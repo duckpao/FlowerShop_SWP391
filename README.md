@@ -1,100 +1,317 @@
 # 🌻 Dự án Chuỗi Cửa Hàng Hoa (Flower Shop Marketplace)
 
-Hệ thống quản lý chuỗi cửa hàng bán hoa đa chi nhánh (Marketplace), bao gồm chức năng mua sắm, đặt hoa theo yêu cầu (Custom Order), tích hợp thanh toán và quản lý giao hàng. Dự án được chia thành hai phần độc lập: Backend (Java Spring Boot) và Frontend (ReactJS - Vite).
+Hệ thống quản lý chuỗi cửa hàng bán hoa đa chi nhánh (**Marketplace**), bao gồm các chức năng:
 
-## 🛠 Yêu cầu hệ thống (Prerequisites)
+* 🛍️ Mua sắm hoa
+* 🌷 Đặt hoa theo yêu cầu (**Custom Order**)
+* 💳 Tích hợp thanh toán
+* 🚚 Quản lý giao hàng
 
-Để chạy được dự án này trên máy cá nhân, team cần cài đặt sẵn các công cụ sau:
-* **Java 17**: Dành cho môi trường Backend.
-* **Node.js**: Khuyến nghị bản LTS để chạy Frontend.
-* **Docker Desktop**: Bắt buộc phải cài đặt và bật lên trước khi code để hệ thống tự động khởi tạo cơ sở dữ liệu MySQL thông qua file `docker-compose.yml`.
+Dự án được chia thành hai phần độc lập:
+
+* **Backend:** Java Spring Boot
+* **Frontend:** ReactJS + Vite
+
+---
+
+## 🛠️ Yêu cầu hệ thống (Prerequisites)
+
+Để chạy được dự án trên máy cá nhân, team cần cài đặt sẵn các công cụ sau:
+
+* **Java 17:** Dùng cho môi trường Backend.
+* **Node.js:** Khuyến nghị sử dụng phiên bản LTS để chạy Frontend.
+* **Docker Desktop:** Bắt buộc phải cài đặt và bật trước khi chạy project. Docker được sử dụng để tự động khởi tạo cơ sở dữ liệu MySQL thông qua file `docker-compose.yml`.
 
 ---
 
 ## 🐳 Hướng dẫn làm việc với Docker (Database)
 
-Dự án sử dụng Docker để đồng bộ môi trường Database (MySQL 8.0) cho toàn bộ team. Mọi thao tác cấu hình và tạo bảng đều đã được tự động hóa.
+Dự án sử dụng **MySQL 8.0** chạy bằng Docker để đồng bộ môi trường Database cho toàn bộ team.
 
-**1. Khởi động Database**  
-Mở terminal tại thư mục gốc của dự án (nơi chứa file `docker-compose.yml` và `database.sql`), chạy lệnh sau để dựng Database chạy ngầm:
+Mọi thao tác cấu hình Database, tạo bảng và chèn dữ liệu mẫu đã được tự động hóa thông qua file `database.sql`.
+
+### 1. Khởi động Database
+
+Mở terminal tại thư mục gốc của project, nơi chứa file `docker-compose.yml` và `database.sql`, sau đó chạy:
+
 ```bash
 docker-compose up -d
-Lưu ý: Lần chạy đầu tiên sẽ mất khoảng 15-20 giây để Docker tự động tạo các bảng và chèn dữ liệu mẫu (Mock data).
+```
 
-2. Xử lý lỗi Database (Reset toàn bộ)
+> **Lưu ý:** Lần chạy đầu tiên có thể mất khoảng **15–20 giây** để Docker tự động tạo các bảng và chèn dữ liệu mẫu (Mock Data).
 
-Nếu bạn gặp lỗi kết nối (Access denied), lỗi sai mật khẩu, hoặc muốn xóa sạch Database để chạy lại file script SQL mới nhất, hãy chạy lệnh sau:
+### 2. Xử lý lỗi Database (Reset toàn bộ)
 
-Bash
+Nếu gặp các lỗi như:
+
+* `Access denied`
+* Sai mật khẩu Database
+* Lỗi kết nối
+* Muốn xóa toàn bộ Database và chạy lại file SQL mới nhất
+
+Hãy chạy:
+
+```bash
 docker-compose down -v
-(Hậu tố -v cực kỳ quan trọng, nó sẽ xóa sạch ổ cứng ảo chứa dữ liệu và mật khẩu cũ bị lỗi. Sau khi chạy lệnh này, bạn tiến hành chạy lại lệnh docker-compose up -d để khởi tạo lại từ đầu).
+```
 
-🚀 Hướng dẫn chạy Backend (Spring Boot)
-Backend cung cấp các RESTful API và sẽ tự động kết nối vào Database MySQL vừa được Docker dựng lên ở cổng 3307.
+> ⚠️ **Lưu ý:** Hậu tố `-v` rất quan trọng vì nó sẽ xóa Volume chứa dữ liệu Database hiện tại.
 
-Mở terminal và di chuyển vào thư mục backend:
+Sau đó khởi tạo lại Database:
 
-Bash
+```bash
+docker-compose up -d
+```
+
+Docker sẽ tạo lại Database từ đầu dựa trên cấu hình và file SQL của project.
+
+---
+
+## 🚀 Hướng dẫn chạy Backend (Spring Boot)
+
+Backend cung cấp các **RESTful API** và tự động kết nối tới Database MySQL được Docker khởi tạo.
+
+Database chạy tại **port `3307`**.
+
+### 1. Di chuyển vào thư mục Backend
+
+Mở terminal và chạy:
+
+```bash
 cd flowershop
-Khởi chạy ứng dụng bằng Gradle wrapper:
+```
 
-Trên Windows: .\gradlew bootRun
+### 2. Khởi chạy Spring Boot
 
-Trên Mac/Linux: ./gradlew bootRun
+**Windows:**
 
-Backend sẽ chạy tại địa chỉ: http://localhost:8080
+```bash
+.\gradlew bootRun
+```
 
-🎨 Hướng dẫn chạy Frontend (ReactJS - Vite)
-Frontend được xây dựng bằng ReactJS (JSX) và sử dụng Vite để tối ưu tốc độ build.
+**Mac/Linux:**
 
-Mở một terminal mới (giữ nguyên terminal của backend và docker đang chạy) và di chuyển vào thư mục frontend:
+```bash
+./gradlew bootRun
+```
 
-Bash
+Sau khi khởi động thành công, Backend sẽ chạy tại:
+
+```text
+http://localhost:8080
+```
+
+---
+
+## 🎨 Hướng dẫn chạy Frontend (ReactJS - Vite)
+
+Frontend được xây dựng bằng **ReactJS (JSX)** và sử dụng **Vite** để tối ưu tốc độ phát triển và build.
+
+### 1. Di chuyển vào thư mục Frontend
+
+Mở một terminal mới, giữ nguyên terminal của Backend và Docker đang chạy:
+
+```bash
 cd flower-shop-client
-Cài đặt các thư viện cần thiết (chỉ cần chạy lần đầu tiên sau khi clone code về):
+```
 
-Bash
+### 2. Cài đặt các thư viện
+
+Chỉ cần thực hiện bước này **lần đầu tiên sau khi clone project** hoặc khi `package.json` có thay đổi:
+
+```bash
 npm install
-Khởi chạy server phát triển:
+```
 
-Bash
+### 3. Khởi chạy Frontend
+
+```bash
 npm run dev
-Mở trình duyệt và truy cập vào: http://localhost:5173
+```
 
-🌿 Quy trình làm việc với Git (Git Workflow)
-Bước 1: Cập nhật code mới nhất
+Sau khi khởi động thành công, mở trình duyệt và truy cập:
 
-Luôn đảm bảo bạn đang ở nhánh master và kéo code mới nhất về trước khi bắt đầu công việc:
+```text
+http://localhost:5173
+```
 
-Bash
+---
+
+# 🌿 Quy trình làm việc với Git (Git Workflow)
+
+## Bước 1: Cập nhật code mới nhất
+
+Luôn đảm bảo bạn đang ở nhánh `master` và lấy code mới nhất trước khi bắt đầu công việc:
+
+```bash
 git checkout master
 git pull origin master
-Bước 2: Tạo nhánh làm việc riêng
+```
 
-Tuyệt đối không code trực tiếp trên nhánh master. Tên nhánh cần có tiền tố rõ ràng phản ánh đúng công việc:
+---
 
-Thêm tính năng mới: git checkout -b feature/ten-tinh-nang
+## Bước 2: Tạo nhánh làm việc riêng
 
-Sửa lỗi: git checkout -b bugfix/ten-loi
+> ⚠️ **Tuyệt đối không code trực tiếp trên nhánh `master`.**
 
-Bước 3: Code và Commit
+Tên nhánh cần có tiền tố rõ ràng, phản ánh đúng loại công việc.
 
-Thực hiện công việc và commit thường xuyên. Ghi chú commit cần rõ nghĩa và mô tả đúng tác vụ:
+### Thêm tính năng mới
 
-Bash
+```bash
+git checkout -b feature/ten-tinh-nang
+```
+
+### Sửa lỗi
+
+```bash
+git checkout -b bugfix/ten-loi
+```
+
+**Ví dụ:**
+
+```bash
+git checkout -b feature/cart-api
+```
+
+---
+
+## Bước 3: Code và Commit
+
+Thực hiện công việc và commit thường xuyên.
+
+Commit message cần rõ nghĩa và mô tả đúng tác vụ đã thực hiện.
+
+**Ví dụ:**
+
+```bash
 git add .
 git commit -m "feat: hoàn thiện API giỏ hàng và tích hợp HMAC-SHA256"
-Bước 4: Đẩy code và Tạo Pull Request (PR)
+```
 
-Đẩy nhánh cá nhân lên kho chứa:
+---
 
-Bash
+## Bước 4: Đẩy code và tạo Pull Request (PR)
+
+Đẩy branch cá nhân lên GitHub:
+
+```bash
 git push origin feature/ten-tinh-nang
-Sau đó lên giao diện GitHub, tạo một Pull Request (PR) trỏ vào nhánh master và tag Bảo để kiểm tra trước khi merge.
+```
 
-⚠️ Quy tắc tránh Conflict & Lưu ý chung
-Giao tiếp: Phân chia task độc lập, hạn chế 2 người cùng sửa chung một file (đặc biệt là các file cấu hình chung) trong cùng một khoảng thời gian.
+Sau đó truy cập GitHub và tạo **Pull Request (PR)**:
 
-Đồng bộ thường xuyên: Nếu một task kéo dài nhiều ngày, mỗi buổi sáng hãy kéo code từ master về nhánh hiện tại (git pull origin master) để đồng bộ và giải quyết conflict từ sớm.
+```text
+feature/ten-tinh-nang → master
+```
 
-Kỷ luật Gitignore: Tuyệt đối không commit các file rác sinh ra từ IDE (như .idea/, .vscode/) hoặc các thư viện quá nặng (như node_modules/, build/). Mọi người phải tuân thủ file .gitignore của project.
+Sau khi tạo PR, **tag Bảo** để review trước khi merge.
+
+---
+
+# ⚠️ Quy tắc tránh Conflict & Lưu ý chung
+
+## 1. Giao tiếp và phân chia Task
+
+Phân chia task độc lập giữa các thành viên.
+
+Hạn chế tối đa việc **2 người cùng chỉnh sửa một file**, đặc biệt là các file cấu hình chung, trong cùng một khoảng thời gian.
+
+---
+
+## 2. Đồng bộ code thường xuyên
+
+Nếu một task kéo dài nhiều ngày, mỗi buổi làm việc nên đồng bộ code mới nhất từ `master` vào branch hiện tại:
+
+```bash
+git pull origin master
+```
+
+Nếu xảy ra conflict, hãy giải quyết conflict ngay thay vì để dồn đến cuối task.
+
+---
+
+## 3. Kỷ luật `.gitignore`
+
+**Tuyệt đối không commit** các file rác hoặc thư mục sinh ra từ IDE/build process.
+
+Một số thư mục/file cần tránh commit:
+
+```text
+.idea/
+.vscode/
+node_modules/
+build/
+dist/
+```
+
+Hãy đảm bảo `.gitignore` của project được cấu hình đúng và tất cả thành viên tuân thủ thống nhất.
+
+---
+
+# 📌 Quick Start
+
+Nếu đã cài đầy đủ **Java 17 + Node.js + Docker Desktop**, có thể chạy project theo thứ tự:
+
+### 1. Khởi động Database
+
+```bash
+docker-compose up -d
+```
+
+### 2. Chạy Backend
+
+```bash
+cd flowershop
+
+# Windows
+.\gradlew bootRun
+
+# Mac/Linux
+./gradlew bootRun
+```
+
+Backend:
+
+```text
+http://localhost:8080
+```
+
+### 3. Chạy Frontend
+
+Mở terminal mới:
+
+```bash
+cd flower-shop-client
+npm install
+npm run dev
+```
+
+Frontend:
+
+```text
+http://localhost:5173
+```
+
+---
+
+## 🎯 Tổng quan cấu trúc Project
+
+```text
+Flower-Shop-Marketplace/
+│
+├── docker-compose.yml
+├── database.sql
+│
+├── flowershop/              # Backend - Spring Boot
+│   ├── src/
+│   ├── build.gradle
+│   └── gradlew
+│
+└── flower-shop-client/      # Frontend - React + Vite
+    ├── src/
+    ├── package.json
+    └── vite.config.js
+```
+
+**Happy Coding! 🌻**
