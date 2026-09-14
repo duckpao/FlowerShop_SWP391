@@ -1,31 +1,33 @@
-🌻 Dự án Chuỗi Cửa Hàng Hoa (Flower Shop Marketplace)
+# 🌻 Dự án Chuỗi Cửa Hàng Hoa (Flower Shop Marketplace)
+
 Hệ thống quản lý chuỗi cửa hàng bán hoa đa chi nhánh (Marketplace), bao gồm chức năng mua sắm, đặt hoa theo yêu cầu (Custom Order), tích hợp thanh toán và quản lý giao hàng. Dự án được chia thành hai phần độc lập: Backend (Java Spring Boot) và Frontend (ReactJS - Vite).
 
-🛠 Yêu cầu hệ thống (Prerequisites)
+## 🛠 Yêu cầu hệ thống (Prerequisites)
+
 Để chạy được dự án này trên máy cá nhân, team cần cài đặt sẵn các công cụ sau:
+* **Java 17**: Dành cho môi trường Backend.
+* **Node.js**: Khuyến nghị bản LTS để chạy Frontend.
+* **Docker Desktop**: Bắt buộc phải cài đặt và bật lên trước khi code để hệ thống tự động khởi tạo cơ sở dữ liệu MySQL thông qua file `docker-compose.yml`.
 
-Java 17: Dành cho môi trường Backend.
+---
 
-Node.js: Khuyến nghị bản LTS (Long Term Support) để chạy Frontend.
+## 🐳 Hướng dẫn làm việc với Docker (Database)
 
-Docker Desktop: Bắt buộc phải cài đặt và bật lên trước khi code để hệ thống tự động khởi tạo cơ sở dữ liệu MySQL.
-
-🐳 Hướng dẫn làm việc với Docker (Database)
 Dự án sử dụng Docker để đồng bộ môi trường Database (MySQL 8.0) cho toàn bộ team. Mọi thao tác cấu hình và tạo bảng đều đã được tự động hóa.
 
-1. Khởi động Database
-Mở terminal tại thư mục gốc của dự án (nơi chứa file docker-compose.yml và database.sql), chạy lệnh sau để dựng Database chạy ngầm:
-
-Bash
+**1. Khởi động Database**  
+Mở terminal tại thư mục gốc của dự án (nơi chứa file `docker-compose.yml` và `database.sql`), chạy lệnh sau để dựng Database chạy ngầm:
+```bash
 docker-compose up -d
 Lưu ý: Lần chạy đầu tiên sẽ mất khoảng 15-20 giây để Docker tự động tạo các bảng và chèn dữ liệu mẫu (Mock data).
 
 2. Xử lý lỗi Database (Reset toàn bộ)
+
 Nếu bạn gặp lỗi kết nối (Access denied), lỗi sai mật khẩu, hoặc muốn xóa sạch Database để chạy lại file script SQL mới nhất, hãy chạy lệnh sau:
 
 Bash
 docker-compose down -v
-(Hậu tố -v cực kỳ quan trọng, nó sẽ xóa sạch ổ cứng ảo chứa dữ liệu và mật khẩu cũ bị lỗi. Sau khi chạy lệnh này, bạn tiến hành chạy lại docker-compose up -d để khởi tạo lại từ đầu).
+(Hậu tố -v cực kỳ quan trọng, nó sẽ xóa sạch ổ cứng ảo chứa dữ liệu và mật khẩu cũ bị lỗi. Sau khi chạy lệnh này, bạn tiến hành chạy lại lệnh docker-compose up -d để khởi tạo lại từ đầu).
 
 🚀 Hướng dẫn chạy Backend (Spring Boot)
 Backend cung cấp các RESTful API và sẽ tự động kết nối vào Database MySQL vừa được Docker dựng lên ở cổng 3307.
@@ -61,12 +63,14 @@ Mở trình duyệt và truy cập vào: http://localhost:5173
 
 🌿 Quy trình làm việc với Git (Git Workflow)
 Bước 1: Cập nhật code mới nhất
+
 Luôn đảm bảo bạn đang ở nhánh master và kéo code mới nhất về trước khi bắt đầu công việc:
 
 Bash
 git checkout master
 git pull origin master
 Bước 2: Tạo nhánh làm việc riêng
+
 Tuyệt đối không code trực tiếp trên nhánh master. Tên nhánh cần có tiền tố rõ ràng phản ánh đúng công việc:
 
 Thêm tính năng mới: git checkout -b feature/ten-tinh-nang
@@ -74,17 +78,19 @@ Thêm tính năng mới: git checkout -b feature/ten-tinh-nang
 Sửa lỗi: git checkout -b bugfix/ten-loi
 
 Bước 3: Code và Commit
+
 Thực hiện công việc và commit thường xuyên. Ghi chú commit cần rõ nghĩa và mô tả đúng tác vụ:
 
 Bash
 git add .
 git commit -m "feat: hoàn thiện API giỏ hàng và tích hợp HMAC-SHA256"
 Bước 4: Đẩy code và Tạo Pull Request (PR)
+
 Đẩy nhánh cá nhân lên kho chứa:
 
 Bash
 git push origin feature/ten-tinh-nang
-Sau đó lên giao diện GitHub, tạo một Pull Request (PR) trỏ vào nhánh master và tag Bảo để review code trước khi merge.
+Sau đó lên giao diện GitHub, tạo một Pull Request (PR) trỏ vào nhánh master và tag Bảo để kiểm tra trước khi merge.
 
 ⚠️ Quy tắc tránh Conflict & Lưu ý chung
 Giao tiếp: Phân chia task độc lập, hạn chế 2 người cùng sửa chung một file (đặc biệt là các file cấu hình chung) trong cùng một khoảng thời gian.
