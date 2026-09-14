@@ -1,0 +1,60 @@
+package com.example.flowershop.entity;
+
+import jakarta.persistence.*;
+import lombok.*;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
+
+import java.time.LocalDateTime;
+
+@Entity
+@Table(name = "Product_Reviews")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class ProductReview {
+
+    @Id
+    @Column(name = "id", length = 36)
+    private String id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "product_id", nullable = false)
+    private Product product;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "order_id", nullable = false)
+    private Order order;
+
+    @Column(name = "rating")
+    private Integer rating;
+
+    @Column(name = "comment", columnDefinition = "TEXT")
+    private String comment;
+
+    @Column(name = "media", columnDefinition = "json")
+    private String media;
+
+    @Column(name = "shop_reply", columnDefinition = "TEXT")
+    private String shopReply;
+
+    @CreationTimestamp
+    @Column(name = "created_date", updatable = false)
+    private LocalDateTime createdDate;
+
+    @Column(name = "created_by", length = 36)
+    private String createdBy;
+
+    @UpdateTimestamp
+    @Column(name = "last_modify_date")
+    private LocalDateTime lastModifyDate;
+
+    @Column(name = "last_modify_by", length = 36)
+    private String lastModifyBy;
+}
