@@ -8,26 +8,29 @@ import org.hibernate.annotations.UpdateTimestamp;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "Blog_Interactions")
+@Table(name = "Cart_Items")
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class BlogInteraction {
+public class CartItem {
 
-    @EmbeddedId
-    private BlogInteractionId id;
+    @Id
+    @Column(name = "id", length = 36)
+    private String id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @MapsId("userId")
-    @JoinColumn(name = "user_id")
+    @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @MapsId("blogId")
-    @JoinColumn(name = "blog_id")
-    private Blog blog;
+    @JoinColumn(name = "product_id", nullable = false)
+    private Product product;
+
+    @Column(name = "quantity", nullable = false)
+    @Builder.Default
+    private Integer quantity = 1;
 
     @CreationTimestamp
     @Column(name = "created_date", updatable = false)
@@ -43,3 +46,4 @@ public class BlogInteraction {
     @Column(name = "last_modify_by", length = 36)
     private String lastModifyBy;
 }
+
