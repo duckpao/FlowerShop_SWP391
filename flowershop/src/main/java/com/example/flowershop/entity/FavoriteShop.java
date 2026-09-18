@@ -5,19 +5,7 @@ import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
-import java.io.Serializable;
 import java.time.LocalDateTime;
-
-@Embeddable
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-@EqualsAndHashCode
-class FavoriteShopId implements Serializable {
-    private String userId;
-    private String shopId;
-}
 
 @Entity
 @Table(name = "Favorite_Shops")

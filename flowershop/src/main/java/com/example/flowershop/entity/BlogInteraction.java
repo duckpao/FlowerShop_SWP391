@@ -1,6 +1,5 @@
 package com.example.flowershop.entity;
 
-import com.example.flowershop.entity.enums.InteractionType;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -29,6 +28,8 @@ public class BlogInteraction {
     @MapsId("blogId")
     @JoinColumn(name = "blog_id")
     private Blog blog;
+
+    // Note: interactionType is part of the composite key stored in id field
 
     @CreationTimestamp
     @Column(name = "created_date", updatable = false)
