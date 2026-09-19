@@ -75,8 +75,6 @@ CREATE TABLE Products (
     shelf_life_days INT, -- Thời gian bảo quản (ví dụ: 3-5 ngày)
     price DECIMAL(12, 2) NOT NULL,
     stock INT NOT NULL DEFAULT 0,
-    images JSON, 
-    videos JSON,
     status ENUM('ACTIVE', 'INACTIVE', 'OUT_OF_STOCK') DEFAULT 'ACTIVE',
     created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_by NVARCHAR(36),
@@ -84,6 +82,33 @@ CREATE TABLE Products (
     last_modify_by NVARCHAR(36),
     FOREIGN KEY (shop_id) REFERENCES Shops(id),
     FOREIGN KEY (category_id) REFERENCES Categories(id)
+);
+
+CREATE TABLE Product_Images (
+    id NVARCHAR(36) PRIMARY KEY,
+    product_id NVARCHAR(36) NOT NULL,
+    image_url NVARCHAR(500) NOT NULL, -- URL từ Cloudinary
+    is_primary BOOLEAN DEFAULT FALSE, -- Ảnh đại diện sản phẩm
+    display_order INT DEFAULT 0, -- Thứ tự hiển thị
+    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by NVARCHAR(36),
+    last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    last_modify_by NVARCHAR(36),
+    FOREIGN KEY (product_id) REFERENCES Products(id) ON DELETE CASCADE
+);
+
+CREATE TABLE Product_Videos (
+    id NVARCHAR(36) PRIMARY KEY,
+    product_id NVARCHAR(36) NOT NULL,
+    video_url NVARCHAR(500) NOT NULL, -- URL từ Cloudinary
+    title NVARCHAR(255),
+    description TEXT,
+    display_order INT DEFAULT 0, -- Thứ tự hiển thị
+    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by NVARCHAR(36),
+    last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    last_modify_by NVARCHAR(36),
+    FOREIGN KEY (product_id) REFERENCES Products(id) ON DELETE CASCADE
 );
 
 -- ==========================================
@@ -316,13 +341,25 @@ CREATE TABLE Blogs (
     shop_id NVARCHAR(36) NOT NULL,
     title NVARCHAR(255) NOT NULL,
     content LONGTEXT NOT NULL, -- Hỗ trợ HTML/Rich Text Format như bài báo
-    images JSON, -- Bộ sưu tập hình ảnh đính kèm bài viết
+    thumbnail_url NVARCHAR(500), -- URL ảnh đại diện từ Cloudinary
     status ENUM('DRAFT', 'PUBLISHED', 'HIDDEN') DEFAULT 'PUBLISHED',
     created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_by NVARCHAR(36),
     last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     last_modify_by NVARCHAR(36),
     FOREIGN KEY (shop_id) REFERENCES Shops(id)
+);
+
+CREATE TABLE Blog_Images (
+    id NVARCHAR(36) PRIMARY KEY,
+    blog_id NVARCHAR(36) NOT NULL,
+    image_url NVARCHAR(500) NOT NULL, -- URL từ Cloudinary
+    display_order INT DEFAULT 0, -- Thứ tự hiển thị
+    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by NVARCHAR(36),
+    last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    last_modify_by NVARCHAR(36),
+    FOREIGN KEY (blog_id) REFERENCES Blogs(id) ON DELETE CASCADE
 );
 
 CREATE TABLE Blog_Interactions (
@@ -391,9 +428,20 @@ INSERT INTO Categories (id, name, description, status, created_by) VALUES
 ('cat-02', 'Hoa Khai Trương', 'Kệ hoa, lẵng hoa chúc mừng khai trương', 'ACTIVE', 'user-admin-01');
 
 -- 5. INSERT PRODUCTS
-INSERT INTO Products (id, shop_id, category_id, name, description, components, shelf_life_days, price, stock, images, status, created_by) VALUES
-('prod-01', 'shop-01', 'cat-01', 'Bó Hồng Đỏ Mix Baby', 'Bó hoa hồng đỏ Ecuador mix hoa baby trắng', '{"red_roses": 10, "white_baby_breath": 3, "wrapper": "Giấy Kraft"}', 4, 350000.00, 50, '["url_img1.jpg", "url_img2.jpg"]', 'ACTIVE', 'user-shop-01'),
-('prod-02', 'shop-01', 'cat-02', 'Lẵng Hướng Dương Ban Mai', 'Hoa hướng dương tặng khai trương, tốt nghiệp', '{"sunflowers": 5, "yellow_roses": 5}', 5, 450000.00, 20, '["url_img3.jpg"]', 'ACTIVE', 'user-shop-01');
+INSERT INTO Products (id, shop_id, category_id, name, description, components, shelf_life_days, price, stock, status, created_by) VALUES
+('prod-01', 'shop-01', 'cat-01', 'Bó Hồng Đỏ Mix Baby', 'Bó hoa hồng đỏ Ecuador mix hoa baby trắng', '{"red_roses": 10, "white_baby_breath": 3, "wrapper": "Giấy Kraft"}', 4, 350000.00, 50, 'ACTIVE', 'user-shop-01'),
+('prod-02', 'shop-01', 'cat-02', 'Lẵng Hướng Dương Ban Mai', 'Hoa hướng dương tặng khai trương, tốt nghiệp', '{"sunflowers": 5, "yellow_roses": 5}', 5, 450000.00, 20, 'ACTIVE', 'user-shop-01');
+
+-- 5.1 INSERT PRODUCT IMAGES (Từ Cloudinary)
+INSERT INTO Product_Images (id, product_id, image_url, is_primary, display_order, created_by) VALUES
+('img-prod-01-01', 'prod-01', 'https://res.cloudinary.com/[your-cloud]/image/upload/[public-id-1].jpg', TRUE, 1, 'user-shop-01'),
+('img-prod-01-02', 'prod-01', 'https://res.cloudinary.com/[your-cloud]/image/upload/[public-id-2].jpg', FALSE, 2, 'user-shop-01'),
+('img-prod-02-01', 'prod-02', 'https://res.cloudinary.com/[your-cloud]/image/upload/[public-id-3].jpg', TRUE, 1, 'user-shop-01');
+
+-- 5.2 INSERT PRODUCT VIDEOS (Từ Cloudinary)
+INSERT INTO Product_Videos (id, product_id, video_url, title, description, display_order, created_by) VALUES
+('vid-prod-01-01', 'prod-01', 'https://res.cloudinary.com/[your-cloud]/video/upload/[video-id-1].mp4', 'Hướng dẫn cắm hoa', 'Cách cắm bó hồng đỏ mix baby', 1, 'user-shop-01'),
+('vid-prod-02-01', 'prod-02', 'https://res.cloudinary.com/[your-cloud]/video/upload/[video-id-2].mp4', 'Unboxing lẵng hoa', 'Xem cách lẵng hoa được gói', 1, 'user-shop-01');
 
 -- 6. INSERT COUPONS
 INSERT INTO Coupons (id, shop_id, code, discount_type, discount_value, min_order_value, max_discount_value, start_date, end_date, usage_limit, created_by) VALUES
@@ -436,8 +484,12 @@ INSERT INTO Product_Reviews (id, product_id, user_id, order_id, rating, comment,
 ('rev-01', 'prod-01', 'user-customer-01', 'order-01', 5, 'Hoa rất tươi, giao hàng siêu nhanh. Sẽ ủng hộ shop tiếp!', 'Cảm ơn bạn đã tin tưởng FPTU Smart Floral ạ!', 'user-customer-01');
 
 -- 15. INSERT BLOGS & COMMENTS
-INSERT INTO Blogs (id, shop_id, title, content, images, status, created_by) VALUES
-('blog-01', 'shop-01', 'Cách Giữ Hoa Hồng Tươi Lâu', '<p>Bí quyết giữ hoa hồng tươi lâu đến 7 ngày...</p>', '["blog_img1.jpg"]', 'PUBLISHED', 'user-shop-01');
+INSERT INTO Blogs (id, shop_id, title, content, thumbnail_url, status, created_by) VALUES
+('blog-01', 'shop-01', 'Cách Giữ Hoa Hồng Tươi Lâu', '<p>Bí quyết giữ hoa hồng tươi lâu đến 7 ngày...</p>', 'https://res.cloudinary.com/[your-cloud]/image/upload/[blog-thumb-id].jpg', 'PUBLISHED', 'user-shop-01');
+
+-- 15.1 INSERT BLOG IMAGES (Từ Cloudinary)
+INSERT INTO Blog_Images (id, blog_id, image_url, display_order, created_by) VALUES
+('blog-img-01', 'blog-01', 'https://res.cloudinary.com/[your-cloud]/image/upload/[blog-img-id-1].jpg', 1, 'user-shop-01');
 
 INSERT INTO Blog_Comments (id, blog_id, user_id, parent_comment_id, content, created_by) VALUES
 ('cmt-01', 'blog-01', 'user-customer-01', NULL, 'Bài viết rất hữu ích, cảm ơn shop!', 'user-customer-01'),
