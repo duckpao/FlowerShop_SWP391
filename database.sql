@@ -20,15 +20,6 @@ CREATE TABLE Users (
     last_modify_by NVARCHAR(36)
 );
 
-CREATE TABLE Email_Verification_Tokens (
-    user_id NVARCHAR(36) PRIMARY KEY,
-    token_hash VARCHAR(64) NOT NULL UNIQUE,
-    issued_at TIMESTAMP(6) NOT NULL,
-    expires_at TIMESTAMP(6) NOT NULL,
-    used_at TIMESTAMP(6) NULL,
-    CONSTRAINT fk_email_verification_user FOREIGN KEY (user_id) REFERENCES Users(id)
-);
-
 CREATE TABLE Shops (
     id NVARCHAR(36) PRIMARY KEY,
     owner_id NVARCHAR(36) NOT NULL,
@@ -458,28 +449,3 @@ INSERT INTO Favorite_Products (user_id, product_id, created_by) VALUES
 
 INSERT INTO Customer_Occasions (id, customer_id, title, occasion_date, reminder_sent, created_by) VALUES
 ('occ-01', 'user-customer-01', 'Kỷ niệm ngày cưới', '2026-10-15', FALSE, 'user-customer-01');
-CREATE TABLE IF NOT EXISTS Otp_Challenges (
-    id VARCHAR(36) PRIMARY KEY,
-    user_id NVARCHAR(36) NOT NULL,
-    purpose VARCHAR(20) NOT NULL,
-    code_hash VARCHAR(100) NOT NULL,
-    issued_at TIMESTAMP(6) NOT NULL,
-    expires_at TIMESTAMP(6) NOT NULL,
-    used_at TIMESTAMP(6) NULL,
-    window_start TIMESTAMP(6) NOT NULL,
-    failed_attempts INT NOT NULL DEFAULT 0,
-    send_count INT NOT NULL DEFAULT 0,
-    UNIQUE KEY uq_otp_user_purpose (user_id, purpose),
-    CONSTRAINT fk_otp_user FOREIGN KEY (user_id) REFERENCES Users(id)
-);
-CREATE TABLE IF NOT EXISTS Pending_Registrations (
-    email NVARCHAR(255) PRIMARY KEY,
-    full_name NVARCHAR(100) NOT NULL,
-    password_hash VARCHAR(100) NOT NULL,
-    otp_hash VARCHAR(100) NOT NULL,
-    issued_at TIMESTAMP(6) NOT NULL,
-    expires_at TIMESTAMP(6) NOT NULL,
-    window_start TIMESTAMP(6) NOT NULL,
-    failed_attempts INT NOT NULL DEFAULT 0,
-    send_count INT NOT NULL DEFAULT 0
-);

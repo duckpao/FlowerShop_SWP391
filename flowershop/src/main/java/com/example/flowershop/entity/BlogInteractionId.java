@@ -16,6 +16,5 @@ public class BlogInteractionId implements Serializable {
     private String userId;
     private String blogId;
     @Enumerated(EnumType.STRING)
-    @Column(name = "interaction_type")
     private InteractionType interactionType;
 }

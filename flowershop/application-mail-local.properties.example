@@ -1,5 +1,0 @@
-# Copy to application-mail-local.properties in this directory.
-# The actual local file is git-ignored. Never commit or share its contents.
-spring.mail.username=YOUR_SENDER@gmail.com
-spring.mail.password=YOUR_GOOGLE_APP_PASSWORD
-app.mail.from=YOUR_SENDER@gmail.com
