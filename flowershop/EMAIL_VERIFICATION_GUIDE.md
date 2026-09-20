@@ -6,7 +6,7 @@ Trong `flower-shop-client`, chạy `npm.cmd install` và `npm.cmd run dev`.
 Mở http://localhost:5173, điền họ tên/email/mật khẩu và xác nhận mật khẩu.
 Bấm Đăng ký → hiện ô Nhập mã OTP → nhập đúng mã trong email → quay về Sign in.
 Giao diện tự lấy CSRF token và gửi cookie; không cần thao tác Swagger.
-Trang Sign in hiện mới có giao diện, nút đăng nhập chưa mở vì API login chưa được triển khai.
+Trang Sign in đã gọi API login bằng JWT. Xem `../AUTH_MVC_GUIDE.md` để test đăng nhập và đăng xuất.
 
 ### Quên mật khẩu trên giao diện
 
@@ -49,8 +49,7 @@ App Password của khách hàng. Chỉ tài khoản Gmail gửi thư của hệ 
 **Chưa xác thực OTP thì không có bản ghi mới trong Users.** Thông tin nằm ở
 Pending_Registrations; mật khẩu và OTP chỉ được lưu dưới dạng hash. Sau OTP đúng,
 transaction tạo User ACTIVE, isEmailVerified=true và xóa đăng ký tạm.
-Chưa có API login trong project. Khi triển khai login,
-bắt buộc kiểm tra cả status và isEmailVerified trước khi tạo session.
+API login kiểm tra cả status ACTIVE và isEmailVerified trước khi cấp JWT.
 
 ## Database
 
@@ -179,8 +178,8 @@ Gmail thực tế cần cấu hình App Password trên máy của bạn; 202 kh�
 Nếu SMTP lỗi, chỉ có đăng ký tạm, chưa tạo user; sửa SMTP rồi yêu cầu gửi lại sau cooldown.
 Log chỉ ghi loại thư và user ID, không ghi OTP/mật khẩu.
 
-Đã có giao diện React đăng ký/nhập OTP; chưa có API login. Khi thêm login cần chặn
-tài khoản chưa xác thực và thu hồi các session đang có sau reset password.
+Đã có giao diện React đăng ký/nhập OTP và đăng nhập JWT. Login chặn tài khoản
+chưa xác thực; reset password thu hồi tất cả phiên đăng nhập của tài khoản.
 Trước production còn cần giới hạn request theo IP/toàn hệ thống và hàng đợi mail
 bền vững để retry (hiện gửi sau commit, thư thất bại không tự retry).
 Response chung chưa bảo đảm thời gian phản hồi giống nhau giữa email có/không tồn tại.

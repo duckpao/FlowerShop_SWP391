@@ -13,6 +13,18 @@ import java.util.Map;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    @ExceptionHandler(org.springframework.web.server.ResponseStatusException.class)
+    public ResponseEntity<MessageResponse> handleStatus(org.springframework.web.server.ResponseStatusException exception) {
+        return ResponseEntity.status(exception.getStatusCode()).body(new MessageResponse(
+                exception.getReason() == null ? "Yêu cầu không thể thực hiện." : exception.getReason()));
+    }
+
+    @ExceptionHandler({org.springframework.security.core.AuthenticationException.class,
+            org.springframework.security.oauth2.jwt.JwtException.class})
+    public ResponseEntity<MessageResponse> handleAuthentication(Exception exception) {
+        return ResponseEntity.status(401).body(new MessageResponse("Thông tin đăng nhập hoặc phiên không hợp lệ."));
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String, Object>> handleValidation(
             MethodArgumentNotValidException exception

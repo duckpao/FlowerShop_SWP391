@@ -11,7 +11,7 @@ CREATE TABLE Users (
     google_id NVARCHAR(255) UNIQUE,
     full_name NVARCHAR(100),
     phone NVARCHAR(20),
-    role ENUM('ADMIN', 'SHOP', 'CUSTOMER', 'DELIVERY') NOT NULL,
+    role ENUM('ADMIN', 'SHOP', 'CUSTOMER', 'DELIVERY', 'SHOP_STAFF') NOT NULL,
     is_email_verified BOOLEAN DEFAULT FALSE,
     status ENUM('ACTIVE', 'INACTIVE', 'BANNED') DEFAULT 'ACTIVE',
     created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -31,7 +31,7 @@ CREATE TABLE Email_Verification_Tokens (
 
 CREATE TABLE Shops (
     id NVARCHAR(36) PRIMARY KEY,
-    owner_id NVARCHAR(36) NOT NULL,
+    owner_id NVARCHAR(36) NOT NULL UNIQUE,
     name NVARCHAR(255) NOT NULL,
     description TEXT,
     logo_url NVARCHAR(255),
@@ -378,12 +378,12 @@ CREATE TABLE Customer_Occasions (
 -- SCRIPT INSERT MOCK DATA - FLOWER SHOP DB
 -- ==========================================
 
--- 1. INSERT USERS (Admin, Shop Owner, Customer, Delivery)
+-- 1. INSERT USERS (Admin, Shop Manager, Customer, Shop Staff)
 INSERT INTO Users (id, email, password_hash, full_name, phone, role, status, created_by) VALUES
 ('user-admin-01', 'admin@flowershop.com', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', 'System Admin', '0901234567', 'ADMIN', 'ACTIVE', 'user-admin-01'),
 ('user-shop-01', 'shop1@gmail.com', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', 'Nguyễn Đức Bảo', '0912345678', 'SHOP', 'ACTIVE', 'user-admin-01'),
 ('user-customer-01', 'khachhang1@gmail.com', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', 'Trần Thị B', '0987654321', 'CUSTOMER', 'ACTIVE', 'user-customer-01'),
-('user-delivery-01', 'shipper1@ahamove.com', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', 'Lê Văn C', '0922334455', 'DELIVERY', 'ACTIVE', 'user-admin-01');
+('user-staff-01', 'staff1@example.com', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', 'Lê Văn C', '0922334455', 'SHOP_STAFF', 'ACTIVE', 'user-admin-01');
 
 -- 2. INSERT SHOPS
 INSERT INTO Shops (id, owner_id, name, description, logo_url, status, created_by) VALUES
@@ -482,4 +482,41 @@ CREATE TABLE IF NOT EXISTS Pending_Registrations (
     window_start TIMESTAMP(6) NOT NULL,
     failed_attempts INT NOT NULL DEFAULT 0,
     send_count INT NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS Auth_Sessions (
+    id VARCHAR(36) PRIMARY KEY,
+    user_id NVARCHAR(36) NOT NULL,
+    refresh_hash VARCHAR(64) NOT NULL,
+    expires_at TIMESTAMP(6) NOT NULL,
+    revoked BOOLEAN NOT NULL DEFAULT FALSE,
+    INDEX idx_auth_session_user (user_id),
+    FOREIGN KEY (user_id) REFERENCES Users(id)
+);
+
+USE flower_shop_db;
+CREATE TABLE IF NOT EXISTS Shop_Staff (
+    id VARCHAR(36) PRIMARY KEY,
+    shop_id NVARCHAR(36) NOT NULL,
+    user_id NVARCHAR(36) NOT NULL,
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    UNIQUE KEY uq_shop_staff (shop_id,user_id),
+    FOREIGN KEY (shop_id) REFERENCES Shops(id),
+    FOREIGN KEY (user_id) REFERENCES Users(id)
+);
+
+USE flower_shop_db;
+ALTER TABLE Pending_Registrations ADD COLUMN shop_name VARCHAR(255) NULL,
+    ADD COLUMN shop_description VARCHAR(5000) NULL;
+CREATE TABLE Staff_Invitations (
+    id VARCHAR(36) PRIMARY KEY,
+    shop_id NVARCHAR(36) NOT NULL,
+    email VARCHAR(255) NOT NULL,
+    token_hash VARCHAR(64) NOT NULL,
+    expires_at TIMESTAMP(6) NOT NULL,
+    issued_at TIMESTAMP(6) NOT NULL,
+    window_start TIMESTAMP(6) NOT NULL,
+    send_count INT NOT NULL,
+    status VARCHAR(16) NOT NULL,
+    UNIQUE KEY uq_staff_invite(shop_id,email),
+    FOREIGN KEY (shop_id) REFERENCES Shops(id)
 );

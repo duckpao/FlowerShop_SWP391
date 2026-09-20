@@ -26,6 +26,13 @@ public class AuthController {
     private final AuthService authService;
     private final OtpService otpService;
 
+    @PostMapping("/register-shop")
+    @Parameter(name="X-CSRF-TOKEN",in=ParameterIn.HEADER,required=true)
+    public ResponseEntity<MessageResponse> registerShop(@Valid @RequestBody com.example.flowershop.dto.auth.ShopRegisterRequest request) {
+        authService.registerShop(request);
+        return ResponseEntity.accepted().body(new MessageResponse("Nếu email đủ điều kiện, mã OTP sẽ được gửi để xác thực tài khoản và tạo cửa hàng chờ duyệt."));
+    }
+
     @GetMapping("/csrf")
     public Map<String, String> csrf(CsrfToken csrfToken) {
         return Map.of(

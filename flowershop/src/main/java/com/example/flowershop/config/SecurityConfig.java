@@ -23,11 +23,15 @@ public class SecurityConfig {
     }
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http)
+    public SecurityFilterChain securityFilterChain(HttpSecurity http, com.example.flowershop.service.TokenAuthService tokenAuth,
+            org.springframework.core.env.Environment environment, com.example.flowershop.repository.UserRepository users)
             throws Exception {
 
         http
                 .cors(Customizer.withDefaults())
+                .sessionManagement(session -> session.sessionCreationPolicy(org.springframework.security.config.http.SessionCreationPolicy.STATELESS))
+                .addFilterBefore(new com.example.flowershop.security.JwtAuthenticationFilter(tokenAuth),
+                        org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter.class)
 
                 .authorizeHttpRequests(auth -> auth
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
@@ -46,7 +50,11 @@ public class SecurityConfig {
 
                         .requestMatchers(
                                 HttpMethod.POST,
+                                "/api/auth/login",
+                                "/api/auth/refresh",
+                                "/api/auth/logout",
                                 "/api/auth/register",
+                                "/api/auth/register-shop",
                                 "/api/auth/verify-email",
                                 "/api/auth/resend-verification",
                                 "/api/auth/forgot-password",
@@ -55,6 +63,10 @@ public class SecurityConfig {
 
                         .requestMatchers("/api/admin/**")
                         .hasRole("ADMIN")
+                        .requestMatchers("/api/shop/**").hasRole("SHOP")
+                        .requestMatchers("/api/customer/**").hasRole("CUSTOMER")
+                        .requestMatchers("/api/staff/**").hasRole("SHOP_STAFF")
+                        .requestMatchers("/api/delivery/**").denyAll()
 
                         .anyRequest().authenticated()
                 )
@@ -71,6 +83,19 @@ public class SecurityConfig {
                 .httpBasic(basic -> basic.disable())
                 .logout(logout -> logout.disable());
 
+        if (environment.acceptsProfiles(org.springframework.core.env.Profiles.of("dev-admin", "dev-manager"))) {
+            if (!"127.0.0.1".equals(environment.getProperty("server.address"))
+                    || environment.acceptsProfiles(org.springframework.core.env.Profiles.of("prod", "production")))
+                throw new IllegalStateException("Local test profiles require server.address=127.0.0.1 and cannot run with production profiles");
+        }
+        if (environment.acceptsProfiles(org.springframework.core.env.Profiles.of("dev-manager"))) {
+            http.addFilterAfter(new com.example.flowershop.security.DevManagerFilter(users,environment.getRequiredProperty("app.dev-manager.email")),
+                    com.example.flowershop.security.JwtAuthenticationFilter.class);
+        }
+        if (environment.acceptsProfiles(org.springframework.core.env.Profiles.of("dev-admin"))) {
+            http.addFilterAfter(new com.example.flowershop.security.DevAdminFilter(),
+                    com.example.flowershop.security.JwtAuthenticationFilter.class);
+        }
         return http.build();
     }
 }

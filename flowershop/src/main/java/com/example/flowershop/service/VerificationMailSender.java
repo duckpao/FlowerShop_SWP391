@@ -17,6 +17,13 @@ public class VerificationMailSender {
         mail.setFrom(from);
         mail.setTo(event.email());
         switch (event.kind()) {
+            case STAFF_INVITATION -> {
+                mail.setSubject("FlowerShop - Lời mời làm nhân viên cửa hàng");
+                mail.setText("Bạn được mời tham gia cửa hàng: " + event.code()
+                    + "\nLời mời có hiệu lực 24 giờ. Mở ứng dụng FlowerShop, đăng ký và xác thực OTP nếu chưa có tài khoản."
+                    + "\nĐăng nhập bằng chính email nhận thư, vào mục Lời mời nhân viên và nhập mã trên để đồng ý tham gia."
+                    + "\nNếu tài khoản hiện là Customer, xác nhận sẽ chuyển sang Shop Staff. Không chia sẻ mã. Bỏ qua thư nếu không muốn tham gia.");
+            }
             case REGISTER_OTP -> {
                 mail.setSubject("FlowerShop - Mã xác thực đăng ký");
                 mail.setText("Mã OTP đăng ký của bạn: " + event.code()

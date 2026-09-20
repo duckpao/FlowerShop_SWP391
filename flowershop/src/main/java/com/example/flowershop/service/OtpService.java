@@ -24,6 +24,7 @@ public class OtpService {
     private final OtpChallengeRepository challenges;
     private final PasswordEncoder encoder;
     private final ApplicationEventPublisher events;
+    private final AuthSessionRepository sessions;
 
     @Transactional
     public void forgotPassword(String email) {
@@ -71,6 +72,7 @@ public class OtpService {
         User user = lockUser(email);
         consume(user, RESET_PASSWORD, code);
         user.setPasswordHash(encoder.encode(password));
+        sessions.revokeAll(user.getId());
         user.setLastModifyBy(user.getId());
         events.publishEvent(new AuthMailEvent(user.getId(), user.getEmail(), PASSWORD_CHANGED, null));
     }

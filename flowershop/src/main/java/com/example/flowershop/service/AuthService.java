@@ -22,9 +22,19 @@ public class AuthService {
     private final PendingRegistrationRepository pending;
     private final PasswordEncoder encoder;
     private final ApplicationEventPublisher events;
+    private final ShopRepository shops;
 
     @Transactional
     public void registerCustomer(RegisterRequest request) {
+        register(request,null,null);
+    }
+
+    @Transactional
+    public void registerShop(com.example.flowershop.dto.auth.ShopRegisterRequest request) {
+        register(request.account(),request.shopName().strip(),request.description().strip());
+    }
+
+    private void register(RegisterRequest request,String shopName,String description) {
         String email = normalize(request.email());
         if (request.password().getBytes(StandardCharsets.UTF_8).length > 72)
             throw new IllegalArgumentException("Mật khẩu không được vượt quá 72 byte UTF-8.");
@@ -39,6 +49,8 @@ public class AuthService {
         // Replace submitted details only when issuing a new code: old codes cannot
         // activate a different password/name from a subsequent registration request.
         registration.setFullName(request.fullName().strip());
+        registration.setShopName(shopName);
+        registration.setShopDescription(description);
         registration.setPasswordHash(encoder.encode(request.password()));
         issue(registration);
     }
@@ -84,9 +96,11 @@ public class AuthService {
         }
         String id = UUID.randomUUID().toString();
         User user = User.builder().id(id).email(p.getEmail()).fullName(p.getFullName())
-                .passwordHash(p.getPasswordHash()).role(UserRole.CUSTOMER)
+                .passwordHash(p.getPasswordHash()).role(p.getShopName()==null ? UserRole.CUSTOMER : UserRole.SHOP)
                 .status(UserStatus.ACTIVE).isEmailVerified(true).createdBy(id).build();
         users.saveAndFlush(user);
+        if(p.getShopName()!=null) shops.saveAndFlush(Shop.builder().id(UUID.randomUUID().toString()).owner(user)
+                .name(p.getShopName()).description(p.getShopDescription()).status(ShopStatus.PENDING).createdBy(id).build());
         pending.delete(p);
         pending.flush();
         events.publishEvent(new AuthMailEvent(id, user.getEmail(), AuthMailEvent.Kind.WELCOME, null));

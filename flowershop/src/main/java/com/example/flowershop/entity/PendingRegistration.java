@@ -8,6 +8,8 @@ import java.time.Instant;
 @Table(name = "Pending_Registrations")
 @Getter @Setter @NoArgsConstructor
 public class PendingRegistration {
+    @Column(name="shop_name",length=255) private String shopName;
+    @Column(name="shop_description",length=5000) private String shopDescription;
     @Id @Column(length = 255) private String email;
     @Column(name = "full_name", nullable = false, length = 100) private String fullName;
     @Column(name = "password_hash", nullable = false, length = 100) private String passwordHash;
