@@ -5,7 +5,6 @@ export function useManagerShopController(role) {
   const [selected, setSelected] = useState(null)
   const [members, setMembers] = useState([])
   const [form, setForm] = useState({ name: '', description: '', logoUrl: '' })
-  const [email, setEmail] = useState('')
   const [address, setAddress] = useState({ addressLine: '', city: 'Hà Nội', district: '', ward: '', isDefault: true })
   const [busy, setBusy] = useState(true)
   const [error, setError] = useState('')
@@ -48,14 +47,11 @@ export function useManagerShopController(role) {
   const save = e => { e.preventDefault(); return run(async () => {
     const shop = await api.save(selected.id, form); setSelected(shop); setShops(s => s.map(x => x.id === shop.id ? shop : x)); setNotice('Đã cập nhật hồ sơ shop.')
   }) }
-  const add = e => { e.preventDefault(); return run(async () => {
-    await api.add(selected.id, email.trim()); setEmail(''); setMembers(await api.staff(selected.id)); setNotice('Đã thêm nhân viên.')
-  }) }
   const saveAddress = e => { e.preventDefault(); return run(async () => { await api.saveAddress(selected.id, address); setNotice('Đã lưu địa chỉ cửa hàng.') }) }
   const toggle = member => {
     if (!window.confirm(`${member.active ? 'Ngừng' : 'Bật'} quyền làm việc của ${member.email}?`)) return
     return run(async () => { await api.active(selected.id, member.userId, !member.active); setMembers(await api.staff(selected.id)); setNotice('Đã cập nhật quyền làm việc.') })
   }
-  return { shops, selected, members, form, setForm, email, setEmail, address, setAddress, saveAddress, busy, error, notice, select, save, add, toggle,
+  return { shops, selected, members, form, setForm, address, setAddress, saveAddress, busy, error, notice, select, save, toggle,
     retry: () => { setSelected(null); setRevision(x => x + 1) } }
 }

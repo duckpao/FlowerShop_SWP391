@@ -1,6 +1,6 @@
 import '../styles/auth.css'
 import AccountView from './AccountView'
-export default function AuthView({ page, email, fullName, registrationType, setRegistrationType, shopName, setShopName, shopDescription, setShopDescription, password, confirmation, otp, busy, error, notice, seconds, user, logout, checkSession, setEmail, setFullName, setPassword, setConfirmation, setOtp, submit, resend, navigate }) {
+export default function AuthView({ page, email, fullName, password, confirmation, otp, busy, error, notice, seconds, user, logout, checkSession, setEmail, setFullName, setPassword, setConfirmation, setOtp, submit, resend, navigate }) {
   if (page === 'account' && user) return <AccountView user={user} logout={logout} checkSession={checkSession} busy={busy} error={error} notice={notice} />
   return <main className="auth-layout">
     <aside className="brand-panel">
@@ -21,10 +21,6 @@ export default function AuthView({ page, email, fullName, registrationType, setR
         {notice && <p className="message success" role="status">{notice}</p>}
         <form onSubmit={submit}>
           <fieldset disabled={busy}>
-            {page === 'register' && <>
-              <label>Loại đăng ký<select value={registrationType} onChange={e => setRegistrationType(e.target.value)}><option value="customer">Khách hàng / người nhận lời mời Staff</option><option value="shop">Shop Manager — đăng ký cửa hàng</option></select></label>
-              {registrationType === 'shop' && <><label>Tên cửa hàng<input required maxLength={255} value={shopName} onChange={e => setShopName(e.target.value)} /></label><label>Mô tả cửa hàng<textarea maxLength={5000} value={shopDescription} onChange={e => setShopDescription(e.target.value)} /></label><p>Shop được tạo sau OTP đúng và cần Admin duyệt trước khi hoạt động.</p></>}
-            </>}
             {page === 'register' && <label>Họ và tên<input autoComplete="name" required maxLength={50}
               value={fullName} onChange={e => setFullName(e.target.value)} /></label>}
             {page !== 'otp' && page !== 'reset' && <label>Email<input type="email" autoComplete="email" required maxLength={page === 'register' ? 50 : 255}

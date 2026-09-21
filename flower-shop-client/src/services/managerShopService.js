@@ -11,6 +11,5 @@ export const managerShopService = {
   staff: id => call(`${base}/${encodeURIComponent(id)}/staff`),
   address: id => call(`${base}/${encodeURIComponent(id)}/address`),
   saveAddress: (id, body) => call(`${base}/${encodeURIComponent(id)}/address`, 'PUT', body),
-  add: (id, email) => call(`${base}/${encodeURIComponent(id)}/staff`, 'POST', { email }),
   active: (id, userId, active) => call(`${base}/${encodeURIComponent(id)}/staff/${encodeURIComponent(userId)}`, 'PUT', { active }),
 }

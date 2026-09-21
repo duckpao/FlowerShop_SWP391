@@ -12,12 +12,9 @@ export function useAuthController() {
     }).catch(() => {}).finally(() => { if (active) setInitializing(false) })
     return () => { active = false }
   }, [])
-  const [page, setPage] = useState('register')
+  const [page, setPage] = useState('signin')
   const [email, setEmail] = useState('')
   const [fullName, setFullName] = useState('')
-  const [registrationType, setRegistrationType] = useState('customer')
-  const [shopName, setShopName] = useState('')
-  const [shopDescription, setShopDescription] = useState('')
   const [password, setPassword] = useState('')
   const [confirmation, setConfirmation] = useState('')
   const [otp, setOtp] = useState('')
@@ -46,8 +43,7 @@ export function useAuthController() {
         if (password !== confirmation) throw new Error('Mật khẩu xác nhận không khớp.')
         if (new TextEncoder().encode(password).length > 72) throw new Error('Mật khẩu không được vượt quá 72 byte UTF-8.')
         const account = { email: address, password, fullName: fullName.trim() }
-        const data = await post(registrationType === 'shop' ? 'register-shop' : 'register', registrationType === 'shop'
-          ? { account, shopName: shopName.trim(), description: shopDescription.trim() } : account)
+        const data = await post('register', account)
         setEmail(address); setPassword(''); setConfirmation(''); setOtp('')
         setPage('otp'); setSeconds(60); setNotice(data.message)
       } else if (page === 'otp') {
@@ -88,5 +84,5 @@ export function useAuthController() {
     catch (failure) { setUser(null); navigate('signin'); setError(failure.message) }
     finally { setBusy(false) }
   }
-  return { page, email, fullName, registrationType, setRegistrationType, shopName, setShopName, shopDescription, setShopDescription, password, confirmation, otp, busy: busy || initializing, error, notice, seconds, user, logout, checkSession, setEmail, setFullName, setPassword, setConfirmation, setOtp, submit, resend, navigate }
+  return { page, email, fullName, password, confirmation, otp, busy: busy || initializing, error, notice, seconds, user, logout, checkSession, setEmail, setFullName, setPassword, setConfirmation, setOtp, submit, resend, navigate }
 }

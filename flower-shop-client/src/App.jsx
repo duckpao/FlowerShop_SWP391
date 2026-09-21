@@ -1,4 +1,6 @@
 import AuthView from './views/AuthView'
+import HomeView from './views/HomeView'
+import { useEffect } from 'react'
 import { useAuthController } from './controllers/useAuthController'
 import AdminCustomersView from './views/AdminCustomersView'
 import AdminShopsView from './views/AdminShopsView'
@@ -24,5 +26,15 @@ export default function App() {
 
 function AuthApp() {
   const controller = useAuthController()
-  return <AuthView {...controller} />
+  const path = window.location.pathname
+  useEffect(() => {
+    if (path === '/login' && controller.user) {
+      const next = new URLSearchParams(window.location.search).get('next') || '/'
+      window.location.replace(/^\/shops\/[a-zA-Z0-9-]+$/.test(next) ? next : '/')
+    }
+  }, [path, controller.user])
+  if (path === '/login') return <AuthView {...controller} />
+  if (path === '/account' && controller.user) return <><a href="/">Trang chủ</a><AuthView {...controller} /></>
+  if (path === '/shop-admin' && controller.user && ['SHOP', 'SHOP_STAFF'].includes(controller.user.role)) return <main className="account-page"><a href="/">Trang chủ</a><h1>Bạn đang là {controller.user.role === 'SHOP' ? 'Manager' : 'Staff'}</h1><ManagerShopsView role={controller.user.role} /></main>
+  return <HomeView auth={controller} />
 }

@@ -15,18 +15,16 @@ import java.util.*;
 public class ManagerShopService {
     public record Profile(@NotBlank @Size(max=255) String name,@NotNull @Size(max=5000) String description,
                           @NotNull @Size(max=255) @Pattern(regexp="^$|https://[^\\s]+",message="Logo phải là URL HTTPS hoặc để trống") String logoUrl) {}
-    public record StaffInput(@NotBlank @Email @Size(max=255) String email) {}
     public record ActiveInput(@NotNull Boolean active) {}
     public record StaffResponse(String userId,String email,String fullName,boolean active) {
         static StaffResponse from(ShopStaff s) { return new StaffResponse(s.getUser().getId(),s.getUser().getEmail(),s.getUser().getFullName(),s.isActive()); }
     }
     private final ShopRepository shops;
     private final ShopStaffRepository staff;
-    private final UserRepository users;
     private final AddressRepository addresses;
     private final DeliveryAreaService areas;
-    public ManagerShopService(ShopRepository shops,ShopStaffRepository staff,UserRepository users,AddressRepository addresses,DeliveryAreaService areas) {
-        this.shops=shops; this.staff=staff; this.users=users; this.addresses=addresses; this.areas=areas;
+    public ManagerShopService(ShopRepository shops,ShopStaffRepository staff,AddressRepository addresses,DeliveryAreaService areas) {
+        this.shops=shops; this.staff=staff; this.addresses=addresses; this.areas=areas;
     }
     public List<com.example.flowershop.dto.account.AddressResponse> address(String id,String actor) {
         owned(id,actor,false); return addresses.findByShopIdAndUserIsNullOrderByCreatedDateAscIdAsc(id).stream().map(com.example.flowershop.dto.account.AddressResponse::from).toList();
@@ -54,16 +52,6 @@ public class ManagerShopService {
         s.setLogoUrl(input.logoUrl().strip()); s.setLastModifyBy(actor); shops.flush(); return ShopResponse.from(s);
     }
     public List<StaffResponse> staff(String id,String actor) { owned(id,actor,false); return staff.findByShopIdOrderByIdAsc(id).stream().map(StaffResponse::from).toList(); }
-    @Transactional public StaffResponse add(String id,String actor,String email) {
-        var shop=owned(id,actor,true);
-        if(shop.getStatus()!=ShopStatus.ACTIVE) throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Shop phải được duyệt trước khi quản lý nhân viên.");
-        var user=users.findByEmail(email.strip().toLowerCase(Locale.ROOT)).orElseThrow(()->new IllegalArgumentException("Không tìm thấy tài khoản Staff đủ điều kiện."));
-        if(user.getRole()!=UserRole.SHOP_STAFF || user.getStatus()!=UserStatus.ACTIVE || !Boolean.TRUE.equals(user.getIsEmailVerified()))
-            throw new IllegalArgumentException("Không tìm thấy tài khoản Staff đủ điều kiện.");
-        if(staff.findByShopIdAndUserId(id,user.getId()).isPresent()) throw new ResponseStatusException(HttpStatus.CONFLICT,"Nhân viên đã có trong cửa hàng; hãy đổi trạng thái quyền làm việc.");
-        ShopStaff member=new ShopStaff(); member.setId(UUID.randomUUID().toString()); member.setShop(shop); member.setUser(user); member.setActive(true);
-        return StaffResponse.from(staff.save(member));
-    }
     @Transactional public StaffResponse active(String id,String actor,String userId,boolean active) {
         var shop=owned(id,actor,true);
         if(shop.getStatus()!=ShopStatus.ACTIVE) throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Shop phải đang hoạt động.");

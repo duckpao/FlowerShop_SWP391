@@ -3,8 +3,8 @@ const labels = { PENDING: 'Chờ xác nhận', ACCEPTED: 'Đã tham gia', CANCEL
 export default function ShopInvitationsView({ shop }) {
   const c = useInvitationsController(shop)
   const disabled = c.busy || shop.status !== 'ACTIVE'
-  return <section><h3>Mời nhân viên qua email</h3>
-    <p>Người nhận tự đăng ký, xác thực email và đồng ý tham gia. Mã có hiệu lực 24 giờ.</p>
+  return <section><h3>Thêm nhân viên mới</h3>
+    <p>Nhập email người muốn mời. Nếu chưa có tài khoản, người nhận cần đăng ký và xác thực email, sau đó đăng nhập để chấp nhận lời mời. Chỉ khi đồng ý, họ mới trở thành nhân viên của shop. Mã có hiệu lực 24 giờ.</p>
     {c.error && <p role="alert" className="message error">{c.error}</p>}
     {c.notice && <p role="status" className="message success">{c.notice}</p>}
     <form onSubmit={c.send}><fieldset disabled={disabled}><label>Email người nhận<input required type="email" maxLength={50} value={c.email} onChange={e => c.setEmail(e.target.value)} /></label><button>Gửi lời mời</button></fieldset></form>

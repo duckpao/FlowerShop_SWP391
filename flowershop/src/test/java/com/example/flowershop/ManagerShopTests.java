@@ -38,6 +38,10 @@ class ManagerShopTests {
     }
     User user(UserRole role) { return users.saveAndFlush(User.builder().id(UUID.randomUUID().toString()).email(UUID.randomUUID()+"@test.example").fullName("Test")
         .role(role).status(UserStatus.ACTIVE).isEmailVerified(true).passwordHash(encoder.encode("FlowerShop123")).build()); }
+    void seedMembership() {
+        var member=new ShopStaff(); member.setId(UUID.randomUUID().toString()); member.setShop(shop); member.setUser(staff); member.setActive(true);
+        members.saveAndFlush(member);
+    }
     ManagerShopService.Profile profile() { return new ManagerShopService.Profile("New Shop","Description","https://example.com/logo.png"); }
     @Test void managerCannotOwnSecondShop() {
         assertThatThrownBy(()->shops.saveAndFlush(Shop.builder().id(UUID.randomUUID().toString()).name("Second Shop").owner(owner).build()))
@@ -52,10 +56,9 @@ class ManagerShopTests {
         shop.setStatus(ShopStatus.BANNED); shops.saveAndFlush(shop);
         assertThat(service.mine(owner.getId())).hasSize(1);
         assertThatThrownBy(()->service.update(shop.getId(),owner.getId(),profile())).isInstanceOf(ResponseStatusException.class);
-        assertThatThrownBy(()->service.add(shop.getId(),owner.getId(),staff.getEmail())).isInstanceOf(ResponseStatusException.class);
     }
     @Test void membershipRevocationAffectsOnlyShopNotAccount() {
-        service.add(shop.getId(),owner.getId(),staff.getEmail());
+        seedMembership();
         assertThat(service.assigned(staff.getId())).hasSize(1);
         var tx=new TransactionTemplate(transactions);
         tx.executeWithoutResult(s->guard.requireAccess(shop.getId(),staff.getId()));
@@ -67,10 +70,8 @@ class ManagerShopTests {
         shop.setStatus(ShopStatus.BANNED); shops.saveAndFlush(shop);
         assertThatThrownBy(()->tx.executeWithoutResult(s->guard.requireAccess(shop.getId(),staff.getId()))).isInstanceOf(ResponseStatusException.class);
     }
-    @Test void rejectsWrongRolesDuplicateAndForeignMembership() {
-        assertThatThrownBy(()->service.add(shop.getId(),owner.getId(),other.getEmail())).isInstanceOf(IllegalArgumentException.class);
-        service.add(shop.getId(),owner.getId(),staff.getEmail());
-        assertThatThrownBy(()->service.add(shop.getId(),owner.getId(),staff.getEmail())).isInstanceOf(ResponseStatusException.class);
+    @Test void rejectsForeignMembershipManagement() {
+        seedMembership();
         assertThatThrownBy(()->service.active(shop.getId(),other.getId(),staff.getId(),false)).isInstanceOf(ResponseStatusException.class);
         assertThatThrownBy(()->service.staff(shop.getId(),other.getId())).isInstanceOf(ResponseStatusException.class);
     }

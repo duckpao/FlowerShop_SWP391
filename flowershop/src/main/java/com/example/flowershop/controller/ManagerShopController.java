@@ -22,9 +22,6 @@ public class ManagerShopController {
     @PutMapping("/{id}") @Parameter(name="X-CSRF-TOKEN",in=ParameterIn.HEADER,required=true)
     public ShopResponse update(@PathVariable String id,@AuthenticationPrincipal CurrentUser u,@Valid @RequestBody ManagerShopService.Profile body) { return service.update(id,u.id(),body); }
     @GetMapping("/{id}/staff") public List<ManagerShopService.StaffResponse> staff(@PathVariable String id,@AuthenticationPrincipal CurrentUser u) { return service.staff(id,u.id()); }
-    @PostMapping("/{id}/staff") @ResponseStatus(org.springframework.http.HttpStatus.CREATED)
-    @Parameter(name="X-CSRF-TOKEN",in=ParameterIn.HEADER,required=true)
-    public ManagerShopService.StaffResponse add(@PathVariable String id,@AuthenticationPrincipal CurrentUser u,@Valid @RequestBody ManagerShopService.StaffInput body) { return service.add(id,u.id(),body.email()); }
     @PutMapping("/{id}/staff/{userId}") @Parameter(name="X-CSRF-TOKEN",in=ParameterIn.HEADER,required=true)
     public ManagerShopService.StaffResponse active(@PathVariable String id,@PathVariable String userId,@AuthenticationPrincipal CurrentUser u,@Valid @RequestBody ManagerShopService.ActiveInput body) { return service.active(id,u.id(),userId,body.active()); }
 }

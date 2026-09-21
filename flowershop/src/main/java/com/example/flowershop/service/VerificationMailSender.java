@@ -17,6 +17,18 @@ public class VerificationMailSender {
         mail.setFrom(from);
         mail.setTo(event.email());
         switch (event.kind()) {
+            case STAFF_APPLICATION_NEW -> {
+                mail.setSubject("FlowerShop - Có đơn đăng ký làm nhân viên mới");
+                mail.setText("Shop " + event.code() + " vừa nhận được đơn ứng tuyển. Đăng nhập FlowerShop, vào Thông báo đăng ký làm nhân viên để xem thông tin và duyệt hoặc từ chối.");
+            }
+            case STAFF_APPLICATION_APPROVED -> {
+                mail.setSubject("FlowerShop - Đơn ứng tuyển đã được duyệt");
+                mail.setText("Chúc mừng! Bạn đã trở thành nhân viên của shop " + event.code() + ". Hãy đăng nhập lại FlowerShop để sử dụng quyền Staff và vào trang quản trị shop.");
+            }
+            case STAFF_APPLICATION_REJECTED -> {
+                mail.setSubject("FlowerShop - Kết quả ứng tuyển");
+                mail.setText("Cảm ơn bạn đã ứng tuyển tại " + event.code() + ". Shop chưa thể tiếp nhận bạn ở thời điểm này. Tài khoản của bạn vẫn là Customer.");
+            }
             case STAFF_INVITATION -> {
                 mail.setSubject("FlowerShop - Lời mời làm nhân viên cửa hàng");
                 mail.setText("Bạn được mời tham gia cửa hàng: " + event.code()

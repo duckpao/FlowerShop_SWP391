@@ -4,13 +4,12 @@ import '../styles/account.css'
 import AdminCustomersView from './AdminCustomersView'
 import AdminShopsView from './AdminShopsView'
 import ManagerShopsView from './ManagerShopsView'
-import AcceptInvitationView from './AcceptInvitationView'
+
 
 export default function AccountView({ user, logout, checkSession, busy: authBusy, error: authError, notice: authNotice }) {
   const c = useAccountController(user)
   const busy = c.busy || authBusy
   return <main className="account-page">
-    {['CUSTOMER', 'SHOP_STAFF'].includes(user.role) && <AcceptInvitationView email={user.email} />}
     {['SHOP', 'SHOP_STAFF'].includes(user.role) && <ManagerShopsView role={user.role} />}
     {user.role === 'ADMIN' && <AdminCustomersView />}
     {user.role === 'ADMIN' && <AdminShopsView />}

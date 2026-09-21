@@ -1,7 +1,7 @@
 # Hồ sơ cửa hàng và nhân viên
 
 Đã có đăng ký shop qua OTP và lời mời nhân viên qua email: xem [SHOP_ONBOARDING_GUIDE.md](SHOP_ONBOARDING_GUIDE.md).
-Mục thêm Staff có sẵn bên dưới vẫn dùng cho liên kết trực tiếp; người chưa có Staff có thể đi qua lời mời.
+Luồng giao diện hiện tại: Customer tìm shop và gửi đơn xin làm nhân viên; Manager duyệt hoặc từ chối. Xem [STAFF_APPLICATION_GUIDE.md](STAFF_APPLICATION_GUIDE.md). API lời mời cũ vẫn giữ để tương thích nhưng không còn hiển thị trên các trang chính. Đã bỏ API thêm trực tiếp.
 
 Mỗi Manager chỉ sở hữu tối đa một shop, ràng buộc UNIQUE(owner_id) tại DB và OneToOne trong entity.
 Manager local shop1@gmail.com chỉ quản lý FPTU Smart Floral. Giao diện mở thẳng shop này;
@@ -33,10 +33,9 @@ BANNED/INACTIVE chỉ xem. Không tự đổi chủ shop hoặc trạng thái ph
 
 ## Nhân viên
 
-Manager thêm bằng email tài khoản SHOP_STAFF, ACTIVE, đã xác thực.
-Mục thêm trực tiếp liên kết tài khoản hiện có. Mục **Mời nhân viên qua email** hỗ trợ
-người chưa có Staff: tự đăng ký OTP, đăng nhập và xác nhận tham gia theo SHOP_ONBOARDING_GUIDE.md.
-Không tự đổi role Customer/Admin/Manager. Một Staff có thể thuộc nhiều shop.
+Manager nhập email ở mục **Thêm nhân viên mới** để gửi lời mời.
+Người nhận chưa có tài khoản cần đăng ký và xác thực OTP, sau đó đăng nhập và chấp nhận lời mời theo SHOP_ONBOARDING_GUIDE.md.
+Customer chỉ chuyển thành Staff sau khi chấp nhận; Admin/Manager không được chuyển bằng luồng này. Một Staff có thể thuộc nhiều shop.
 Ngừng quyền chỉ vô hiệu hóa liên kết tại shop đó, không khóa tài khoản cá nhân.
 Staff đăng nhập thấy các shop được phân công và trạng thái shop, không được sửa hồ sơ.
 
@@ -47,7 +46,7 @@ Staff đăng nhập thấy các shop được phân công và trạng thái shop
 | GET | `/api/shop/mine` | Danh sách shop sở hữu |
 | PUT | `/api/shop/mine/{id}` | Body name, description, logoUrl |
 | GET/PUT | `/api/shop/mine/{id}/address` | Xem danh sách / cập nhật địa chỉ chính |
-| GET/POST | `/api/shop/mine/{id}/staff` | Danh sách / thêm bằng body email |
+| GET | `/api/shop/mine/{id}/staff` | Danh sách nhân viên đã tham gia |
 | PUT | `/api/shop/mine/{id}/staff/{userId}` | Body `{"active":false}` hoặc true |
 | GET | `/api/staff/shops` | Shop Staff được phân công |
 
@@ -64,7 +63,7 @@ Dev-admin chỉ hỗ trợ API Admin; dev-manager là profile riêng cho API Man
 
 1. Restart backend, chạy frontend, đăng nhập Manager đã xác thực có shop.
 2. Sửa tên/mô tả/logo và địa chỉ, reload kiểm tra lưu dữ liệu.
-3. Dùng email Staff đã xác thực để thêm vào shop ACTIVE.
+3. Tại **Thêm nhân viên mới**, gửi lời mời từ shop ACTIVE. Người nhận đăng ký/xác thực nếu cần, đăng nhập và chấp nhận lời mời, sau đó đăng nhập lại với quyền Staff.
 4. Đăng nhập Staff ở cửa sổ khác: thấy shop được phân công.
 5. Manager ngừng quyền, Staff tải lại: shop không còn trong danh sách.
 6. Admin khóa shop: Manager vẫn xem được nhưng không sửa hồ sơ/nhân viên.

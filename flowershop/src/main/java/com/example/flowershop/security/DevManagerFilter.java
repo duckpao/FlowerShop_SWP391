@@ -21,9 +21,9 @@ public class DevManagerFilter extends OncePerRequestFilter {
             throws ServletException,IOException {
         String path=request.getRequestURI().substring(request.getContextPath().length());
         boolean allowed=switch(request.getMethod()) {
-            case "GET" -> path.equals("/api/shop/mine") || path.matches("/api/shop/mine/[^/]+/(staff|address|invitations)");
-            case "PUT" -> path.matches("/api/shop/mine/[^/]+") || path.matches("/api/shop/mine/[^/]+/address") || path.matches("/api/shop/mine/[^/]+/staff/[^/]+");
-            case "POST" -> path.matches("/api/shop/mine/[^/]+/(staff|invitations)");
+            case "GET" -> path.equals("/api/shop/mine") || path.matches("/api/shop/mine/[^/]+/(staff|address|invitations|applications)");
+            case "PUT" -> path.matches("/api/shop/mine/[^/]+/applications/[^/]+") || path.matches("/api/shop/mine/[^/]+") || path.matches("/api/shop/mine/[^/]+/address") || path.matches("/api/shop/mine/[^/]+/staff/[^/]+");
+            case "POST" -> path.matches("/api/shop/mine/[^/]+/invitations");
             case "DELETE" -> path.matches("/api/shop/mine/[^/]+/invitations/[^/]+");
             default -> false;
         };
