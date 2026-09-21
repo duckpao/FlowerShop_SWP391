@@ -3,6 +3,7 @@ import { roleLabels } from '../models/authModel'
 import '../styles/account.css'
 import AdminCustomersView from './AdminCustomersView'
 import AdminShopsView from './AdminShopsView'
+import AdminManagerApplicationsView from './AdminManagerApplicationsView'
 import ManagerShopsView from './ManagerShopsView'
 
 
@@ -12,7 +13,9 @@ export default function AccountView({ user, logout, checkSession, busy: authBusy
   return <main className="account-page">
     {['SHOP', 'SHOP_STAFF'].includes(user.role) && <ManagerShopsView role={user.role} />}
     {user.role === 'ADMIN' && <AdminCustomersView />}
+    {user.role === 'ADMIN' && <p><a href="/admin/approvals">Mở màn Duyệt yêu cầu đăng ký Manager</a></p>}
     {user.role === 'ADMIN' && <AdminShopsView />}
+    {user.role === 'ADMIN' && <AdminManagerApplicationsView />}
     <header className="account-header"><div><h1>Tài khoản FlowerShop</h1><p>{roleLabels[user.role]}</p></div>
       <button type="button" disabled={busy} onClick={logout}>Đăng xuất</button></header>
     {(c.error || authError) && <p className="message error" role="alert">{c.error || authError}</p>}

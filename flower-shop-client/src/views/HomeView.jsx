@@ -1,16 +1,24 @@
 import { useShopSearchController } from '../controllers/useShopSearchController'
 import ManagerNotificationsView from './ManagerNotificationsView'
+import ManagerApplicationView from './ManagerApplicationView'
+import ProductsView from './ProductsView'
 const roles = { CUSTOMER: 'Customer', SHOP_STAFF: 'Staff', SHOP: 'Manager', ADMIN: 'Admin' }
 const statuses = { PENDING: 'Chờ duyệt', APPROVED: 'Đã duyệt', REJECTED: 'Đã từ chối' }
 export default function HomeView({ auth }) {
   const c = useShopSearchController(auth.user)
   return <main className="account-page"><h1>✿ FlowerShop</h1>
     <header className="account-header">{auth.user ? <><div><p>{auth.user.email}</p><strong>Bạn đang là {roles[auth.user.role] || auth.user.role}</strong></div>
-      <a href="/account">Hồ sơ cá nhân</a>
+      {auth.user.role !== 'CUSTOMER' && <a href="/account">Hồ sơ cá nhân</a>}
+      {auth.user.role === 'ADMIN' && <a className="primary" href="/admin">Dashboard Admin</a>}
       {['SHOP', 'SHOP_STAFF'].includes(auth.user.role) && <a href="/shop-admin">Vào trang quản trị shop</a>}
-      <button disabled={auth.busy} onClick={auth.logout}>Đăng xuất</button></> : <a href="/login">Đăng nhập</a>}</header>
+      <div className="customer-header-actions"><button disabled={auth.busy} onClick={auth.logout}>Đăng xuất</button>
+        {auth.user.role === 'CUSTOMER' && <a className="customer-profile-icon" href="/account" aria-label="Quản lý thông tin tài khoản" title="Quản lý thông tin tài khoản">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><circle cx="12" cy="8" r="4" /><path d="M4 22v-2a8 8 0 0 1 16 0v2" /></svg>
+        </a>}
+      </div></> : <a href="/login">Đăng nhập</a>}</header>
     {auth.error && <p role="alert">{auth.error}</p>}
     {auth.user?.role === 'SHOP' && <ManagerNotificationsView />}
+    {auth.user && ['CUSTOMER', 'SHOP'].includes(auth.user.role) && <ManagerApplicationView key={auth.user.id} user={auth.user} />}
     {c.sessionExpired && <p role="alert">Phiên đăng nhập đã thay đổi hoặc hết hạn. <a href="/login">Đăng nhập lại để xem quyền và kết quả ứng tuyển mới nhất.</a></p>}
     {!c.selected && <>
     <h2>Tìm cửa hàng hoa</h2><form onSubmit={c.search}><label>Tên shop<input maxLength={100} value={c.query} onChange={e => c.setQuery(e.target.value)} /></label><button disabled={c.busy}>Tìm kiếm</button></form>
@@ -20,6 +28,7 @@ export default function HomeView({ auth }) {
     </>}
     {c.selected && <section className="account-card"><button onClick={() => c.select(null)}>← Quay lại danh sách shop</button><h2>✿ {c.selected.name}</h2><p>{c.selected.description || 'Chào mừng bạn đến với cửa hàng.'}</p>
       <h3>Giới thiệu cửa hàng</h3><p>Khám phá cửa hàng và cơ hội trở thành thành viên của đội ngũ.</p>
+      <ProductsView key={c.selected.id} shop={c.selected} />
       <h3>Tuyển dụng</h3><p>Bạn yêu thích hoa và muốn làm việc tại {c.selected.name}? Hãy gửi thông tin để Manager xem xét.</p>
       {c.error && <p role="alert">{c.error}</p>}{c.notice && <p role="status">{c.notice}</p>}
       {auth.user?.role === 'CUSTOMER' ? <><button aria-expanded={c.showApplication} onClick={() => c.setShowApplication(!c.showApplication)}>{c.showApplication ? 'Đóng form' : 'Đăng ký làm nhân viên'}</button>

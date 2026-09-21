@@ -1,5 +1,9 @@
 .account-page { max-width: 840px; width: 100%; margin: auto; padding: 24px; }
 .account-header { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+.customer-header-actions { display: flex; align-items: center; gap: 14px; margin-left: auto; }
+.customer-profile-icon { display: grid; place-items: center; width: 48px; height: 48px; flex-shrink: 0; border-radius: 50%; background: #203d32; color: white; text-decoration: none; }
+.customer-profile-icon:hover { background: #365747; }
+.customer-profile-icon:focus-visible { outline: 3px solid #86a995; outline-offset: 4px; }
 .account-card { margin: 24px 0; background: white; padding: 24px; border: 1px solid #ded6d1; border-radius: 16px; }
 .account-page button { cursor: pointer; padding: 10px 16px; border-radius: 8px; }
 .account-page button:disabled { cursor: wait; opacity: .6; }

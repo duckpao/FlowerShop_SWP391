@@ -21,7 +21,8 @@ public class DevAdminFilter extends OncePerRequestFilter {
                 (path.equals("/api/admin/customers") || path.matches("/api/admin/customers/[^/]+")))
                 || (request.getMethod().equals("PUT") && path.matches("/api/admin/customers/[^/]+/blocked"))
                 || (request.getMethod().equals("GET") && (path.equals("/api/admin/shops") || path.matches("/api/admin/shops/[^/]+")))
-                || (request.getMethod().equals("PUT") && path.matches("/api/admin/shops/[^/]+/(approve|block|unblock)"));
+                || (request.getMethod().equals("PUT") && path.matches("/api/admin/shops/[^/]+/(approve|block|unblock)"))
+                || (request.getMethod().equals("PUT") && path.matches("/api/admin/shops/applications/[^/]+"));
         boolean loopback=List.of("127.0.0.1","::1","0:0:0:0:0:0:0:1").contains(request.getRemoteAddr());
         if (allowed && loopback && request.getHeader("Authorization")==null
                 && SecurityContextHolder.getContext().getAuthentication()==null) {
