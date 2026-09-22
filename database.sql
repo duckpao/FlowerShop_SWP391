@@ -11,7 +11,7 @@ CREATE TABLE Users (
     google_id NVARCHAR(255) UNIQUE,
     full_name NVARCHAR(100),
     phone NVARCHAR(20),
-    role ENUM('ADMIN', 'SHOP', 'CUSTOMER', 'DELIVERY', 'SHOP_STAFF') NOT NULL,
+    role ENUM('ADMIN', 'SHOP', 'CUSTOMER', 'DELIVERY') NOT NULL,
     is_email_verified BOOLEAN DEFAULT FALSE,
     status ENUM('ACTIVE', 'INACTIVE', 'BANNED') DEFAULT 'ACTIVE',
     created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -20,18 +20,9 @@ CREATE TABLE Users (
     last_modify_by NVARCHAR(36)
 );
 
-CREATE TABLE Email_Verification_Tokens (
-    user_id NVARCHAR(36) PRIMARY KEY,
-    token_hash VARCHAR(64) NOT NULL UNIQUE,
-    issued_at TIMESTAMP(6) NOT NULL,
-    expires_at TIMESTAMP(6) NOT NULL,
-    used_at TIMESTAMP(6) NULL,
-    CONSTRAINT fk_email_verification_user FOREIGN KEY (user_id) REFERENCES Users(id)
-);
-
 CREATE TABLE Shops (
     id NVARCHAR(36) PRIMARY KEY,
-    owner_id NVARCHAR(36) NOT NULL UNIQUE,
+    owner_id NVARCHAR(36) NOT NULL,
     name NVARCHAR(255) NOT NULL,
     description TEXT,
     logo_url NVARCHAR(255),
@@ -84,8 +75,6 @@ CREATE TABLE Products (
     shelf_life_days INT, -- Thời gian bảo quản (ví dụ: 3-5 ngày)
     price DECIMAL(12, 2) NOT NULL,
     stock INT NOT NULL DEFAULT 0,
-    images JSON, 
-    videos JSON,
     status ENUM('ACTIVE', 'INACTIVE', 'OUT_OF_STOCK') DEFAULT 'ACTIVE',
     created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_by NVARCHAR(36),
@@ -93,6 +82,33 @@ CREATE TABLE Products (
     last_modify_by NVARCHAR(36),
     FOREIGN KEY (shop_id) REFERENCES Shops(id),
     FOREIGN KEY (category_id) REFERENCES Categories(id)
+);
+
+CREATE TABLE Product_Images (
+    id NVARCHAR(36) PRIMARY KEY,
+    product_id NVARCHAR(36) NOT NULL,
+    image_url NVARCHAR(500) NOT NULL, -- URL từ Cloudinary
+    is_primary BOOLEAN DEFAULT FALSE, -- Ảnh đại diện sản phẩm
+    display_order INT DEFAULT 0, -- Thứ tự hiển thị
+    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by NVARCHAR(36),
+    last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    last_modify_by NVARCHAR(36),
+    FOREIGN KEY (product_id) REFERENCES Products(id) ON DELETE CASCADE
+);
+
+CREATE TABLE Product_Videos (
+    id NVARCHAR(36) PRIMARY KEY,
+    product_id NVARCHAR(36) NOT NULL,
+    video_url NVARCHAR(500) NOT NULL, -- URL từ Cloudinary
+    title NVARCHAR(255),
+    description TEXT,
+    display_order INT DEFAULT 0, -- Thứ tự hiển thị
+    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by NVARCHAR(36),
+    last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    last_modify_by NVARCHAR(36),
+    FOREIGN KEY (product_id) REFERENCES Products(id) ON DELETE CASCADE
 );
 
 -- ==========================================
@@ -325,13 +341,25 @@ CREATE TABLE Blogs (
     shop_id NVARCHAR(36) NOT NULL,
     title NVARCHAR(255) NOT NULL,
     content LONGTEXT NOT NULL, -- Hỗ trợ HTML/Rich Text Format như bài báo
-    images JSON, -- Bộ sưu tập hình ảnh đính kèm bài viết
+    thumbnail_url NVARCHAR(500), -- URL ảnh đại diện từ Cloudinary
     status ENUM('DRAFT', 'PUBLISHED', 'HIDDEN') DEFAULT 'PUBLISHED',
     created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_by NVARCHAR(36),
     last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     last_modify_by NVARCHAR(36),
     FOREIGN KEY (shop_id) REFERENCES Shops(id)
+);
+
+CREATE TABLE Blog_Images (
+    id NVARCHAR(36) PRIMARY KEY,
+    blog_id NVARCHAR(36) NOT NULL,
+    image_url NVARCHAR(500) NOT NULL, -- URL từ Cloudinary
+    display_order INT DEFAULT 0, -- Thứ tự hiển thị
+    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by NVARCHAR(36),
+    last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    last_modify_by NVARCHAR(36),
+    FOREIGN KEY (blog_id) REFERENCES Blogs(id) ON DELETE CASCADE
 );
 
 CREATE TABLE Blog_Interactions (
@@ -378,12 +406,12 @@ CREATE TABLE Customer_Occasions (
 -- SCRIPT INSERT MOCK DATA - FLOWER SHOP DB
 -- ==========================================
 
--- 1. INSERT USERS (Admin, Shop Manager, Customer, Shop Staff)
+-- 1. INSERT USERS (Admin, Shop Owner, Customer, Delivery)
 INSERT INTO Users (id, email, password_hash, full_name, phone, role, status, created_by) VALUES
 ('user-admin-01', 'admin@flowershop.com', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', 'System Admin', '0901234567', 'ADMIN', 'ACTIVE', 'user-admin-01'),
 ('user-shop-01', 'shop1@gmail.com', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', 'Nguyễn Đức Bảo', '0912345678', 'SHOP', 'ACTIVE', 'user-admin-01'),
 ('user-customer-01', 'khachhang1@gmail.com', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', 'Trần Thị B', '0987654321', 'CUSTOMER', 'ACTIVE', 'user-customer-01'),
-('user-staff-01', 'staff1@example.com', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', 'Lê Văn C', '0922334455', 'SHOP_STAFF', 'ACTIVE', 'user-admin-01');
+('user-delivery-01', 'shipper1@ahamove.com', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', 'Lê Văn C', '0922334455', 'DELIVERY', 'ACTIVE', 'user-admin-01');
 
 -- 2. INSERT SHOPS
 INSERT INTO Shops (id, owner_id, name, description, logo_url, status, created_by) VALUES
@@ -400,9 +428,20 @@ INSERT INTO Categories (id, name, description, status, created_by) VALUES
 ('cat-02', 'Hoa Khai Trương', 'Kệ hoa, lẵng hoa chúc mừng khai trương', 'ACTIVE', 'user-admin-01');
 
 -- 5. INSERT PRODUCTS
-INSERT INTO Products (id, shop_id, category_id, name, description, components, shelf_life_days, price, stock, images, status, created_by) VALUES
-('prod-01', 'shop-01', 'cat-01', 'Bó Hồng Đỏ Mix Baby', 'Bó hoa hồng đỏ Ecuador mix hoa baby trắng', '{"red_roses": 10, "white_baby_breath": 3, "wrapper": "Giấy Kraft"}', 4, 350000.00, 50, '["url_img1.jpg", "url_img2.jpg"]', 'ACTIVE', 'user-shop-01'),
-('prod-02', 'shop-01', 'cat-02', 'Lẵng Hướng Dương Ban Mai', 'Hoa hướng dương tặng khai trương, tốt nghiệp', '{"sunflowers": 5, "yellow_roses": 5}', 5, 450000.00, 20, '["url_img3.jpg"]', 'ACTIVE', 'user-shop-01');
+INSERT INTO Products (id, shop_id, category_id, name, description, components, shelf_life_days, price, stock, status, created_by) VALUES
+('prod-01', 'shop-01', 'cat-01', 'Bó Hồng Đỏ Mix Baby', 'Bó hoa hồng đỏ Ecuador mix hoa baby trắng', '{"red_roses": 10, "white_baby_breath": 3, "wrapper": "Giấy Kraft"}', 4, 350000.00, 50, 'ACTIVE', 'user-shop-01'),
+('prod-02', 'shop-01', 'cat-02', 'Lẵng Hướng Dương Ban Mai', 'Hoa hướng dương tặng khai trương, tốt nghiệp', '{"sunflowers": 5, "yellow_roses": 5}', 5, 450000.00, 20, 'ACTIVE', 'user-shop-01');
+
+-- 5.1 INSERT PRODUCT IMAGES (Từ Cloudinary)
+INSERT INTO Product_Images (id, product_id, image_url, is_primary, display_order, created_by) VALUES
+('img-prod-01-01', 'prod-01', 'https://res.cloudinary.com/[your-cloud]/image/upload/[public-id-1].jpg', TRUE, 1, 'user-shop-01'),
+('img-prod-01-02', 'prod-01', 'https://res.cloudinary.com/[your-cloud]/image/upload/[public-id-2].jpg', FALSE, 2, 'user-shop-01'),
+('img-prod-02-01', 'prod-02', 'https://res.cloudinary.com/[your-cloud]/image/upload/[public-id-3].jpg', TRUE, 1, 'user-shop-01');
+
+-- 5.2 INSERT PRODUCT VIDEOS (Từ Cloudinary)
+INSERT INTO Product_Videos (id, product_id, video_url, title, description, display_order, created_by) VALUES
+('vid-prod-01-01', 'prod-01', 'https://res.cloudinary.com/[your-cloud]/video/upload/[video-id-1].mp4', 'Hướng dẫn cắm hoa', 'Cách cắm bó hồng đỏ mix baby', 1, 'user-shop-01'),
+('vid-prod-02-01', 'prod-02', 'https://res.cloudinary.com/[your-cloud]/video/upload/[video-id-2].mp4', 'Unboxing lẵng hoa', 'Xem cách lẵng hoa được gói', 1, 'user-shop-01');
 
 -- 6. INSERT COUPONS
 INSERT INTO Coupons (id, shop_id, code, discount_type, discount_value, min_order_value, max_discount_value, start_date, end_date, usage_limit, created_by) VALUES
@@ -445,8 +484,12 @@ INSERT INTO Product_Reviews (id, product_id, user_id, order_id, rating, comment,
 ('rev-01', 'prod-01', 'user-customer-01', 'order-01', 5, 'Hoa rất tươi, giao hàng siêu nhanh. Sẽ ủng hộ shop tiếp!', 'Cảm ơn bạn đã tin tưởng FPTU Smart Floral ạ!', 'user-customer-01');
 
 -- 15. INSERT BLOGS & COMMENTS
-INSERT INTO Blogs (id, shop_id, title, content, images, status, created_by) VALUES
-('blog-01', 'shop-01', 'Cách Giữ Hoa Hồng Tươi Lâu', '<p>Bí quyết giữ hoa hồng tươi lâu đến 7 ngày...</p>', '["blog_img1.jpg"]', 'PUBLISHED', 'user-shop-01');
+INSERT INTO Blogs (id, shop_id, title, content, thumbnail_url, status, created_by) VALUES
+('blog-01', 'shop-01', 'Cách Giữ Hoa Hồng Tươi Lâu', '<p>Bí quyết giữ hoa hồng tươi lâu đến 7 ngày...</p>', 'https://res.cloudinary.com/[your-cloud]/image/upload/[blog-thumb-id].jpg', 'PUBLISHED', 'user-shop-01');
+
+-- 15.1 INSERT BLOG IMAGES (Từ Cloudinary)
+INSERT INTO Blog_Images (id, blog_id, image_url, display_order, created_by) VALUES
+('blog-img-01', 'blog-01', 'https://res.cloudinary.com/[your-cloud]/image/upload/[blog-img-id-1].jpg', 1, 'user-shop-01');
 
 INSERT INTO Blog_Comments (id, blog_id, user_id, parent_comment_id, content, created_by) VALUES
 ('cmt-01', 'blog-01', 'user-customer-01', NULL, 'Bài viết rất hữu ích, cảm ơn shop!', 'user-customer-01'),
@@ -458,65 +501,3 @@ INSERT INTO Favorite_Products (user_id, product_id, created_by) VALUES
 
 INSERT INTO Customer_Occasions (id, customer_id, title, occasion_date, reminder_sent, created_by) VALUES
 ('occ-01', 'user-customer-01', 'Kỷ niệm ngày cưới', '2026-10-15', FALSE, 'user-customer-01');
-CREATE TABLE IF NOT EXISTS Otp_Challenges (
-    id VARCHAR(36) PRIMARY KEY,
-    user_id NVARCHAR(36) NOT NULL,
-    purpose VARCHAR(20) NOT NULL,
-    code_hash VARCHAR(100) NOT NULL,
-    issued_at TIMESTAMP(6) NOT NULL,
-    expires_at TIMESTAMP(6) NOT NULL,
-    used_at TIMESTAMP(6) NULL,
-    window_start TIMESTAMP(6) NOT NULL,
-    failed_attempts INT NOT NULL DEFAULT 0,
-    send_count INT NOT NULL DEFAULT 0,
-    UNIQUE KEY uq_otp_user_purpose (user_id, purpose),
-    CONSTRAINT fk_otp_user FOREIGN KEY (user_id) REFERENCES Users(id)
-);
-CREATE TABLE IF NOT EXISTS Pending_Registrations (
-    email NVARCHAR(255) PRIMARY KEY,
-    full_name NVARCHAR(100) NOT NULL,
-    password_hash VARCHAR(100) NOT NULL,
-    otp_hash VARCHAR(100) NOT NULL,
-    issued_at TIMESTAMP(6) NOT NULL,
-    expires_at TIMESTAMP(6) NOT NULL,
-    window_start TIMESTAMP(6) NOT NULL,
-    failed_attempts INT NOT NULL DEFAULT 0,
-    send_count INT NOT NULL DEFAULT 0
-);
-CREATE TABLE IF NOT EXISTS Auth_Sessions (
-    id VARCHAR(36) PRIMARY KEY,
-    user_id NVARCHAR(36) NOT NULL,
-    refresh_hash VARCHAR(64) NOT NULL,
-    expires_at TIMESTAMP(6) NOT NULL,
-    revoked BOOLEAN NOT NULL DEFAULT FALSE,
-    INDEX idx_auth_session_user (user_id),
-    FOREIGN KEY (user_id) REFERENCES Users(id)
-);
-
-USE flower_shop_db;
-CREATE TABLE IF NOT EXISTS Shop_Staff (
-    id VARCHAR(36) PRIMARY KEY,
-    shop_id NVARCHAR(36) NOT NULL,
-    user_id NVARCHAR(36) NOT NULL,
-    active BOOLEAN NOT NULL DEFAULT TRUE,
-    UNIQUE KEY uq_shop_staff (shop_id,user_id),
-    FOREIGN KEY (shop_id) REFERENCES Shops(id),
-    FOREIGN KEY (user_id) REFERENCES Users(id)
-);
-
-USE flower_shop_db;
-ALTER TABLE Pending_Registrations ADD COLUMN shop_name VARCHAR(255) NULL,
-    ADD COLUMN shop_description VARCHAR(5000) NULL;
-CREATE TABLE Staff_Invitations (
-    id VARCHAR(36) PRIMARY KEY,
-    shop_id NVARCHAR(36) NOT NULL,
-    email VARCHAR(255) NOT NULL,
-    token_hash VARCHAR(64) NOT NULL,
-    expires_at TIMESTAMP(6) NOT NULL,
-    issued_at TIMESTAMP(6) NOT NULL,
-    window_start TIMESTAMP(6) NOT NULL,
-    send_count INT NOT NULL,
-    status VARCHAR(16) NOT NULL,
-    UNIQUE KEY uq_staff_invite(shop_id,email),
-    FOREIGN KEY (shop_id) REFERENCES Shops(id)
-);

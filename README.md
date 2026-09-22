@@ -14,6 +14,12 @@ Dự án được chia thành hai phần độc lập:
 
 ---
 
+## Database cho các chức năng trên nhánh Quangdv
+
+`database.sql` và `db.sql` được giữ nguyên theo `master`. Sau khi khởi tạo database mới, cần chạy các migration trong `flowershop/sql/` theo thứ tự `001` đến `010` trên database `flower_shop_db` để có các bảng OTP, phiên đăng nhập, nhân viên và đơn đăng ký manager.
+
+Với database đã chạy các migration này, không chạy lại toàn bộ: một số migration thêm cột hoặc ràng buộc chỉ được chạy một lần. Không chạy lại script khởi tạo trên database có dữ liệu cần giữ. Cập nhật code không tự động chạy migration.
+
 ## 🛠️ Yêu cầu hệ thống (Prerequisites)
 
 Để chạy được dự án trên máy cá nhân, team cần cài đặt sẵn các công cụ sau:
