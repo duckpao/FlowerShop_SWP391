@@ -109,7 +109,9 @@ Frontend được xây dựng bằng **ReactJS (JSX)** và sử dụng **Vite** 
 
 ### 1. Di chuyển vào thư mục Frontend
 
-Mở một terminal mới, giữ nguyên terminal của Backend và Docker đang chạy:
+Frontend hiện được đóng gói và phục vụ bởi Spring Boot tại cổng 8080. Nếu backend đã chạy thì chỉ cần mở http://localhost:8080, không chạy thêm server frontend. Gradle tự chạy `npm ci` và build React khi cần.
+
+Cách khởi động thay thế từ thư mục frontend (chỉ dùng khi backend chưa chạy):
 
 ```bash
 cd flower-shop-client
@@ -132,7 +134,7 @@ npm run dev
 Sau khi khởi động thành công, mở trình duyệt và truy cập:
 
 ```text
-http://localhost:5173
+http://localhost:8080
 ```
 
 ---
@@ -279,7 +281,7 @@ http://localhost:8080
 
 ### 3. Chạy Frontend
 
-Mở terminal mới:
+Không cần terminal thứ hai: backend ở bước trên đã build và phục vụ frontend trên cùng cổng 8080. Lệnh dưới đây chỉ là cách khởi động thay thế khi backend chưa chạy:
 
 ```bash
 cd flower-shop-client
@@ -290,7 +292,7 @@ npm run dev
 Frontend:
 
 ```text
-http://localhost:5173
+http://localhost:8080
 ```
 
 ---

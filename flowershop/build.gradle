@@ -45,3 +45,26 @@ tasks.named('bootRun') {
     // -Xms: RAM khởi tạo, -Xmx: RAM tối đa
     jvmArgs = ["-Xms256m", "-Xmx512m", "-XX:+UseG1GC"]
 }
+
+// Package the React app with Spring Boot so UI and API share port 8080.
+def frontendDir = layout.projectDirectory.dir('../flower-shop-client')
+def npmExecutable = System.getProperty('os.name').toLowerCase().contains('windows') ? 'npm.cmd' : 'npm'
+tasks.register('installFrontend', Exec) {
+    workingDir frontendDir
+    commandLine npmExecutable, 'ci'
+    inputs.files(frontendDir.file('package.json'), frontendDir.file('package-lock.json'))
+    outputs.dir(frontendDir.dir('node_modules'))
+}
+tasks.register('buildFrontend', Exec) {
+    dependsOn 'installFrontend'
+    workingDir frontendDir
+    commandLine npmExecutable, 'run', 'build'
+    inputs.dir(frontendDir.dir('src'))
+    inputs.dir(frontendDir.dir('public'))
+    inputs.files(frontendDir.file('index.html'), frontendDir.file('vite.config.js'), frontendDir.file('package.json'), frontendDir.file('package-lock.json'))
+    outputs.dir(frontendDir.dir('dist'))
+}
+tasks.named('processResources') {
+    dependsOn 'buildFrontend'
+    from(frontendDir.dir('dist')) { into 'static' }
+}

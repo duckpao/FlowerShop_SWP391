@@ -69,7 +69,7 @@ Nếu chưa có tài khoản Admin để duyệt, chỉ bật Admin thử nghi�
 .\gradlew.bat bootRun --args="--spring.profiles.active=dev-admin"
 ```
 
-Frontend: `npm.cmd run dev`. Manager và Staff dùng http://localhost:5173 ; Admin local dùng /dev-admin.
+Frontend: `npm.cmd run dev`. Manager và Staff dùng http://localhost:8080 ; Admin local dùng /dev-admin.
 Không public profile thử nghiệm ra mạng. SMTP lấy từ application-mail-local.properties hiện có.
 Mail gửi sau commit, chưa có outbox/retry bền vững: 202 là tiếp nhận, không đảm bảo thư đã tới hộp thư.
 Nếu SMTP lỗi, kiểm tra cấu hình rồi gửi lại sau cooldown. Không cần gửi mật khẩu cho Manager/Admin.

@@ -49,7 +49,10 @@ class AdminCustomerTests {
         var page=adminService.list("","",0,1);
         assertThat(page.totalElements()).isEqualTo(2); assertThat(page.totalPages()).isEqualTo(2);
         assertThat(page.content()).hasSize(1);
-        assertThat(adminService.list("CUSTOMER@","",0,10).content()).singleElement().satisfies(c->assertThat(c.id()).isEqualTo(customer.getId()));
+        customer.setFullName("Rose Customer");customer.setPhone("0912345678");users.saveAndFlush(customer);
+        assertThat(adminService.list("rOsE","",0,10).content()).singleElement().satisfies(c->assertThat(c.id()).isEqualTo(customer.getId()));
+        assertThat(adminService.list("CUSTOMER@","",0,10).totalElements()).isZero();
+        assertThat(adminService.list("0912345678","",0,10).totalElements()).isZero();
         assertThat(adminService.list("%","",0,10).totalElements()).isZero();
         adminService.setBlocked(customer.getId(),true,admin.getId());
         assertThat(adminService.list("","BANNED",0,10).totalElements()).isEqualTo(1);

@@ -34,6 +34,9 @@ public class SecurityConfig {
                         org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter.class)
 
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers(HttpMethod.GET, "/", "/index.html", "/assets/**", "/vite.svg", "/favicon.svg", "/icons.svg",
+                                "/login", "/account", "/admin", "/admin/shops", "/admin/approvals", "/admin/users", "/admin/profile",
+                                "/shop-admin", "/shop-admin/staff", "/shop-admin/products", "/shop-admin/shop", "/shop-admin/profile", "/shops/*").permitAll()
                         .requestMatchers(HttpMethod.GET,"/api/public/shops","/api/public/shops/*","/api/public/shops/*/products").permitAll()
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                         .requestMatchers(

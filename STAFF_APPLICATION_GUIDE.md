@@ -2,7 +2,7 @@
 
 Chạy migration `flowershop/sql/009_staff_applications.sql` trên database `flower_shop_db` rồi khởi động lại backend. Không chạy lại `database.sql` trên DB đang có dữ liệu vì file đó xóa database.
 
-1. Mở http://localhost:5173/ — trang index hiển thị các shop ACTIVE, tìm theo tên (tối đa 50 kết quả).
+1. Mở http://localhost:8080/ — trang index hiển thị các shop ACTIVE, tìm theo tên (tối đa 50 kết quả).
 2. Bấm Đăng nhập → `/login`. Đăng ký trên giao diện luôn tạo Customer, xác thực OTP rồi đăng nhập. Trang index hiển thị “Bạn đang là Customer”.
 3. Tìm shop, bấm Vào shop để mở `/shops/{id}`. Giao diện shop hiển thị giới thiệu và mục Tuyển dụng, chưa mở form. Bấm Đăng ký làm nhân viên mới mở form; khách chưa đăng nhập được chuyển đến login và quay lại đúng shop. Điền họ tên, số điện thoại, giới thiệu/kinh nghiệm, gửi đơn. Form đóng lại và thông báo gửi thành công; quyền vẫn là Customer.
 4. Mở trình duyệt khác hoặc cửa sổ riêng tư, đăng nhập tài khoản Manager sở hữu shop đó. Trang index hiển thị Manager; bấm Vào trang quản trị shop.

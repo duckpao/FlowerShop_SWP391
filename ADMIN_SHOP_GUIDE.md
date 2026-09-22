@@ -11,7 +11,7 @@ Trong flowershop:
 .\gradlew.bat bootRun --args="--spring.profiles.active=dev-admin"
 ```
 
-Trong flower-shop-client: `npm.cmd run dev`. Mở http://localhost:5173/dev-admin,
+Trong flower-shop-client: `npm.cmd run dev`. Mở http://localhost:8080/dev-admin,
 kéo xuống **Quản lý cửa hàng**. Chế độ thường: đăng nhập Admin đã xác thực email.
 Thao tác ghi vào DB đang cấu hình; không public dev-admin qua proxy/tunnel.
 

@@ -31,9 +31,7 @@ public class AdminShopService {
         Specification<Shop> spec=(root,query,cb)-> {
             var predicates=new ArrayList<jakarta.persistence.criteria.Predicate>();
             if (selected!=null) predicates.add(cb.equal(root.get("status"),selected));
-            if (!term.isEmpty()) predicates.add(cb.or(cb.like(cb.lower(root.get("name")),"%"+term+"%",'!'),
-                    cb.like(cb.lower(root.get("owner").get("email")),"%"+term+"%",'!'),
-                    cb.like(cb.lower(root.get("owner").get("fullName")),"%"+term+"%",'!')));
+            if (!term.isEmpty()) predicates.add(cb.like(cb.lower(root.get("name")),"%"+term+"%",'!'));
             return cb.and(predicates.toArray(jakarta.persistence.criteria.Predicate[]::new));
         };
         var result=shops.findAll(spec,PageRequest.of(page,size,Sort.by(Sort.Order.desc("createdDate"),Sort.Order.asc("id"))));

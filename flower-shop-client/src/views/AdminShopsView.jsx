@@ -5,7 +5,7 @@ export default function AdminShopsView() {
   const c = useAdminShopsController()
   return <section className="account-card"><h2>Quản lý cửa hàng</h2>
     <form onSubmit={c.search}><fieldset disabled={c.busy}>
-      <label>Tìm tên shop, tên/email chủ shop<input maxLength={100} value={c.q} onChange={e => c.setQ(e.target.value)} /></label>
+      <label>Tìm theo tên shop<input maxLength={100} placeholder="Nhập tên shop" value={c.q} onChange={e => c.setQ(e.target.value)} /></label>
       <label>Trạng thái<select value={c.status} onChange={e => c.setStatus(e.target.value)}>
         <option value="">Tất cả</option>{Object.entries(labels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
       </select></label><button>Tìm kiếm</button>

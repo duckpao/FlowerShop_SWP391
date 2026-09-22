@@ -14,7 +14,7 @@ public class CorsConfig {
             @Override
             public void addCorsMappings(CorsRegistry registry) {
                 registry.addMapping("/api/**") // Chỉ áp dụng cho các route bắt đầu bằng /api
-                        .allowedOrigins("http://localhost:5173") // Domain của ReactJS (Vite)
+                        .allowedOrigins("http://localhost:8080") // Domain của ReactJS (Vite)
                         .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
                         .allowedHeaders("*")
                         .allowCredentials(true); // Cho phép gửi cookie/token nếu có

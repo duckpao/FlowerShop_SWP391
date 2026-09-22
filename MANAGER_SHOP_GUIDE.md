@@ -17,7 +17,7 @@ Trong flowershop chạy:
 .\gradlew.bat bootRun --args="--spring.profiles.active=dev-admin,dev-manager"
 ```
 
-Chạy frontend `npm.cmd run dev`, mở http://localhost:5173/dev-manager.
+Chạy frontend `npm.cmd run dev`, mở http://localhost:8080/dev-manager.
 Profile dev-manager dùng email `shop1@gmail.com` trong application-dev-manager.properties.
 Tài khoản đó phải tồn tại, role SHOP và ACTIVE; chỉ chế độ local này bỏ mật khẩu/xác thực email.
 Không sửa emailVerified hoặc role trong DB. Thiếu tài khoản trả 503 với hướng dẫn cấu hình.

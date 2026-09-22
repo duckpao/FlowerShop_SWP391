@@ -5,7 +5,7 @@ export default function AdminCustomersView() {
   const c = useAdminCustomersController()
   return <section className="account-card"><h2>Quản lý khách hàng</h2>
     <form onSubmit={c.search}><fieldset disabled={c.busy}>
-      <label>Tìm theo tên, email, điện thoại<input maxLength={100} value={c.query} onChange={e => c.setQuery(e.target.value)} /></label>
+      <label>Tìm theo tên người dùng<input maxLength={100} placeholder="Nhập tên người dùng" value={c.query} onChange={e => c.setQuery(e.target.value)} /></label>
       <label>Trạng thái<select value={c.status} onChange={e => c.setStatus(e.target.value)}>
         <option value="">Tất cả</option>{Object.entries(labels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
       </select></label><button type="submit">Tìm kiếm</button>

@@ -13,7 +13,7 @@ Dừng backend đang chạy bằng Ctrl+C, sau đó trong thư mục `flowershop
 ```
 
 Trong thư mục `flower-shop-client`, chạy `npm.cmd run dev` và mở
-`http://localhost:5173/dev-admin` (đổi cổng nếu Vite báo cổng khác).
+`http://localhost:8080/dev-admin` (đổi cổng nếu Vite báo cổng khác).
 Trang này không cần tài khoản/Authorize; các thao tác vẫn lấy CSRF tự động.
 Swagger cũng có thể gọi các API Customer Management không cần Authorize khi profile này bật;
 PUT vẫn phải lấy CSRF mới trước mỗi lần gọi.

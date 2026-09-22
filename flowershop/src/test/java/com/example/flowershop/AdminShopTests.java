@@ -81,7 +81,8 @@ class AdminShopTests {
         shops.saveAndFlush(Shop.builder().id(UUID.randomUUID().toString()).owner(secondOwner).name("Lily").status(ShopStatus.ACTIVE).build());
         assertThat(service.list("","",0,1).totalPages()).isEqualTo(2);
         assertThat(service.list("ROSE","PENDING",0,10).content()).hasSize(1);
-        assertThat(service.list(owner.getEmail(),"",0,10).totalElements()).isEqualTo(1);
+        assertThat(service.list(owner.getEmail(),"",0,10).totalElements()).isZero();
+        assertThat(service.list("Other Manager","",0,10).totalElements()).isZero();
         assertThat(service.list("%","",0,10).totalElements()).isZero();
         assertThatThrownBy(()->service.list("","BAD",0,10)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(()->service.list("","",0,101)).isInstanceOf(IllegalArgumentException.class);

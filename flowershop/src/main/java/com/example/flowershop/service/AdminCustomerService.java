@@ -34,10 +34,7 @@ public class AdminCustomerService {
             var predicates=new ArrayList<jakarta.persistence.criteria.Predicate>();
             predicates.add(cb.equal(root.get("role"),UserRole.CUSTOMER));
             if (selected!=null) predicates.add(cb.equal(root.get("status"),selected));
-            if (!term.isEmpty()) predicates.add(cb.or(
-                    cb.like(cb.lower(root.get("email")),"%"+term+"%",'!'),
-                    cb.like(cb.lower(root.get("fullName")),"%"+term+"%",'!'),
-                    cb.like(root.get("phone"),"%"+term+"%",'!')));
+            if (!term.isEmpty()) predicates.add(cb.like(cb.lower(root.get("fullName")),"%"+term+"%",'!'));
             return cb.and(predicates.toArray(jakarta.persistence.criteria.Predicate[]::new));
         };
         var result=users.findAll(spec,PageRequest.of(page,size,Sort.by(Sort.Order.desc("createdDate"),Sort.Order.asc("id"))));
