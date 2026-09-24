@@ -1,13 +1,14 @@
 import { authService } from './authService'
+import { API_BASE } from '../apiBase'
 const managerRequest = (path, options) => import.meta.env.DEV && window.location.pathname === '/dev-manager' ? authService.devManagerRequest(path, options) : authService.authenticatedRequest(path, options)
 export const staffApplicationService = {
   async detail(id) {
-    const response = await fetch(`/api/public/shops/${encodeURIComponent(id)}`)
+    const response = await fetch(`${API_BASE}/api/public/shops/${encodeURIComponent(id)}`)
     if (!response.ok) throw new Error('Không tìm thấy shop đang hoạt động.')
     return response.json()
   },
   async search(q) {
-    const response = await fetch(`/api/public/shops?q=${encodeURIComponent(q)}`)
+    const response = await fetch(`${API_BASE}/api/public/shops?q=${encodeURIComponent(q)}`)
     if (!response.ok) throw new Error('Không tải được danh sách shop.')
     return response.json()
   },

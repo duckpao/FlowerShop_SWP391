@@ -1,18 +1,20 @@
 import { authModel } from '../models/authModel'
+import { API_BASE } from '../apiBase'
 
 async function request(path, { method = 'GET', body, bearer = false } = {}) {
+  const isFormData = body instanceof FormData
   const headers = {}
   if (method !== 'GET') {
-    const csrfResponse = await fetch('/api/auth/csrf', { credentials: 'include', cache: 'no-store' })
+    const csrfResponse = await fetch(`${API_BASE}/api/auth/csrf`, { credentials: 'include', cache: 'no-store' })
     if (!csrfResponse.ok) throw new Error('Không thể tạo phiên bảo vệ yêu cầu.')
     const csrf = await csrfResponse.json()
     headers[csrf.headerName] = csrf.token
-    headers['Content-Type'] = 'application/json'
+    if (!isFormData) headers['Content-Type'] = 'application/json'
   }
   if (bearer && authModel.getToken()) headers.Authorization = `Bearer ${authModel.getToken()}`
-  const response = await fetch(path.startsWith('/api/') ? path : `/api/auth/${path}`, {
+  const response = await fetch(`${API_BASE}${path.startsWith('/api/') ? path : `/api/auth/${path}`}`, {
     method, headers, credentials: 'include', cache: 'no-store',
-    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    ...(body !== undefined ? { body: isFormData ? body : JSON.stringify(body) } : {}),
   })
   const data = await response.json().catch(() => ({}))
   if (!response.ok) {

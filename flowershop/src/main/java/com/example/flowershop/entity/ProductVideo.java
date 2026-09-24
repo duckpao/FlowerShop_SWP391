@@ -1,17 +1,12 @@
 package com.example.flowershop.entity;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
-import com.example.flowershop.entity.enums.ProductStatus;
-
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
@@ -24,49 +19,34 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
-@Table(name = "Products")
+@Table(name = "Product_Videos")
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class Product {
+public class ProductVideo {
 
     @Id
     @Column(name = "id", length = 36)
     private String id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "shop_id", nullable = false)
-    private Shop shop;
+    @JoinColumn(name = "product_id", nullable = false)
+    private Product product;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "category_id", nullable = false)
-    private Category category;
+    @Column(name = "video_url", nullable = false, length = 500)
+    private String videoUrl;
 
-    @Column(name = "name", nullable = false, length = 255)
-    private String name;
+    @Column(name = "title", length = 255)
+    private String title;
 
     @Column(name = "description", columnDefinition = "TEXT")
     private String description;
 
-    @Column(name = "components", columnDefinition = "json")
-    private String components;
-
-    @Column(name = "shelf_life_days")
-    private Integer shelfLifeDays;
-
-    @Column(name = "price", nullable = false, precision = 12, scale = 2)
-    private BigDecimal price;
-
-    @Column(name = "stock", nullable = false)
+    @Column(name = "display_order")
     @Builder.Default
-    private Integer stock = 0;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "status")
-    @Builder.Default
-    private ProductStatus status = ProductStatus.ACTIVE;
+    private Integer displayOrder = 0;
 
     @CreationTimestamp
     @Column(name = "created_date", updatable = false)
