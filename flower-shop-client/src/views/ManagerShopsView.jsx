@@ -1,3 +1,5 @@
+import DataTable from './DataTable'
+import InfoPopup from './InfoPopup'
 import { useManagerShopController } from '../controllers/useManagerShopController'
 import { shopStatusLabels } from '../models/shopModel'
 import StaffApplicationsView from './StaffApplicationsView'
@@ -11,8 +13,12 @@ export default function ManagerShopsView({ role, section = 'all' }) {
     {c.busy && <p>Đang tải…</p>}
     <button disabled={c.busy} onClick={c.retry}>Tải lại cửa hàng</button>
     {!c.busy && !c.shops.length && <p>Chưa có cửa hàng được phân công.</p>}
-    {role !== 'SHOP' && <ul className="address-list">{c.shops.map(s => <li key={s.id}>{s.name} · {shopStatusLabels[s.status]} <button disabled={c.busy} onClick={() => c.select(s)}>Xem cửa hàng</button></li>)}</ul>}
+    {role !== 'SHOP' && <DataTable title="Cửa hàng được phân công" rows={c.shops} columns={[
+ {key:'name',label:'Tên shop'},{key:'status',label:'Trạng thái',render:s=>shopStatusLabels[s.status]},
+ {key:'actions',label:'Thao tác',render:s=><button disabled={c.busy} onClick={()=>c.select(s)}>Xem cửa hàng</button>}
+ ]} />}
     {c.selected && <><h3>{c.selected.name}</h3><p>{shopStatusLabels[c.selected.status]}</p>
+      <InfoPopup title="Thông tin cửa hàng"><p>{c.selected.name}</p><p>{c.selected.description || 'Chưa có mô tả'}</p><p>Trạng thái: {shopStatusLabels[c.selected.status]}</p><p>{[c.address.addressLine,c.address.ward,c.address.district,c.address.city].filter(Boolean).join(', ')}</p></InfoPopup>
       {role === 'SHOP' && ['all', 'staff'].includes(section) && <StaffApplicationsView key={c.selected.id} shop={c.selected} />}
       {role === 'SHOP' && ['all', 'products'].includes(section) && <ProductsView key={`products-${c.selected.id}`} shop={c.selected} manage />}
       {!editable && <p>Cửa hàng hiện ở chế độ chỉ xem đối với tài khoản này.</p>}
@@ -30,8 +36,12 @@ export default function ManagerShopsView({ role, section = 'all' }) {
       {role === 'SHOP' && ['all', 'staff'].includes(section) && <>
         <h3>Nhân viên cửa hàng</h3><p>Danh sách nhân viên đã được phân công vào shop. Sau khi duyệt đơn, bấm “Tải lại cửa hàng” để cập nhật danh sách.</p>
         {!c.members.length && <p>Chưa có nhân viên tham gia shop.</p>}
-        <ul className="address-list">{c.members.map(m => <li key={m.userId}>{m.fullName} · {m.email} · {m.active ? 'Được làm việc' : 'Đã ngừng quyền'}
-          <button disabled={c.busy || c.selected.status !== 'ACTIVE'} onClick={() => c.toggle(m)}>{m.active ? 'Ngừng quyền' : 'Bật quyền'}</button></li>)}</ul>
+        <DataTable title="Nhân viên cửa hàng" rows={c.members} rowKey="userId" columns={[
+ {key:'fullName',label:'Họ tên'},{key:'email',label:'Email'},
+ {key:'detail',label:'Chi tiết',render:m=><InfoPopup title="Thông tin nhân viên"><p>Họ tên: {m.fullName}</p><p>Email: {m.email}</p><p>Trạng thái: {m.active ? 'Được làm việc' : 'Đã ngừng quyền'}</p></InfoPopup>},
+ {key:'active',label:'Trạng thái',render:m=>m.active?'Được làm việc':'Đã ngừng quyền'},
+ {key:'actions',label:'Thao tác',render:m=><button disabled={c.busy||c.selected.status!=='ACTIVE'} onClick={()=>c.toggle(m)}>{m.active?'Ngừng quyền':'Bật quyền'}</button>}
+ ]} />
       </>}
     </>}
   </section>

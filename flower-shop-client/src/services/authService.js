@@ -18,6 +18,7 @@ async function request(path, { method = 'GET', body, bearer = false } = {}) {
   if (!response.ok) {
     const error = new Error(data.errors ? Object.values(data.errors).join(' ') : data.message || 'Yêu cầu thất bại. Vui lòng thử lại.')
     error.status = response.status
+    error.fieldErrors = data.errors || {}
     throw error
   }
   return data

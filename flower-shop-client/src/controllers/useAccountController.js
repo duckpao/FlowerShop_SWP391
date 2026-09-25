@@ -13,6 +13,9 @@ export function useAccountController(user) {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [reload, setReload] = useState(0)
+  const [serverPhoneError, setServerPhoneError] = useState('')
+  const phoneError = form.phone && !/^0[0-9]{9}$/.test(form.phone)
+    ? 'Số điện thoại phải bắt đầu bằng 0 và có đúng 10 chữ số' : serverPhoneError
   useEffect(() => {
     let active = true
     setBusy(true); setError('')
@@ -27,11 +30,15 @@ export function useAccountController(user) {
   }, [user.id, user.role, reload])
   async function run(action) {
     setBusy(true); setError(''); setNotice('')
-    try { await action() } catch (e) { setError(e.message) } finally { setBusy(false) }
+    try { await action() } catch (e) {
+      if (e.fieldErrors?.phone) setServerPhoneError(e.fieldErrors.phone)
+      else setError(e.message)
+    } finally { setBusy(false) }
   }
   const cancel = () => { setEditing(null); setAddress(emptyAddress(cities[0] || '')) }
   const saveProfile = e => {
     e.preventDefault()
+    if (phoneError) return
     return run(async () => {
       const p = await accountService.updateProfile({ fullName: form.fullName.trim(), phone: form.phone.trim() })
       setProfile(p); setForm(profileInput(p)); setNotice('Đã cập nhật hồ sơ.')
@@ -60,6 +67,6 @@ export function useAccountController(user) {
     setAddress({ addressLine: item.addressLine || '', city: item.city || '', district: item.district || '', ward: item.ward || '', isDefault: item.isDefault })
     setError(''); setNotice('')
   }
-  return { profile, form, setForm, addresses, cities, address, setAddress, editing, busy, error, notice,
+  return { profile, form, setForm: next => { setServerPhoneError(''); setForm(next) }, phoneError, addresses, cities, address, setAddress, editing, busy, error, notice,
     saveProfile, saveAddress, remove, makeDefault, edit, cancel, retry: () => setReload(x => x + 1) }
 }

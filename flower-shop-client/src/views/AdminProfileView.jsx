@@ -8,7 +8,8 @@ export default function AdminProfileView({ user, roleLabel = 'Admin' }) {
     {c.profile && <><p>Email: {c.profile.email}</p><p>Vai trò: {roleLabel} · {c.profile.emailVerified ? 'Đã xác thực email' : 'Chưa xác thực email'}</p>
       <form onSubmit={c.saveProfile}><fieldset disabled={c.busy}>
         <label>Họ và tên<input required maxLength={100} autoComplete="name" value={c.form.fullName} onChange={e => c.setForm({ ...c.form, fullName: e.target.value })} /></label>
-        <label>Số điện thoại<input type="tel" maxLength={16} pattern="[+]?[0-9]{9,15}" autoComplete="tel" value={c.form.phone} onChange={e => c.setForm({ ...c.form, phone: e.target.value })} /></label>
+        <label>Số điện thoại<input type="tel" inputMode="numeric" autoComplete="tel" aria-invalid={!!c.phoneError} aria-describedby="profile-phone-error" value={c.form.phone} onChange={e => c.setForm({ ...c.form, phone: e.target.value })} />
+          <small id="profile-phone-error" style={{color:'#b42318'}} aria-live="polite">{c.phoneError}</small></label>
         <button>Lưu thông tin tài khoản</button>
       </fieldset></form></>}
   </section>

@@ -2,11 +2,12 @@ import { useShopSearchController } from '../controllers/useShopSearchController'
 import ManagerNotificationsView from './ManagerNotificationsView'
 import ManagerApplicationView from './ManagerApplicationView'
 import ProductsView from './ProductsView'
+import InfoPopup from './InfoPopup'
 const roles = { CUSTOMER: 'Customer', SHOP_STAFF: 'Staff', SHOP: 'Manager', ADMIN: 'Admin' }
 const statuses = { PENDING: 'Chờ duyệt', APPROVED: 'Đã duyệt', REJECTED: 'Đã từ chối' }
-export default function HomeView({ auth }) {
+export default function HomeView({ auth, embedded = false, section = 'shops' }) {
   const c = useShopSearchController(auth.user)
-  return <main className="account-page"><h1>✿ FlowerShop</h1>
+  return <section className={embedded ? 'customer-content' : 'account-page'}>{!embedded && <><h1>✿ FlowerShop</h1>
     <header className="account-header">{auth.user ? <><div><p>{auth.user.email}</p><strong>Bạn đang là {roles[auth.user.role] || auth.user.role}</strong></div>
       {auth.user.role !== 'CUSTOMER' && <a href="/account">Hồ sơ cá nhân</a>}
       {auth.user.role === 'ADMIN' && <a className="primary" href="/admin">Dashboard Admin</a>}
@@ -15,18 +16,18 @@ export default function HomeView({ auth }) {
         {auth.user.role === 'CUSTOMER' && <a className="customer-profile-icon" href="/account" aria-label="Quản lý thông tin tài khoản" title="Quản lý thông tin tài khoản">
           <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><circle cx="12" cy="8" r="4" /><path d="M4 22v-2a8 8 0 0 1 16 0v2" /></svg>
         </a>}
-      </div></> : <a href="/login">Đăng nhập</a>}</header>
+      </div></> : <a href="/login">Đăng nhập</a>}</header></>}
     {auth.error && <p role="alert">{auth.error}</p>}
     {auth.user?.role === 'SHOP' && <ManagerNotificationsView />}
-    {auth.user && ['CUSTOMER', 'SHOP'].includes(auth.user.role) && <ManagerApplicationView key={auth.user.id} user={auth.user} />}
+    {!embedded && auth.user && ['CUSTOMER', 'SHOP'].includes(auth.user.role) && <ManagerApplicationView key={auth.user.id} user={auth.user} />}
     {c.sessionExpired && <p role="alert">Phiên đăng nhập đã thay đổi hoặc hết hạn. <a href="/login">Đăng nhập lại để xem quyền và kết quả ứng tuyển mới nhất.</a></p>}
-    {!c.selected && <>
+    {section === 'shops' && !c.selected && <>
     <h2>Tìm cửa hàng hoa</h2><form onSubmit={c.search}><label>Tên shop<input maxLength={100} value={c.query} onChange={e => c.setQuery(e.target.value)} /></label><button disabled={c.busy}>Tìm kiếm</button></form>
     {c.error && <p role="alert" className="message error">{c.error}</p>}{c.notice && <p role="status">{c.notice}</p>}
     <p>Hiển thị tối đa 50 shop đang hoạt động. Nhập tên để thu hẹp kết quả.</p>
     <ul className="address-list">{c.shops.map(shop => <li key={shop.id}><h3>{shop.name}</h3><p>{shop.description}</p><button onClick={() => c.select(shop)}>Vào shop</button></li>)}</ul>
     </>}
-    {c.selected && <section className="account-card"><button onClick={() => c.select(null)}>← Quay lại danh sách shop</button><h2>✿ {c.selected.name}</h2><p>{c.selected.description || 'Chào mừng bạn đến với cửa hàng.'}</p>
+    {section === 'shops' && c.selected && <section className="account-card"><button onClick={() => { if (embedded) window.location.assign('/?view=shops'); else c.select(null) }}>← Quay lại danh sách shop</button><h2>✿ {c.selected.name}</h2><p>{c.selected.description || 'Chào mừng bạn đến với cửa hàng.'}</p>
       <h3>Giới thiệu cửa hàng</h3><p>Khám phá cửa hàng và cơ hội trở thành thành viên của đội ngũ.</p>
       <ProductsView key={c.selected.id} shop={c.selected} />
       <h3>Tuyển dụng</h3><p>Bạn yêu thích hoa và muốn làm việc tại {c.selected.name}? Hãy gửi thông tin để Manager xem xét.</p>
@@ -39,6 +40,9 @@ export default function HomeView({ auth }) {
         <p>Khi Manager duyệt, tài khoản của bạn sẽ chuyển từ Customer sang Staff. Bạn cần đăng nhập lại để sử dụng quyền mới.</p><button>Gửi đơn đăng ký làm nhân viên</button>
       </fieldset></form></>}</> : !auth.user ? <a href={`/login?next=${encodeURIComponent(window.location.pathname)}`}>Đăng ký làm nhân viên — đăng nhập để tiếp tục</a> : <p>Chỉ Customer được gửi đơn xin làm nhân viên.</p>}
     </section>}
-    {auth.user && <details className="account-card"><summary>Thông báo ứng tuyển của tôi ({c.applications.length})</summary><ul>{c.applications.map(a => <li key={a.id}><strong>{a.shopName}: {statuses[a.status]}</strong><p>{a.status === 'APPROVED' ? 'Chúc mừng! Bạn đã trở thành nhân viên của shop. Đăng nhập lại để sử dụng quyền Staff.' : a.status === 'REJECTED' ? 'Cảm ơn bạn đã ứng tuyển. Shop chưa thể tiếp nhận bạn ở thời điểm này. Tài khoản của bạn vẫn là Customer.' : 'Đơn đã được gửi đến Manager và đang chờ xem xét.'}</p></li>)}</ul></details>}
-  </main>
+    {auth.user && (!embedded || section === 'applications') && <InfoPopup title="Thông báo ứng tuyển của tôi" label={`Thông báo ứng tuyển của tôi (${c.applications.length})`}>
+      {!c.applications.length && <p>Chưa có đơn ứng tuyển.</p>}
+      <ul>{c.applications.map(a => <li key={a.id}><strong>{a.shopName}: {statuses[a.status]}</strong><p>{a.status === 'APPROVED' ? 'Chúc mừng! Bạn đã trở thành nhân viên của shop. Đăng nhập lại để sử dụng quyền Staff.' : a.status === 'REJECTED' ? 'Cảm ơn bạn đã ứng tuyển. Shop chưa thể tiếp nhận bạn ở thời điểm này. Tài khoản của bạn vẫn là Customer.' : 'Đơn đã được gửi đến Manager và đang chờ xem xét.'}</p></li>)}</ul>
+    </InfoPopup>}
+  </section>
 }

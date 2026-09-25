@@ -7,17 +7,17 @@ import AdminManagerApplicationsView from './AdminManagerApplicationsView'
 import ManagerShopsView from './ManagerShopsView'
 
 
-export default function AccountView({ user, logout, checkSession, busy: authBusy, error: authError, notice: authNotice }) {
+export default function AccountView({ user, logout, checkSession, busy: authBusy, error: authError, notice: authNotice, embedded = false }) {
   const c = useAccountController(user)
   const busy = c.busy || authBusy
-  return <main className="account-page">
+  return <section className={embedded ? 'customer-content' : 'account-page'}>
     {['SHOP', 'SHOP_STAFF'].includes(user.role) && <ManagerShopsView role={user.role} />}
     {user.role === 'ADMIN' && <AdminCustomersView />}
     {user.role === 'ADMIN' && <p><a href="/admin/approvals">Mở màn Duyệt yêu cầu đăng ký Manager</a></p>}
     {user.role === 'ADMIN' && <AdminShopsView />}
     {user.role === 'ADMIN' && <AdminManagerApplicationsView />}
-    <header className="account-header"><div><h1>Tài khoản FlowerShop</h1><p>{roleLabels[user.role]}</p></div>
-      <button type="button" disabled={busy} onClick={logout}>Đăng xuất</button></header>
+    {!embedded && <header className="account-header"><div><h1>Tài khoản FlowerShop</h1><p>{roleLabels[user.role]}</p></div>
+      <button type="button" disabled={busy} onClick={logout}>Đăng xuất</button></header>}
     {(c.error || authError) && <p className="message error" role="alert">{c.error || authError}</p>}
     {(c.notice || authNotice) && <p className="message success" role="status">{c.notice || authNotice}</p>}
     {c.busy && <p role="status">Đang tải…</p>}
@@ -27,9 +27,9 @@ export default function AccountView({ user, logout, checkSession, busy: authBusy
       <form onSubmit={c.saveProfile}><fieldset disabled={busy}>
         <label>Họ và tên<input required maxLength={100} autoComplete="name" value={c.form.fullName}
           onChange={e => c.setForm({ ...c.form, fullName: e.target.value })} /></label>
-        <label>Số điện thoại<input type="tel" maxLength={16} pattern="[+]?[0-9]{9,15}" autoComplete="tel"
+        <label>Số điện thoại<input type="tel" inputMode="numeric" autoComplete="tel" aria-invalid={!!c.phoneError} aria-describedby="profile-phone-error"
           value={c.form.phone} onChange={e => c.setForm({ ...c.form, phone: e.target.value })} />
-          <small>Có thể để trống; nếu nhập cần 9–15 chữ số, có thể bắt đầu bằng +.</small></label>
+          <small id="profile-phone-error" style={{color:'#b42318'}} aria-live="polite">{c.phoneError}</small></label>
         <button className="primary">Lưu hồ sơ</button>
       </fieldset></form>
     </section>}
@@ -61,5 +61,5 @@ export default function AccountView({ user, logout, checkSession, busy: authBusy
       </fieldset></form>
     </section>}
     <button className="text-button" disabled={busy} onClick={checkSession}>Kiểm tra phiên đăng nhập</button>
-  </main>
+  </section>
 }

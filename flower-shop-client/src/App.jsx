@@ -1,5 +1,6 @@
 import AuthView from './views/AuthView'
 import HomeView from './views/HomeView'
+import CustomerDashboardView from './views/CustomerDashboardView'
 import { useEffect } from 'react'
 import { useAuthController } from './controllers/useAuthController'
 import AdminCustomersView from './views/AdminCustomersView'
@@ -32,18 +33,25 @@ function AuthApp() {
   const controller = useAuthController()
   const path = window.location.pathname
   useEffect(() => {
+    if (!controller.initializing && !controller.user && path !== '/login') {
+      window.location.replace('/login')
+    }
+  }, [controller.initializing, controller.user, path])
+  useEffect(() => {
     if (path === '/login' && controller.user) {
       const next = new URLSearchParams(window.location.search).get('next') || '/'
-      window.location.replace(controller.user.role === 'ADMIN' ? '/admin' : controller.user.role === 'SHOP' ? '/shop-admin' : /^\/shops\/[a-zA-Z0-9-]+$/.test(next) ? next : '/')
+      window.location.replace(controller.user.role === 'ADMIN' ? '/admin' : controller.user.role === 'SHOP' ? '/shop-admin' : controller.user.role === 'CUSTOMER' ? '/' : /^\/shops\/[a-zA-Z0-9-]+$/.test(next) ? next : '/')
     }
   }, [path, controller.user])
   if (path === '/login') return <AuthView {...controller} />
+  if (!controller.user) return <main className="account-page"><p role="status">{controller.initializing ? 'Đang kiểm tra đăng nhập…' : 'Đang chuyển đến trang đăng nhập…'}</p></main>
   if (['/admin', '/admin/shops', '/admin/approvals', '/admin/users', '/admin/profile'].includes(path)) {
     if (controller.busy && !controller.user) return <main className="account-page"><p role="status">Đang kiểm tra đăng nhập…</p></main>
     if (!controller.user) return <main className="account-page"><h1>Trang quản trị</h1><p>Hãy đăng nhập tài khoản Admin.</p><a href={`/login?next=${encodeURIComponent(path)}`}>Đăng nhập</a></main>
     if (controller.user.role !== 'ADMIN') return <main className="account-page"><h1>Không có quyền truy cập</h1><p>Chỉ Admin được duyệt đơn mở shop.</p><a href="/">Về trang chủ</a></main>
     return <AdminDashboardView {...controller} path={path} />
   }
+  if (controller.user?.role === 'CUSTOMER' && (['/', '/account'].includes(path) || path.startsWith('/shops/'))) return <CustomerDashboardView auth={controller} path={path} />
   if (path === '/account' && controller.user) return <><a href="/">Trang chủ</a><AuthView {...controller} /></>
   if (['/shop-admin', '/shop-admin/staff', '/shop-admin/products', '/shop-admin/shop', '/shop-admin/profile'].includes(path)) {
     if (controller.busy && !controller.user) return <main className="account-page"><p role="status">Đang kiểm tra đăng nhập…</p></main>

@@ -1,3 +1,5 @@
+import DetailDialog from './DetailDialog'
+import DataTable from './DataTable'
 import { useAdminCustomersController } from '../controllers/useAdminCustomersController'
 
 const labels = { ACTIVE: 'Đang hoạt động', BANNED: 'Đã khóa', INACTIVE: 'Ngừng hoạt động' }
@@ -15,20 +17,20 @@ export default function AdminCustomersView() {
     {c.notice && <p className="message success" role="status">{c.notice}</p>}
     {c.data && <><p>Tổng: {c.data.totalElements} khách hàng</p>
       {!c.data.content.length && <p>Không có khách hàng phù hợp.</p>}
-      <ul className="address-list">{c.data.content.map(customer => <li key={customer.id}>
-        <strong>{customer.fullName || customer.email}</strong><p>{customer.email} · {labels[customer.status]}</p>
-        <div className="address-actions"><button disabled={c.busy} onClick={() => c.detail(customer.id)}>Xem chi tiết</button>
-          <button disabled={c.busy} onClick={() => c.toggle(customer)}>{customer.status === 'BANNED' ? 'Mở khóa' : 'Khóa tài khoản'}</button></div>
-      </li>)}</ul>
+      <DataTable title="Danh sách khách hàng" rows={c.data.content} columns={[
+ {key:'fullName',label:'Họ tên'}, {key:'email',label:'Email'},
+ {key:'status',label:'Trạng thái',render:x=>labels[x.status]},
+ {key:'actions',label:'Thao tác',render:customer=><div className="address-actions"><button disabled={c.busy} aria-haspopup="dialog" onClick={()=>c.detail(customer.id)}>Xem chi tiết</button><button disabled={c.busy} onClick={()=>c.toggle(customer)}>{customer.status==='BANNED'?'Mở khóa':'Khóa tài khoản'}</button></div>}
+ ]} />
       <div className="address-actions"><button disabled={c.busy || c.data.page === 0} onClick={() => c.next(-1)}>Trang trước</button>
         <span>Trang {c.data.page + 1} / {Math.max(1, c.data.totalPages)}</span>
         <button disabled={c.busy || c.data.page + 1 >= c.data.totalPages} onClick={() => c.next(1)}>Trang sau</button></div>
     </>}
-    {c.selected && <article className="account-card"><h3>Chi tiết khách hàng</h3>
+    {c.selected && <DetailDialog title="Chi tiết khách hàng" onClose={() => c.setSelected(null)}>
       <p>Họ tên: {c.selected.fullName}</p><p>Email: {c.selected.email}</p><p>Điện thoại: {c.selected.phone || 'Chưa cập nhật'}</p>
       <p>Trạng thái: {labels[c.selected.status]}</p><p>Email: {c.selected.emailVerified ? 'Đã xác thực' : 'Chưa xác thực'}</p>
       <p>Ngày tạo: {c.selected.createdAt ? new Date(c.selected.createdAt).toLocaleString('vi-VN') : 'Chưa có'}</p>
       <button onClick={() => c.setSelected(null)}>Đóng chi tiết</button>
-    </article>}
+    </DetailDialog>}
   </section>
 }

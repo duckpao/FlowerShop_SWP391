@@ -1,3 +1,5 @@
+import DataTable from './DataTable'
+import InfoPopup from './InfoPopup'
 import { useProductsController } from '../controllers/useProductsController'
 export default function ProductsView({ shop, manage = false }) {
   const c = useProductsController(shop.id, manage)
@@ -14,7 +16,16 @@ export default function ProductsView({ shop, manage = false }) {
       <label>Trạng thái<select value={c.form.status} onChange={e => c.setForm({ ...c.form, status: e.target.value })}><option value="ACTIVE">Đăng bán</option><option value="INACTIVE">Ẩn</option><option value="OUT_OF_STOCK">Hết hàng</option></select></label>
       <button disabled={!c.categories.length}>Lưu sản phẩm</button>{c.editing && <button type="button" onClick={c.cancel}>Hủy sửa</button>}
     </fieldset></form>}
-    {c.data && <><p>{c.data.totalElements} sản phẩm</p><ul className="address-list">{c.data.content.map(p => <li key={p.id}><h3>{p.name}</h3><p>{p.description}</p><p>{Number(p.price).toLocaleString('vi-VN')} đ · {p.categoryName} · Còn {p.stock}</p>{manage && <><p>{p.status}</p><button disabled={disabled} onClick={() => c.edit(p)}>Sửa</button><button disabled={disabled || p.status === 'INACTIVE'} onClick={() => c.hide(p.id)}>Ẩn sản phẩm</button></>}</li>)}</ul>
+    {c.data && <><p>{c.data.totalElements} sản phẩm</p><DataTable title="Danh sách sản phẩm" rows={c.data.content} columns={[
+ {key:'name',label:'Sản phẩm'},{key:'categoryName',label:'Danh mục'},
+ {key:'price',label:'Giá',render:p=>Number(p.price).toLocaleString('vi-VN')+' đ'},
+ {key:'stock',label:'Tồn kho'},
+ {key:'description',label:'Chi tiết',render:p=><InfoPopup title={p.name}><p>{p.description || 'Chưa có mô tả'}</p><p>Danh mục: {p.categoryName}</p><p>Giá: {Number(p.price).toLocaleString('vi-VN')} đ</p><p>Tồn kho: {p.stock}</p></InfoPopup>},
+ ...(manage?[
+ {key:'status',label:'Trạng thái',render:p=>({ACTIVE:'Đăng bán',INACTIVE:'Đã ẩn',OUT_OF_STOCK:'Hết hàng'})[p.status]||p.status},
+ {key:'actions',label:'Thao tác',render:p=><><button disabled={disabled} onClick={()=>c.edit(p)}>Sửa</button><button disabled={disabled||p.status==='INACTIVE'} onClick={()=>c.hide(p.id)}>Ẩn sản phẩm</button></>}
+ ]:[])
+ ]} />
       <button disabled={c.busy || c.page === 0} onClick={() => c.setPage(x => x - 1)}>Trang trước</button><button disabled={c.busy || c.page + 1 >= c.data.totalPages} onClick={() => c.setPage(x => x + 1)}>Trang sau</button></>}
   </section>
 }
