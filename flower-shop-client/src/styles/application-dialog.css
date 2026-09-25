@@ -1,0 +1,15 @@
+.application-dialog { position: fixed; inset: 0; margin: auto; width: min(680px, calc(100vw - 32px)); max-height: 88dvh; padding: 0; border: 1px solid #d9e3dc; border-radius: 18px; color: #203d32; background: white; box-shadow: 0 24px 80px #0004; overflow: hidden; }
+.application-dialog[open] { display: flex; flex-direction: column; }
+.application-dialog::backdrop { background: rgb(13 28 21 / 55%); backdrop-filter: blur(3px); }
+.application-dialog-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 24px; border-bottom: 1px solid #e1e8e3; }
+.application-dialog-header h2 { margin: 0; font-size: 22px; }
+.application-dialog-header p { margin: 8px 0 0; overflow-wrap: anywhere; }
+.application-dialog-body { padding: 8px 24px 24px; overflow-y: auto; overflow-wrap: anywhere; }
+.application-dialog-body p { line-height: 1.6; }
+.application-description { white-space: pre-wrap; }
+.application-dialog-footer { padding: 16px 24px; border-top: 1px solid #e1e8e3; display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 10px; }
+.application-dialog button { padding: 10px 16px; border: 1px solid #cad6ce; border-radius: 8px; cursor: pointer; color: #203d32; background: #f6f8f6; }
+.application-dialog button.application-approve { background: #203d32; color: white; }
+.application-dialog button:disabled { opacity: .6; cursor: wait; }
+.application-dialog button:focus-visible { outline: 3px solid #86a995; outline-offset: 2px; }
+@media (max-width: 480px) { .application-dialog-header, .application-dialog-footer { padding: 16px; } .application-dialog-body { padding: 8px 16px 16px; } }

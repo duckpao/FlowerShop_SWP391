@@ -46,4 +46,3 @@ public class CartItem {
     @Column(name = "last_modify_by", length = 36)
     private String lastModifyBy;
 }
-

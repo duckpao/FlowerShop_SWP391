@@ -14,6 +14,12 @@ Dự án được chia thành hai phần độc lập:
 
 ---
 
+## Database cho các chức năng trên nhánh Quangdv
+
+`database.sql` và `db.sql` được giữ nguyên theo `master`. Sau khi khởi tạo database mới, cần chạy các migration trong `flowershop/sql/` theo thứ tự `001` đến `010` trên database `flower_shop_db` để có các bảng OTP, phiên đăng nhập, nhân viên và đơn đăng ký manager.
+
+Với database đã chạy các migration này, không chạy lại toàn bộ: một số migration thêm cột hoặc ràng buộc chỉ được chạy một lần. Không chạy lại script khởi tạo trên database có dữ liệu cần giữ. Cập nhật code không tự động chạy migration.
+
 ## 🛠️ Yêu cầu hệ thống (Prerequisites)
 
 Để chạy được dự án trên máy cá nhân, team cần cài đặt sẵn các công cụ sau:
@@ -109,7 +115,9 @@ Frontend được xây dựng bằng **ReactJS (JSX)** và sử dụng **Vite** 
 
 ### 1. Di chuyển vào thư mục Frontend
 
-Mở một terminal mới, giữ nguyên terminal của Backend và Docker đang chạy:
+Frontend hiện được đóng gói và phục vụ bởi Spring Boot tại cổng 8080. Nếu backend đã chạy thì chỉ cần mở http://localhost:8080, không chạy thêm server frontend. Gradle tự chạy `npm ci` và build React khi cần.
+
+Cách khởi động thay thế từ thư mục frontend (chỉ dùng khi backend chưa chạy):
 
 ```bash
 cd flower-shop-client
@@ -132,7 +140,7 @@ npm run dev
 Sau khi khởi động thành công, mở trình duyệt và truy cập:
 
 ```text
-http://localhost:5173
+http://localhost:8080
 ```
 
 ---
@@ -279,7 +287,7 @@ http://localhost:8080
 
 ### 3. Chạy Frontend
 
-Mở terminal mới:
+Không cần terminal thứ hai: backend ở bước trên đã build và phục vụ frontend trên cùng cổng 8080. Lệnh dưới đây chỉ là cách khởi động thay thế khi backend chưa chạy:
 
 ```bash
 cd flower-shop-client
@@ -290,7 +298,7 @@ npm run dev
 Frontend:
 
 ```text
-http://localhost:5173
+http://localhost:8080
 ```
 
 ---

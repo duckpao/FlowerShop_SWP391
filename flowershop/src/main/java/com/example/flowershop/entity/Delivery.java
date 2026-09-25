@@ -1,5 +1,6 @@
 package com.example.flowershop.entity;
 
+import com.example.flowershop.entity.enums.DeliveryStatus;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -30,10 +31,10 @@ public class Delivery {
     @Column(name = "tracking_code", length = 100)
     private String trackingCode;
 
-    // Sử dụng String tạm thời vì database định nghĩa ENUM trực tiếp
-    @Column(name = "status", length = 20)
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status")
     @Builder.Default
-    private String status = "PENDING";
+    private DeliveryStatus status = DeliveryStatus.PENDING;
 
     @Column(name = "tracking_notes", columnDefinition = "TEXT")
     private String trackingNotes;

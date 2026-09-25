@@ -29,6 +29,8 @@ public class BlogInteraction {
     @JoinColumn(name = "blog_id")
     private Blog blog;
 
+    // Note: interactionType is part of the composite key stored in id field
+
     @CreationTimestamp
     @Column(name = "created_date", updatable = false)
     private LocalDateTime createdDate;

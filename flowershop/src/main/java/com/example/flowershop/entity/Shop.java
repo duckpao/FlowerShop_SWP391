@@ -21,8 +21,8 @@ public class Shop {
     @Column(name = "id", length = 36)
     private String id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "owner_id", nullable = false)
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "owner_id", nullable = false, unique = true)
     private User owner;
 
     @Column(name = "name", nullable = false, length = 255)
