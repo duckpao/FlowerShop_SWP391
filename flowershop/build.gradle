@@ -57,10 +57,9 @@ tasks.named('bootRun') {
 def frontendDir = layout.projectDirectory.dir('../flower-shop-client')
 def npmExecutable = System.getProperty('os.name').toLowerCase().contains('windows') ? 'npm.cmd' : 'npm'
 tasks.register('installFrontend', Exec) {
+    doNotTrackState("node_modules is too volatile to track")
     workingDir frontendDir
-    commandLine npmExecutable, 'ci'
-    inputs.files(frontendDir.file('package.json'), frontendDir.file('package-lock.json'))
-    outputs.dir(frontendDir.dir('node_modules'))
+    commandLine npmExecutable, 'install'
 }
 tasks.register('buildFrontend', Exec) {
     dependsOn 'installFrontend'
