@@ -8,6 +8,9 @@ import AdminManagerApplicationsView from './views/AdminManagerApplicationsView'
 import AdminDashboardView from './views/AdminDashboardView'
 import ManagerShopsView from './views/ManagerShopsView'
 import ManagerDashboardView from './views/ManagerDashboardView'
+import ProductCatalogView from './views/ProductCatalogView'
+import ProductDetailView from './views/ProductDetailView'
+import FavoritesView from './views/FavoritesView'
 import './styles/account.css'
 
 export default function App() {
@@ -38,7 +41,7 @@ function AuthApp() {
     }
   }, [path, controller.user])
   if (path === '/login') return <AuthView {...controller} />
-  if (['/admin', '/admin/shops', '/admin/approvals', '/admin/users', '/admin/profile'].includes(path)) {
+  if (['/admin', '/admin/shops', '/admin/approvals', '/admin/users', '/admin/profile', '/admin/categories'].includes(path)) {
     if (controller.busy && !controller.user) return <main className="account-page"><p role="status">Đang kiểm tra đăng nhập…</p></main>
     if (!controller.user) return <main className="account-page"><h1>Trang quản trị</h1><p>Hãy đăng nhập tài khoản Admin.</p><a href={`/login?next=${encodeURIComponent(path)}`}>Đăng nhập</a></main>
     if (controller.user.role !== 'ADMIN') return <main className="account-page"><h1>Không có quyền truy cập</h1><p>Chỉ Admin được duyệt đơn mở shop.</p><a href="/">Về trang chủ</a></main>
@@ -52,5 +55,9 @@ function AuthApp() {
     if (controller.user.role === 'SHOP_STAFF' && path === '/shop-admin') return <main className="account-page"><a href="/">Trang chủ</a><h1>Bạn đang là Staff</h1><ManagerShopsView role="SHOP_STAFF" /></main>
     return <main className="account-page"><h1>Không có quyền truy cập</h1><p>Chỉ Shop Manager được quản lý nhân viên và cửa hàng.</p><a href="/">Về trang chủ</a></main>
   }
+  if (path === '/products') return <ProductCatalogView auth={controller} />
+  if (path === '/favorites') return <FavoritesView auth={controller} />
+  const productMatch = path.match(/^\/products\/([^/]+)$/)
+  if (productMatch) return <ProductDetailView auth={controller} productId={decodeURIComponent(productMatch[1])} />
   return <HomeView auth={controller} />
 }

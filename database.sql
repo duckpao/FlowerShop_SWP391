@@ -1,5 +1,9 @@
-DROP DATABASE IF EXISTS flower_shop_db; 
-CREATE DATABASE flower_shop_db;
+-- File này lưu bằng UTF-8. Không có dòng SET NAMES dưới đây, client mysql trong container Docker
+-- đọc nó như latin1 và mọi chữ tiếng Việt bị lưu sai (ví dụ "Hoa Khai Trương" thành "Hoa Khai TrÆ°Æ¡ng").
+SET NAMES utf8mb4;
+
+DROP DATABASE IF EXISTS flower_shop_db;
+CREATE DATABASE flower_shop_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE flower_shop_db;
 -- ==========================================
 -- M01: AUTHENTICATION & USER MANAGEMENT

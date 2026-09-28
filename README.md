@@ -14,9 +14,28 @@ Dự án được chia thành hai phần độc lập:
 
 ---
 
+## Sản phẩm, đánh giá và yêu thích
+
+Danh sách sản phẩm toàn sàn, chi tiết kèm đánh giá, quản lý ảnh của Manager, sản phẩm yêu thích
+và quản lý danh mục của Admin. Cần chạy migration `flowershop/sql/011_product_catalog.sql` trước khi dùng.
+
+* [PRODUCT_CATALOG_GUIDE.md](PRODUCT_CATALOG_GUIDE.md) — cách dùng và các bước test thủ công.
+* [PRODUCT_CATALOG_IMPLEMENTATION.md](PRODUCT_CATALOG_IMPLEMENTATION.md) — danh sách file, nghiệp vụ
+  chi tiết, phân quyền và các quyết định thiết kế.
+
 ## Database cho các chức năng trên nhánh Quangdv
 
-`database.sql` và `db.sql` được giữ nguyên theo `master`. Sau khi khởi tạo database mới, cần chạy các migration trong `flowershop/sql/` theo thứ tự `001` đến `010` trên database `flower_shop_db` để có các bảng OTP, phiên đăng nhập, nhân viên và đơn đăng ký manager.
+Sau khi khởi tạo database mới, cần chạy các migration trong `flowershop/sql/` theo thứ tự `001` đến `012` trên database `flower_shop_db` để có các bảng OTP, phiên đăng nhập, nhân viên, đơn đăng ký manager và phần đánh giá/kiểm duyệt sản phẩm.
+
+### Lỗi font tiếng Việt trong dữ liệu mẫu
+
+`database.sql` và `db.sql` trước đây thiếu dòng `SET NAMES utf8mb4`, nên client mysql trong container
+đọc file UTF-8 như latin1 và lưu sai toàn bộ chữ tiếng Việt ("Hoa Khai Trương" thành "Hoa Khai TrÆ°Æ¡ng").
+Lỗi này còn làm địa chỉ mẫu lưu thành "HÃ  Ná»™i", không khớp danh sách khu vực giao hàng.
+
+Hai file đã được vá nên **database tạo mới không còn dính lỗi**. Với database đang chạy, chạy
+`flowershop/sql/012_fix_utf8_mojibake.sql` để sửa dữ liệu tại chỗ mà không phải tạo lại;
+script có điều kiện bảo vệ nên chạy lại nhiều lần vẫn an toàn và không đụng vào dữ liệu vốn đã đúng.
 
 Với database đã chạy các migration này, không chạy lại toàn bộ: một số migration thêm cột hoặc ràng buộc chỉ được chạy một lần. Không chạy lại script khởi tạo trên database có dữ liệu cần giữ. Cập nhật code không tự động chạy migration.
 

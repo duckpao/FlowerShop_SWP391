@@ -8,15 +8,13 @@ import org.hibernate.annotations.UpdateTimestamp;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "Product_Reviews",
-        uniqueConstraints = @UniqueConstraint(name = "uq_review_user_product",
-                columnNames = {"user_id", "product_id"}))
+@Table(name = "Product_Images")
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class ProductReview {
+public class ProductImage {
 
     @Id
     @Column(name = "id", length = 36)
@@ -26,25 +24,16 @@ public class ProductReview {
     @JoinColumn(name = "product_id", nullable = false)
     private Product product;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = false)
-    private User user;
+    @Column(name = "image_url", nullable = false, length = 500)
+    private String imageUrl;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = true)
-    @JoinColumn(name = "order_id")
-    private Order order;
+    @Builder.Default
+    @Column(name = "is_primary")
+    private Boolean isPrimary = false;
 
-    @Column(name = "rating")
-    private Integer rating;
-
-    @Column(name = "comment", columnDefinition = "TEXT")
-    private String comment;
-
-    @Column(name = "media", columnDefinition = "json")
-    private String media;
-
-    @Column(name = "shop_reply", columnDefinition = "TEXT")
-    private String shopReply;
+    @Builder.Default
+    @Column(name = "display_order")
+    private Integer displayOrder = 0;
 
     @CreationTimestamp
     @Column(name = "created_date", updatable = false)

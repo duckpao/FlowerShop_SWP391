@@ -2,12 +2,14 @@ import AdminShopsView from './AdminShopsView'
 import AdminManagerApplicationsView from './AdminManagerApplicationsView'
 import AdminCustomersView from './AdminCustomersView'
 import AdminProfileView from './AdminProfileView'
+import AdminCategoriesView from './AdminCategoriesView'
 import '../styles/admin.css'
 
 const options = [
   { href: '/admin/users', title: 'Quản lý người dùng', icon: '♙', description: 'Quản lý tài khoản khách hàng: tìm kiếm, xem chi tiết, khóa hoặc mở khóa.' },
   { href: '/admin/shops', title: 'Quản lý shop', icon: '❀', description: 'Xem cửa hàng, tìm kiếm, duyệt hoạt động và khóa hoặc mở khóa shop.' },
   { href: '/admin/approvals', title: 'Quản lý đơn', icon: '☷', description: 'Xem đơn đăng ký mở shop, kiểm tra thông tin và duyệt hoặc từ chối yêu cầu.' },
+  { href: '/admin/categories', title: 'Danh mục & kiểm duyệt', icon: '☰', description: 'Thêm và sửa danh mục sản phẩm, ẩn sản phẩm vi phạm khỏi trang công khai.' },
 ]
 
 export default function AdminDashboardView({ user, logout, busy, error, path }) {
@@ -28,6 +30,7 @@ export default function AdminDashboardView({ user, logout, busy, error, path }) 
       </div></>}
       {path === '/admin/shops' && <AdminShopsView />}
       {path === '/admin/users' && <AdminCustomersView />}
+      {path === '/admin/categories' && <AdminCategoriesView />}
       {profile && <AdminProfileView user={user} />}
       {path === '/admin/approvals' && <><p>Danh sách đơn Customer đăng ký trở thành Manager và mở shop.</p><AdminManagerApplicationsView /></>}
     </main>

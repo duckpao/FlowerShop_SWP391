@@ -1,3 +1,6 @@
+-- File này lưu bằng UTF-8; khai báo charset để chữ tiếng Việt không bị nạp sai thành latin1.
+SET NAMES utf8mb4;
+
 CREATE TABLE Users (
     id VARCHAR(36) PRIMARY KEY,
     email VARCHAR(255) UNIQUE NOT NULL,

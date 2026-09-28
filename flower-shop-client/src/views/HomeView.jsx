@@ -21,6 +21,8 @@ export default function HomeView({ auth }) {
     {auth.user && ['CUSTOMER', 'SHOP'].includes(auth.user.role) && <ManagerApplicationView key={auth.user.id} user={auth.user} />}
     {c.sessionExpired && <p role="alert">Phiên đăng nhập đã thay đổi hoặc hết hạn. <a href="/login">Đăng nhập lại để xem quyền và kết quả ứng tuyển mới nhất.</a></p>}
     {!c.selected && <>
+    <p><a className="primary" href="/products">Xem tất cả sản phẩm</a>
+      {auth.user?.role === 'CUSTOMER' && <> · <a href="/favorites">Sản phẩm yêu thích</a></>}</p>
     <h2>Tìm cửa hàng hoa</h2><form onSubmit={c.search}><label>Tên shop<input maxLength={100} value={c.query} onChange={e => c.setQuery(e.target.value)} /></label><button disabled={c.busy}>Tìm kiếm</button></form>
     {c.error && <p role="alert" className="message error">{c.error}</p>}{c.notice && <p role="status">{c.notice}</p>}
     <p>Hiển thị tối đa 50 shop đang hoạt động. Nhập tên để thu hẹp kết quả.</p>
