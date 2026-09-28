@@ -16,7 +16,6 @@ import {
   UserCircleIcon,
 } from "../icons";
 import { cn } from "../utils";
-import SidebarWidget from "./SidebarWidget";
 
 type NavItem = {
   name: string;
@@ -38,17 +37,23 @@ type NavItem = {
 const adminNavItems: NavItem[] = [
   { name: 'Tổng quan', path: '/admin', icon: <GridIcon fontSize={24} /> },
   { name: 'Quản lý người dùng', path: '/admin/users', icon: <UserCircleIcon fontSize={24} /> },
-  { name: 'Quản lý shop', path: '/admin/shops', icon: <GridIcon fontSize={24} /> },
-  { name: 'Quản lý đơn', path: '/admin/approvals', icon: <ListIcon fontSize={24} /> }
+  { name: 'Quản lý các shop', path: '/admin/shops', icon: <BoxCubeIcon fontSize={24} /> },
+  { name: 'Xem khiếu nại', path: '#', icon: <ListIcon fontSize={24} /> }
 ];
 
 const managerNavItems: NavItem[] = [
   { name: 'Tổng quan', path: '/shop-admin', icon: <GridIcon fontSize={24} /> },
-  { name: 'Tài khoản Staff', path: '/shop-admin/staff', icon: <UserCircleIcon fontSize={24} /> },
+  { name: 'Quản lý shop', path: '/shop-admin/shop', icon: <PageIcon fontSize={24} /> },
   { name: 'Quản lý mặt hàng', path: '/shop-admin/products', icon: <BoxCubeIcon fontSize={24} /> },
-  { name: 'Hồ sơ shop', path: '/shop-admin/shop', icon: <PageIcon fontSize={24} /> }
+  { name: 'Quản lý nhân sự', path: '/shop-admin/staff', icon: <UserCircleIcon fontSize={24} /> },
+  { name: 'Nhắn tin nhanh', path: '#', icon: <ListIcon fontSize={24} /> }
 ];
 
+const publicNavItems: NavItem[] = [
+  { name: 'Trang chủ', path: '/', icon: <GridIcon fontSize={24} /> },
+  { name: 'Cửa hàng', path: '/#shops', icon: <ListIcon fontSize={24} /> },
+  { name: 'Sản phẩm', path: '/#products', icon: <BoxCubeIcon fontSize={24} /> },
+];
 
 const AppSidebar: React.FC = () => {
   const { isExpanded, isMobileOpen, isHovered, setIsHovered, setIsMobileOpen } =
@@ -69,35 +74,38 @@ const AppSidebar: React.FC = () => {
     if (isMobileOpen) {
       setIsMobileOpen(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.pathname]);
+  }, [location.pathname, setIsMobileOpen]);
 
-  // const isActive = (path: string) => location.pathname === path;
   const isActive = useCallback(
-    (path: string) => location.pathname === path,
-    [location.pathname],
+    (path: string) => {
+      // Cho public routes có hash link
+      if (path.includes('#')) return location.hash === path.substring(path.indexOf('#')) || (path === '/' && location.pathname === '/' && !location.hash);
+      return location.pathname === path;
+    },
+    [location],
   );
 
   useEffect(() => {
-    let submenuMatched = false;
+    let submenuToOpen: { type: "main" | "others"; index: number } | null = null;
+    
+    const navItems = location.pathname.startsWith('/admin') && !location.pathname.startsWith('/shop-admin') 
+      ? adminNavItems 
+      : location.pathname.startsWith('/shop-admin') 
+        ? managerNavItems 
+        : publicNavItems;
 
-      const items = location.pathname.startsWith('/admin') && !location.pathname.startsWith('/shop-admin') ? adminNavItems : managerNavItems;
+    navItems.forEach((nav, index) => {
+      if (nav.subItems) {
+        nav.subItems.forEach((subItem) => {
+          if (isActive(subItem.path)) {
+            submenuToOpen = { type: "main", index };
+          }
+        });
+      }
+    });
 
-      items.forEach((nav, index) => {
-        if (nav.subItems) {
-          nav.subItems.forEach((subItem) => {
-            if (isActive(subItem.path)) {
-              setOpenSubmenu({
-                type: "main",
-                index,
-              });
-              submenuMatched = true;
-            }
-          });
-        }
-      });
-    if (!submenuMatched) {
-      setOpenSubmenu(null);
+    if (submenuToOpen) {
+      setOpenSubmenu(submenuToOpen);
     }
   }, [location, isActive]);
 
@@ -183,8 +191,8 @@ const AppSidebar: React.FC = () => {
             </button>
           ) : (
             nav.path && (
-              <Link
-                to={nav.path}
+              <a
+                href={nav.path}
                 target={nav.target}
                 className={`group menu-item ${
                   isActive(nav.path) ? "menu-item-active" : "menu-item-inactive"
@@ -204,7 +212,7 @@ const AppSidebar: React.FC = () => {
                     {nav.key ? t(`sidebar.items.${nav.key}`) : nav.name}
                   </span>
                 )}
-              </Link>
+              </a>
             )
           )}
           {nav.subItems && (isExpanded || isHovered || isMobileOpen) && (
@@ -270,6 +278,14 @@ const AppSidebar: React.FC = () => {
     </ul>
   );
 
+  const isPublic = !location.pathname.startsWith('/admin') && !location.pathname.startsWith('/shop-admin');
+  const sectionTitle = isPublic ? "CHUNG" : "QUẢN LÝ";
+  const navItems = location.pathname.startsWith('/admin') && !location.pathname.startsWith('/shop-admin') 
+    ? adminNavItems 
+    : location.pathname.startsWith('/shop-admin') 
+      ? managerNavItems 
+      : publicNavItems;
+
   return (
     <aside
       className={cn(
@@ -288,31 +304,12 @@ const AppSidebar: React.FC = () => {
           !isExpanded && !isHovered ? "xl:justify-center" : "justify-start",
         )}
       >
-        <Link to="/">
-          {isExpanded || isHovered || isMobileOpen ? (
-            <>
-              <img
-                className="dark:hidden"
-                src="/images/logo/logo.svg"
-                alt="Logo"
-                width={150}
-                height={40}
-              />
-              <img
-                className="hidden dark:block"
-                src="/images/logo/logo-dark.svg"
-                alt="Logo"
-                width={150}
-                height={40}
-              />
-            </>
-          ) : (
-            <img
-              src="/images/logo/logo-icon.svg"
-              alt="Logo"
-              width={32}
-              height={32}
-            />
+        <Link to="/" className="flex items-center gap-2">
+          <span className="text-2xl">✿</span>
+          {(isExpanded || isHovered || isMobileOpen) && (
+            <span className="text-xl font-bold text-brand-500 truncate">
+              FlowerShop
+            </span>
           )}
         </Link>
       </div>
@@ -329,17 +326,16 @@ const AppSidebar: React.FC = () => {
                 }`}
               >
                 {isExpanded || isHovered || isMobileOpen ? (
-                  "QUẢN LÝ"
+                  sectionTitle
                 ) : (
                   <HorizontaLDots className="size-6" />
                 )}
               </h2>
-              {renderMenuItems(location.pathname.startsWith('/admin') && !location.pathname.startsWith('/shop-admin') ? adminNavItems : managerNavItems, "main")}
+              {renderMenuItems(navItems, "main")}
             </div>
           </div>
         </nav>
 
-        {isExpanded || isHovered || isMobileOpen ? <SidebarWidget /> : null}
       </div>
     </aside>
   );

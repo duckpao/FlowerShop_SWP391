@@ -21,76 +21,34 @@ const statuses = {
 export default function HomeView({ auth }) {
   const c = useShopSearchController(auth.user);
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <header className="sticky top-0 z-50 bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-white/5">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center">
-              <a href="/" className="text-2xl font-bold text-brand-500 hover:text-brand-600">
-                ✿ FlowerShop
+    <div className="bg-gray-50 dark:bg-gray-900 flex-1">
+      <main className="mx-auto w-full max-w-7xl py-8 space-y-12">
+        
+        {/* Hero Section */}
+        <section className="relative overflow-hidden rounded-3xl bg-brand-50 dark:bg-brand-500/10 px-6 py-16 sm:px-12 sm:py-24 text-center border border-brand-100 dark:border-brand-500/20">
+          <div className="mx-auto max-w-3xl relative z-10">
+            <span className="text-brand-500 font-semibold tracking-wider uppercase text-sm mb-4 block">Hoa tươi giao tận nơi</span>
+            <h1 className="text-4xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-6xl mb-6">
+              Mỗi đóa hoa, <br className="hidden sm:block"/> một lời gửi yêu thương
+            </h1>
+            <p className="text-lg leading-8 text-gray-600 dark:text-gray-300 mb-8">
+              Khám phá hàng ngàn mẫu hoa đẹp từ các cửa hàng uy tín. Đặt hoa dễ dàng, giao hàng nhanh chóng, mang lại niềm vui cho những người thân yêu.
+            </p>
+            <div className="flex items-center justify-center gap-x-6">
+              <a href="#shops" className="rounded-xl bg-brand-500 px-6 py-3.5 text-sm font-semibold text-white shadow-xs hover:bg-brand-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 transition-colors">
+                Tìm cửa hàng
+              </a>
+              <a href="#products" className="text-sm font-semibold leading-6 text-gray-900 dark:text-white hover:text-brand-500 dark:hover:text-brand-400 transition-colors">
+                Khám phá sản phẩm <span aria-hidden="true">→</span>
               </a>
             </div>
-            
-            <div className="flex items-center gap-4">
-              {auth.user ? (
-                <>
-                  <div className="hidden md:block text-right mr-4">
-                    <p className="text-sm font-medium text-gray-900 dark:text-white">{auth.user.email}</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      Bạn đang là <span className="font-semibold text-brand-500">{roles[auth.user.role] || auth.user.role}</span>
-                    </p>
-                  </div>
-                  
-                  {auth.user.role !== "CUSTOMER" && (
-                    <a href="/account" className="text-sm font-medium text-gray-700 hover:text-brand-500 dark:text-gray-300 dark:hover:text-brand-400">
-                      Hồ sơ cá nhân
-                    </a>
-                  )}
-                  {auth.user.role === "ADMIN" && (
-                    <a href="/admin" className="px-4 py-2 text-sm font-medium text-white bg-brand-500 hover:bg-brand-600 rounded-lg transition-colors">
-                      Dashboard Admin
-                    </a>
-                  )}
-                  {["SHOP", "SHOP_STAFF"].includes(auth.user.role) && (
-                    <a href="/shop-admin" className="text-sm font-medium text-gray-700 hover:text-brand-500 dark:text-gray-300 dark:hover:text-brand-400">
-                      Vào trang quản trị shop
-                    </a>
-                  )}
-                  
-                  <div className="flex items-center gap-3 border-l border-gray-200 dark:border-white/10 pl-4 ml-2">
-                    <button 
-                      disabled={auth.busy} 
-                      onClick={auth.logout}
-                      className="text-sm font-medium text-gray-600 hover:text-error-500 dark:text-gray-400 transition-colors disabled:opacity-50"
-                    >
-                      Đăng xuất
-                    </button>
-                    {auth.user.role === "CUSTOMER" && (
-                      <a
-                        href="/account"
-                        className="p-2 text-gray-500 hover:text-brand-500 hover:bg-brand-50 dark:hover:bg-brand-500/10 rounded-full transition-colors"
-                        aria-label="Quản lý thông tin tài khoản"
-                        title="Quản lý thông tin tài khoản"
-                      >
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <circle cx="12" cy="8" r="4" />
-                          <path d="M4 22v-2a8 8 0 0 1 16 0v2" />
-                        </svg>
-                      </a>
-                    )}
-                  </div>
-                </>
-              ) : (
-                <a href="/login" className="px-4 py-2 text-sm font-medium text-white bg-brand-500 hover:bg-brand-600 rounded-lg transition-colors">
-                  Đăng nhập
-                </a>
-              )}
-            </div>
           </div>
-        </div>
-      </header>
+          
+          {/* Decorative elements */}
+          <div className="absolute top-0 left-0 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-brand-200 dark:bg-brand-500/20 rounded-full blur-3xl opacity-50"></div>
+          <div className="absolute bottom-0 right-0 translate-x-1/3 translate-y-1/3 w-96 h-96 bg-pink-200 dark:bg-pink-500/20 rounded-full blur-3xl opacity-50"></div>
+        </section>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
         {auth.error && (
           <div className="rounded-lg bg-error-50 dark:bg-error-500/10 p-4" role="alert">
             <p className="text-sm text-error-600 dark:text-error-500">{auth.error}</p>
