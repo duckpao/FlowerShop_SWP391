@@ -63,12 +63,6 @@ public class Product {
     @Builder.Default
     private Integer stock = 0;
 
-    @Column(name = "images", columnDefinition = "json")
-    private String images;
-
-    @Column(name = "videos", columnDefinition = "json")
-    private String videos;
-
     @Enumerated(EnumType.STRING)
     @Column(name = "status")
     @Builder.Default

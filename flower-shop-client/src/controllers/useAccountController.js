@@ -60,6 +60,8 @@ export function useAccountController(user) {
     setAddress({ addressLine: item.addressLine || '', city: item.city || '', district: item.district || '', ward: item.ward || '', isDefault: item.isDefault })
     setError(''); setNotice('')
   }
-  return { profile, form, setForm, addresses, cities, address, setAddress, editing, busy, error, notice,
-    saveProfile, saveAddress, remove, makeDefault, edit, cancel, retry: () => setReload(x => x + 1) }
+  return {
+    profile, form, setForm, addresses, cities, address, setAddress, editing, busy, error, notice,
+    saveProfile, saveAddress, remove, makeDefault, edit, cancel, retry: () => setReload(x => x + 1)
+  }
 }
