@@ -8,6 +8,8 @@ export function useProductsController(shopId, manage) {
   const [categories, setCategories] = useState([])
   const [form, setForm] = useState(empty)
   const [editing, setEditing] = useState(null)
+  const [images, setImages] = useState([])
+  const [videos, setVideos] = useState([])
   const [page, setPage] = useState(0)
   const [revision, setRevision] = useState(0)
   const [busy, setBusy] = useState(false)

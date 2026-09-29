@@ -1,9 +1,5 @@
--- File này lưu bằng UTF-8. Không có dòng SET NAMES dưới đây, client mysql trong container Docker
--- đọc nó như latin1 và mọi chữ tiếng Việt bị lưu sai (ví dụ "Hoa Khai Trương" thành "Hoa Khai TrÆ°Æ¡ng").
-SET NAMES utf8mb4;
-
 DROP DATABASE IF EXISTS flower_shop_db;
-CREATE DATABASE flower_shop_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE flower_shop_db;
 USE flower_shop_db;
 -- ==========================================
 -- M01: AUTHENTICATION & USER MANAGEMENT
@@ -15,7 +11,7 @@ CREATE TABLE Users (
     google_id NVARCHAR(255) UNIQUE,
     full_name NVARCHAR(100),
     phone NVARCHAR(20),
-    role ENUM('ADMIN', 'SHOP', 'CUSTOMER', 'DELIVERY') NOT NULL,
+    role ENUM('ADMIN', 'SHOP', 'CUSTOMER', 'SHOP_STAFF') NOT NULL,
     is_email_verified BOOLEAN DEFAULT FALSE,
     status ENUM('ACTIVE', 'INACTIVE', 'BANNED') DEFAULT 'ACTIVE',
     created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -26,7 +22,7 @@ CREATE TABLE Users (
 
 CREATE TABLE Shops (
     id NVARCHAR(36) PRIMARY KEY,
-    owner_id NVARCHAR(36) NOT NULL,
+    owner_id NVARCHAR(36) NOT NULL UNIQUE, -- 1 shop / 1 owner
     name NVARCHAR(255) NOT NULL,
     description TEXT,
     logo_url NVARCHAR(255),
@@ -53,6 +49,114 @@ CREATE TABLE Addresses (
     last_modify_by NVARCHAR(36),
     FOREIGN KEY (user_id) REFERENCES Users(id),
     FOREIGN KEY (shop_id) REFERENCES Shops(id)
+);
+
+-- ==========================================
+-- M09: AUTH SESSIONS & SHOP/STAFF ONBOARDING
+-- ==========================================
+CREATE TABLE Email_Verification_Tokens (
+    user_id NVARCHAR(36) PRIMARY KEY,
+    token_hash VARCHAR(64) NOT NULL UNIQUE,
+    issued_at TIMESTAMP(6) NOT NULL,
+    expires_at TIMESTAMP(6) NOT NULL,
+    used_at TIMESTAMP(6) NULL,
+    FOREIGN KEY (user_id) REFERENCES Users(id)
+);
+
+CREATE TABLE Otp_Challenges (
+    id NVARCHAR(36) PRIMARY KEY,
+    user_id NVARCHAR(36) NOT NULL,
+    purpose VARCHAR(20) NOT NULL,
+    code_hash VARCHAR(100) NOT NULL,
+    issued_at TIMESTAMP(6) NOT NULL,
+    expires_at TIMESTAMP(6) NOT NULL,
+    used_at TIMESTAMP(6) NULL,
+    window_start TIMESTAMP(6) NOT NULL,
+    failed_attempts INT NOT NULL DEFAULT 0,
+    send_count INT NOT NULL DEFAULT 0,
+    UNIQUE KEY uq_otp_user_purpose (user_id, purpose),
+    FOREIGN KEY (user_id) REFERENCES Users(id)
+);
+
+CREATE TABLE Pending_Registrations (
+    email NVARCHAR(255) PRIMARY KEY,
+    full_name NVARCHAR(100) NOT NULL,
+    password_hash VARCHAR(100) NOT NULL,
+    otp_hash VARCHAR(100) NOT NULL,
+    shop_name VARCHAR(255) NULL,
+    shop_description VARCHAR(5000) NULL,
+    issued_at TIMESTAMP(6) NOT NULL,
+    expires_at TIMESTAMP(6) NOT NULL,
+    window_start TIMESTAMP(6) NOT NULL,
+    failed_attempts INT NOT NULL DEFAULT 0,
+    send_count INT NOT NULL DEFAULT 0
+);
+
+CREATE TABLE Auth_Sessions (
+    id NVARCHAR(36) PRIMARY KEY,
+    user_id NVARCHAR(36) NOT NULL,
+    refresh_hash VARCHAR(64) NOT NULL,
+    expires_at TIMESTAMP(6) NOT NULL,
+    revoked BOOLEAN NOT NULL DEFAULT FALSE,
+    FOREIGN KEY (user_id) REFERENCES Users(id)
+);
+
+CREATE TABLE Shop_Staff (
+    id NVARCHAR(36) PRIMARY KEY,
+    shop_id NVARCHAR(36) NOT NULL,
+    user_id NVARCHAR(36) NOT NULL,
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    UNIQUE KEY uq_shop_staff (shop_id, user_id),
+    FOREIGN KEY (shop_id) REFERENCES Shops(id),
+    FOREIGN KEY (user_id) REFERENCES Users(id)
+);
+
+CREATE TABLE Staff_Invitations (
+    id NVARCHAR(36) PRIMARY KEY,
+    shop_id NVARCHAR(36) NOT NULL,
+    email VARCHAR(255) NOT NULL,
+    token_hash VARCHAR(64) NOT NULL,
+    expires_at TIMESTAMP(6) NOT NULL,
+    issued_at TIMESTAMP(6) NOT NULL,
+    window_start TIMESTAMP(6) NOT NULL,
+    send_count INT NOT NULL,
+    status VARCHAR(16) NOT NULL,
+    UNIQUE KEY uq_staff_invite (shop_id, email),
+    FOREIGN KEY (shop_id) REFERENCES Shops(id)
+);
+
+CREATE TABLE Staff_Applications (
+    id NVARCHAR(36) PRIMARY KEY,
+    shop_id NVARCHAR(36) NOT NULL,
+    user_id NVARCHAR(36) NOT NULL,
+    fullName VARCHAR(100) NOT NULL,
+    phone VARCHAR(20) NOT NULL,
+    introduction VARCHAR(1000) NOT NULL,
+    status VARCHAR(16) NOT NULL,
+    submittedAt DATETIME(6) NOT NULL,
+    CONSTRAINT uq_staff_application UNIQUE (shop_id, user_id),
+    FOREIGN KEY (shop_id) REFERENCES Shops(id),
+    FOREIGN KEY (user_id) REFERENCES Users(id)
+);
+
+CREATE TABLE Manager_Applications (
+    id NVARCHAR(36) PRIMARY KEY,
+    user_id NVARCHAR(36) NOT NULL UNIQUE,
+    full_name VARCHAR(100) NOT NULL,
+    phone VARCHAR(20) NOT NULL,
+    shop_name VARCHAR(255) NOT NULL,
+    description VARCHAR(5000) NOT NULL,
+    address_line VARCHAR(255) NOT NULL,
+    city VARCHAR(100) NOT NULL,
+    district VARCHAR(100) NOT NULL,
+    ward VARCHAR(100) NOT NULL,
+    status VARCHAR(16) NOT NULL,
+    review_note VARCHAR(1000),
+    submitted_at DATETIME(6) NOT NULL,
+    reviewed_at DATETIME(6),
+    reviewed_by VARCHAR(36),
+    shop_id VARCHAR(36),
+    FOREIGN KEY (user_id) REFERENCES Users(id)
 );
 
 -- ==========================================
@@ -410,98 +514,121 @@ CREATE TABLE Customer_Occasions (
 -- SCRIPT INSERT MOCK DATA - FLOWER SHOP DB
 -- ==========================================
 
--- 1. INSERT USERS (Admin, Shop Owner, Customer, Delivery)
-INSERT INTO Users (id, email, password_hash, full_name, phone, role, status, created_by) VALUES
-('user-admin-01', 'admin@flowershop.com', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', 'System Admin', '0901234567', 'ADMIN', 'ACTIVE', 'user-admin-01'),
-('user-shop-01', 'shop1@gmail.com', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', 'Nguyễn Đức Bảo', '0912345678', 'SHOP', 'ACTIVE', 'user-admin-01'),
-('user-customer-01', 'khachhang1@gmail.com', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', 'Trần Thị B', '0987654321', 'CUSTOMER', 'ACTIVE', 'user-customer-01'),
-('user-delivery-01', 'shipper1@ahamove.com', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', 'Lê Văn C', '0922334455', 'DELIVERY', 'ACTIVE', 'user-admin-01');
+-- 1. INSERT USERS (Admin, Shop Owner, Customer, Shop Staff) — id là UUID ngẫu nhiên thật
+INSERT INTO Users (id, email, password_hash, full_name, phone, role, is_email_verified, status, created_by) VALUES
+('53728def-d2ff-40e5-8861-2eabf13340e3', 'admin@flowershop.com', '$2a$12$6FvjssRwuLZ2v8986LgoMuUiOnM2VxgWhIg1Iz6xJ11a3swWd0QhG', 'System Admin', '0901234567', 'ADMIN', TRUE, 'ACTIVE', '53728def-d2ff-40e5-8861-2eabf13340e3'),
+('6cd6ebd5-c618-4043-93dc-fe16532f2942', 'shop1@gmail.com', '$2a$12$6FvjssRwuLZ2v8986LgoMuUiOnM2VxgWhIg1Iz6xJ11a3swWd0QhG', 'Nguyễn Đức Bảo', '0912345678', 'SHOP', TRUE, 'ACTIVE', '53728def-d2ff-40e5-8861-2eabf13340e3'),
+('dcca63c5-cff9-4dc7-b27a-6a80d5cee5b5', 'khachhang1@gmail.com', '$2a$12$6FvjssRwuLZ2v8986LgoMuUiOnM2VxgWhIg1Iz6xJ11a3swWd0QhG', 'Trần Thị B', '0987654321', 'CUSTOMER', TRUE, 'ACTIVE', 'dcca63c5-cff9-4dc7-b27a-6a80d5cee5b5'),
+('8da640f4-6292-4bc5-8ff3-57806c7e0d0d', 'staff1@gmail.com', '$2a$12$6FvjssRwuLZ2v8986LgoMuUiOnM2VxgWhIg1Iz6xJ11a3swWd0QhG', 'Phạm Văn D', '0933445566', 'SHOP_STAFF', TRUE, 'ACTIVE', '6cd6ebd5-c618-4043-93dc-fe16532f2942');
 
 -- 2. INSERT SHOPS
 INSERT INTO Shops (id, owner_id, name, description, logo_url, status, created_by) VALUES
-('shop-01', 'user-shop-01', 'FPTU Smart Floral', 'Tiệm hoa sinh viên giá rẻ, thiết kế theo yêu cầu.', 'https://link-to-logo.com/logo1.png', 'ACTIVE', 'user-admin-01');
+('47bf0de6-8c7a-4a7e-9e45-f69f723dafd7', '6cd6ebd5-c618-4043-93dc-fe16532f2942', 'FPTU Smart Floral', 'Tiệm hoa sinh viên giá rẻ, thiết kế theo yêu cầu.', 'https://link-to-logo.com/logo1.png', 'ACTIVE', '53728def-d2ff-40e5-8861-2eabf13340e3');
 
 -- 3. INSERT ADDRESSES (1 địa chỉ cho Shop, 1 địa chỉ cho Khách)
 INSERT INTO Addresses (id, user_id, shop_id, address_line, ward, district, city, is_default, created_by) VALUES
-('addr-shop-01', NULL, 'shop-01', 'Khu Công Nghệ Cao Hòa Lạc', 'Thạch Hòa', 'Thạch Thất', 'Hà Nội', TRUE, 'user-shop-01'),
-('addr-customer-01', 'user-customer-01', NULL, 'Số 10, Ngõ 20, Đường Cầu Giấy', 'Dịch Vọng', 'Cầu Giấy', 'Hà Nội', TRUE, 'user-customer-01');
+('c3f09dda-8509-4372-9528-6da8612b7e53', NULL, '47bf0de6-8c7a-4a7e-9e45-f69f723dafd7', 'Khu Công Nghệ Cao Hòa Lạc', 'Thạch Hòa', 'Thạch Thất', 'Hà Nội', TRUE, '6cd6ebd5-c618-4043-93dc-fe16532f2942'),
+('d3170ed8-579f-4582-94fa-15e5dd1d4f27', 'dcca63c5-cff9-4dc7-b27a-6a80d5cee5b5', NULL, 'Số 10, Ngõ 20, Đường Cầu Giấy', 'Dịch Vọng', 'Cầu Giấy', 'Hà Nội', TRUE, 'dcca63c5-cff9-4dc7-b27a-6a80d5cee5b5');
 
 -- 4. INSERT CATEGORIES
 INSERT INTO Categories (id, name, description, status, created_by) VALUES
-('cat-01', 'Hoa Tình Yêu', 'Các mẫu hoa lãng mạn dành cho cặp đôi', 'ACTIVE', 'user-admin-01'),
-('cat-02', 'Hoa Khai Trương', 'Kệ hoa, lẵng hoa chúc mừng khai trương', 'ACTIVE', 'user-admin-01');
+('7f03856e-6c1b-49f9-a0ef-811dad84a981', 'Hoa Tình Yêu', 'Các mẫu hoa lãng mạn dành cho cặp đôi', 'ACTIVE', '53728def-d2ff-40e5-8861-2eabf13340e3'),
+('64350058-2e23-483c-806e-d14d7a99c2f7', 'Hoa Khai Trương', 'Kệ hoa, lẵng hoa chúc mừng khai trương', 'ACTIVE', '53728def-d2ff-40e5-8861-2eabf13340e3');
 
 -- 5. INSERT PRODUCTS
 INSERT INTO Products (id, shop_id, category_id, name, description, components, shelf_life_days, price, stock, status, created_by) VALUES
-('prod-01', 'shop-01', 'cat-01', 'Bó Hồng Đỏ Mix Baby', 'Bó hoa hồng đỏ Ecuador mix hoa baby trắng', '{"red_roses": 10, "white_baby_breath": 3, "wrapper": "Giấy Kraft"}', 4, 350000.00, 50, 'ACTIVE', 'user-shop-01'),
-('prod-02', 'shop-01', 'cat-02', 'Lẵng Hướng Dương Ban Mai', 'Hoa hướng dương tặng khai trương, tốt nghiệp', '{"sunflowers": 5, "yellow_roses": 5}', 5, 450000.00, 20, 'ACTIVE', 'user-shop-01');
+('642d2fca-13ce-4b97-85ea-946b10ad464d', '47bf0de6-8c7a-4a7e-9e45-f69f723dafd7', '7f03856e-6c1b-49f9-a0ef-811dad84a981', 'Bó Hồng Đỏ Mix Baby', 'Bó hoa hồng đỏ Ecuador mix hoa baby trắng', '{"red_roses": 10, "white_baby_breath": 3, "wrapper": "Giấy Kraft"}', 4, 350000.00, 50, 'ACTIVE', '6cd6ebd5-c618-4043-93dc-fe16532f2942'),
+('a657ef0e-1ce6-4277-9733-8172d54b8f7d', '47bf0de6-8c7a-4a7e-9e45-f69f723dafd7', '64350058-2e23-483c-806e-d14d7a99c2f7', 'Lẵng Hướng Dương Ban Mai', 'Hoa hướng dương tặng khai trương, tốt nghiệp', '{"sunflowers": 5, "yellow_roses": 5}', 5, 450000.00, 20, 'ACTIVE', '6cd6ebd5-c618-4043-93dc-fe16532f2942');
 
 -- 5.1 INSERT PRODUCT IMAGES (Từ Cloudinary)
 INSERT INTO Product_Images (id, product_id, image_url, is_primary, display_order, created_by) VALUES
-('img-prod-01-01', 'prod-01', 'https://res.cloudinary.com/[your-cloud]/image/upload/[public-id-1].jpg', TRUE, 1, 'user-shop-01'),
-('img-prod-01-02', 'prod-01', 'https://res.cloudinary.com/[your-cloud]/image/upload/[public-id-2].jpg', FALSE, 2, 'user-shop-01'),
-('img-prod-02-01', 'prod-02', 'https://res.cloudinary.com/[your-cloud]/image/upload/[public-id-3].jpg', TRUE, 1, 'user-shop-01');
+('29310520-bdf5-4a31-ab4a-61d0f8d0ca00', '642d2fca-13ce-4b97-85ea-946b10ad464d', 'https://res.cloudinary.com/[your-cloud]/image/upload/[public-id-1].jpg', TRUE, 1, '6cd6ebd5-c618-4043-93dc-fe16532f2942'),
+('6ef57559-7a60-4154-b9d0-e1313ab56c42', '642d2fca-13ce-4b97-85ea-946b10ad464d', 'https://res.cloudinary.com/[your-cloud]/image/upload/[public-id-2].jpg', FALSE, 2, '6cd6ebd5-c618-4043-93dc-fe16532f2942'),
+('91d6f7f7-f3b5-4ef5-8285-6d7a72015536', 'a657ef0e-1ce6-4277-9733-8172d54b8f7d', 'https://res.cloudinary.com/[your-cloud]/image/upload/[public-id-3].jpg', TRUE, 1, '6cd6ebd5-c618-4043-93dc-fe16532f2942');
 
 -- 5.2 INSERT PRODUCT VIDEOS (Từ Cloudinary)
 INSERT INTO Product_Videos (id, product_id, video_url, title, description, display_order, created_by) VALUES
-('vid-prod-01-01', 'prod-01', 'https://res.cloudinary.com/[your-cloud]/video/upload/[video-id-1].mp4', 'Hướng dẫn cắm hoa', 'Cách cắm bó hồng đỏ mix baby', 1, 'user-shop-01'),
-('vid-prod-02-01', 'prod-02', 'https://res.cloudinary.com/[your-cloud]/video/upload/[video-id-2].mp4', 'Unboxing lẵng hoa', 'Xem cách lẵng hoa được gói', 1, 'user-shop-01');
+('6a718859-d6f3-4ba0-b88d-f4e02f5a735a', '642d2fca-13ce-4b97-85ea-946b10ad464d', 'https://res.cloudinary.com/[your-cloud]/video/upload/[video-id-1].mp4', 'Hướng dẫn cắm hoa', 'Cách cắm bó hồng đỏ mix baby', 1, '6cd6ebd5-c618-4043-93dc-fe16532f2942'),
+('60e0df58-4648-4fb1-ad3f-757c8e0d1dd0', 'a657ef0e-1ce6-4277-9733-8172d54b8f7d', 'https://res.cloudinary.com/[your-cloud]/video/upload/[video-id-2].mp4', 'Unboxing lẵng hoa', 'Xem cách lẵng hoa được gói', 1, '6cd6ebd5-c618-4043-93dc-fe16532f2942');
 
 -- 6. INSERT COUPONS
 INSERT INTO Coupons (id, shop_id, code, discount_type, discount_value, min_order_value, max_discount_value, start_date, end_date, usage_limit, created_by) VALUES
-('coupon-01', 'shop-01', 'WELCOME10', 'PERCENTAGE', 10.00, 200000.00, 50000.00, '2023-01-01 00:00:00', '2026-12-31 23:59:59', 100, 'user-shop-01');
+('9e688368-bc75-457b-ad83-474a40b74dca', '47bf0de6-8c7a-4a7e-9e45-f69f723dafd7', 'WELCOME10', 'PERCENTAGE', 10.00, 200000.00, 50000.00, '2023-01-01 00:00:00', '2026-12-31 23:59:59', 100, '6cd6ebd5-c618-4043-93dc-fe16532f2942');
 
 -- 7. INSERT CART ITEMS
 INSERT INTO Cart_Items (id, user_id, product_id, quantity, created_by) VALUES
-('cart-01', 'user-customer-01', 'prod-01', 2, 'user-customer-01');
+('af66eb3c-27e3-431d-bdc1-31d1b8bb7868', 'dcca63c5-cff9-4dc7-b27a-6a80d5cee5b5', '642d2fca-13ce-4b97-85ea-946b10ad464d', 2, 'dcca63c5-cff9-4dc7-b27a-6a80d5cee5b5');
 
 -- 8. INSERT ORDERS (Đơn hàng Standard)
 INSERT INTO Orders (id, customer_id, shop_id, delivery_address_id, coupon_id, order_type, sub_total, discount_amount, total_amount, deposit_amount, status, created_by) VALUES
-('order-01', 'user-customer-01', 'shop-01', 'addr-customer-01', 'coupon-01', 'STANDARD', 700000.00, 50000.00, 650000.00, 0.00, 'DELIVERING', 'user-customer-01');
+('2b19ecd8-7d3a-421e-9fcd-9cf518e27d43', 'dcca63c5-cff9-4dc7-b27a-6a80d5cee5b5', '47bf0de6-8c7a-4a7e-9e45-f69f723dafd7', 'd3170ed8-579f-4582-94fa-15e5dd1d4f27', '9e688368-bc75-457b-ad83-474a40b74dca', 'STANDARD', 700000.00, 50000.00, 650000.00, 0.00, 'DELIVERING', 'dcca63c5-cff9-4dc7-b27a-6a80d5cee5b5');
 
 -- 9. INSERT ORDER DETAILS
 INSERT INTO Order_Details (id, order_id, product_id, price, quantity, created_by) VALUES
-('ord-dtl-01', 'order-01', 'prod-01', 350000.00, 2, 'user-customer-01');
+('162fa037-0dd4-447e-ad26-e0c11a089181', '2b19ecd8-7d3a-421e-9fcd-9cf518e27d43', '642d2fca-13ce-4b97-85ea-946b10ad464d', 350000.00, 2, 'dcca63c5-cff9-4dc7-b27a-6a80d5cee5b5');
 
 -- 10. INSERT PAYMENTS (Khách đã thanh toán qua VNPay)
 INSERT INTO Payments (id, order_id, payment_type, payment_method, amount, gateway_transaction_no, gateway_response, status, created_by) VALUES
-('pay-01', 'order-01', 'FULL', 'VNPAY', 650000.00, 'VNP123456789', '{"vnp_ResponseCode":"00", "vnp_BankCode":"NCB"}', 'SUCCESS', 'user-customer-01');
+('80af1ea5-8818-4e5e-8422-fdf516beb745', '2b19ecd8-7d3a-421e-9fcd-9cf518e27d43', 'FULL', 'VNPAY', 650000.00, 'VNP123456789', '{"vnp_ResponseCode":"00", "vnp_BankCode":"NCB"}', 'SUCCESS', 'dcca63c5-cff9-4dc7-b27a-6a80d5cee5b5');
 
 -- 11. INSERT DELIVERIES (Đã giao cho đối tác)
 INSERT INTO Deliveries (id, order_id, delivery_partner_id, tracking_code, tracking_notes, status, created_by) VALUES
-('del-01', 'order-01', 'GHTK_PARTNER', 'GHTK987654321', 'Giao trong giờ hành chính', 'ON_THE_WAY', 'user-shop-01');
+('ebc98acb-605c-4808-bf99-09f4b86ebc93', '2b19ecd8-7d3a-421e-9fcd-9cf518e27d43', '0c3224c6-3052-4e8b-a0ed-aedc122673ec', 'GHTK987654321', 'Giao trong giờ hành chính', 'ON_THE_WAY', '6cd6ebd5-c618-4043-93dc-fe16532f2942');
 
 -- 12. INSERT CHAT SYSTEM
 INSERT INTO Chat_Sessions (id, customer_id, shop_id, created_by) VALUES
-('session-01', 'user-customer-01', 'shop-01', 'user-customer-01');
+('95e26051-785f-4caf-ac3e-afbe52831a32', 'dcca63c5-cff9-4dc7-b27a-6a80d5cee5b5', '47bf0de6-8c7a-4a7e-9e45-f69f723dafd7', 'dcca63c5-cff9-4dc7-b27a-6a80d5cee5b5');
 
 INSERT INTO Chat_Messages (id, session_id, sender_id, sender_type, message, is_read, created_by) VALUES
-('msg-01', 'session-01', 'user-customer-01', 'CUSTOMER', 'Shop ơi bó hồng đỏ còn hàng không ạ?', TRUE, 'user-customer-01'),
-('msg-02', 'session-01', 'user-shop-01', 'SHOP', 'Dạ tiệm em còn nhiều hoa tươi mới nhập sáng nay ạ!', FALSE, 'user-shop-01');
+('fe6c0e0b-beb1-4ea1-a70e-31a735340cc1', '95e26051-785f-4caf-ac3e-afbe52831a32', 'dcca63c5-cff9-4dc7-b27a-6a80d5cee5b5', 'CUSTOMER', 'Shop ơi bó hồng đỏ còn hàng không ạ?', TRUE, 'dcca63c5-cff9-4dc7-b27a-6a80d5cee5b5'),
+('84638f5b-eb84-4a31-8ee7-fe50cfd39b72', '95e26051-785f-4caf-ac3e-afbe52831a32', '6cd6ebd5-c618-4043-93dc-fe16532f2942', 'SHOP', 'Dạ tiệm em còn nhiều hoa tươi mới nhập sáng nay ạ!', FALSE, '6cd6ebd5-c618-4043-93dc-fe16532f2942');
 
 -- 13. INSERT CUSTOM ORDER REQUESTS
 INSERT INTO Custom_Order_Requests (id, customer_id, shop_id, budget, desired_components, description, status, created_by) VALUES
-('req-01', 'user-customer-01', 'shop-01', 1000000.00, '{"main_flowers": ["Hồng Ân", "Lan Hồ Điệp"], "color_tone": "Pastel"}', 'Làm cho mình một lẵng hoa tặng kỷ niệm 10 năm ngày cưới.', 'NEGOTIATING', 'user-customer-01');
+('42933810-021e-45bd-af32-75ea4d8c8e0e', 'dcca63c5-cff9-4dc7-b27a-6a80d5cee5b5', '47bf0de6-8c7a-4a7e-9e45-f69f723dafd7', 1000000.00, '{"main_flowers": ["Hồng Ân", "Lan Hồ Điệp"], "color_tone": "Pastel"}', 'Làm cho mình một lẵng hoa tặng kỷ niệm 10 năm ngày cưới.', 'NEGOTIATING', 'dcca63c5-cff9-4dc7-b27a-6a80d5cee5b5');
 
 -- 14. INSERT PRODUCT REVIEWS
 INSERT INTO Product_Reviews (id, product_id, user_id, order_id, rating, comment, shop_reply, created_by) VALUES
-('rev-01', 'prod-01', 'user-customer-01', 'order-01', 5, 'Hoa rất tươi, giao hàng siêu nhanh. Sẽ ủng hộ shop tiếp!', 'Cảm ơn bạn đã tin tưởng FPTU Smart Floral ạ!', 'user-customer-01');
+('332237bc-d6a8-4965-b148-1bffd9abedcb', '642d2fca-13ce-4b97-85ea-946b10ad464d', 'dcca63c5-cff9-4dc7-b27a-6a80d5cee5b5', '2b19ecd8-7d3a-421e-9fcd-9cf518e27d43', 5, 'Hoa rất tươi, giao hàng siêu nhanh. Sẽ ủng hộ shop tiếp!', 'Cảm ơn bạn đã tin tưởng FPTU Smart Floral ạ!', 'dcca63c5-cff9-4dc7-b27a-6a80d5cee5b5');
 
 -- 15. INSERT BLOGS & COMMENTS
 INSERT INTO Blogs (id, shop_id, title, content, thumbnail_url, status, created_by) VALUES
-('blog-01', 'shop-01', 'Cách Giữ Hoa Hồng Tươi Lâu', '<p>Bí quyết giữ hoa hồng tươi lâu đến 7 ngày...</p>', 'https://res.cloudinary.com/[your-cloud]/image/upload/[blog-thumb-id].jpg', 'PUBLISHED', 'user-shop-01');
+('20bc14fe-fabb-4f27-b3d4-0873218de792', '47bf0de6-8c7a-4a7e-9e45-f69f723dafd7', 'Cách Giữ Hoa Hồng Tươi Lâu', '<p>Bí quyết giữ hoa hồng tươi lâu đến 7 ngày...</p>', 'https://res.cloudinary.com/[your-cloud]/image/upload/[blog-thumb-id].jpg', 'PUBLISHED', '6cd6ebd5-c618-4043-93dc-fe16532f2942');
 
 -- 15.1 INSERT BLOG IMAGES (Từ Cloudinary)
 INSERT INTO Blog_Images (id, blog_id, image_url, display_order, created_by) VALUES
-('blog-img-01', 'blog-01', 'https://res.cloudinary.com/[your-cloud]/image/upload/[blog-img-id-1].jpg', 1, 'user-shop-01');
+('2673935b-603f-4967-a472-c73e41b115ea', '20bc14fe-fabb-4f27-b3d4-0873218de792', 'https://res.cloudinary.com/[your-cloud]/image/upload/[blog-img-id-1].jpg', 1, '6cd6ebd5-c618-4043-93dc-fe16532f2942');
 
 INSERT INTO Blog_Comments (id, blog_id, user_id, parent_comment_id, content, created_by) VALUES
-('cmt-01', 'blog-01', 'user-customer-01', NULL, 'Bài viết rất hữu ích, cảm ơn shop!', 'user-customer-01'),
-('cmt-02', 'blog-01', 'user-shop-01', 'cmt-01', 'Dạ shop cảm ơn bạn ạ.', 'user-shop-01'); -- Reply comment
+('9e546eb5-a444-4119-86a3-3b8407249456', '20bc14fe-fabb-4f27-b3d4-0873218de792', 'dcca63c5-cff9-4dc7-b27a-6a80d5cee5b5', NULL, 'Bài viết rất hữu ích, cảm ơn shop!', 'dcca63c5-cff9-4dc7-b27a-6a80d5cee5b5'),
+('2bd5eeb6-0d61-4770-bc50-da3ac7b9b526', '20bc14fe-fabb-4f27-b3d4-0873218de792', '6cd6ebd5-c618-4043-93dc-fe16532f2942', '9e546eb5-a444-4119-86a3-3b8407249456', 'Dạ shop cảm ơn bạn ạ.', '6cd6ebd5-c618-4043-93dc-fe16532f2942'); -- Reply comment
 
 -- 16. INSERT FAVORITES & OCCASIONS
 INSERT INTO Favorite_Products (user_id, product_id, created_by) VALUES
-('user-customer-01', 'prod-01', 'user-customer-01');
+('dcca63c5-cff9-4dc7-b27a-6a80d5cee5b5', '642d2fca-13ce-4b97-85ea-946b10ad464d', 'dcca63c5-cff9-4dc7-b27a-6a80d5cee5b5');
 
 INSERT INTO Customer_Occasions (id, customer_id, title, occasion_date, reminder_sent, created_by) VALUES
-('occ-01', 'user-customer-01', 'Kỷ niệm ngày cưới', '2026-10-15', FALSE, 'user-customer-01');
+('60b10412-9153-48a7-857d-2faeb68a08c5', 'dcca63c5-cff9-4dc7-b27a-6a80d5cee5b5', 'Kỷ niệm ngày cưới', '2026-10-15', FALSE, 'dcca63c5-cff9-4dc7-b27a-6a80d5cee5b5');
+
+-- 17. INSERT AUTH & SHOP/STAFF ONBOARDING DEMO DATA
+-- (Không có mock data cho Email_Verification_Tokens vì bảng này chưa được ứng dụng sử dụng.)
+INSERT INTO Otp_Challenges (id, user_id, purpose, code_hash, issued_at, expires_at, window_start, failed_attempts, send_count) VALUES
+('a55527ce-6330-4570-ae62-52af795c4b70', 'dcca63c5-cff9-4dc7-b27a-6a80d5cee5b5', 'RESET_PASSWORD', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', '2026-09-27 09:00:00', '2026-09-27 09:05:00', '2026-09-27 09:00:00', 0, 1);
+
+INSERT INTO Pending_Registrations (email, full_name, password_hash, otp_hash, shop_name, shop_description, issued_at, expires_at, window_start, failed_attempts, send_count) VALUES
+('hoaxinh.owner@gmail.com', 'Đỗ Thị Hoa', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', 'Hoa Xinh Corner', 'Tiệm hoa nhỏ chuyên hoa cưới và hoa sự kiện.', '2026-09-27 08:00:00', '2026-09-27 08:05:00', '2026-09-27 08:00:00', 0, 1);
+
+INSERT INTO Auth_Sessions (id, user_id, refresh_hash, expires_at, revoked) VALUES
+('cf15b58e-86a5-4e1c-b5f4-fb49eef8431e', 'dcca63c5-cff9-4dc7-b27a-6a80d5cee5b5', '120c7fd6bccd463cc455a83865ca1e395c080dfbf1c3068fd16739cda0e2e381', '2026-10-04 09:00:00', FALSE);
+
+INSERT INTO Shop_Staff (id, shop_id, user_id, active) VALUES
+('9b016711-02fb-4325-a59d-9e0222483be9', '47bf0de6-8c7a-4a7e-9e45-f69f723dafd7', '8da640f4-6292-4bc5-8ff3-57806c7e0d0d', TRUE);
+
+INSERT INTO Staff_Applications (id, shop_id, user_id, fullName, phone, introduction, status, submittedAt) VALUES
+('3f64c11d-979b-4739-9075-8cf2ae40aadc', '47bf0de6-8c7a-4a7e-9e45-f69f723dafd7', '8da640f4-6292-4bc5-8ff3-57806c7e0d0d', 'Phạm Văn D', '0933445566', 'Em có kinh nghiệm 1 năm bán hoa, mong được hỗ trợ shop.', 'APPROVED', '2026-09-20 10:00:00');
+
+INSERT INTO Staff_Invitations (id, shop_id, email, token_hash, expires_at, issued_at, window_start, send_count, status) VALUES
+('bcca8057-01f7-4c72-b62d-b74e7003af4d', '47bf0de6-8c7a-4a7e-9e45-f69f723dafd7', 'staff2@gmail.com', 'fdb7ea0d1c4c9c541c51ea56199e1784310feae640c5ed70f465ddb1c113c336', '2026-10-04 09:00:00', '2026-09-27 09:00:00', '2026-09-27 09:00:00', 1, 'PENDING');
+
+INSERT INTO Manager_Applications (id, user_id, full_name, phone, shop_name, description, address_line, city, district, ward, status, submitted_at) VALUES
+('57fa5524-687a-4464-a8a0-846690b9d696', 'dcca63c5-cff9-4dc7-b27a-6a80d5cee5b5', 'Trần Thị B', '0987654321', 'B Flower House', 'Xin mở shop hoa online phục vụ khu vực Cầu Giấy.', 'Số 10, Ngõ 20, Đường Cầu Giấy', 'Hà Nội', 'Cầu Giấy', 'Dịch Vọng', 'PENDING', '2026-09-25 14:00:00');

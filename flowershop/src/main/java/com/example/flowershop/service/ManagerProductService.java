@@ -1,4 +1,5 @@
 package com.example.flowershop.service;
+
 import com.example.flowershop.entity.*;
 import com.example.flowershop.entity.enums.*;
 import com.example.flowershop.repository.*;
@@ -7,10 +8,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.data.domain.*;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 import java.math.BigDecimal;
 import java.util.*;
-@Service @Transactional(readOnly=true)
+
+@Service
+@Transactional(readOnly = true)
 public class ManagerProductService {
     public record ImageInput(@NotBlank @Size(max=500)
         @Pattern(regexp="https://[^\\s]+",message="Ảnh phải là URL HTTPS") String url, boolean primary) {}
@@ -61,8 +65,109 @@ public class ManagerProductService {
         }
         return result(stored);
     }
-    @Transactional public void hide(String shopId,String id,String actor) {
-        owned(shopId,actor,true);var p=products.findByIdAndShopId(id,shopId).orElseThrow(ManagerProductService::missing);
-        p.setStatus(ProductStatus.INACTIVE);p.setLastModifyBy(actor);
+
+    @Transactional
+    public void hide(String shopId, String id, String actor) {
+        owned(shopId, actor, true);
+        var p = products.findByIdAndShopId(id, shopId).orElseThrow(ManagerProductService::missing);
+        p.setStatus(ProductStatus.INACTIVE);
+        p.setLastModifyBy(actor);
+    }
+
+    private ImageItem imageItem(ProductImage i) {
+        return new ImageItem(i.getId(), i.getImageUrl(), Boolean.TRUE.equals(i.getIsPrimary()), i.getDisplayOrder());
+    }
+
+    public List<ImageItem> listImages(String shopId, String productId, String actor) {
+        owned(shopId, actor, false);
+        products.findByIdAndShopId(productId, shopId).orElseThrow(ManagerProductService::missing);
+        return images.findByProductIdOrderByDisplayOrderAsc(productId).stream().map(this::imageItem).toList();
+    }
+
+    @Transactional
+    public List<ImageItem> uploadImage(String shopId, String productId, String actor, MultipartFile file) {
+        owned(shopId, actor, true);
+        var product = products.findByIdAndShopId(productId, shopId).orElseThrow(ManagerProductService::missing);
+        if (file == null || file.isEmpty()) {
+            throw new IllegalArgumentException("Vui lòng chọn ảnh để tải lên.");
+        }
+        if (file.getSize() > MAX_IMAGE_BYTES) {
+            throw new IllegalArgumentException("Ảnh không được vượt quá 5MB.");
+        }
+        if (!ALLOWED_IMAGE_TYPES.contains(file.getContentType())) {
+            throw new IllegalArgumentException("Chỉ nhận ảnh JPEG, PNG hoặc WebP.");
+        }
+        String url;
+        try {
+            url = cloudinary.upload(file.getBytes(), file.getOriginalFilename(), file.getContentType());
+        } catch (java.io.IOException e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Không thể đọc dữ liệu ảnh.", e);
+        }
+        long count = images.countByProductId(productId);
+        var image = ProductImage.builder().id(UUID.randomUUID().toString()).product(product).imageUrl(url)
+                .isPrimary(count == 0).displayOrder((int) count).createdBy(actor).build();
+        images.saveAndFlush(image);
+        return listImages(shopId, productId, actor);
+    }
+
+    @Transactional
+    public void deleteImage(String shopId, String productId, String imageId, String actor) {
+        owned(shopId, actor, true);
+        products.findByIdAndShopId(productId, shopId).orElseThrow(ManagerProductService::missing);
+        var image = images.findByIdAndProductId(imageId, productId).orElseThrow(ManagerProductService::missing);
+        images.delete(image);
+    }
+
+    private VideoItem videoItem(ProductVideo v) {
+        return new VideoItem(v.getId(), v.getVideoUrl(), v.getTitle(), v.getDescription(), v.getDisplayOrder());
+    }
+
+    public List<VideoItem> listVideos(String shopId, String productId, String actor) {
+        owned(shopId, actor, false);
+        products.findByIdAndShopId(productId, shopId).orElseThrow(ManagerProductService::missing);
+        return videos.findByProductIdOrderByDisplayOrderAsc(productId).stream().map(this::videoItem).toList();
+    }
+
+    @Transactional
+    public List<VideoItem> uploadVideo(String shopId, String productId, String actor, MultipartFile file, String title, String description) {
+        owned(shopId, actor, true);
+        var product = products.findByIdAndShopId(productId, shopId).orElseThrow(ManagerProductService::missing);
+        if (file == null || file.isEmpty()) {
+            throw new IllegalArgumentException("Vui lòng chọn video để tải lên.");
+        }
+        if (file.getSize() > MAX_VIDEO_BYTES) {
+            throw new IllegalArgumentException("Video không được vượt quá 50MB.");
+        }
+        if (!ALLOWED_VIDEO_TYPES.contains(file.getContentType())) {
+            throw new IllegalArgumentException("Chỉ nhận video MP4, WebM hoặc MOV.");
+        }
+        String url;
+        try {
+            url = cloudinary.uploadVideo(file.getBytes(), file.getOriginalFilename(), file.getContentType());
+        } catch (java.io.IOException e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Không thể đọc dữ liệu video.", e);
+        }
+        long count = videos.countByProductId(productId);
+        var video = ProductVideo.builder().id(UUID.randomUUID().toString()).product(product).videoUrl(url)
+                .title(title == null || title.isBlank() ? null : title.strip()).description(description == null || description.isBlank() ? null : description.strip())
+                .displayOrder((int) count).createdBy(actor).build();
+        videos.saveAndFlush(video);
+        return listVideos(shopId, productId, actor);
+    }
+
+    @Transactional
+    public void deleteVideo(String shopId, String productId, String videoId, String actor) {
+        owned(shopId, actor, true);
+        products.findByIdAndShopId(productId, shopId).orElseThrow(ManagerProductService::missing);
+        var video = videos.findByIdAndProductId(videoId, productId).orElseThrow(ManagerProductService::missing);
+        videos.delete(video);
+    }
+
+    public Detail detail(String productId) {
+        var product = products.findById(productId).filter(p -> p.getStatus() == ProductStatus.ACTIVE && p.getShop().getStatus() == ShopStatus.ACTIVE).orElseThrow(ManagerProductService::missing);
+        var urls = images.findByProductIdOrderByDisplayOrderAsc(productId).stream().map(ProductImage::getImageUrl).toList();
+        var vids = videos.findByProductIdOrderByDisplayOrderAsc(productId).stream().map(v -> new VideoInfo(v.getVideoUrl(), v.getTitle(), v.getDescription())).toList();
+        return new Detail(product.getId(), product.getShop().getId(), product.getShop().getName(), product.getCategory().getId(), product.getCategory().getName(),
+                product.getName(), product.getDescription(), product.getPrice(), product.getStock(), urls, vids);
     }
 }

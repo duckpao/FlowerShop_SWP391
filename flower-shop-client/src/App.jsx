@@ -8,9 +8,7 @@ import AdminManagerApplicationsView from './views/AdminManagerApplicationsView'
 import AdminDashboardView from './views/AdminDashboardView'
 import ManagerShopsView from './views/ManagerShopsView'
 import ManagerDashboardView from './views/ManagerDashboardView'
-import ProductCatalogView from './views/ProductCatalogView'
 import ProductDetailView from './views/ProductDetailView'
-import FavoritesView from './views/FavoritesView'
 import './styles/account.css'
 
 export default function App() {
@@ -48,6 +46,8 @@ function AuthApp() {
     return <AdminDashboardView {...controller} path={path} />
   }
   if (path === '/account' && controller.user) return <><a href="/">Trang chủ</a><AuthView {...controller} /></>
+  const productMatch = path.match(/^\/products\/([^/]+)$/)
+  if (productMatch) return <ProductDetailView id={decodeURIComponent(productMatch[1])} />
   if (['/shop-admin', '/shop-admin/staff', '/shop-admin/products', '/shop-admin/shop', '/shop-admin/profile'].includes(path)) {
     if (controller.busy && !controller.user) return <main className="account-page"><p role="status">Đang kiểm tra đăng nhập…</p></main>
     if (!controller.user) return <main className="account-page"><h1>Trang quản trị shop</h1><a href="/login">Đăng nhập</a></main>
