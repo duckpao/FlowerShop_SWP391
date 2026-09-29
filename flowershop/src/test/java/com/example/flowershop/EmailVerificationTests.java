@@ -37,6 +37,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class EmailVerificationTests {
     @Autowired AuthService auth;
     @Autowired OtpService otp;
+    @Autowired com.example.flowershop.security.CaptchaService captcha;
     @Autowired UserRepository users;
     @Autowired PendingRegistrationRepository pending;
     @Autowired OtpChallengeRepository challenges;
@@ -86,18 +87,31 @@ class EmailVerificationTests {
             assertThat(draft().getFailedAttempts()).isEqualTo(i);
         }
         assertThatThrownBy(() -> auth.verify(EMAIL, code)).isInstanceOf(InvalidOtpException.class);
-        ageIssue(); auth.resend(EMAIL); assertThat(mails()).hasSize(1);
+        ageIssue(); assertThatThrownBy(() -> auth.resend(EMAIL)).isInstanceOf(com.example.flowershop.exception.CaptchaRequiredException.class); assertThat(mails()).hasSize(1);
         var p = draft(); p.setWindowStart(Instant.now().minusSeconds(901)); pending.saveAndFlush(p);
-        auth.resend(EMAIL); assertThat(draft().getFailedAttempts()).isZero();
+        var image=captcha.create(EMAIL,"register");
+        auth.resend(EMAIL,image.id(),answer(image.id())); assertThat(draft().getFailedAttempts()).isZero();
         auth.verify(EMAIL, lastCode()); assertThat(users.count()).isEqualTo(1);
     }
 
-    @Test void resendRotatesCodeAndHonorsCooldownAndSendLimit() {
-        String old = register(); auth.resend(EMAIL); assertThat(mails()).hasSize(1);
-        ageIssue(); auth.resend(EMAIL); assertThat(lastCode()).isNotEqualTo(old);
+    private String answer(String id) {
+        var map=(java.util.Map<?,?>) org.springframework.test.util.ReflectionTestUtils.getField(captcha,"challenges");
+        return org.springframework.test.util.ReflectionTestUtils.invokeMethod(map.get(id),"answer");
+    }
+    @Test void resetRequiresCaptchaAfterFiveMistakesAndAcceptsCorrectCodeWithCaptcha() {
+        auth.verify(EMAIL,register()); otp.forgotPassword(EMAIL); String code=lastCode();
+        for(int i=0;i<5;i++) assertThatThrownBy(() -> otp.resetPassword(EMAIL,wrong(code),PASSWORD,PASSWORD)).isInstanceOf(InvalidOtpException.class);
+        assertThatThrownBy(() -> otp.resetPassword(EMAIL,code,PASSWORD,PASSWORD)).isInstanceOf(com.example.flowershop.exception.CaptchaRequiredException.class);
+        var image=captcha.create(EMAIL,"reset");
+        otp.resetPassword(EMAIL,code,PASSWORD,PASSWORD,image.id(),answer(image.id()));
+        assertThat(challenges.findByUserIdAndPurpose(user().getId(),RESET_PASSWORD).orElseThrow().getUsedAt()).isNotNull();
+    }
+    @Test void resendImmediatelyRotatesCode() {
+        String old = register();
+        auth.resend(EMAIL); assertThat(lastCode()).isNotEqualTo(old);
         assertThatThrownBy(() -> auth.verify(EMAIL, old)).isInstanceOf(InvalidOtpException.class);
         ageIssue(); auth.resend(EMAIL); assertThat(mails()).hasSize(3);
-        ageIssue(); auth.resend(EMAIL); assertThat(mails()).hasSize(3);
+        auth.resend(EMAIL); assertThat(mails()).hasSize(4);
         assertThat(draft().getFailedAttempts()).isEqualTo(1); assertThat(users.count()).isZero();
     }
 
@@ -148,7 +162,7 @@ class EmailVerificationTests {
 
     @Test void resetResendInvalidatesOldOtpAndRetainsFailedAttempts() {
         auth.verify(EMAIL, register()); otp.forgotPassword(EMAIL); String old = lastCode();
-        int sent = mails().size(); otp.forgotPassword(EMAIL); assertThat(mails()).hasSize(sent);
+        int sent = mails().size(); otp.forgotPassword(EMAIL); assertThat(mails()).hasSize(sent + 1);
         assertThatThrownBy(() -> otp.resetPassword(EMAIL, wrong(old), PASSWORD, PASSWORD)).isInstanceOf(InvalidOtpException.class);
         var c = challenges.findByUserIdAndPurpose(user().getId(), RESET_PASSWORD).orElseThrow();
         c.setIssuedAt(Instant.now().minusSeconds(61)); challenges.saveAndFlush(c);
@@ -190,8 +204,8 @@ class EmailVerificationTests {
 
     @Test void smtpFailureLeavesOnlyPendingAndCanRetry() {
         doThrow(new MailSendException("simulated")).when(mailSender).send(any(SimpleMailMessage.class));
-        auth.registerCustomer(request()); assertThat(users.count()).isZero(); assertThat(pending.count()).isEqualTo(1);
-        reset(mailSender); ageIssue(); auth.resend(EMAIL); auth.verify(EMAIL, lastCode());
+        assertThatThrownBy(() -> auth.registerCustomer(request())).isInstanceOf(org.springframework.web.server.ResponseStatusException.class); assertThat(users.count()).isZero(); assertThat(pending.count()).isZero();
+        reset(mailSender); auth.registerCustomer(request()); auth.verify(EMAIL, lastCode());
         assertThat(users.count()).isEqualTo(1);
     }
 
