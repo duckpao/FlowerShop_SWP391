@@ -26,6 +26,8 @@ async function request(path, { method = 'GET', body, bearer = false } = {}) {
   const data = await response.json().catch(() => ({}))
   if (!response.ok) {
     const error = new Error(data.errors ? Object.values(data.errors).join(' ') : data.message || 'Yêu cầu thất bại. Vui lòng thử lại.')
+    error.captchaRequired = data.captchaRequired === true
+    error.fieldErrors = data.errors || {}
     error.status = response.status
     if (path !== 'refresh' && error.status !== 401 && error.status !== 403) {
       toast.error(error.message)
@@ -70,8 +72,8 @@ export const authService = {
     }
   },
   post: (path, body) => request(path, { method: 'POST', body }),
-  async login(email, password) {
-    const data = await request('login', { method: 'POST', body: { email, password } })
+  async login(email, password, captcha = {}) {
+    const data = await request('login', { method: 'POST', body: { email, password, ...captcha } })
     authModel.setToken(data.accessToken)
     return data.user
   },

@@ -12,6 +12,11 @@ import java.util.Map;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+    @ExceptionHandler(CaptchaRequiredException.class)
+    public ResponseEntity<Map<String,Object>> captcha(CaptchaRequiredException e) {
+        return ResponseEntity.status(429).body(Map.of("message",e.getMessage(),"captchaRequired",true));
+    }
+
 
     @ExceptionHandler(org.springframework.web.server.ResponseStatusException.class)
     public ResponseEntity<MessageResponse> handleStatus(org.springframework.web.server.ResponseStatusException exception) {

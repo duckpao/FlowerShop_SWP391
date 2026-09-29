@@ -1,5 +1,10 @@
+import PasswordInput from '../components/form/PasswordInput';
+import { useState } from 'react';
+import { validateAuth } from '../models/authValidation';
 import AccountView from "./AccountView";
 export default function AuthView({
+  registrationRole, setRegistrationRole,
+  fieldErrors = {}, captchaRequired, captcha, captchaAnswer, setCaptchaAnswer, reloadCaptcha,
   page,
   email,
   fullName,
@@ -22,6 +27,10 @@ export default function AuthView({
   resend,
   navigate,
 }) {
+  const [touched, setTouched] = useState({})
+  const errors = validateAuth(page, {email, fullName, password, confirmation, otp})
+  const field = name => ({id: 'auth-' + name, onBlur: () => setTouched(x => ({...x, [name]: true})), 'aria-invalid': !!(fieldErrors[name] || touched[name] && errors[name]), 'aria-describedby': 'auth-' + name + '-error'})
+  const feedback = name => <p id={'auth-' + name + '-error'} className="text-sm text-error-500" aria-live="polite">{(touched[name] && errors[name]) || fieldErrors[name] || ''}</p>
   if (page === "account" && user)
     return (
       <AccountView
@@ -89,21 +98,35 @@ export default function AuthView({
             </div>
           )}
           
-          <form onSubmit={submit} className="space-y-6">
+          <form noValidate onSubmit={submit} className="space-y-6">
             <fieldset disabled={busy} className="space-y-4">
+              {page === 'register' && (
+                <div className="space-y-1.5">
+                  <label htmlFor="registration-role" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Loại tài khoản</label>
+                  <select id="registration-role" required value={registrationRole} onChange={e => setRegistrationRole(e.target.value)} className="block w-full rounded-lg border border-gray-300 px-4 py-3 dark:border-white/10 dark:bg-gray-800 dark:text-white">
+                    <option value="CUSTOMER">Customer — Khách hàng</option>
+                    <option value="SHOP">Manager shop — Quản lý cửa hàng</option>
+                  </select>
+                  <p className="text-sm text-gray-500">
+                    {registrationRole === 'SHOP' ? 'Sau khi xác thực email, bạn có thể đăng nhập vào trang quản lý cửa hàng. Cửa hàng mới cần được quản trị viên duyệt.' : 'Đăng nhập để mua sắm và quản lý tài khoản khách hàng.'}
+                  </p>
+                </div>
+              )}
               {page === "register" && (
                 <div className="space-y-1.5">
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                     Họ và tên
+                    <span className="text-error-500" aria-hidden="true"> *</span>
                   </label>
                   <input
                     className="block w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 placeholder-gray-400 focus:border-brand-500 focus:ring-3 focus:ring-brand-500/10 dark:border-white/10 dark:bg-gray-800 dark:text-white dark:focus:border-brand-500"
                     autoComplete="name"
                     required
                     maxLength={50}
-                    value={fullName}
+                    {...field('fullName')} value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
                   />
+                  {feedback('fullName')}
                 </div>
               )}
               {page !== "otp" && page !== "reset" && (
@@ -117,9 +140,10 @@ export default function AuthView({
                     autoComplete="email"
                     required
                     maxLength={page === "register" ? 50 : 255}
-                    value={email}
+                    {...field('email')} value={email}
                     onChange={(e) => setEmail(e.target.value)}
                   />
+                  {feedback('email')}
                 </div>
               )}
               {page !== "otp" && page !== "forgot" && (
@@ -127,9 +151,9 @@ export default function AuthView({
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                     {page === "reset" ? "Mật khẩu mới" : "Mật khẩu"}
                   </label>
-                  <input
+                  <PasswordInput key={page}
                     className="block w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 placeholder-gray-400 focus:border-brand-500 focus:ring-3 focus:ring-brand-500/10 dark:border-white/10 dark:bg-gray-800 dark:text-white dark:focus:border-brand-500"
-                    type="password"
+                    
                     required
                     minLength={
                       page === "register"
@@ -147,9 +171,10 @@ export default function AuthView({
                     autoComplete={
                       page !== "signin" ? "new-password" : "current-password"
                     }
-                    value={password}
+                    {...field('password')} value={password}
                     onChange={(e) => setPassword(e.target.value)}
                   />
+                  {feedback('password')}
                   {page !== "signin" && (
                     <p className="text-xs text-gray-500 mt-1">
                       {page === "register"
@@ -164,14 +189,15 @@ export default function AuthView({
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                     Nhập lại mật khẩu
                   </label>
-                  <input
+                  <PasswordInput key={page}
                     className="block w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 placeholder-gray-400 focus:border-brand-500 focus:ring-3 focus:ring-brand-500/10 dark:border-white/10 dark:bg-gray-800 dark:text-white dark:focus:border-brand-500"
-                    type="password"
+                    
                     autoComplete="new-password"
                     required
-                    value={confirmation}
+                    {...field('confirmation')} value={confirmation}
                     onChange={(e) => setConfirmation(e.target.value)}
                   />
+                  {feedback('confirmation')}
                 </div>
               )}
               {(page === "otp" || page === "reset") && (
@@ -186,16 +212,24 @@ export default function AuthView({
                     required
                     pattern="[0-9]{6}"
                     maxLength={6}
-                    value={otp}
+                    {...field('otp')} value={otp}
                     onChange={(e) =>
                       setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))
                     }
                     autoFocus
                   />
+                  {feedback('otp')}
                 </div>
               )}
+              {captchaRequired && <div className="space-y-2 rounded-lg border border-gray-300 p-3">
+                {captcha && <img src={captcha.image} width="210" height="64" alt="CAPTCHA 5 ký tự" />}
+                <button type="button" className="block font-bold underline underline-offset-4 text-brand-600 hover:text-brand-700 disabled:opacity-50" onClick={reloadCaptcha} disabled={busy}>Đổi ảnh</button>
+                <label htmlFor="captcha-answer" className="sr-only">Nhập mã trong ảnh</label>
+                <input id="captcha-answer" className="w-full rounded border p-2" required maxLength={5} autoComplete="off" value={captchaAnswer} onChange={e => setCaptchaAnswer(e.target.value.toUpperCase())} />
+              </div>}
               <button 
                 className="w-full bg-brand-500 hover:bg-brand-600 text-white font-medium rounded-lg px-4 py-3 transition-colors disabled:opacity-50 disabled:cursor-not-allowed mt-2" 
+                disabled={captchaRequired && (!captcha || captchaAnswer.length !== 5)}
                 type="submit"
               >
                 {busy
@@ -219,7 +253,7 @@ export default function AuthView({
                 <button
                   className="text-sm font-medium text-brand-500 hover:text-brand-600 transition-colors disabled:opacity-50"
                   onClick={resend}
-                  disabled={busy || seconds > 0}
+                  disabled={busy || (captchaRequired && (!captcha || captchaAnswer.length !== 5))}
                 >
                   {seconds > 0 ? `Gửi lại mã sau ${seconds}s` : "Gửi lại mã OTP"}
                 </button>

@@ -10,7 +10,7 @@ public record RegisterRequest(
         @NotBlank(message = "Email không được để trống")
         @Email(message = "Email không hợp lệ")
         @Size(max = 50, message = "Email tối đa 50 ký tự")
-        String email,
+        @ValidEmail String email,
 
         @NotBlank(message = "Mật khẩu không được để trống")
         @Size(min = 9, max = 15,
