@@ -6,7 +6,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 class FrontendRoutingTests extends ManagerShopTests {
     @Test void reactRoutesForwardToIndexWithoutOpeningProtectedApis() throws Exception {
-        for (String path : java.util.List.of("/", "/login", "/account", "/admin", "/admin/approvals", "/shop-admin", "/shop-admin/staff", "/shops/test-shop")) {
+        for (String path : java.util.List.of("/", "/login", "/account", "/admin", "/admin/approvals", "/shop-admin", "/shop-admin/staff", "/shops/test-shop",
+                "/products", "/products/test-product", "/favorites", "/admin/categories")) {
             mvc.perform(get(path)).andExpect(status().isOk()).andExpect(forwardedUrl("/index.html"));
         }
         mvc.perform(get("/index.html")).andExpect(status().isOk()).andExpect(content().string(org.hamcrest.Matchers.containsString("id=\"root\"")));

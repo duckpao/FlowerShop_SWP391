@@ -63,11 +63,9 @@ public class Product {
     @Builder.Default
     private Integer stock = 0;
 
-    @Column(name = "images", columnDefinition = "json")
-    private String images;
-
-    @Column(name = "videos", columnDefinition = "json")
-    private String videos;
+    @Builder.Default
+    @Column(name = "admin_hidden", nullable = false)
+    private boolean adminHidden = false;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status")
