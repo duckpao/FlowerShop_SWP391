@@ -20,5 +20,12 @@ public class MakeOrderRequest {
 
     // Tuỳ chọn
     private String couponId;
+
+    // Phương thức thanh toán: "COD" hoặc "ONLINE" (mặc định ONLINE nếu null)
+    private String paymentMethod;
+
+    // Họ và tên người nhận & số điện thoại nhận hàng
+    private String recipientName;
+    private String phone;
 }
 

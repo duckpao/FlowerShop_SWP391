@@ -158,7 +158,7 @@ public class PaymentService {
                 .id(UUID.randomUUID().toString())
                 .order(matchedOrder)
                 .paymentType(PaymentType.FULL)
-                .paymentMethod(PaymentMethod.BANK_TRANSFER)
+                .paymentMethod(PaymentMethod.ONLINE)
                 .amount(transferAmount)
                 .gatewayTransactionNo(refCode)
                 .gatewayResponse(String.format(
@@ -242,4 +242,3 @@ public class PaymentService {
         return null;
     }
 }
-

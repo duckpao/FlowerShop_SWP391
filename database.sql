@@ -261,9 +261,10 @@ CREATE TABLE Payments (
     id NVARCHAR(36) PRIMARY KEY,
     order_id NVARCHAR(36) NOT NULL,
     payment_type ENUM('DEPOSIT', 'FINAL', 'FULL') NOT NULL,
-    payment_method ENUM('VNPAY', 'MOMO', 'COD', 'BANK_TRANSFER') NOT NULL,
+    payment_method ENUM('ONLINE', 'COD') NOT NULL,
     amount DECIMAL(12, 2) NOT NULL,
     gateway_transaction_no NVARCHAR(100), -- Mã giao dịch từ cổng thanh toán (vnp_TransactionNo)
+    invoice_number NVARCHAR(100) UNIQUE, -- Mã hóa đơn duy nhất dùng cho SePay Gateway/IPN
     gateway_response JSON, -- Lưu toàn bộ payload response từ API để làm đối soát/hoàn tiền
     status ENUM('PENDING', 'SUCCESS', 'FAILED') DEFAULT 'PENDING',
     created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -429,8 +430,8 @@ INSERT INTO Categories (id, name, description, status, created_by) VALUES
 
 -- 5. INSERT PRODUCTS
 INSERT INTO Products (id, shop_id, category_id, name, description, components, shelf_life_days, price, stock, status, created_by) VALUES
-('prod-01', 'shop-01', 'cat-01', 'Bó Hồng Đỏ Mix Baby', 'Bó hoa hồng đỏ Ecuador mix hoa baby trắng', '{"red_roses": 10, "white_baby_breath": 3, "wrapper": "Giấy Kraft"}', 4, 350000.00, 50, 'ACTIVE', 'user-shop-01'),
-('prod-02', 'shop-01', 'cat-02', 'Lẵng Hướng Dương Ban Mai', 'Hoa hướng dương tặng khai trương, tốt nghiệp', '{"sunflowers": 5, "yellow_roses": 5}', 5, 450000.00, 20, 'ACTIVE', 'user-shop-01');
+('prod-01', 'shop-01', 'cat-01', 'Bó Hồng Đỏ Mix Baby', 'Bó hoa hồng đỏ Ecuador mix hoa baby trắng', '{"red_roses": 10, "white_baby_breath": 3, "wrapper": "Giấy Kraft"}', 4, 1000.00, 50, 'ACTIVE', 'user-shop-01'),
+('prod-02', 'shop-01', 'cat-02', 'Lẵng Hướng Dương Ban Mai', 'Hoa hướng dương tặng khai trương, tốt nghiệp', '{"sunflowers": 5, "yellow_roses": 5}', 5, 2000.00, 20, 'ACTIVE', 'user-shop-01');
 
 -- 5.1 INSERT PRODUCT IMAGES (Từ Cloudinary)
 INSERT INTO Product_Images (id, product_id, image_url, is_primary, display_order, created_by) VALUES
@@ -457,11 +458,11 @@ INSERT INTO Orders (id, customer_id, shop_id, delivery_address_id, coupon_id, or
 
 -- 9. INSERT ORDER DETAILS
 INSERT INTO Order_Details (id, order_id, product_id, price, quantity, created_by) VALUES
-('ord-dtl-01', 'order-01', 'prod-01', 350000.00, 2, 'user-customer-01');
+('ord-dtl-01', 'order-01', 'prod-01', 1000.00, 2, 'user-customer-01');
 
--- 10. INSERT PAYMENTS (Khách đã thanh toán qua VNPay)
+-- 10. INSERT PAYMENTS (Khách đã thanh toán online)
 INSERT INTO Payments (id, order_id, payment_type, payment_method, amount, gateway_transaction_no, gateway_response, status, created_by) VALUES
-('pay-01', 'order-01', 'FULL', 'VNPAY', 650000.00, 'VNP123456789', '{"vnp_ResponseCode":"00", "vnp_BankCode":"NCB"}', 'SUCCESS', 'user-customer-01');
+('pay-01', 'order-01', 'FULL', 'ONLINE', 650000.00, 'VNP123456789', '{"vnp_ResponseCode":"00", "vnp_BankCode":"NCB"}', 'SUCCESS', 'user-customer-01');
 
 -- 11. INSERT DELIVERIES (Đã giao cho đối tác)
 INSERT INTO Deliveries (id, order_id, delivery_partner_id, tracking_code, tracking_notes, status, created_by) VALUES

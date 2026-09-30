@@ -20,7 +20,8 @@ public class CartItemResponse {
         private String id;
         private String name;
         private BigDecimal price;
-        private String images; // JSON string
+        private java.util.List<String> images;
+        private String image;
         private Integer stock;
         private String shopId;
         private String shopName;

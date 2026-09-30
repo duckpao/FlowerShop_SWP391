@@ -118,7 +118,7 @@ public class SePayGatewayService {
                 .id(UUID.randomUUID().toString())
                 .order(order)
                 .paymentType(paymentType)
-                .paymentMethod(PaymentMethod.SEPAY)
+                .paymentMethod(PaymentMethod.ONLINE)
                 .amount(payableAmount)
                 .invoiceNumber(invoiceNumber)
                 .status(PaymentStatus.PENDING)
@@ -438,4 +438,3 @@ public class SePayGatewayService {
                 .build();
     }
 }
-

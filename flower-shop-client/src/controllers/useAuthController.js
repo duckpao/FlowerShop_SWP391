@@ -1,16 +1,28 @@
 import { useEffect, useState } from 'react'
 import { authService } from '../services/authService'
 import { validateAuth } from '../models/authValidation'
+import { useNavigate } from 'react-router'
 const post = authService.post
 
 export function useAuthController() {
+  const routerNavigate = useNavigate();
   const [user, setUser] = useState(null)
   const [initializing, setInitializing] = useState(true)
   useEffect(() => {
     let active = true
     authService.me().then(current => {
-      if (active) { setUser(current); setPage('account') }
-    }).catch(() => {}).finally(() => { if (active) setInitializing(false) })
+      if (active) {
+        setUser(current); setPage('account');
+        if (window.location.pathname === '/login') {
+          const searchParams = new URLSearchParams(window.location.search);
+          const nextUrl = searchParams.get('next');
+          if (current.role === 'ADMIN') routerNavigate('/admin');
+          else if (current.role === 'SHOP' || current.role === 'SHOP_STAFF') routerNavigate('/shop-admin');
+          else if (nextUrl) routerNavigate(nextUrl);
+          else routerNavigate('/');
+        }
+      }
+    }).catch(() => { }).finally(() => { if (active) setInitializing(false) })
     return () => { active = false }
   }, [])
   const [page, setPage] = useState('signin')
@@ -46,6 +58,17 @@ export function useAuthController() {
       if (page === 'signin') {
         const current = await authService.login(address, password)
         setUser(current); setPassword(''); setPage('account'); setNotice('Đăng nhập thành công.')
+        const searchParams = new URLSearchParams(window.location.search);
+        const nextUrl = searchParams.get('next');
+        if (current.role === 'ADMIN') {
+          routerNavigate('/admin');
+        } else if (current.role === 'SHOP' || current.role === 'SHOP_STAFF') {
+          routerNavigate('/shop-admin');
+        } else if (nextUrl) {
+          routerNavigate(nextUrl);
+        } else {
+          routerNavigate('/');
+        }
       } else if (page === 'register') {
         if (password !== confirmation) throw new Error('Mật khẩu xác nhận không khớp.')
         if (new TextEncoder().encode(password).length > 72) throw new Error('Mật khẩu không được vượt quá 72 byte UTF-8.')

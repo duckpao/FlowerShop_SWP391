@@ -9,7 +9,9 @@ import com.example.flowershop.entity.Product;
 import com.example.flowershop.entity.User;
 import com.example.flowershop.exception.ApiException;
 import com.example.flowershop.entity.enums.ProductStatus;
+import com.example.flowershop.entity.ProductImage;
 import com.example.flowershop.repository.CartItemRepository;
+import com.example.flowershop.repository.ProductImageRepository;
 import com.example.flowershop.repository.ProductRepository;
 import com.example.flowershop.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -28,6 +30,7 @@ public class CartService {
 
     private final CartItemRepository cartItemRepository;
     private final ProductRepository productRepository;
+    private final ProductImageRepository productImageRepository;
     private final UserRepository userRepository;
 
     /**
@@ -176,11 +179,17 @@ public class CartService {
         Product product = cartItem.getProduct();
         BigDecimal itemTotal = product.getPrice().multiply(BigDecimal.valueOf(cartItem.getQuantity()));
 
+        List<String> imageUrls = productImageRepository.findByProductIdOrderByDisplayOrderAsc(product.getId())
+                .stream()
+                .map(ProductImage::getImageUrl)
+                .toList();
+
         CartItemResponse.ProductSummary productSummary = CartItemResponse.ProductSummary.builder()
                 .id(product.getId())
                 .name(product.getName())
                 .price(product.getPrice())
-                .images(product.getImages())
+                .images(imageUrls)
+                .image(imageUrls.isEmpty() ? null : imageUrls.get(0))
                 .stock(product.getStock())
                 .shopId(product.getShop().getId())
                 .shopName(product.getShop().getName())

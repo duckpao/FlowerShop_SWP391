@@ -1,24 +1,98 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router';
 import orderApi from '../api/orderApi';
 import paymentApi from '../api/paymentApi';
-import PaymentModal from '../components/payment/PaymentModal';
+import { accountService } from '../services/accountService';
+import PageMeta from '../components/common/PageMeta';
+import PageBreadCrumb from '../components/common/PageBreadCrumb';
+import Button from '../components/ui/button/Button';
+import { TrashBinIcon } from '../icons';
 
-export default function CartPage({ cart, loading, error, fetchCart, updateItem, removeItem, userId }) {
+export default function CartPage({ cart, loading, error, fetchCart, updateItem, removeItem, userId, user, isGuest }) {
+  const navigate = useNavigate();
+  const isUserLoggedIn = Boolean(user && (userId || user.id));
   const [selectedItemIds, setSelectedItemIds] = useState([]);
-  const [deliveryAddressId, setDeliveryAddressId] = useState('addr-customer-01');
+  const [recipientName, setRecipientName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [deliveryAddress, setDeliveryAddress] = useState('');
+  const [savedAddresses, setSavedAddresses] = useState([]);
   const [couponCode, setCouponCode] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('SEPAY_GATEWAY'); // 'SEPAY_GATEWAY' | 'VIETQR_DIRECT' | 'COD'
-  
+  const [paymentMethod, setPaymentMethod] = useState('ONLINE'); // 'ONLINE' | 'COD'
+
   const [orderLoading, setOrderLoading] = useState(false);
   const [orderError, setOrderError] = useState(null);
   const [orderSuccess, setOrderSuccess] = useState(null);
 
-  // State cho Modal VietQR nhúng tại trang
-  const [isQrModalOpen, setIsQrModalOpen] = useState(false);
-  const [qrOrderId, setQrOrderId] = useState(null);
+  // 1. Phục hồi thông tin đã nhập từ localStorage
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('flower_checkout_info');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.recipientName) setRecipientName(parsed.recipientName);
+        if (parsed.phone) setPhone(parsed.phone);
+        if (parsed.deliveryAddress) setDeliveryAddress(parsed.deliveryAddress);
+      }
+    } catch {}
+  }, []);
 
-  // Khi cart load xong, đồng bộ selectedItemIds (giữ các item đã tick trước đó)
+  // 2. Nếu đăng nhập thì tự động lấy thông tin từ Profile và Sổ địa chỉ
+  useEffect(() => {
+    if (user) {
+      if (user.fullName) {
+        setRecipientName(prev => prev || user.fullName);
+      }
+      if (user.phone) {
+        setPhone(prev => prev || user.phone);
+      }
+
+      accountService.profile().then(p => {
+        if (p) {
+          if (p.fullName) setRecipientName(prev => prev || p.fullName);
+          if (p.phone) setPhone(prev => prev || p.phone);
+        }
+      }).catch(() => {});
+
+      if (user.role === 'CUSTOMER') {
+        accountService.addresses().then(list => {
+          if (list && list.length > 0) {
+            setSavedAddresses(list);
+            const def = list.find(a => a.isDefault) || list[0];
+            const fullAddr = [def.addressLine, def.ward, def.district, def.city].filter(Boolean).join(', ');
+            if (fullAddr) {
+              setDeliveryAddress(prev => prev || fullAddr);
+            }
+          }
+        }).catch(() => {});
+      }
+    }
+  }, [user]);
+
+  const handleRecipientNameChange = (val) => {
+    setRecipientName(val);
+    try {
+      const prev = JSON.parse(localStorage.getItem('flower_checkout_info') || '{}');
+      localStorage.setItem('flower_checkout_info', JSON.stringify({ ...prev, recipientName: val }));
+    } catch {}
+  };
+
+  const handlePhoneChange = (val) => {
+    setPhone(val);
+    try {
+      const prev = JSON.parse(localStorage.getItem('flower_checkout_info') || '{}');
+      localStorage.setItem('flower_checkout_info', JSON.stringify({ ...prev, phone: val }));
+    } catch {}
+  };
+
+  const handleDeliveryAddressChange = (val) => {
+    setDeliveryAddress(val);
+    try {
+      const prev = JSON.parse(localStorage.getItem('flower_checkout_info') || '{}');
+      localStorage.setItem('flower_checkout_info', JSON.stringify({ ...prev, deliveryAddress: val }));
+    } catch {}
+  };
+
+  // Khi cart load xong, đồng bộ selectedItemIds
   useEffect(() => {
     if (cart && cart.items) {
       setSelectedItemIds(prev => {
@@ -62,8 +136,8 @@ export default function CartPage({ cart, loading, error, fetchCart, updateItem, 
 
   // Lấy danh sách các item đang được chọn
   const selectedItems = items.filter(item => selectedItemIds.includes(item.id));
-
-  // Tính tổng tiền các item được chọn
+  const totalQuantity = items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+  const selectedQuantity = selectedItems.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
   const selectedTotal = selectedItems.reduce(
     (sum, item) => sum + Number(item.itemTotal || 0),
     0
@@ -71,10 +145,10 @@ export default function CartPage({ cart, loading, error, fetchCart, updateItem, 
 
   // Group các item được chọn theo shopId (vì mỗi đơn hàng thuộc 1 shop)
   const selectedByShop = selectedItems.reduce((acc, item) => {
-    const shopId = item.product.shopId;
+    const shopId = item.product?.shopId || 'unknown';
     if (!acc[shopId]) {
       acc[shopId] = {
-        shopName: item.product.shopName,
+        shopName: item.product?.shopName || 'Cửa hàng hoa',
         items: [],
       };
     }
@@ -83,21 +157,48 @@ export default function CartPage({ cart, loading, error, fetchCart, updateItem, 
   }, {});
 
   const shopIds = Object.keys(selectedByShop);
+  const hasMultipleShopsSelected = shopIds.length > 1;
+
+  // Kiểm tra xem có sản phẩm nào được chọn mà số lượng vượt quá tồn kho không
+  const hasOverStockItem = selectedItems.some(
+    item => item.product?.stock != null && item.quantity > item.product.stock
+  );
 
   // Xử lý thanh toán & đặt hàng
   const handlePlaceOrder = async () => {
+    if (!isUserLoggedIn) {
+      localStorage.setItem('flower_checkout_info', JSON.stringify({ recipientName, phone, deliveryAddress }));
+      navigate('/login?next=/cart');
+      return;
+    }
+
     if (selectedItems.length === 0) {
       setOrderError('Vui lòng chọn ít nhất 1 sản phẩm để đặt hàng.');
       return;
     }
 
-    if (!deliveryAddressId.trim()) {
-      setOrderError('Vui lòng nhập mã địa chỉ nhận hàng.');
+    if (!recipientName.trim()) {
+      setOrderError('Vui lòng nhập họ và tên người nhận hoa.');
       return;
     }
 
-    if (shopIds.length > 1) {
-      setOrderError('Hiện tại chỉ hỗ trợ thanh toán sản phẩm của cùng 1 cửa hàng trong mỗi đơn. Vui lòng chỉ chọn sản phẩm của một shop.');
+    if (!phone.trim()) {
+      setOrderError('Vui lòng nhập số điện thoại nhận hoa.');
+      return;
+    }
+
+    if (!deliveryAddress.trim()) {
+      setOrderError('Vui lòng nhập địa chỉ nhận hoa chi tiết.');
+      return;
+    }
+
+    if (hasMultipleShopsSelected) {
+      setOrderError('Mỗi đơn hàng chỉ được chứa sản phẩm từ 1 cửa hàng. Vui lòng chỉ chọn sản phẩm thuộc cùng 1 shop.');
+      return;
+    }
+
+    if (hasOverStockItem) {
+      setOrderError('Có sản phẩm được chọn vượt quá số lượng trong kho. Vui lòng điều chỉnh lại số lượng.');
       return;
     }
 
@@ -107,17 +208,19 @@ export default function CartPage({ cart, loading, error, fetchCart, updateItem, 
     setOrderLoading(true);
     setOrderError(null);
     try {
-      // 1. Tạo đơn hàng phía Backend
+      // 1. Tạo đơn hàng
       const order = await orderApi.makeOrder(userId, {
         shopId: targetShopId,
         cartItemIds: targetItemIds,
-        deliveryAddressId: deliveryAddressId.trim(),
+        deliveryAddressId: deliveryAddress.trim(),
+        recipientName: recipientName.trim(),
+        phone: phone.trim(),
         couponId: couponCode.trim() || undefined,
+        paymentMethod: paymentMethod,
       });
 
-      // 2. Xử lý theo phương thức thanh toán đã chọn
-      if (paymentMethod === 'SEPAY_GATEWAY') {
-        // Luồng Cổng SePay Gateway: Khởi tạo phiên thanh toán bảo mật từ Spring Boot
+      // 2. Xử lý phương thức thanh toán
+      if (paymentMethod === 'ONLINE') {
         const createRes = await paymentApi.createPayment({
           orderId: order.id,
           paymentType: 'FULL',
@@ -131,23 +234,12 @@ export default function CartPage({ cart, loading, error, fetchCart, updateItem, 
           throw new Error('Không nhận được thông tin cổng thanh toán từ máy chủ.');
         }
 
-        // Cập nhật lại giỏ hàng ngay vì các sản phẩm đã được đưa vào đơn hàng
         await fetchCart();
-
-        // Submit form POST sang Cổng SePay Checkout theo chuẩn tài liệu chính thức
         paymentApi.submitSePayCheckoutForm(checkoutUrl, fields);
         return;
       }
 
-      if (paymentMethod === 'VIETQR_DIRECT') {
-        // Luồng VietQR trực tiếp: Mở modal quét mã ngay tại web
-        setQrOrderId(order.id);
-        setIsQrModalOpen(true);
-        await fetchCart();
-        return;
-      }
-
-      // Luồng COD: Đặt hàng thành công thông thường
+      // Luồng COD: đặt hàng thành công
       setOrderSuccess(order);
       await fetchCart();
     } catch (err) {
@@ -158,150 +250,198 @@ export default function CartPage({ cart, loading, error, fetchCart, updateItem, 
   };
 
   return (
-    <div style={styles.page}>
-      {/* Breadcrumbs */}
-      <div style={styles.breadcrumb}>
-        <Link to="/" style={styles.breadcrumbLink}>Trang chủ</Link>
-        <span style={styles.breadcrumbSep}>›</span>
-        <span style={styles.breadcrumbCurrent}>Giỏ hàng ({items.length})</span>
-      </div>
+    <div className="p-4 sm:p-6 lg:p-8 w-full max-w-screen-2xl mx-auto">
+      <PageMeta title="Giỏ hàng | Cửa hàng hoa" description="Xem và thanh toán giỏ hàng hoa tươi của bạn" />
+      <PageBreadCrumb pageTitle={`Giỏ hàng (${totalQuantity})`} />
 
-      <h1 style={styles.pageTitle}>🛒 Giỏ hàng của bạn</h1>
+      {error && (
+        <div className="mb-6 rounded-xl bg-error-50 dark:bg-error-500/10 p-4 border border-error-200 dark:border-error-500/20 text-error-600 dark:text-error-400">
+          {error}
+        </div>
+      )}
 
-      {/* Thông báo đặt hàng thành công (COD) */}
       {orderSuccess && (
-        <div style={styles.successCard}>
-          <div style={styles.successIcon}>🎉</div>
-          <div>
-            <h3 style={styles.successTitle}>Đặt hàng thành công!</h3>
-            <p style={styles.successDesc}>
-              Mã đơn hàng: <strong>{orderSuccess.id}</strong> | Tổng thanh toán: <strong>{formatPrice(orderSuccess.totalAmount)}</strong>
-            </p>
-            <p style={{ fontSize: 13, color: '#2b8a3e', marginTop: 4 }}>
-              Phương thức: Thanh toán khi nhận hàng (COD) • Trạng thái: <strong>{orderSuccess.status}</strong>
-            </p>
+        <div className="mb-8 rounded-2xl border border-success-200 bg-success-50 p-6 dark:border-success-500/20 dark:bg-success-500/10 text-center">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-success-500 text-white text-2xl mb-3">
+            ✓
           </div>
-          <button style={styles.successCloseBtn} onClick={() => setOrderSuccess(null)}>
-            ✕
-          </button>
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Đặt hàng COD thành công!</h2>
+          <p className="text-gray-600 dark:text-gray-300 max-w-md mx-auto mb-4">
+            Mã đơn hàng: <strong className="text-brand-600 dark:text-brand-400 font-mono">{orderSuccess.id}</strong>.
+            Cửa hàng sẽ liên hệ và giao hàng tới bạn sớm nhất. Vui lòng chuẩn bị tiền mặt khi nhận hàng.
+          </p>
+          <div className="flex justify-center gap-4">
+            <Button onClick={() => setOrderSuccess(null)} variant="outline">
+              Xem lại giỏ hàng
+            </Button>
+            <Link to="/">
+              <Button>Tiếp tục mua sắm</Button>
+            </Link>
+          </div>
         </div>
       )}
 
-      {/* Thông báo lỗi nếu có */}
-      {(error || orderError) && (
-        <div style={styles.errorBanner}>
-          <span>⚠️ {error || orderError}</span>
-          <button style={styles.errorCloseBtn} onClick={() => setOrderError(null)}>✕</button>
-        </div>
-      )}
-
-      {/* Trạng thái giỏ hàng trống */}
-      {isEmpty && (
-        <div style={styles.emptyContainer}>
-          <div style={styles.emptyEmoji}>🌸</div>
-          <h2 style={styles.emptyTitle}>Giỏ hàng của bạn đang trống</h2>
-          <p style={styles.emptyDesc}>Hãy dạo một vòng cửa hàng và chọn những bó hoa tươi đẹp nhất nhé!</p>
-          <Link to="/" style={styles.continueBtn}>
-            ← Tiếp tục chọn hoa
+      {isEmpty ? (
+        <div className="rounded-2xl border border-gray-200 bg-white p-12 text-center shadow-sm dark:border-white/5 dark:bg-white/3 max-w-xl mx-auto my-12">
+          <div className="text-6xl mb-4">🌸</div>
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Giỏ hàng của bạn đang trống</h2>
+          <p className="text-gray-500 dark:text-gray-400 mb-6">
+            Hãy dạo một vòng cửa hàng và chọn những bó hoa tươi đẹp nhất gửi tặng người thân yêu nhé!
+          </p>
+          <Link to="/">
+            <Button className="px-8 py-3">
+              ← Khám phá sản phẩm
+            </Button>
           </Link>
         </div>
-      )}
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          {/* CỘT TRÁI: DANH SÁCH SẢN PHẨM TRONG GIỎ (8 cols) */}
+          <div className="lg:col-span-8 space-y-4">
+            {hasMultipleShopsSelected && (
+              <div className="rounded-xl border border-warning-200 bg-warning-50 p-4 dark:border-warning-500/20 dark:bg-warning-500/10 text-warning-800 dark:text-warning-300 text-sm flex items-start gap-3">
+                <span className="text-xl">⚠️</span>
+                <div>
+                  <strong>Lưu ý đặt hàng đa cửa hàng:</strong>
+                  <p className="mt-0.5">
+                    Bạn đang chọn sản phẩm của {shopIds.length} shop khác nhau. Mỗi đơn hàng chỉ áp dụng cho 1 shop. Vui lòng bỏ chọn sản phẩm của các shop khác trước khi tiến hành thanh toán.
+                  </p>
+                </div>
+              </div>
+            )}
 
-      {/* Bảng sản phẩm & Cột thanh toán */}
-      {!isEmpty && (
-        <div style={styles.layout}>
-          {/* CỘT TRÁI: DANH SÁCH SẢN PHẨM */}
-          <div style={styles.cartContent}>
-            {/* Header bảng */}
-            <div style={styles.tableHeader}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 3 }}>
+            {/* Thanh thao tác chọn tất cả */}
+            <div className="rounded-xl border border-gray-200 bg-white px-5 py-4 shadow-sm dark:border-white/5 dark:bg-white/3 flex items-center justify-between">
+              <label className="flex items-center gap-3 cursor-pointer text-sm font-semibold text-gray-800 dark:text-white">
                 <input
                   type="checkbox"
-                  style={styles.checkbox}
                   checked={items.length > 0 && selectedItemIds.length === items.length}
                   onChange={handleToggleSelectAll}
+                  className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500 dark:border-white/10 dark:bg-gray-800"
                 />
-                <span style={styles.headerCol}>Tất cả ({items.length} sản phẩm)</span>
-              </div>
-              <span style={{ ...styles.headerCol, flex: 1.5, textAlign: 'center' }}>Đơn giá</span>
-              <span style={{ ...styles.headerCol, flex: 1.5, textAlign: 'center' }}>Số lượng</span>
-              <span style={{ ...styles.headerCol, flex: 1.8, textAlign: 'right' }}>Số tiền</span>
-              <span style={{ ...styles.headerCol, width: 60, textAlign: 'center' }}>Xóa</span>
+                <span>Chọn tất cả ({totalQuantity} sản phẩm)</span>
+              </label>
+
+              <span className="text-xs text-gray-500 dark:text-gray-400">
+                Đã chọn: <strong className="text-brand-600 dark:text-brand-400">{selectedQuantity}</strong> sản phẩm
+              </span>
             </div>
 
-            {/* Danh sách items */}
-            <div style={styles.itemList}>
+            {/* Danh sách từng sản phẩm */}
+            <div className="space-y-3">
               {items.map((item) => {
-                const isChecked = selectedItemIds.includes(item.id);
-                const product = item.product;
+                const isSelected = selectedItemIds.includes(item.id);
+                const product = item.product || {};
+                const imageUrl = product.images?.[0] || product.image;
+
                 return (
                   <div
                     key={item.id}
-                    style={{
-                      ...styles.itemRow,
-                      backgroundColor: isChecked ? '#fff' : '#fafafa',
-                    }}
+                    className={`rounded-xl border bg-white p-4 sm:p-5 shadow-sm transition-all dark:bg-white/3 ${
+                      isSelected
+                        ? 'border-brand-300 ring-1 ring-brand-300/30 dark:border-brand-500/40'
+                        : 'border-gray-200 dark:border-white/5'
+                    }`}
                   >
-                    {/* Checkbox + Info */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 14, flex: 3 }}>
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                      {/* Checkbox */}
                       <input
                         type="checkbox"
-                        style={styles.checkbox}
-                        checked={isChecked}
+                        checked={isSelected}
                         onChange={() => handleToggleItem(item.id)}
+                        className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500 dark:border-white/10 dark:bg-gray-800 mt-1 sm:mt-0"
                       />
-                      <div style={styles.itemImgBox}>
-                        <span style={{ fontSize: 32 }}>🌹</span>
-                      </div>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={styles.shopBadge}>🏪 {product.shopName}</div>
-                        <h4 style={styles.itemName}>{product.name}</h4>
-                        <span style={styles.stockNote}>Còn {product.stock} sản phẩm</span>
-                      </div>
-                    </div>
 
-                    {/* Đơn giá */}
-                    <div style={{ flex: 1.5, textAlign: 'center', color: '#555', fontWeight: 500 }}>
-                      {formatPrice(product.price)}
-                    </div>
+                      {/* Ảnh sản phẩm */}
+                      <Link
+                        to={`/products/${encodeURIComponent(product.id || '')}`}
+                        className="h-20 w-20 flex-shrink-0 overflow-hidden rounded-lg border border-gray-100 bg-gray-50 dark:border-white/5 dark:bg-gray-800 flex items-center justify-center"
+                      >
+                        {imageUrl ? (
+                          <img src={imageUrl} alt={product.name} className="h-full w-full object-cover" />
+                        ) : (
+                          <span className="text-2xl">💐</span>
+                        )}
+                      </Link>
 
-                    {/* Bộ điều khiển số lượng */}
-                    <div style={{ flex: 1.5, display: 'flex', justifyContent: 'center' }}>
-                      <div style={styles.qtyBox}>
-                        <button
-                          style={styles.qtyBtn}
-                          onClick={() => {
-                            if (item.quantity > 1) updateItem(item.id, item.quantity - 1);
-                          }}
-                          disabled={item.quantity <= 1 || loading}
+                      {/* Tên & Shop */}
+                      <div className="flex-1 min-w-0">
+                        <Link
+                          to={`/products/${encodeURIComponent(product.id || '')}`}
+                          className="font-semibold text-gray-900 hover:text-brand-500 dark:text-white dark:hover:text-brand-400 line-clamp-1 transition-colors text-base"
                         >
-                          −
-                        </button>
-                        <span style={styles.qtyVal}>{item.quantity}</span>
+                          {product.name || 'Sản phẩm'}
+                        </Link>
+                        <div className="flex flex-wrap items-center gap-2 mt-1">
+                          {product.shopName && (
+                            <span className="text-xs font-medium text-brand-600 bg-brand-50 dark:bg-brand-500/10 dark:text-brand-300 px-2 py-0.5 rounded">
+                              🏪 {product.shopName}
+                            </span>
+                          )}
+                          {product.stock != null && (
+                            <span className={`text-xs px-2 py-0.5 rounded font-medium ${
+                              item.quantity > product.stock
+                                ? 'bg-error-50 text-error-600 dark:bg-error-500/10 dark:text-error-400 font-bold'
+                                : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'
+                            }`}>
+                              {item.quantity > product.stock
+                                ? `⚠️ Vượt quá tồn kho (Còn ${product.stock})`
+                                : `Kho: ${product.stock}`}
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 sm:hidden">
+                          Đơn giá: {formatPrice(item.unitPrice || product.price)}
+                        </p>
+                      </div>
+
+                      {/* Đơn giá (Desktop) */}
+                      <div className="hidden sm:block text-right min-w-[100px]">
+                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                          {formatPrice(item.unitPrice || product.price)}
+                        </span>
+                      </div>
+
+                      {/* Bộ điều khiển số lượng */}
+                      <div className="flex items-center border border-gray-200 dark:border-white/10 rounded-lg overflow-hidden bg-gray-50 dark:bg-gray-800">
                         <button
-                          style={styles.qtyBtn}
+                          type="button"
+                          onClick={() => updateItem(item.id, Math.max(1, item.quantity - 1))}
+                          disabled={item.quantity <= 1 || loading}
+                          className="px-2.5 py-1 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/10 disabled:opacity-40 transition-colors font-bold"
+                        >
+                          -
+                        </button>
+                        <span className="px-3 py-1 text-sm font-semibold text-gray-800 dark:text-white min-w-[32px] text-center">
+                          {item.quantity}
+                        </span>
+                        <button
+                          type="button"
                           onClick={() => updateItem(item.id, item.quantity + 1)}
-                          disabled={item.quantity >= product.stock || loading}
+                          disabled={loading || (product.stock != null && item.quantity >= product.stock)}
+                          className="px-2.5 py-1 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/10 disabled:opacity-40 transition-colors font-bold"
+                          title={product.stock != null && item.quantity >= product.stock ? `Đã đạt số lượng tồn kho tối đa (${product.stock})` : 'Tăng số lượng'}
                         >
                           +
                         </button>
                       </div>
-                    </div>
 
-                    {/* Thành tiền */}
-                    <div style={{ flex: 1.8, textAlign: 'right', fontWeight: 700, color: '#e8604c', fontSize: 16 }}>
-                      {formatPrice(item.itemTotal)}
-                    </div>
+                      {/* Thành tiền */}
+                      <div className="text-right min-w-[110px]">
+                        <span className="font-bold text-brand-600 dark:text-brand-400 text-base">
+                          {formatPrice(item.itemTotal || (item.unitPrice * item.quantity))}
+                        </span>
+                      </div>
 
-                    {/* Nút xóa */}
-                    <div style={{ width: 60, textAlign: 'center' }}>
+                      {/* Nút xóa */}
                       <button
-                        style={styles.deleteBtn}
+                        type="button"
                         onClick={() => removeItem(item.id)}
-                        title="Xóa khỏi giỏ"
                         disabled={loading}
+                        className="text-gray-400 hover:text-error-500 transition-colors p-1 rounded hover:bg-error-50 dark:hover:bg-error-500/10"
+                        title="Xóa sản phẩm này"
                       >
-                        🗑️
+                        <TrashBinIcon className="h-5 w-5" />
                       </button>
                     </div>
                   </div>
@@ -309,514 +449,212 @@ export default function CartPage({ cart, loading, error, fetchCart, updateItem, 
               })}
             </div>
 
-            <div style={styles.cartActions}>
-              <Link to="/" style={styles.backLink}>
-                ← Tiếp tục mua thêm hoa
+            <div className="pt-2">
+              <Link to="/" className="inline-flex items-center text-sm font-medium text-brand-600 dark:text-brand-400 hover:underline gap-1">
+                ← Tiếp tục xem và chọn thêm hoa
               </Link>
             </div>
           </div>
 
-          {/* CỘT PHẢI: THÔNG TIN THANH TOÁN (ORDER SUMMARY) */}
-          <div style={styles.summaryCol}>
-            <div style={styles.summaryCard}>
-              <h3 style={styles.summaryTitle}>Thông tin đơn hàng</h3>
+          {/* CỘT PHẢI: FORM THANH TOÁN & TÓM TẮT ĐƠN HÀNG (4 cols) */}
+          <div className="lg:col-span-4 sticky top-24 space-y-6">
+            <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-white/5 dark:bg-white/3 space-y-6">
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white border-b border-gray-100 dark:border-white/5 pb-4">
+                Tóm tắt đơn hàng
+              </h3>
 
-              {/* Nhập địa chỉ nhận hàng */}
-              <div style={styles.formGroup}>
-                <label style={styles.label}>
-                  Địa chỉ giao hàng <span style={{ color: '#e8604c' }}>*</span>
+              {/* Họ và tên người nhận */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                  Họ và tên người nhận <span className="text-error-500">*</span>
                 </label>
                 <input
                   type="text"
-                  style={styles.input}
-                  value={deliveryAddressId}
-                  onChange={(e) => setDeliveryAddressId(e.target.value)}
-                  placeholder="Nhập ID địa chỉ..."
+                  value={recipientName}
+                  onChange={(e) => handleRecipientNameChange(e.target.value)}
+                  placeholder="Nhập họ và tên người nhận hoa..."
+                  className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-white/10 dark:bg-gray-800 dark:text-white"
                 />
-                <span style={styles.inputNote}>💡 Mặc định: <code>addr-customer-01</code></span>
               </div>
 
-              {/* LỰA CHỌN PHƯƠNG THỨC THANH TOÁN */}
-              <div style={styles.formGroup}>
-                <label style={styles.label}>Phương thức thanh toán <span style={{ color: '#e8604c' }}>*</span></label>
-                
-                {/* 1. Cổng SePay Gateway */}
-                <label
-                  style={{
-                    ...styles.paymentOption,
-                    borderColor: paymentMethod === 'SEPAY_GATEWAY' ? '#e8604c' : '#eee',
-                    backgroundColor: paymentMethod === 'SEPAY_GATEWAY' ? '#fff8f6' : '#fff',
-                  }}
-                >
-                  <input
-                    type="radio"
-                    name="paymentMethod"
-                    value="SEPAY_GATEWAY"
-                    checked={paymentMethod === 'SEPAY_GATEWAY'}
-                    onChange={() => setPaymentMethod('SEPAY_GATEWAY')}
-                    style={styles.radio}
-                  />
-                  <div>
-                    <div style={styles.optTitle}>🌐 Cổng thanh toán SePay (Khuyên dùng)</div>
-                    <div style={styles.optDesc}>Hỗ trợ VietQR, Thẻ Visa/Mastercard & NAPAS</div>
-                  </div>
+              {/* Số điện thoại nhận hàng */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                  Số điện thoại nhận hàng <span className="text-error-500">*</span>
                 </label>
-
-                {/* 2. Quét VietQR trực tiếp tại web */}
-                <label
-                  style={{
-                    ...styles.paymentOption,
-                    borderColor: paymentMethod === 'VIETQR_DIRECT' ? '#e8604c' : '#eee',
-                    backgroundColor: paymentMethod === 'VIETQR_DIRECT' ? '#fff8f6' : '#fff',
-                  }}
-                >
-                  <input
-                    type="radio"
-                    name="paymentMethod"
-                    value="VIETQR_DIRECT"
-                    checked={paymentMethod === 'VIETQR_DIRECT'}
-                    onChange={() => setPaymentMethod('VIETQR_DIRECT')}
-                    style={styles.radio}
-                  />
-                  <div>
-                    <div style={styles.optTitle}>📲 Quét mã VietQR trực tiếp</div>
-                    <div style={styles.optDesc}>Quét mã QR chuyển khoản ngay trên trang này</div>
-                  </div>
-                </label>
-
-                {/* 3. COD */}
-                <label
-                  style={{
-                    ...styles.paymentOption,
-                    borderColor: paymentMethod === 'COD' ? '#e8604c' : '#eee',
-                    backgroundColor: paymentMethod === 'COD' ? '#fff8f6' : '#fff',
-                  }}
-                >
-                  <input
-                    type="radio"
-                    name="paymentMethod"
-                    value="COD"
-                    checked={paymentMethod === 'COD'}
-                    onChange={() => setPaymentMethod('COD')}
-                    style={styles.radio}
-                  />
-                  <div>
-                    <div style={styles.optTitle}>💵 Thanh toán khi nhận hàng (COD)</div>
-                    <div style={styles.optDesc}>Thanh toán tiền mặt cho shipper</div>
-                  </div>
-                </label>
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => handlePhoneChange(e.target.value)}
+                  placeholder="Ví dụ: 0912345678"
+                  maxLength={15}
+                  className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-white/10 dark:bg-gray-800 dark:text-white"
+                />
               </div>
 
-              {/* Nhập voucher */}
-              <div style={styles.formGroup}>
-                <label style={styles.label}>Mã giảm giá / Voucher</label>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <input
-                    type="text"
-                    style={{ ...styles.input, flex: 1 }}
-                    value={couponCode}
-                    onChange={(e) => setCouponCode(e.target.value)}
-                    placeholder="Nhập mã coupon..."
-                  />
-                  <button style={styles.applyBtn} type="button">Áp dụng</button>
+              {/* Địa chỉ nhận hoa */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                    Địa chỉ nhận hoa <span className="text-error-500">*</span>
+                  </label>
+                  {savedAddresses.length > 0 && (
+                    <select
+                      onChange={(e) => {
+                        if (e.target.value) handleDeliveryAddressChange(e.target.value);
+                      }}
+                      className="text-xs text-brand-600 dark:text-brand-400 bg-transparent border-none cursor-pointer focus:ring-0 p-0 font-medium"
+                      defaultValue=""
+                    >
+                      <option value="" disabled>Chọn địa chỉ đã lưu</option>
+                      {savedAddresses.map(addr => {
+                        const str = [addr.addressLine, addr.ward, addr.district, addr.city].filter(Boolean).join(', ');
+                        return (
+                          <option key={addr.id} value={str}>
+                            {addr.isDefault ? `★ [Mặc định] ${addr.addressLine}` : addr.addressLine}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  )}
+                </div>
+                <input
+                  type="text"
+                  value={deliveryAddress}
+                  onChange={(e) => handleDeliveryAddressChange(e.target.value)}
+                  placeholder="Nhập số nhà, tên đường, phường/xã, quận/huyện..."
+                  className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-white/10 dark:bg-gray-800 dark:text-white"
+                />
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  {isUserLoggedIn
+                    ? '💡 Đã tự động điền từ thông tin tài khoản của bạn. Có thể chỉnh sửa nếu giao nơi khác.'
+                    : '💡 Bạn có thể nhập trước thông tin nhận hàng, sau đó đăng nhập để xác nhận đặt hàng.'}
+                </p>
+              </div>
+
+              {/* Phương thức thanh toán */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                  Phương thức thanh toán <span className="text-error-500">*</span>
+                </label>
+                <div className="space-y-2.5">
+                  <label
+                    className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${
+                      paymentMethod === 'ONLINE'
+                        ? 'border-brand-500 bg-brand-50/50 ring-1 ring-brand-500/20 dark:bg-brand-500/10 dark:border-brand-500'
+                        : 'border-gray-200 hover:border-gray-300 dark:border-white/10 dark:hover:border-white/20'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="paymentMethod"
+                      value="ONLINE"
+                      checked={paymentMethod === 'ONLINE'}
+                      onChange={() => setPaymentMethod('ONLINE')}
+                      className="mt-0.5 text-brand-600 focus:ring-brand-500"
+                    />
+                    <div>
+                      <div className="text-sm font-semibold text-gray-900 dark:text-white">
+                        🌐 Thanh toán online (Khuyên dùng)
+                      </div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                        Hỗ trợ VietQR, Thẻ Visa/Mastercard & ATM qua Cổng SePay
+                      </div>
+                    </div>
+                  </label>
+
+                  <label
+                    className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${
+                      paymentMethod === 'COD'
+                        ? 'border-brand-500 bg-brand-50/50 ring-1 ring-brand-500/20 dark:bg-brand-500/10 dark:border-brand-500'
+                        : 'border-gray-200 hover:border-gray-300 dark:border-white/10 dark:hover:border-white/20'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="paymentMethod"
+                      value="COD"
+                      checked={paymentMethod === 'COD'}
+                      onChange={() => setPaymentMethod('COD')}
+                      className="mt-0.5 text-brand-600 focus:ring-brand-500"
+                    />
+                    <div>
+                      <div className="text-sm font-semibold text-gray-900 dark:text-white">
+                        💵 Thanh toán khi nhận hàng (COD)
+                      </div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                        Nhận hoa và thanh toán tiền mặt trực tiếp cho người giao
+                      </div>
+                    </div>
+                  </label>
                 </div>
               </div>
 
-              <div style={styles.divider} />
-
               {/* Chi tiết tính tiền */}
-              <div style={styles.priceRow}>
-                <span style={{ color: '#666' }}>Đã chọn:</span>
-                <span style={{ fontWeight: 600 }}>{selectedItems.length} sản phẩm</span>
+              <div className="space-y-2.5 pt-4 border-t border-gray-100 dark:border-white/5 text-sm">
+                <div className="flex justify-between text-gray-600 dark:text-gray-400">
+                  <span>Số lượng chọn:</span>
+                  <span className="font-semibold text-gray-900 dark:text-white">{selectedQuantity} sản phẩm</span>
+                </div>
+                <div className="flex justify-between text-gray-600 dark:text-gray-400">
+                  <span>Tạm tính:</span>
+                  <span className="font-semibold text-gray-900 dark:text-white">{formatPrice(selectedTotal)}</span>
+                </div>
+                <div className="flex justify-between text-gray-600 dark:text-gray-400">
+                  <span>Phí vận chuyển:</span>
+                  <span className="font-semibold text-success-600 dark:text-success-400">Miễn phí</span>
+                </div>
+                <div className="flex justify-between items-baseline pt-3 border-t border-gray-100 dark:border-white/5">
+                  <span className="text-base font-bold text-gray-900 dark:text-white">Tổng thanh toán:</span>
+                  <span className="text-2xl font-extrabold text-brand-600 dark:text-brand-400">
+                    {formatPrice(selectedTotal)}
+                  </span>
+                </div>
               </div>
 
-              <div style={styles.priceRow}>
-                <span style={{ color: '#666' }}>Tạm tính:</span>
-                <span style={{ fontWeight: 600 }}>{formatPrice(selectedTotal)}</span>
-              </div>
+              {orderError && (
+                <div className="rounded-lg bg-error-50 dark:bg-error-500/10 p-3 text-sm text-error-600 dark:text-error-400">
+                  {orderError}
+                </div>
+              )}
 
-              <div style={styles.priceRow}>
-                <span style={{ color: '#666' }}>Phí vận chuyển:</span>
-                <span style={{ color: '#2b8a3e', fontWeight: 600 }}>Miễn phí</span>
-              </div>
+              {/* Nút thanh toán hoặc đăng nhập */}
+              {!isUserLoggedIn ? (
+                <Button
+                  type="button"
+                  onClick={() => {
+                    localStorage.setItem('flower_checkout_info', JSON.stringify({ recipientName, phone, deliveryAddress }));
+                    navigate('/login?next=/cart');
+                  }}
+                  disabled={selectedItems.length === 0}
+                  className="w-full py-3.5 text-base font-bold shadow-md bg-brand-500 hover:bg-brand-600 text-white"
+                >
+                  Đăng nhập để thanh toán ({selectedQuantity}) →
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  onClick={handlePlaceOrder}
+                  disabled={orderLoading || selectedItems.length === 0 || hasMultipleShopsSelected || hasOverStockItem}
+                  className="w-full py-3.5 text-base font-bold shadow-md"
+                >
+                  {orderLoading
+                    ? 'Đang kết nối cổng thanh toán...'
+                    : hasOverStockItem
+                    ? 'Có sản phẩm vượt quá tồn kho'
+                    : paymentMethod === 'ONLINE'
+                    ? `Thanh toán online (${selectedQuantity}) →`
+                    : `Đặt hàng COD (${selectedQuantity})`}
+                </Button>
+              )}
 
-              <div style={styles.divider} />
-
-              <div style={styles.totalRow}>
-                <span style={{ fontSize: 16, fontWeight: 700, color: '#222' }}>Tổng thanh toán:</span>
-                <span style={styles.totalPrice}>{formatPrice(selectedTotal)}</span>
-              </div>
-
-              {/* Nút Đặt hàng / Thanh toán */}
-              <button
-                style={{
-                  ...styles.checkoutBtn,
-                  opacity: selectedItems.length === 0 || orderLoading ? 0.6 : 1,
-                  cursor: selectedItems.length === 0 || orderLoading ? 'not-allowed' : 'pointer',
-                }}
-                onClick={handlePlaceOrder}
-                disabled={selectedItems.length === 0 || orderLoading}
-              >
-                {orderLoading
-                  ? 'Đang kết nối cổng thanh toán...'
-                  : paymentMethod === 'SEPAY_GATEWAY'
-                  ? `Thanh toán SePay (${selectedItems.length}) →`
-                  : paymentMethod === 'VIETQR_DIRECT'
-                  ? `Lấy mã VietQR (${selectedItems.length}) ➔`
-                  : `Đặt hàng COD (${selectedItems.length})`}
-              </button>
-
-              <div style={styles.securityNote}>
-                🔒 Bảo mật SSL & xác thực giao dịch SePay 3D Secure
+              <div className="text-center text-xs text-gray-400 dark:text-gray-500">
+                🔒 Thông tin thanh toán được mã hóa và bảo mật an toàn
               </div>
             </div>
           </div>
         </div>
       )}
-
-      {/* Modal quét VietQR trực tiếp tại web */}
-      <PaymentModal
-        isOpen={isQrModalOpen}
-        onClose={() => {
-          setIsQrModalOpen(false);
-          setQrOrderId(null);
-        }}
-        orderId={qrOrderId}
-        onPaymentSuccess={() => {
-          fetchCart();
-        }}
-      />
     </div>
   );
 }
-
-const styles = {
-  page: {
-    maxWidth: 1200,
-    margin: '0 auto',
-    padding: '24px 16px 60px',
-    fontFamily: 'system-ui, -apple-system, sans-serif',
-  },
-  breadcrumb: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    fontSize: 14,
-    color: '#888',
-    marginBottom: 20,
-  },
-  breadcrumbLink: {
-    color: '#666',
-    textDecoration: 'none',
-  },
-  breadcrumbSep: { color: '#ccc' },
-  breadcrumbCurrent: { color: '#e8604c', fontWeight: 600 },
-  pageTitle: {
-    fontSize: 26,
-    fontWeight: 800,
-    color: '#1a1a1a',
-    marginBottom: 24,
-  },
-  successCard: {
-    display: 'flex',
-    alignItems: 'flex-start',
-    gap: 16,
-    background: '#ebfbee',
-    border: '1px solid #b2f2bb',
-    borderRadius: 12,
-    padding: '16px 20px',
-    marginBottom: 24,
-    position: 'relative',
-  },
-  successIcon: { fontSize: 28 },
-  successTitle: { margin: 0, color: '#2b8a3e', fontSize: 16, fontWeight: 700 },
-  successDesc: { margin: '4px 0 0', color: '#2f9e44', fontSize: 14 },
-  successCloseBtn: {
-    position: 'absolute',
-    top: 14,
-    right: 14,
-    background: 'none',
-    border: 'none',
-    cursor: 'pointer',
-    fontSize: 16,
-    color: '#2b8a3e',
-  },
-  errorBanner: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    background: '#fff5f5',
-    border: '1px solid #ffc9c9',
-    borderRadius: 10,
-    padding: '12px 18px',
-    marginBottom: 20,
-    color: '#e03131',
-    fontSize: 14,
-    fontWeight: 500,
-  },
-  errorCloseBtn: {
-    background: 'none',
-    border: 'none',
-    cursor: 'pointer',
-    color: '#e03131',
-    fontSize: 16,
-  },
-  emptyContainer: {
-    background: '#fff',
-    borderRadius: 16,
-    padding: '60px 20px',
-    textAlign: 'center',
-    border: '1px solid #eee',
-    boxShadow: '0 2px 12px rgba(0,0,0,0.03)',
-  },
-  emptyEmoji: { fontSize: 64, marginBottom: 16 },
-  emptyTitle: { fontSize: 22, fontWeight: 700, color: '#333', marginBottom: 8 },
-  emptyDesc: { color: '#888', fontSize: 15, marginBottom: 24 },
-  continueBtn: {
-    display: 'inline-block',
-    padding: '12px 28px',
-    background: '#e8604c',
-    color: '#fff',
-    textDecoration: 'none',
-    borderRadius: 10,
-    fontWeight: 700,
-    fontSize: 15,
-  },
-  layout: {
-    display: 'flex',
-    gap: 24,
-    alignItems: 'flex-start',
-  },
-  cartContent: {
-    flex: '1 1 62%',
-    background: '#fff',
-    borderRadius: 16,
-    border: '1px solid #eee',
-    overflow: 'hidden',
-    boxShadow: '0 2px 12px rgba(0,0,0,0.03)',
-  },
-  tableHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    padding: '16px 20px',
-    background: '#f8f9fa',
-    borderBottom: '1px solid #eee',
-  },
-  headerCol: {
-    fontSize: 14,
-    fontWeight: 700,
-    color: '#666',
-  },
-  checkbox: {
-    width: 18,
-    height: 18,
-    accentColor: '#e8604c',
-    cursor: 'pointer',
-  },
-  itemList: {
-    display: 'flex',
-    flexDirection: 'column',
-  },
-  itemRow: {
-    display: 'flex',
-    alignItems: 'center',
-    padding: '20px',
-    borderBottom: '1px solid #f2f2f2',
-    transition: 'background-color 0.2s',
-  },
-  itemImgBox: {
-    width: 70,
-    height: 70,
-    borderRadius: 10,
-    background: '#fff4f2',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-    border: '1px solid #fde4df',
-  },
-  shopBadge: {
-    fontSize: 11,
-    color: '#888',
-    marginBottom: 4,
-    fontWeight: 600,
-  },
-  itemName: {
-    margin: '0 0 6px',
-    fontSize: 15,
-    fontWeight: 700,
-    color: '#222',
-    lineHeight: 1.4,
-  },
-  stockNote: {
-    fontSize: 12,
-    color: '#999',
-  },
-  qtyBox: {
-    display: 'flex',
-    alignItems: 'center',
-    border: '1px solid #ddd',
-    borderRadius: 8,
-    overflow: 'hidden',
-    background: '#fff',
-  },
-  qtyBtn: {
-    width: 32,
-    height: 32,
-    border: 'none',
-    background: '#f8f9fa',
-    cursor: 'pointer',
-    fontSize: 16,
-    fontWeight: 700,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    color: '#444',
-  },
-  qtyVal: {
-    minWidth: 36,
-    textAlign: 'center',
-    fontSize: 14,
-    fontWeight: 700,
-  },
-  deleteBtn: {
-    background: 'none',
-    border: 'none',
-    cursor: 'pointer',
-    fontSize: 18,
-    opacity: 0.7,
-    padding: 6,
-    transition: 'opacity 0.2s',
-  },
-  cartActions: {
-    padding: '16px 20px',
-    background: '#fafafa',
-  },
-  backLink: {
-    color: '#666',
-    textDecoration: 'none',
-    fontSize: 14,
-    fontWeight: 600,
-  },
-  summaryCol: {
-    flex: '1 1 38%',
-    position: 'sticky',
-    top: 24,
-  },
-  summaryCard: {
-    background: '#fff',
-    borderRadius: 16,
-    padding: '24px',
-    border: '1px solid #eee',
-    boxShadow: '0 4px 20px rgba(0,0,0,0.05)',
-  },
-  summaryTitle: {
-    margin: '0 0 20px',
-    fontSize: 18,
-    fontWeight: 800,
-    color: '#1a1a1a',
-  },
-  formGroup: {
-    marginBottom: 18,
-  },
-  label: {
-    display: 'block',
-    fontSize: 13,
-    fontWeight: 600,
-    color: '#444',
-    marginBottom: 8,
-  },
-  paymentOption: {
-    display: 'flex',
-    alignItems: 'flex-start',
-    gap: 12,
-    padding: '12px 14px',
-    borderRadius: 10,
-    border: '1.5px solid #eee',
-    marginBottom: 10,
-    cursor: 'pointer',
-    transition: 'all 0.2s',
-  },
-  radio: {
-    marginTop: 3,
-    accentColor: '#e8604c',
-    cursor: 'pointer',
-  },
-  optTitle: {
-    fontSize: 14,
-    fontWeight: 700,
-    color: '#222',
-  },
-  optDesc: {
-    fontSize: 12,
-    color: '#777',
-    marginTop: 2,
-  },
-  input: {
-    width: '100%',
-    padding: '10px 14px',
-    border: '1px solid #ddd',
-    borderRadius: 8,
-    fontSize: 14,
-    outline: 'none',
-    boxSizing: 'border-box',
-    fontFamily: 'inherit',
-  },
-  inputNote: {
-    display: 'block',
-    fontSize: 11,
-    color: '#888',
-    marginTop: 4,
-  },
-  applyBtn: {
-    padding: '0 16px',
-    background: '#333',
-    color: '#fff',
-    border: 'none',
-    borderRadius: 8,
-    cursor: 'pointer',
-    fontWeight: 600,
-    fontSize: 13,
-  },
-  divider: {
-    height: 1,
-    background: '#eee',
-    margin: '18px 0',
-  },
-  priceRow: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-    fontSize: 14,
-  },
-  totalRow: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  totalPrice: {
-    fontSize: 22,
-    fontWeight: 800,
-    color: '#e8604c',
-  },
-  checkoutBtn: {
-    width: '100%',
-    padding: '14px 0',
-    background: '#e8604c',
-    color: '#fff',
-    border: 'none',
-    borderRadius: 10,
-    fontSize: 15,
-    fontWeight: 800,
-    letterSpacing: 0.3,
-    transition: 'background 0.2s',
-  },
-  securityNote: {
-    textAlign: 'center',
-    fontSize: 12,
-    color: '#999',
-    marginTop: 14,
-  },
-};

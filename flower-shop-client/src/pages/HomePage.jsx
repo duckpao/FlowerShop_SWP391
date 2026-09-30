@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
-export default function HomePage({ addToCart, loading }) {
+export default function HomePage({ addToCart, loading, cartCount = 0 }) {
   const [toastMessage, setToastMessage] = useState(null);
 
   const formatPrice = (amount) =>
@@ -11,7 +11,7 @@ export default function HomePage({ addToCart, loading }) {
     {
       id: 'prod-01',
       name: 'Bó Hồng Đỏ Mix Baby',
-      price: 350000,
+      price: 1000,
       category: 'Hoa Tình Yêu',
       shopName: 'FPTU Smart Floral',
       desc: 'Bó hoa hồng đỏ Ecuador mix hoa baby trắng tượng trưng cho tình yêu nồng nàn.',
@@ -21,7 +21,7 @@ export default function HomePage({ addToCart, loading }) {
     {
       id: 'prod-02',
       name: 'Lẵng Hướng Dương Ban Mai',
-      price: 450000,
+      price: 2000,
       category: 'Hoa Khai Trương',
       shopName: 'FPTU Smart Floral',
       desc: 'Hoa hướng dương rực rỡ tặng khai trương, tốt nghiệp, đem lại may mắn.',
@@ -65,7 +65,7 @@ export default function HomePage({ addToCart, loading }) {
             <p style={styles.sectionSub}>Hoa tươi mới nhập trong sáng nay, đảm bảo tươi 3-5 ngày</p>
           </div>
           <Link to="/cart" style={styles.cartBtnHeader}>
-            🛒 Tới giỏ hàng của bạn →
+            🛒 Tới giỏ hàng của bạn {cartCount > 0 ? `(${cartCount})` : ''} →
           </Link>
         </div>
 

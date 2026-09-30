@@ -5,6 +5,9 @@ import com.example.flowershop.dto.order.OrderResponse;
 import com.example.flowershop.entity.*;
 import com.example.flowershop.entity.enums.OrderStatus;
 import com.example.flowershop.entity.enums.OrderType;
+import com.example.flowershop.entity.enums.PaymentMethod;
+import com.example.flowershop.entity.enums.PaymentStatus;
+import com.example.flowershop.entity.enums.PaymentType;
 import com.example.flowershop.exception.ApiException;
 import com.example.flowershop.repository.*;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +30,7 @@ public class OrderService {
     private final UserRepository userRepository;
     private final AddressRepository addressRepository;
     private final ProductRepository productRepository;
+    private final PaymentRepository paymentRepository;
 
     /**
      * Tạo đơn hàng từ các cart items đã chọn.
@@ -44,13 +48,41 @@ public class OrderService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> ApiException.notFound("Không tìm thấy user với id: " + userId));
 
-        // 2. Validate delivery address (phải thuộc user này)
-        Address deliveryAddress = addressRepository.findById(request.getDeliveryAddressId())
-                .orElseThrow(() -> ApiException.notFound("Không tìm thấy địa chỉ giao hàng với id: " + request.getDeliveryAddressId()));
-
-        if (deliveryAddress.getUser() == null || !deliveryAddress.getUser().getId().equals(userId)) {
-            throw ApiException.forbidden("Địa chỉ giao hàng không thuộc về bạn.");
+        boolean userUpdated = false;
+        if (request.getPhone() != null && !request.getPhone().trim().isEmpty() && (user.getPhone() == null || user.getPhone().trim().isEmpty())) {
+            user.setPhone(request.getPhone().trim());
+            userUpdated = true;
         }
+        if (request.getRecipientName() != null && !request.getRecipientName().trim().isEmpty() && (user.getFullName() == null || user.getFullName().trim().isEmpty())) {
+            user.setFullName(request.getRecipientName().trim());
+            userUpdated = true;
+        }
+        if (userUpdated) {
+            userRepository.save(user);
+        }
+
+        // 2. Validate delivery address (hỗ trợ cả Address ID lẫn nhập địa chỉ trực tiếp)
+        String rawAddressInput = (request.getDeliveryAddressId() != null) ? request.getDeliveryAddressId().trim() : "";
+        if (rawAddressInput.isEmpty()) {
+            rawAddressInput = "Hà Nội";
+        }
+        final String addressValue = rawAddressInput;
+
+        Address deliveryAddress = addressRepository.findById(addressValue)
+                .filter(addr -> addr.getUser() != null && addr.getUser().getId().equals(userId))
+                .orElseGet(() -> {
+                    // Nếu người dùng nhập trực tiếp địa chỉ dạng text (ví dụ: "ha noi", "Số 10 Cầu Giấy, Hà Nội")
+                    // Hoặc ID chưa có trong DB, tự động tạo và lưu Address cho user này:
+                    Address newAddress = Address.builder()
+                            .id("addr-" + UUID.randomUUID().toString().substring(0, 8))
+                            .user(user)
+                            .addressLine(addressValue)
+                            .city("Hà Nội")
+                            .isDefault(false)
+                            .createdBy(userId)
+                            .build();
+                    return addressRepository.save(newAddress);
+                });
 
         // 3. Validate shop
         // Lấy danh sách cart items được chọn
@@ -150,6 +182,29 @@ public class OrderService {
 
         // 7. Xóa cart items đã đặt hàng
         cartItemRepository.deleteAll(selectedCartItems);
+
+        // 8. Xử lý phương thức thanh toán
+        boolean isCod = "COD".equalsIgnoreCase(request.getPaymentMethod());
+        if (isCod) {
+            // COD: tạo bản ghi thanh toán ngay, trạng thái PENDING (sẽ thu tiền khi giao hàng)
+            Payment codPayment = Payment.builder()
+                    .id(UUID.randomUUID().toString())
+                    .order(order)
+                    .paymentType(PaymentType.FULL)
+                    .paymentMethod(PaymentMethod.COD)
+                    .amount(totalAmount)
+                    .invoiceNumber("COD-" + order.getId().replace("-", "").substring(0, 8).toUpperCase())
+                    .status(PaymentStatus.PENDING)
+                    .createdBy(userId)
+                    .lastModifyBy(userId)
+                    .build();
+            paymentRepository.save(codPayment);
+
+            // Đơn COD chuyển sang PROCESSING ngay (đã xác nhận, chờ giao hàng)
+            order.setStatus(OrderStatus.PROCESSING);
+            order.setLastModifyBy(userId);
+            order = orderRepository.save(order);
+        }
 
         return OrderResponse.builder()
                 .id(order.getId())

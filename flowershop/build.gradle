@@ -52,7 +52,7 @@ def frontendDir = layout.projectDirectory.dir('../flower-shop-client')
 def npmExecutable = System.getProperty('os.name').toLowerCase().contains('windows') ? 'npm.cmd' : 'npm'
 tasks.register('installFrontend', Exec) {
     workingDir frontendDir
-    commandLine npmExecutable, 'ci'
+    commandLine npmExecutable, 'install'
     inputs.files(frontendDir.file('package.json'), frontendDir.file('package-lock.json'))
     outputs.dir(frontendDir.dir('node_modules'))
 }
@@ -67,5 +67,6 @@ tasks.register('buildFrontend', Exec) {
 }
 tasks.named('processResources') {
     dependsOn 'buildFrontend'
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
     from(frontendDir.dir('dist')) { into 'static' }
 }

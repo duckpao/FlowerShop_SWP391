@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import { useSearchParams, Link } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router';
 import paymentApi from '../api/paymentApi';
+import PageMeta from '../components/common/PageMeta';
+import Button from '../components/ui/button/Button';
 
 export default function PaymentSuccessPage() {
   const [searchParams] = useSearchParams();
@@ -32,7 +34,7 @@ export default function PaymentSuccessPage() {
         if (data && (data.invoiceNumber || data.orderId || data.paymentId)) {
           setPaymentData(data);
 
-          // Nếu đã xác nhận thanh toán thành công từ IPN
+          // Nếu đã xác nhận thanh toán thành công
           if (data.isPaid || data.paymentStatus === 'SUCCESS' || data.orderStatus === 'PROCESSING') {
             setLoading(false);
             return;
@@ -65,110 +67,100 @@ export default function PaymentSuccessPage() {
   }, [invoiceNumber, orderId]);
 
   const isConfirmed = paymentData?.isPaid || paymentData?.paymentStatus === 'SUCCESS';
+  const formatPrice = (amount) =>
+    new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount || 0);
 
   return (
-    <div style={styles.container}>
-      <div style={styles.card}>
+    <div className="p-4 sm:p-6 lg:p-8 w-full max-w-2xl mx-auto my-8">
+      <PageMeta title="Kết quả thanh toán | Cửa hàng hoa" description="Xác nhận thanh toán đơn hàng" />
+
+      <div className="rounded-2xl border border-gray-200 bg-white p-8 sm:p-10 shadow-sm dark:border-white/5 dark:bg-white/3 text-center">
         {loading ? (
-          <div style={styles.loadingBox}>
-            <div style={styles.spinner}></div>
-            <h2 style={styles.title}>Đang xác thực giao dịch...</h2>
-            <p style={styles.desc}>
-              Hệ thống đang kết nối đối soát với SePay và Ngân hàng. Vui lòng chờ trong giây lát.
-              ({pollCount}/{maxAttempts})
+          <div className="py-8 space-y-4">
+            <div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-solid border-brand-500 border-t-transparent"></div>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+              Đang xác thực giao dịch...
+            </h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400 max-w-md mx-auto">
+              Hệ thống đang đối soát với cổng thanh toán và Ngân hàng. Vui lòng chờ trong giây lát ({pollCount}/{maxAttempts}).
             </p>
           </div>
         ) : isConfirmed ? (
-          <div>
-            <div style={styles.iconCircleSuccess}>
-              <span style={styles.checkIcon}>✓</span>
+          <div className="space-y-6">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-success-500 text-white text-3xl shadow-lg shadow-success-500/30">
+              ✓
             </div>
-            <span style={styles.badgeSuccess}>Thanh toán thành công</span>
-            <h1 style={styles.title}>Cảm ơn bạn đã mua hàng!</h1>
-            <p style={styles.desc}>
-              Đơn hàng của bạn đã được xác nhận thanh toán thành công qua <strong>Cổng thanh toán SePay</strong>.
-              Cửa hàng hoa đang chuẩn bị đơn và sẽ sớm giao đến bạn.
-            </p>
+            
+            <div>
+              <span className="inline-block px-3 py-1 text-xs font-semibold rounded-full bg-success-100 text-success-800 dark:bg-success-500/20 dark:text-success-400 mb-2">
+                Thanh toán thành công
+              </span>
+              <h1 className="text-3xl font-extrabold text-gray-900 dark:text-white">
+                Cảm ơn bạn đã mua hoa!
+              </h1>
+              <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                Đơn hàng của bạn đã được ghi nhận và thanh toán thành công. Cửa hàng sẽ chuẩn bị hoa tươi và giao sớm nhất!
+              </p>
+            </div>
 
-            <div style={styles.detailsCard}>
+            {/* Chi tiết giao dịch */}
+            <div className="rounded-xl border border-gray-100 bg-gray-50 p-5 dark:border-white/5 dark:bg-gray-800/40 text-left space-y-3 text-sm">
               {paymentData?.invoiceNumber && (
-                <div style={styles.detailRow}>
-                  <span style={styles.label}>Mã hóa đơn:</span>
-                  <strong style={styles.val}>{paymentData.invoiceNumber}</strong>
+                <div className="flex justify-between">
+                  <span className="text-gray-500 dark:text-gray-400">Mã hóa đơn:</span>
+                  <span className="font-mono font-semibold text-gray-900 dark:text-white">{paymentData.invoiceNumber}</span>
                 </div>
               )}
               {paymentData?.orderId && (
-                <div style={styles.detailRow}>
-                  <span style={styles.label}>Mã đơn hàng:</span>
-                  <span style={styles.val}>{paymentData.orderId}</span>
+                <div className="flex justify-between">
+                  <span className="text-gray-500 dark:text-gray-400">Mã đơn hàng:</span>
+                  <span className="font-mono text-gray-900 dark:text-white">{paymentData.orderId}</span>
                 </div>
               )}
-              {paymentData?.paidAmount && (
-                <div style={styles.detailRow}>
-                  <span style={styles.label}>Số tiền đã trả:</span>
-                  <strong style={{ ...styles.val, color: '#e8604c' }}>
-                    {new Intl.NumberFormat('vi-VN').format(paymentData.paidAmount)} đ
-                  </strong>
-                </div>
-              )}
-              {paymentData?.transactionNo && (
-                <div style={styles.detailRow}>
-                  <span style={styles.label}>Mã giao dịch SePay:</span>
-                  <span style={styles.val}>{paymentData.transactionNo}</span>
+              {paymentData?.amount && (
+                <div className="flex justify-between items-baseline pt-2 border-t border-gray-200 dark:border-white/10">
+                  <span className="font-semibold text-gray-900 dark:text-white">Số tiền đã thanh toán:</span>
+                  <span className="text-lg font-bold text-brand-600 dark:text-brand-400">
+                    {formatPrice(paymentData.amount)}
+                  </span>
                 </div>
               )}
             </div>
 
-            <div style={styles.actions}>
-              <Link to="/" style={styles.homeBtn}>
-                ← Về trang chủ
-              </Link>
-              <Link to="/cart" style={styles.cartBtn}>
-                Giỏ hàng
+            <div className="flex flex-col sm:flex-row justify-center gap-3 pt-2">
+              <Link to="/" className="w-full sm:w-auto">
+                <Button className="w-full sm:w-auto px-8 py-3">
+                  Tiếp tục mua sắm
+                </Button>
               </Link>
             </div>
-          </div>
-        ) : isTimedOut ? (
-          <div>
-            <div style={styles.iconCirclePending}>
-              <span style={styles.pendingIcon}>⏳</span>
-            </div>
-            <span style={styles.badgePending}>Đang xử lý giao dịch</span>
-            <h1 style={styles.title}>Giao dịch đang được xử lý</h1>
-            <p style={styles.desc}>
-              Cổng thanh toán SePay đã tiếp nhận yêu cầu. Hệ thống ngân hàng có thể mất vài phút để ghi nhận tiền.
-              Bạn có thể kiểm tra lại trạng thái trong Lịch sử đơn hàng.
-            </p>
 
-            {invoiceNumber && (
-              <div style={styles.orderBox}>
-                <span style={styles.label}>Mã hóa đơn:</span>
-                <code>{invoiceNumber}</code>
-              </div>
-            )}
-
-            <div style={styles.actions}>
-              <Link to="/" style={styles.homeBtn}>
-                ← Tiếp tục mua sắm
-              </Link>
-              <Link to="/cart" style={styles.cartBtn}>
-                Xem giỏ hàng
-              </Link>
-            </div>
+            
           </div>
         ) : (
-          <div>
-            <div style={styles.iconCircleError}>
-              <span style={styles.errorIcon}>!</span>
+          <div className="space-y-6">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-warning-500 text-white text-3xl shadow-lg shadow-warning-500/30">
+              ⏳
             </div>
-            <span style={styles.badgeError}>Chưa xác nhận thanh toán</span>
-            <h1 style={styles.title}>Không tìm thấy giao dịch</h1>
-            <p style={styles.desc}>
-              Không thể tìm thấy thông tin thanh toán tương ứng hoặc giao dịch chưa hoàn tất.
-            </p>
-            <div style={styles.actions}>
-              <Link to="/cart" style={styles.homeBtn}>
-                Quay lại giỏ hàng
+            
+            <div>
+              <span className="inline-block px-3 py-1 text-xs font-semibold rounded-full bg-warning-100 text-warning-800 dark:bg-warning-500/20 dark:text-warning-400 mb-2">
+                Đang xử lý thanh toán
+              </span>
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+                Giao dịch đang được xác nhận
+              </h1>
+              <p className="mt-2 text-sm text-gray-600 dark:text-gray-400 max-w-md mx-auto">
+                Nếu bạn đã chuyển khoản hoặc thanh toán thành công, vui lòng đợi ít phút để hệ thống ngân hàng đồng bộ.
+              </p>
+            </div>
+
+            <div className="flex flex-col sm:flex-row justify-center gap-3 pt-2">
+              <Button onClick={() => window.location.reload()} variant="outline">
+                Kiểm tra lại trạng thái
+              </Button>
+              <Link to="/">
+                <Button>Về trang chủ</Button>
               </Link>
             </div>
           </div>
@@ -177,184 +169,3 @@ export default function PaymentSuccessPage() {
     </div>
   );
 }
-
-const styles = {
-  container: {
-    minHeight: '80vh',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '40px 16px',
-    fontFamily: 'system-ui, sans-serif',
-  },
-  card: {
-    background: '#fff',
-    borderRadius: 20,
-    padding: '48px 36px',
-    maxWidth: 520,
-    width: '100%',
-    textAlign: 'center',
-    border: '1px solid #e9ecef',
-    boxShadow: '0 10px 30px rgba(0, 0, 0, 0.06)',
-  },
-  loadingBox: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    padding: '24px 0',
-  },
-  spinner: {
-    width: 44,
-    height: 44,
-    border: '4px solid #f1f3f5',
-    borderTop: '4px solid #e8604c',
-    borderRadius: '50%',
-    animation: 'spin 1s linear infinite',
-    marginBottom: 20,
-  },
-  iconCircleSuccess: {
-    width: 76,
-    height: 76,
-    borderRadius: '50%',
-    background: '#e6fcf5',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    margin: '0 auto 20px',
-  },
-  checkIcon: {
-    fontSize: 40,
-    color: '#12b886',
-    fontWeight: 900,
-  },
-  iconCirclePending: {
-    width: 76,
-    height: 76,
-    borderRadius: '50%',
-    background: '#fff9db',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    margin: '0 auto 20px',
-  },
-  pendingIcon: {
-    fontSize: 36,
-  },
-  iconCircleError: {
-    width: 76,
-    height: 76,
-    borderRadius: '50%',
-    background: '#fff5f5',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    margin: '0 auto 20px',
-  },
-  errorIcon: {
-    fontSize: 36,
-    color: '#fa5252',
-    fontWeight: 900,
-  },
-  badgeSuccess: {
-    background: '#ebfbee',
-    color: '#2b8a3e',
-    padding: '4px 12px',
-    borderRadius: 20,
-    fontSize: 12,
-    fontWeight: 700,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    display: 'inline-block',
-    marginBottom: 12,
-  },
-  badgePending: {
-    background: '#fff3bf',
-    color: '#f59f00',
-    padding: '4px 12px',
-    borderRadius: 20,
-    fontSize: 12,
-    fontWeight: 700,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    display: 'inline-block',
-    marginBottom: 12,
-  },
-  badgeError: {
-    background: '#ffe3e3',
-    color: '#e03131',
-    padding: '4px 12px',
-    borderRadius: 20,
-    fontSize: 12,
-    fontWeight: 700,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    display: 'inline-block',
-    marginBottom: 12,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: 800,
-    color: '#1a1a1a',
-    margin: '0 0 12px',
-  },
-  desc: {
-    fontSize: 14,
-    color: '#666',
-    lineHeight: 1.5,
-    margin: '0 0 24px',
-  },
-  detailsCard: {
-    background: '#f8f9fa',
-    borderRadius: 12,
-    padding: '16px',
-    marginBottom: 24,
-    textAlign: 'left',
-    fontSize: 13,
-    border: '1px solid #eee',
-  },
-  detailRow: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    padding: '6px 0',
-    borderBottom: '1px dashed #e9ecef',
-  },
-  orderBox: {
-    background: '#f8f9fa',
-    borderRadius: 10,
-    padding: '12px 16px',
-    marginBottom: 24,
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    border: '1px solid #eee',
-  },
-  label: { color: '#777', fontWeight: 500 },
-  val: { fontWeight: 600, color: '#222' },
-  actions: {
-    display: 'flex',
-    gap: 12,
-    justifyContent: 'center',
-  },
-  homeBtn: {
-    flex: 1,
-    padding: '12px 0',
-    background: '#e8604c',
-    color: '#fff',
-    textDecoration: 'none',
-    borderRadius: 10,
-    fontWeight: 700,
-    fontSize: 14,
-    textAlign: 'center',
-  },
-  cartBtn: {
-    flex: 1,
-    padding: '12px 0',
-    background: '#f1f3f5',
-    color: '#495057',
-    textDecoration: 'none',
-    borderRadius: 10,
-    fontWeight: 600,
-    fontSize: 14,
-    textAlign: 'center',
-  },
-};

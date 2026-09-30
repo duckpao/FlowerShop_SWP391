@@ -36,10 +36,9 @@ public class SecurityConfig {
 
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.GET, "/", "/index.html", "/assets/**", "/vite.svg", "/favicon.svg", "/icons.svg",
-                                "/login", "/account", "/admin", "/admin/shops", "/admin/approvals", "/admin/users", "/admin/profile",
                                 "/shop-admin", "/shop-admin/staff", "/shop-admin/products", "/shop-admin/shop", "/shop-admin/profile", "/shops/*",
-                                "/cart", "/home", "/payment/**").permitAll()
-                        .requestMatchers(HttpMethod.GET,"/api/public/shops","/api/public/shops/*","/api/public/shops/*/products").permitAll()
+                                "/products/*", "/cart", "/home", "/payment/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/public/shops", "/api/public/shops/*", "/api/public/shops/*/products", "/api/public/products", "/api/public/products/*", "/api/public/categories").permitAll()
                         .requestMatchers("/api/cart/**", "/api/orders/**", "/api/payments/**").permitAll()
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                         .requestMatchers(
