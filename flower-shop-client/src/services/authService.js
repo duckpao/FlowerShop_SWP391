@@ -2,22 +2,25 @@ import toast from 'react-hot-toast'
 import { authModel } from '../models/authModel'
 import { API_BASE } from '../apiBase'
 
-async function request(path, { method = 'GET', body, bearer = false } = {}) {
+async function request(path, { method = 'GET', body, bearer = false, headers: customHeaders = {} } = {}) {
   const isFormData = body instanceof FormData
-  const headers = {}
+  const headers = { ...customHeaders }
   if (method !== 'GET') {
     const csrfResponse = await fetch(`${API_BASE}/api/auth/csrf`, { credentials: 'include', cache: 'no-store' })
     if (!csrfResponse.ok) throw new Error('Không thể tạo phiên bảo vệ yêu cầu.')
     const csrf = await csrfResponse.json()
     headers[csrf.headerName] = csrf.token
-    if (!isFormData) headers['Content-Type'] = 'application/json'
+    if (!isFormData && !headers['Content-Type']) headers['Content-Type'] = 'application/json'
   }
   if (bearer && authModel.getToken()) headers.Authorization = `Bearer ${authModel.getToken()}`
   let response;
   try {
+    const formattedBody = isFormData
+      ? body
+      : (body !== undefined ? (typeof body === 'string' ? body : JSON.stringify(body)) : undefined)
     response = await fetch(`${API_BASE}${path.startsWith('/api/') ? path : `/api/auth/${path}`}`, {
       method, headers, credentials: 'include', cache: 'no-store',
-      ...(body !== undefined ? { body: isFormData ? body : JSON.stringify(body) } : {}),
+      ...(formattedBody !== undefined ? { body: formattedBody } : {}),
     })
   } catch (err) {
     if (path !== 'refresh') toast.error('Mất kết nối mạng. Vui lòng kiểm tra lại đường truyền.');

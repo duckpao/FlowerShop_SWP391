@@ -121,7 +121,7 @@ export default function AccountView({ user, logout, checkSession, busy: authBusy
               <div className="space-y-6">
                 <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
                   <p className="text-sm text-blue-800 dark:text-blue-300">
-                    Khu vực hỗ trợ: <span className="font-semibold">{c.cities.join(', ') || 'Chưa mở giao hàng'}</span>. Tối đa 10 địa chỉ.
+                    Khu vực hỗ trợ: <span className="font-semibold">Toàn quốc (qua Giao Hàng Nhanh - GHN)</span>. Tối đa 10 địa chỉ.
                   </p>
                 </div>
 

@@ -12,7 +12,15 @@ async function get(path) {
 }
 
 export const catalogService = {
-  browse: params => get(`/api/public/products?${new URLSearchParams(params)}`),
+  browse: params => {
+    const searchParams = new URLSearchParams()
+    Object.entries(params || {}).forEach(([key, val]) => {
+      if (val !== undefined && val !== null && val !== '') {
+        searchParams.set(key, val)
+      }
+    })
+    return get(`/api/public/products?${searchParams.toString()}`)
+  },
   detail: id => get(`/api/public/products/${encodeURIComponent(id)}`),
   categories: () => get('/api/public/categories'),
   shops: () => get('/api/public/shops'),

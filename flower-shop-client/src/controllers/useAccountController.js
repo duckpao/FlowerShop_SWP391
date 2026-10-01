@@ -38,7 +38,16 @@ export function useAccountController(user) {
   const saveAddress = e => {
     e.preventDefault()
     return run(async () => {
-      await accountService.saveAddress(editing, { ...address, addressLine: address.addressLine.trim(), ward: address.ward.trim(), district: address.district.trim() })
+      await accountService.saveAddress(editing, {
+        ...address,
+        addressLine: address.addressLine?.trim() || '',
+        city: address.city?.trim() || '',
+        district: address.district?.trim() || '',
+        ward: address.ward?.trim() || '',
+        ghnDistrictId: address.ghnDistrictId,
+        ghnWardCode: address.ghnWardCode,
+        isDefault: !!address.isDefault
+      })
       setAddresses(await accountService.addresses()); cancel(); setNotice('Đã lưu địa chỉ.')
     })
   }
@@ -55,11 +64,19 @@ export function useAccountController(user) {
   })
   const edit = item => {
     setEditing(item.id)
-    setAddress({ addressLine: item.addressLine || '', district: item.district || '', ward: item.ward || '', isDefault: item.isDefault })
+    setAddress({
+      addressLine: item.addressLine || '',
+      city: item.city || '',
+      district: item.district || '',
+      ward: item.ward || '',
+      ghnDistrictId: item.ghnDistrictId || null,
+      ghnWardCode: item.ghnWardCode || '',
+      isDefault: !!item.isDefault
+    })
     setError(''); setNotice('')
   }
   return {
-    profile, form, setForm, addresses, cities, address, setAddress, editing, busy, error, notice,
+    profile, form, setForm, addresses, address, setAddress, editing, busy, error, notice,
     saveProfile, saveAddress, remove, makeDefault, edit, cancel, retry: () => setReload(x => x + 1)
   }
 }

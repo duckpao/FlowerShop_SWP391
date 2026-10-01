@@ -3,21 +3,22 @@ import { authService } from './authService'
 const base = shopId => `/api/shop/mine/${encodeURIComponent(shopId)}/orders`
 
 export const managerOrderService = {
-    list: (shopId, page, status) => {
-        const params = new URLSearchParams({ page })
+    list: (shopId, page = 0, status = null) => {
+        const params = new URLSearchParams()
+        if (page !== undefined && page !== null && page !== '') params.set('page', page)
         if (status) params.set('status', status)
-        return authService.authenticatedRequest(`${base(shopId)}?${params}`)
+        return authService.authenticatedRequest(`${base(shopId)}?${params.toString()}`)
     },
     getQueue: (shopId, page = 0, status = null) => {
-        const params = new URLSearchParams({ page })
+        const params = new URLSearchParams()
+        if (page !== undefined && page !== null && page !== '') params.set('page', page)
         if (status) params.set('status', status)
-        return authService.authenticatedRequest(`${base(shopId)}/queue?${params}`)
+        return authService.authenticatedRequest(`${base(shopId)}/queue?${params.toString()}`)
     },
     getQueueCount: (shopId) => authService.authenticatedRequest(`${base(shopId)}/queue/count`),
     cancelOrder: (shopId, orderId, reason) => authService.authenticatedRequest(`${base(shopId)}/${encodeURIComponent(orderId)}/cancel`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason })
+        body: { reason }
     }),
     detail: (shopId, id) => authService.authenticatedRequest(`${base(shopId)}/${encodeURIComponent(id)}`),
     ship: (shopId, id) => authService.authenticatedRequest(`${base(shopId)}/${encodeURIComponent(id)}/ship`, { method: 'POST' }),

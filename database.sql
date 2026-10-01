@@ -11,7 +11,7 @@ CREATE TABLE Users (
     google_id NVARCHAR(255) UNIQUE,
     full_name NVARCHAR(100),
     phone NVARCHAR(20),
-    role ENUM('ADMIN', 'SHOP', 'CUSTOMER', 'DELIVERY') NOT NULL,
+    role ENUM('ADMIN', 'SHOP', 'CUSTOMER', 'SHOP_STAFF', 'DELIVERY') NOT NULL,
     is_email_verified BOOLEAN DEFAULT FALSE,
     status ENUM('ACTIVE', 'INACTIVE', 'BANNED') DEFAULT 'ACTIVE',
     created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -185,6 +185,7 @@ CREATE TABLE Products (
     shelf_life_days INT, -- Thời gian bảo quản (ví dụ: 3-5 ngày)
     price DECIMAL(12, 2) NOT NULL,
     stock INT NOT NULL DEFAULT 0,
+    product_type ENUM('READY_MADE', 'CUSTOM') NOT NULL DEFAULT 'READY_MADE',
     status ENUM('ACTIVE', 'INACTIVE', 'OUT_OF_STOCK') DEFAULT 'ACTIVE',
     admin_hidden BOOLEAN NOT NULL DEFAULT FALSE,
     created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
