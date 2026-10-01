@@ -46,7 +46,7 @@ public class PaymentService {
     @Value("${sepay.va-prefix:TKPNXT}")
     private String vaPrefix;
 
-    @Value("${sepay.api-key:YOUR_SEPAY_API_KEY}")
+    @Value("${sepay.api-key:}")
     private String apiKey;
 
     /**
@@ -63,9 +63,10 @@ public class PaymentService {
      * 1. Sinh thông tin thanh toán VietQR cho đơn hàng
      */
     @Transactional(readOnly = true)
-    public PaymentQrResponse generatePaymentQr(String orderId) {
+    public PaymentQrResponse generatePaymentQr(String orderId, String userId) {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> ApiException.notFound("Không tìm thấy đơn hàng với id: " + orderId));
+        requireOwner(order, userId);
 
         if (order.getStatus() != OrderStatus.PENDING) {
             throw ApiException.badRequest("Đơn hàng này đã được thanh toán hoặc không ở trạng thái chờ.");
@@ -109,14 +110,15 @@ public class PaymentService {
         log.info("Nhận Webhook từ SePay: {}", webhookDto);
 
         // Kiểm tra API Key nếu có cấu hình
-        if (apiKey != null && !apiKey.equals("YOUR_SEPAY_API_KEY") && !apiKey.isBlank()) {
-            String token = authHeader != null && authHeader.startsWith("Apikey ")
-                    ? authHeader.substring(7).trim()
-                    : authHeader;
-            if (!apiKey.equals(token)) {
-                log.warn("SePay Webhook: Sai API Key xác thực!");
-                throw ApiException.forbidden("Unauthorized webhook request");
-            }
+        if (apiKey == null || apiKey.isBlank()) {
+            throw ApiException.forbidden("Webhook chưa được cấu hình.");
+        }
+        String token = authHeader != null && authHeader.startsWith("Apikey ")
+                ? authHeader.substring(7).trim()
+                : authHeader;
+        if (!apiKey.equals(token)) {
+            log.warn("SePay Webhook: Sai API Key xác thực!");
+            throw ApiException.forbidden("Unauthorized webhook request");
         }
 
         // Bỏ qua nếu là giao dịch tiền ra
@@ -147,6 +149,11 @@ public class PaymentService {
         BigDecimal transferAmount = webhookDto.getTransferAmount() != null
                 ? webhookDto.getTransferAmount()
                 : BigDecimal.ZERO;
+
+        if (matchedOrder.getStatus() != OrderStatus.PENDING ||
+                matchedOrder.getTotalAmount().compareTo(transferAmount) != 0) {
+            return Map.of("success", false, "message", "Order status or amount mismatch");
+        }
 
         // Cập nhật trạng thái đơn hàng sang PROCESSING
         matchedOrder.setStatus(OrderStatus.PROCESSING);
@@ -186,59 +193,54 @@ public class PaymentService {
      * 3. Kiểm tra trạng thái đơn hàng cho Frontend Polling (kèm đối soát chủ động thời gian thực)
      */
     @Transactional
-    public PaymentStatusResponse checkPaymentStatus(String orderId) {
+    public PaymentStatusResponse checkPaymentStatus(String orderId, String userId) {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> ApiException.notFound("Không tìm thấy đơn hàng với id: " + orderId));
+        requireOwner(order, userId);
 
         // Nếu có bản ghi payment chưa thành công -> chủ động đối soát với SePay
         Optional<Payment> latestPaymentOpt = paymentRepository.findTopByOrderIdOrderByCreatedDateDesc(orderId);
         if (latestPaymentOpt.isPresent()) {
             Payment payment = latestPaymentOpt.get();
-            if (payment.getStatus() != PaymentStatus.SUCCESS) {
+            if (payment.getPaymentMethod() == PaymentMethod.ONLINE && payment.getStatus() != PaymentStatus.SUCCESS) {
                 sePayGatewayService.reconcileWithSePayGateway(payment);
             }
         }
 
-        boolean isPaid = order.getStatus() == OrderStatus.PROCESSING
-                || order.getStatus() == OrderStatus.DELIVERING
-                || order.getStatus() == OrderStatus.COMPLETED
-                || order.getStatus() == OrderStatus.DEPOSIT_PAID;
-
         Optional<Payment> latestPayment = paymentRepository.findTopByOrderIdOrderByCreatedDateDesc(orderId);
+        boolean isPaid = latestPayment.map(p -> p.getStatus() == PaymentStatus.SUCCESS).orElse(false);
 
         return PaymentStatusResponse.builder()
                 .orderId(order.getId())
                 .orderStatus(order.getStatus().name())
                 .isPaid(isPaid)
-                .paidAmount(latestPayment.map(Payment::getAmount).orElse(BigDecimal.ZERO))
+                .paidAmount(latestPayment.filter(p -> p.getStatus() == PaymentStatus.SUCCESS).map(Payment::getAmount).orElse(BigDecimal.ZERO))
                 .transactionNo(latestPayment.map(Payment::getGatewayTransactionNo).orElse(null))
                 .message(isPaid ? "Đơn hàng đã được thanh toán thành công!" : "Đang chờ thanh toán...")
                 .build();
     }
 
+    private static void requireOwner(Order order, String userId) {
+        if (userId == null || order.getCustomer() == null || !userId.equals(order.getCustomer().getId())) {
+            throw ApiException.forbidden("Không có quyền truy cập đơn hàng này.");
+        }
+    }
+
     private Order findMatchingOrder(String content) {
-        Pattern pattern = Pattern.compile("(?i)DH([a-zA-Z0-9]+)");
+        Pattern pattern = Pattern.compile("(?i)DH([a-f0-9]{8})(?![a-f0-9])");
         Matcher matcher = pattern.matcher(content);
 
         if (matcher.find()) {
             String candidateCode = matcher.group(1).toUpperCase();
 
-            List<Order> pendingOrders = orderRepository.findAll();
-            for (Order o : pendingOrders) {
+            for (Order o : orderRepository.findAll()) {
+                if (o.getStatus() != OrderStatus.PENDING) continue;
                 String shortCode = o.getId().replace("-", "").toUpperCase();
-                if (shortCode.startsWith(candidateCode) || candidateCode.startsWith(shortCode.substring(0, Math.min(8, shortCode.length())))) {
+                if (shortCode.startsWith(candidateCode)) {
                     return o;
                 }
             }
         }
-
-        List<Order> allOrders = orderRepository.findAll();
-        for (Order o : allOrders) {
-            if (content.toLowerCase().contains(o.getId().toLowerCase())) {
-                return o;
-            }
-        }
-
         return null;
     }
 }

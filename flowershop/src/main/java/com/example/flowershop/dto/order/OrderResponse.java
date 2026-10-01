@@ -18,6 +18,8 @@ public class OrderResponse {
     private BigDecimal discountAmount;
     private BigDecimal totalAmount;
     private String deliveryAddressId;
+    private String recipientName;
+    private String recipientPhone;
     private List<OrderItemResponse> items;
     private LocalDateTime createdDate;
 

@@ -2,6 +2,7 @@ package com.example.flowershop.dto.order;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 import java.util.List;
@@ -26,6 +27,7 @@ public class MakeOrderRequest {
 
     // Họ và tên người nhận & số điện thoại nhận hàng
     private String recipientName;
+    @Size(max = 20)
     private String phone;
 }
 

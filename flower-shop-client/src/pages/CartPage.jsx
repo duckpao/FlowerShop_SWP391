@@ -23,20 +23,7 @@ export default function CartPage({ cart, loading, error, fetchCart, updateItem, 
   const [orderError, setOrderError] = useState(null);
   const [orderSuccess, setOrderSuccess] = useState(null);
 
-  // 1. Phục hồi thông tin đã nhập từ localStorage
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem('flower_checkout_info');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed.recipientName) setRecipientName(parsed.recipientName);
-        if (parsed.phone) setPhone(parsed.phone);
-        if (parsed.deliveryAddress) setDeliveryAddress(parsed.deliveryAddress);
-      }
-    } catch {}
-  }, []);
-
-  // 2. Nếu đăng nhập thì tự động lấy thông tin từ Profile và Sổ địa chỉ
+  // Nếu đăng nhập thì tự động lấy thông tin từ Profile và Sổ địa chỉ
   useEffect(() => {
     if (user) {
       if (user.fullName) {
@@ -70,26 +57,14 @@ export default function CartPage({ cart, loading, error, fetchCart, updateItem, 
 
   const handleRecipientNameChange = (val) => {
     setRecipientName(val);
-    try {
-      const prev = JSON.parse(localStorage.getItem('flower_checkout_info') || '{}');
-      localStorage.setItem('flower_checkout_info', JSON.stringify({ ...prev, recipientName: val }));
-    } catch {}
   };
 
   const handlePhoneChange = (val) => {
     setPhone(val);
-    try {
-      const prev = JSON.parse(localStorage.getItem('flower_checkout_info') || '{}');
-      localStorage.setItem('flower_checkout_info', JSON.stringify({ ...prev, phone: val }));
-    } catch {}
   };
 
   const handleDeliveryAddressChange = (val) => {
     setDeliveryAddress(val);
-    try {
-      const prev = JSON.parse(localStorage.getItem('flower_checkout_info') || '{}');
-      localStorage.setItem('flower_checkout_info', JSON.stringify({ ...prev, deliveryAddress: val }));
-    } catch {}
   };
 
   // Khi cart load xong, đồng bộ selectedItemIds
@@ -167,7 +142,6 @@ export default function CartPage({ cart, loading, error, fetchCart, updateItem, 
   // Xử lý thanh toán & đặt hàng
   const handlePlaceOrder = async () => {
     if (!isUserLoggedIn) {
-      localStorage.setItem('flower_checkout_info', JSON.stringify({ recipientName, phone, deliveryAddress }));
       navigate('/login?next=/cart');
       return;
     }
@@ -622,10 +596,7 @@ export default function CartPage({ cart, loading, error, fetchCart, updateItem, 
               {!isUserLoggedIn ? (
                 <Button
                   type="button"
-                  onClick={() => {
-                    localStorage.setItem('flower_checkout_info', JSON.stringify({ recipientName, phone, deliveryAddress }));
-                    navigate('/login?next=/cart');
-                  }}
+                  onClick={() => navigate('/login?next=/cart')}
                   disabled={selectedItems.length === 0}
                   className="w-full py-3.5 text-base font-bold shadow-md bg-brand-500 hover:bg-brand-600 text-white"
                 >

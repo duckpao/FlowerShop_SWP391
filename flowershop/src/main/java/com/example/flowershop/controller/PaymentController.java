@@ -7,6 +7,8 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import com.example.flowershop.dto.auth.CurrentUser;
 
 import java.util.Map;
 
@@ -25,10 +27,9 @@ public class PaymentController {
     @PostMapping("/payments/sepay/create")
     public ResponseEntity<CreatePaymentResponse> createPayment(
             @Valid @RequestBody CreatePaymentRequest request,
-            @RequestHeader(value = "X-User-Id", required = false) String headerUserId
+            @AuthenticationPrincipal CurrentUser currentUser
     ) {
-        String userId = request.getUserId() != null ? request.getUserId() : headerUserId;
-        CreatePaymentResponse response = sePayGatewayService.createPayment(request, userId);
+        CreatePaymentResponse response = sePayGatewayService.createPayment(request, currentUser.id());
         return ResponseEntity.ok(response);
     }
 
@@ -37,8 +38,8 @@ public class PaymentController {
      * POST /api/sepay/checkout/{orderId}
      */
     @PostMapping("/sepay/checkout/{orderId}")
-    public ResponseEntity<SePayCheckoutFormResponse> initiateCheckout(@PathVariable String orderId) {
-        return ResponseEntity.ok(sePayGatewayService.initiateCheckout(orderId));
+    public ResponseEntity<SePayCheckoutFormResponse> initiateCheckout(@PathVariable String orderId, @AuthenticationPrincipal CurrentUser currentUser) {
+        return ResponseEntity.ok(sePayGatewayService.initiateCheckout(orderId, currentUser.id()));
     }
 
     /**
@@ -61,9 +62,9 @@ public class PaymentController {
     @GetMapping("/payments/{paymentId}")
     public ResponseEntity<PaymentStatusResponse> getPaymentById(
             @PathVariable String paymentId,
-            @RequestHeader(value = "X-User-Id", required = false) String headerUserId
+            @AuthenticationPrincipal CurrentUser currentUser
     ) {
-        return ResponseEntity.ok(sePayGatewayService.getStatusById(paymentId, headerUserId));
+        return ResponseEntity.ok(sePayGatewayService.getStatusById(paymentId, currentUser.id()));
     }
 
     /**
@@ -73,9 +74,9 @@ public class PaymentController {
     @GetMapping("/payments/status-by-invoice/{invoiceNumber}")
     public ResponseEntity<PaymentStatusResponse> getPaymentByInvoice(
             @PathVariable String invoiceNumber,
-            @RequestHeader(value = "X-User-Id", required = false) String headerUserId
+            @AuthenticationPrincipal CurrentUser currentUser
     ) {
-        return ResponseEntity.ok(sePayGatewayService.getStatusByInvoice(invoiceNumber, headerUserId));
+        return ResponseEntity.ok(sePayGatewayService.getStatusByInvoice(invoiceNumber, currentUser.id()));
     }
 
     /**
@@ -83,8 +84,8 @@ public class PaymentController {
      * GET /api/payments/status-by-order/{orderId} và GET /api/payment/status/{orderId}
      */
     @GetMapping({"/payments/status-by-order/{orderId}", "/payment/status/{orderId}"})
-    public ResponseEntity<PaymentStatusResponse> getPaymentByOrder(@PathVariable String orderId) {
-        return ResponseEntity.ok(paymentService.checkPaymentStatus(orderId));
+    public ResponseEntity<PaymentStatusResponse> getPaymentByOrder(@PathVariable String orderId, @AuthenticationPrincipal CurrentUser currentUser) {
+        return ResponseEntity.ok(paymentService.checkPaymentStatus(orderId, currentUser.id()));
     }
 
     /**
@@ -92,8 +93,8 @@ public class PaymentController {
      * POST /api/payments/create-qr/{orderId} và POST /api/payment/create-qr/{orderId}
      */
     @PostMapping({"/payments/create-qr/{orderId}", "/payment/create-qr/{orderId}"})
-    public ResponseEntity<PaymentQrResponse> createQrPayment(@PathVariable String orderId) {
-        return ResponseEntity.ok(paymentService.generatePaymentQr(orderId));
+    public ResponseEntity<PaymentQrResponse> createQrPayment(@PathVariable String orderId, @AuthenticationPrincipal CurrentUser currentUser) {
+        return ResponseEntity.ok(paymentService.generatePaymentQr(orderId, currentUser.id()));
     }
 
     /**

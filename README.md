@@ -16,7 +16,7 @@ Dự án được chia thành hai phần độc lập:
 
 ## Database cho các chức năng trên nhánh Quangdv
 
-Sau khi khởi tạo database mới, cần chạy các migration trong `flowershop/sql/` theo thứ tự `001` đến `011` trên database `flower_shop_db`. Migration `011_online_cod_payment_methods.sql` quy chuẩn dữ liệu cũ về hai phương thức `ONLINE` và `COD`.
+Sau khi khởi tạo database mới, cần chạy các migration trong `flowershop/sql/` theo thứ tự `001` đến `012` trên database `flower_shop_db`. Migration `011_online_cod_payment_methods.sql` quy chuẩn dữ liệu cũ về hai phương thức `ONLINE` và `COD`.
 
 Với database đã chạy các migration này, không chạy lại toàn bộ: một số migration thêm cột hoặc ràng buộc chỉ được chạy một lần. Không chạy lại script khởi tạo trên database có dữ liệu cần giữ. Cập nhật code không tự động chạy migration.
 
@@ -302,6 +302,21 @@ http://localhost:8080
 ```
 
 ---
+
+## Test thanh toán SePay trên máy cá nhân
+
+Mỗi thành viên dùng thông tin **Sandbox** của SePay. Chủ tài khoản test lấy Merchant ID và Secret Key trong mục Sandbox rồi chia sẻ qua kênh riêng của nhóm. Thành viên cũng có thể tạo tài khoản Sandbox riêng. Không đưa khóa vào Git hoặc file `.example`.
+
+Trong thư mục `flowershop`, sao chép file mẫu và điền `sepay.merchant-id`, `sepay.secret-key`:
+
+```powershell
+Copy-Item application-sepay-local.properties.example application-sepay-local.properties
+.\gradlew.bat bootRun
+```
+
+File `application-sepay-local.properties` đã được Git ignore. File mẫu chọn Checkout và API đối soát của Sandbox, nên có thể thử đặt hàng và thanh toán giả lập mà không dùng tiền thật. Khi thử IPN, cấu hình thêm `sepay.ipn-secret` và URL callback công khai trong SePay; `localhost` không nhận được IPN từ Internet. Nếu không có khóa Sandbox, luồng thanh toán trực tuyến sẽ không khởi tạo được.
+
+Khóa Production từng được commit cần được thu hồi và cấp lại; xóa khóa khỏi bản hiện tại không xóa được lịch sử Git.
 
 ## 🎯 Tổng quan cấu trúc Project
 

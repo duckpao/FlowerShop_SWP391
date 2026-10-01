@@ -143,4 +143,16 @@ class JwtAuthenticationTests {
         mvc.perform(post("/api/auth/logout").cookie(refresh).session(session).header("X-CSRF-TOKEN",value)).andExpect(status().isOk());
         mvc.perform(get("/api/auth/me").header("Authorization","Bearer "+access)).andExpect(status().isUnauthorized());
     }
+    @Test void cartAndOrdersRequireCustomerTokenAndMatchingOwner() throws Exception {
+        String bearer = "Bearer " + login().accessToken();
+        User other = users.saveAndFlush(User.builder().id(UUID.randomUUID().toString())
+                .email("other-cart@example.com").fullName("Other Customer")
+                .passwordHash(encoder.encode(password)).role(UserRole.CUSTOMER)
+                .status(UserStatus.ACTIVE).isEmailVerified(true).build());
+        mvc.perform(get("/api/cart/" + user.getId())).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/orders/" + user.getId())).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/cart/" + other.getId()).header("Authorization", bearer)).andExpect(status().isForbidden());
+        mvc.perform(get("/api/orders/" + other.getId()).header("Authorization", bearer)).andExpect(status().isForbidden());
+        mvc.perform(get("/api/cart/" + user.getId()).header("Authorization", bearer)).andExpect(status().isOk());
+    }
 }

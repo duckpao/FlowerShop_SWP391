@@ -4,8 +4,11 @@ import com.example.flowershop.dto.common.MessageResponse;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.oauth2.jwt.JwtException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.server.ResponseStatusException;
@@ -61,6 +64,21 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<MessageResponse> handleInvalidArgument(IllegalArgumentException exception) {
         return ResponseEntity.badRequest().body(new MessageResponse(exception.getMessage()));
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<MessageResponse> handleUnreadableBody(HttpMessageNotReadableException exception) {
+        return ResponseEntity.badRequest().body(new MessageResponse("Dữ liệu JSON không hợp lệ."));
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<MessageResponse> handleAccessDenied(AccessDeniedException exception) {
+        return ResponseEntity.status(403).body(new MessageResponse("Không có quyền truy cập."));
+    }
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<MessageResponse> handleMissingResource(NoResourceFoundException exception) {
+        return ResponseEntity.status(404).body(new MessageResponse("Không tìm thấy tài nguyên."));
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)

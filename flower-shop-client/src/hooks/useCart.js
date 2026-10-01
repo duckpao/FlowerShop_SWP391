@@ -2,23 +2,25 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import cartApi from '../api/cartApi';
 import { API_BASE } from '../apiBase';
 
-const GUEST_CART_KEY = 'flower_guest_cart';
+// Quản lý giỏ hàng khách tạm thời trong bộ nhớ (In-memory), không lưu vào localStorage
+let inMemoryGuestItems = [];
+
+// Xóa key cũ trong localStorage nếu còn sót lại
+try {
+  localStorage.removeItem('flower_guest_cart');
+  localStorage.removeItem('flower_checkout_info');
+} catch {}
 
 function getGuestCart() {
-  try {
-    const raw = localStorage.getItem(GUEST_CART_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
+  return inMemoryGuestItems;
 }
 
 function saveGuestCart(items) {
-  try {
-    localStorage.setItem(GUEST_CART_KEY, JSON.stringify(items));
-  } catch (e) {
-    console.error('Failed to save guest cart to localStorage', e);
-  }
+  inMemoryGuestItems = items;
+}
+
+function clearGuestCart() {
+  inMemoryGuestItems = [];
 }
 
 function calculateGuestTotals(items) {
@@ -34,8 +36,8 @@ function calculateGuestTotals(items) {
 
 /**
  * Custom hook quản lý state giỏ hàng hỗ trợ cả Guest (chưa đăng nhập) và User đã đăng nhập.
- * - Khách (Guest): giỏ hàng lưu an toàn trong localStorage, hiển thị đầy đủ trên UI.
- * - Khi đăng nhập: tự động đồng bộ sản phẩm từ giỏ khách lên server DB của user.
+ * - Khách (Guest): giỏ hàng chỉ lưu tạm trong bộ nhớ (In-memory), KHÔNG lưu localStorage.
+ * - Người dùng (User): lưu trữ và đồng bộ an toàn trên máy chủ cơ sở dữ liệu.
  */
 export function useCart(userId) {
   const [cart, setCart] = useState(null);
@@ -85,7 +87,7 @@ export function useCart(userId) {
             await cartApi.addToCart(userId, { productId, quantity });
           }
         }
-        localStorage.removeItem(GUEST_CART_KEY);
+        clearGuestCart();
       } catch (err) {
         console.warn('Lỗi khi đồng bộ giỏ hàng của khách vào tài khoản:', err);
       } finally {

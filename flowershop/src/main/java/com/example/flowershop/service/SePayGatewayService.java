@@ -15,6 +15,8 @@ import com.example.flowershop.exception.ApiException;
 import com.example.flowershop.repository.OrderRepository;
 import com.example.flowershop.repository.PaymentRepository;
 import com.example.flowershop.util.SePaySignatureUtil;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -24,8 +26,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 @Slf4j
 @Service
@@ -34,23 +34,27 @@ public class SePayGatewayService {
 
     private final OrderRepository orderRepository;
     private final PaymentRepository paymentRepository;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Value("${sepay.merchant-id:SP-TEST-001}")
     private String merchantId;
 
-    @Value("${sepay.secret-key:sepay_secret_test_key}")
+    @Value("${sepay.secret-key:}")
     private String secretKey;
 
     @Value("${sepay.checkout-url:https://pay-sandbox.sepay.vn/v1/checkout/init}")
     private String checkoutUrl;
 
-    @Value("${sepay.success-url:http://localhost:5173/payment/success}")
+    @Value("${sepay.api-base-url:https://pgapi.sepay.vn}")
+    private String apiBaseUrl;
+
+    @Value("${sepay.success-url:http://localhost:8080/payment/success}")
     private String successUrl;
 
-    @Value("${sepay.error-url:http://localhost:5173/payment/error}")
+    @Value("${sepay.error-url:http://localhost:8080/payment/error}")
     private String errorUrl;
 
-    @Value("${sepay.cancel-url:http://localhost:5173/payment/cancel}")
+    @Value("${sepay.cancel-url:http://localhost:8080/payment/cancel}")
     private String cancelUrl;
 
     @Value("${sepay.ipn-secret:}")
@@ -67,14 +71,16 @@ public class SePayGatewayService {
      */
     @Transactional
     public CreatePaymentResponse createPayment(CreatePaymentRequest request, String authenticatedUserId) {
+        if (secretKey == null || secretKey.isBlank() || merchantId == null || merchantId.isBlank()) {
+            throw ApiException.badRequest("Cổng thanh toán chưa được cấu hình.");
+        }
         String orderId = request.getOrderId();
-        Order order = orderRepository.findById(orderId)
+        Order order = orderRepository.findByIdForUpdate(orderId)
                 .orElseThrow(() -> ApiException.notFound("Không tìm thấy đơn hàng với id: " + orderId));
 
         // PHASE 12: Xác thực quyền sở hữu đơn hàng
-        if (authenticatedUserId != null && !authenticatedUserId.isBlank()
-                && order.getCustomer() != null
-                && !order.getCustomer().getId().equals(authenticatedUserId)) {
+        if (authenticatedUserId == null || order.getCustomer() == null
+                || !order.getCustomer().getId().equals(authenticatedUserId)) {
             throw ApiException.forbidden("Bạn không có quyền thanh toán cho đơn hàng này.");
         }
 
@@ -85,9 +91,29 @@ public class SePayGatewayService {
         if (order.getStatus() == OrderStatus.CANCELLED) {
             throw ApiException.badRequest("Đơn hàng này đã bị hủy, không thể thanh toán.");
         }
+        if (order.getStatus() != OrderStatus.PENDING && order.getStatus() != OrderStatus.DEPOSIT_PAID
+                && order.getStatus() != OrderStatus.AWAITING_DEPOSIT) {
+            throw ApiException.badRequest("Đơn hàng không còn chờ thanh toán.");
+        }
+        if (paymentRepository.findByOrderId(orderId).stream().anyMatch(p -> p.getPaymentMethod() == PaymentMethod.COD)) {
+            throw ApiException.badRequest("Đơn COD không thể thanh toán trực tuyến.");
+        }
 
         // PHASE 2 & 3: Xác định PaymentType (FULL, DEPOSIT, FINAL)
         PaymentType paymentType = request.getPaymentType() != null ? request.getPaymentType() : PaymentType.FULL;
+        if (order.getOrderType() == com.example.flowershop.entity.enums.OrderType.STANDARD
+                && paymentType != PaymentType.FULL) {
+            throw ApiException.badRequest("Đơn hàng thường chỉ hỗ trợ thanh toán toàn bộ.");
+        }
+        if (order.getStatus() == OrderStatus.DEPOSIT_PAID && paymentType != PaymentType.FINAL) {
+            throw ApiException.badRequest("Đơn đã trả cọc chỉ được thanh toán phần còn lại.");
+        }
+        if (paymentType == PaymentType.FINAL && order.getStatus() != OrderStatus.DEPOSIT_PAID) {
+            throw ApiException.badRequest("Đơn hàng chưa thanh toán tiền cọc.");
+        }
+        if (paymentType == PaymentType.DEPOSIT && order.getStatus() == OrderStatus.DEPOSIT_PAID) {
+            throw ApiException.badRequest("Tiền cọc đã được thanh toán.");
+        }
 
         // PHASE 13: Server-side tính toán số tiền thanh toán (TUYỆT ĐỐI không tin amount từ React)
         BigDecimal payableAmount;
@@ -110,22 +136,24 @@ public class SePayGatewayService {
             payableAmount = order.getTotalAmount();
         }
 
-        // Tạo mã invoice duy nhất cho mỗi lần thanh toán (PHASE 2 & PHASE 9)
-        String invoiceNumber = "INV-" + getShortOrderCode(orderId) + "-" + paymentType + "-" + System.currentTimeMillis() % 1000000;
-
-        // Tạo bản ghi Payment với trạng thái PENDING
-        Payment payment = Payment.builder()
-                .id(UUID.randomUUID().toString())
-                .order(order)
-                .paymentType(paymentType)
-                .paymentMethod(PaymentMethod.ONLINE)
-                .amount(payableAmount)
-                .invoiceNumber(invoiceNumber)
-                .status(PaymentStatus.PENDING)
-                .createdBy(order.getCustomer() != null ? order.getCustomer().getId() : "SYSTEM")
-                .build();
-
-        paymentRepository.save(payment);
+        Payment payment = paymentRepository.findByOrderId(orderId).stream()
+                .filter(p -> p.getPaymentMethod() == PaymentMethod.ONLINE
+                        && p.getPaymentType() == paymentType && p.getStatus() == PaymentStatus.PENDING)
+                .findFirst().orElse(null);
+        if (payment == null) {
+            payment = Payment.builder()
+                    .id(UUID.randomUUID().toString())
+                    .order(order)
+                    .paymentType(paymentType)
+                    .paymentMethod(PaymentMethod.ONLINE)
+                    .amount(payableAmount)
+                    .invoiceNumber("INV-" + getShortOrderCode(orderId) + "-" + paymentType + "-" + UUID.randomUUID().toString().substring(0, 8))
+                    .status(PaymentStatus.PENDING)
+                    .createdBy(order.getCustomer().getId())
+                    .build();
+            paymentRepository.save(payment);
+        }
+        String invoiceNumber = payment.getInvoiceNumber();
 
         // PHASE 6: Xây dựng các fields thanh toán và chữ ký HMAC-SHA256 theo chuẩn tài liệu SePay
         long amountLong = payableAmount.longValue();
@@ -169,10 +197,10 @@ public class SePayGatewayService {
      * Backward-compatible: Khởi tạo cho controller cũ
      */
     @Transactional
-    public SePayCheckoutFormResponse initiateCheckout(String orderId) {
+    public SePayCheckoutFormResponse initiateCheckout(String orderId, String authenticatedUserId) {
         CreatePaymentResponse res = createPayment(
                 CreatePaymentRequest.builder().orderId(orderId).paymentType(PaymentType.FULL).build(),
-                null
+                authenticatedUserId
         );
         return SePayCheckoutFormResponse.builder()
                 .checkoutUrl(res.getCheckoutUrl())
@@ -188,11 +216,10 @@ public class SePayGatewayService {
         log.info("Nhận IPN callback từ SePay Gateway: {}", payload);
 
         // Kiểm tra bí mật xác thực nếu có cấu hình
-        if (ipnSecret != null && !ipnSecret.isBlank()) {
-            if (!ipnSecret.equals(xSecretKeyHeader) && !secretKey.equals(xSecretKeyHeader)) {
-                log.warn("SePay IPN: Sai bí mật xác thực X-Secret-Key!");
-                throw ApiException.forbidden("Invalid IPN secret key");
-            }
+        if (ipnSecret == null || ipnSecret.isBlank()) throw ApiException.forbidden("IPN chưa được cấu hình.");
+        if (!ipnSecret.equals(xSecretKeyHeader)) {
+            log.warn("SePay IPN: Sai bí mật xác thực X-Secret-Key!");
+            throw ApiException.forbidden("Invalid IPN secret key");
         }
 
         if (payload == null || !"ORDER_PAID".equalsIgnoreCase(payload.getNotificationType())) {
@@ -209,14 +236,8 @@ public class SePayGatewayService {
         String invoiceNumber = ipnOrder.getOrderInvoiceNumber();
 
         // Tìm kiếm Payment theo invoiceNumber
-        Payment payment = paymentRepository.findByInvoiceNumber(invoiceNumber)
+        Payment payment = paymentRepository.findByInvoiceNumberForUpdate(invoiceNumber)
                 .orElse(null);
-
-        // Fallback: Thử tìm theo order ID nếu là flow cũ
-        if (payment == null) {
-            payment = paymentRepository.findTopByOrderIdOrderByCreatedDateDesc(invoiceNumber)
-                    .orElse(null);
-        }
 
         if (payment == null) {
             log.warn("IPN: Không tìm thấy Payment tương ứng với invoiceNumber: {}", invoiceNumber);
@@ -228,9 +249,15 @@ public class SePayGatewayService {
             log.info("Giao dịch cho invoice {} đã được cập nhật thành công trước đó (Idempotent bypass).", invoiceNumber);
             return Map.of("success", true, "message", "Payment already processed");
         }
+        if (payment.getOrder().getStatus() == OrderStatus.CANCELLED) {
+            return Map.of("success", false, "message", "Order cancelled");
+        }
 
         // Lấy thông tin giao dịch từ SePay
         SePayIpnPayload.IpnTransaction transaction = payload.getTransaction();
+        if (transaction == null || !"APPROVED".equalsIgnoreCase(transaction.getTransactionStatus())) {
+            return Map.of("success", false, "message", "Transaction not approved");
+        }
         String transactionId = transaction != null && transaction.getTransactionId() != null
                 ? transaction.getTransactionId()
                 : UUID.randomUUID().toString();
@@ -240,7 +267,8 @@ public class SePayGatewayService {
                 : (ipnOrder.getOrderAmount() != null ? ipnOrder.getOrderAmount() : BigDecimal.ZERO);
 
         // PHASE 13: Kiểm tra khớp số tiền (Amount Validation)
-        if (payment.getAmount().compareTo(paidAmount) != 0) {
+        if (payment.getAmount().compareTo(paidAmount) != 0
+                || (ipnOrder.getOrderAmount() != null && payment.getAmount().compareTo(ipnOrder.getOrderAmount()) != 0)) {
             log.error("PHÁT HIỆN LỆCH TIỀN: invoice={}, Yêu cầu={}đ, SePay báo={}đ",
                     invoiceNumber, payment.getAmount(), paidAmount);
             payment.setStatus(PaymentStatus.FAILED);
@@ -285,7 +313,7 @@ public class SePayGatewayService {
      */
     @Transactional
     public boolean reconcileWithSePayGateway(Payment payment) {
-        if (payment == null || payment.getInvoiceNumber() == null) return false;
+        if (payment == null || payment.getPaymentMethod() != PaymentMethod.ONLINE || payment.getInvoiceNumber() == null) return false;
         if (payment.getStatus() == PaymentStatus.SUCCESS) return true;
 
         try {
@@ -295,7 +323,7 @@ public class SePayGatewayService {
             );
 
             // API Endpoint kiểm tra đơn hàng theo chuẩn tài liệu SePay Gateway
-            String pgApiUrl = "https://pgapi.sepay.vn/v1/order/detail/" + invoiceNumber;
+            String pgApiUrl = apiBaseUrl.replaceAll("/$", "") + "/v1/order/detail/" + invoiceNumber;
 
             java.net.http.HttpRequest req = java.net.http.HttpRequest.newBuilder()
                     .uri(java.net.URI.create(pgApiUrl))
@@ -312,22 +340,19 @@ public class SePayGatewayService {
                 String body = resp.body();
                 log.info("Kết quả đối soát từ SePay pgapi cho invoice {}: {}", invoiceNumber, body);
 
-                Matcher stMatcher = Pattern.compile("\"order_status\"\\s*:\\s*\"([^\"]+)\"").matcher(body);
-                if (stMatcher.find()) {
-                    String sepayStatus = stMatcher.group(1);
+                JsonNode root = objectMapper.readTree(body);
+                JsonNode details = root.has("data") && root.get("data").isObject() ? root.get("data") : root;
+                String sepayStatus = details.path("order_status").asText();
+                if (!sepayStatus.isBlank()) {
                     if ("CAPTURED".equalsIgnoreCase(sepayStatus)) {
-                        String transactionNo = null;
-                        Matcher txMatcher = Pattern.compile("\"order_id\"\\s*:\\s*\"([^\"]+)\"").matcher(body);
-                        if (txMatcher.find()) {
-                            transactionNo = txMatcher.group(1);
-                        }
-
-                        BigDecimal paidAmount = payment.getAmount();
-                        Matcher amtMatcher = Pattern.compile("\"order_amount\"\\s*:\\s*\"([^\"]+)\"").matcher(body);
-                        if (amtMatcher.find()) {
-                            try {
-                                paidAmount = new BigDecimal(amtMatcher.group(1));
-                            } catch (Exception ignored) {}
+                        String transactionNo = details.path("order_id").asText(null);
+                        String amountText = details.path("order_amount").asText(null);
+                        String returnedInvoice = details.path("order_invoice_number").asText(null);
+                        if (amountText == null || (returnedInvoice != null && !invoiceNumber.equals(returnedInvoice))) return false;
+                        BigDecimal paidAmount = new BigDecimal(amountText);
+                        if (payment.getAmount().compareTo(paidAmount) != 0 || payment.getOrder().getStatus() == OrderStatus.CANCELLED) {
+                            log.warn("SePay amount, invoice or order status mismatch for invoice {}", invoiceNumber);
+                            return false;
                         }
 
                         // Cập nhật Payment -> SUCCESS
@@ -368,14 +393,13 @@ public class SePayGatewayService {
      */
     @Transactional
     public PaymentStatusResponse getStatusByInvoice(String invoiceNumber, String authenticatedUserId) {
-        Payment payment = paymentRepository.findByInvoiceNumber(invoiceNumber)
+        Payment payment = paymentRepository.findByInvoiceNumberForUpdate(invoiceNumber)
                 .orElseThrow(() -> ApiException.notFound("Không tìm thấy thông tin thanh toán với mã hóa đơn: " + invoiceNumber));
 
         // Kiểm tra quyền truy cập nếu có authenticatedUserId
-        if (authenticatedUserId != null && !authenticatedUserId.isBlank()
-                && payment.getOrder() != null
-                && payment.getOrder().getCustomer() != null
-                && !payment.getOrder().getCustomer().getId().equals(authenticatedUserId)) {
+        if (authenticatedUserId == null || payment.getOrder() == null
+                || payment.getOrder().getCustomer() == null
+                || !payment.getOrder().getCustomer().getId().equals(authenticatedUserId)) {
             throw ApiException.forbidden("Bạn không có quyền xem thông tin giao dịch này.");
         }
 
@@ -409,10 +433,9 @@ public class SePayGatewayService {
         Payment payment = paymentRepository.findById(paymentId)
                 .orElseThrow(() -> ApiException.notFound("Không tìm thấy thông tin thanh toán với id: " + paymentId));
 
-        if (authenticatedUserId != null && !authenticatedUserId.isBlank()
-                && payment.getOrder() != null
-                && payment.getOrder().getCustomer() != null
-                && !payment.getOrder().getCustomer().getId().equals(authenticatedUserId)) {
+        if (authenticatedUserId == null || payment.getOrder() == null
+                || payment.getOrder().getCustomer() == null
+                || !payment.getOrder().getCustomer().getId().equals(authenticatedUserId)) {
             throw ApiException.forbidden("Bạn không có quyền xem thông tin giao dịch này.");
         }
 
