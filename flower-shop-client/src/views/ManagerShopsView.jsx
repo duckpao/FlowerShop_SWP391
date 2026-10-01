@@ -45,12 +45,17 @@ export default function ManagerShopsView({ role, section = "all" }) {
 
   useEffect(() => {
     if (provinces.length > 0 && c.address?.city && !c.address._ghnProvinceId) {
-      const prov = provinces.find(p => p.name === c.address.city);
+      const cityName = (c.address.city || '').trim().toLowerCase();
+      const prov = provinces.find(p => 
+        p.name.trim().toLowerCase() === cityName ||
+        p.name.trim().toLowerCase().includes(cityName) ||
+        cityName.includes(p.name.trim().toLowerCase())
+      );
       if (prov) {
-        c.setAddress(prev => ({ ...prev, _ghnProvinceId: prov.id }));
+        c.setAddress(prev => ({ ...prev, _ghnProvinceId: String(prov.id) }));
       }
     }
-  }, [provinces, c.address?.city]);
+  }, [provinces, c.address?.city, c.address?._ghnProvinceId]);
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -188,13 +193,12 @@ export default function ManagerShopsView({ role, section = "all" }) {
                           <select 
                             required
                             className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900"
-                            value={c.address.city || ''} 
+                            value={c.address?._ghnProvinceId || ''} 
                             onChange={(e) => {
                               const selectedOpt = e.target.options[e.target.selectedIndex];
                               c.setAddress({
                                 ...c.address, 
-                                city: selectedOpt.text,
-                                // We store province ID temporarily in ghnProvinceId to fetch districts, but it's not sent to backend
+                                city: e.target.value ? selectedOpt.text : '',
                                 _ghnProvinceId: e.target.value,
                                 district: '',
                                 ghnDistrictId: '',
@@ -205,7 +209,7 @@ export default function ManagerShopsView({ role, section = "all" }) {
                           >
                             <option value="">Chọn Tỉnh / Thành phố</option>
                             {provinces.map(p => (
-                              <option key={p.id} value={p.id}>{p.name}</option>
+                              <option key={p.id} value={String(p.id)}>{p.name}</option>
                             ))}
                           </select>
                         </div>
@@ -214,15 +218,15 @@ export default function ManagerShopsView({ role, section = "all" }) {
                           <Label>Quận / Huyện</Label>
                           <select 
                             required
-                            disabled={!c.address.city || !districts.length}
+                            disabled={!c.address?._ghnProvinceId || !districts.length}
                             className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 disabled:bg-gray-100 dark:disabled:bg-gray-800"
-                            value={c.address.ghnDistrictId || ''} 
+                            value={c.address?.ghnDistrictId ? String(c.address.ghnDistrictId) : ''} 
                             onChange={(e) => {
                               const selectedOpt = e.target.options[e.target.selectedIndex];
                               c.setAddress({
                                 ...c.address, 
-                                district: selectedOpt.text,
-                                ghnDistrictId: Number(e.target.value),
+                                district: e.target.value ? selectedOpt.text : '',
+                                ghnDistrictId: e.target.value ? Number(e.target.value) : '',
                                 ward: '',
                                 ghnWardCode: ''
                               })
@@ -230,7 +234,7 @@ export default function ManagerShopsView({ role, section = "all" }) {
                           >
                             <option value="">Chọn Quận / Huyện</option>
                             {districts.map(d => (
-                              <option key={d.id} value={d.id}>{d.name}</option>
+                              <option key={d.id} value={String(d.id)}>{d.name}</option>
                             ))}
                           </select>
                         </div>
@@ -239,21 +243,21 @@ export default function ManagerShopsView({ role, section = "all" }) {
                           <Label>Phường / Xã</Label>
                           <select 
                             required
-                            disabled={!c.address.ghnDistrictId || !wards.length}
+                            disabled={!c.address?.ghnDistrictId || !wards.length}
                             className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 disabled:bg-gray-100 dark:disabled:bg-gray-800"
-                            value={c.address.ghnWardCode || ''} 
+                            value={c.address?.ghnWardCode ? String(c.address.ghnWardCode) : ''} 
                             onChange={(e) => {
                               const selectedOpt = e.target.options[e.target.selectedIndex];
                               c.setAddress({
                                 ...c.address, 
-                                ward: selectedOpt.text,
+                                ward: e.target.value ? selectedOpt.text : '',
                                 ghnWardCode: e.target.value
                               })
                             }}
                           >
                             <option value="">Chọn Phường / Xã</option>
                             {wards.map(w => (
-                              <option key={w.id} value={w.id}>{w.name}</option>
+                              <option key={w.id} value={String(w.id)}>{w.name}</option>
                             ))}
                           </select>
                         </div>
