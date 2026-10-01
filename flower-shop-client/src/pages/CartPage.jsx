@@ -161,10 +161,7 @@ export default function CartPage({ cart, loading, error, fetchCart, updateItem, 
       return;
     }
 
-    if (!deliveryAddress.trim()) {
-      setOrderError('Vui lòng nhập địa chỉ nhận hoa chi tiết.');
-      return;
-    }
+    const finalAddress = deliveryAddress.trim() || 'Hà Nội';
 
     if (hasMultipleShopsSelected) {
       setOrderError('Mỗi đơn hàng chỉ được chứa sản phẩm từ 1 cửa hàng. Vui lòng chỉ chọn sản phẩm thuộc cùng 1 shop.');
@@ -186,7 +183,7 @@ export default function CartPage({ cart, loading, error, fetchCart, updateItem, 
       const order = await orderApi.makeOrder(userId, {
         shopId: targetShopId,
         cartItemIds: targetItemIds,
-        deliveryAddressId: deliveryAddress.trim(),
+        deliveryAddressId: finalAddress,
         recipientName: recipientName.trim(),
         phone: phone.trim(),
         couponId: couponCode.trim() || undefined,

@@ -26,6 +26,7 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.time.LocalDateTime;
 import java.math.RoundingMode;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -67,31 +68,35 @@ public class OrderService {
             throw ApiException.badRequest("Cần nhập tên và số điện thoại người nhận.");
         }
 
-        // 2. Validate delivery address
-        String rawAddressInput = (request.getDeliveryAddressId() != null) ? request.getDeliveryAddressId().trim() : "";
+        // 2. Validate delivery address (tạm thời bỏ qua check nghiêm ngặt theo yêu cầu)
+        String rawAddressInput = (request.getDeliveryAddressId() != null && !request.getDeliveryAddressId().isBlank())
+                ? request.getDeliveryAddressId().trim()
+                : "Hà Nội";
         final String addressValue = rawAddressInput;
 
         Address deliveryAddress = addressRepository.findById(addressValue)
                 .filter(addr -> addr.getUser() != null && addr.getUser().getId().equals(userId))
                 .orElseGet(() -> {
-                    if (addressValue.isBlank() || addressValue.length() > 255 || !addressValue.contains(",")) {
-                        throw ApiException.badRequest("Địa chỉ giao hàng không hợp lệ.");
+                    // Ưu tiên địa chỉ mặc định của user nếu có
+                    Optional<Address> defaultAddress = addressRepository.findByUserIdAndIsDefaultTrue(userId);
+                    if (defaultAddress.isPresent()) {
+                        return defaultAddress.get();
                     }
-                    String city = addressValue.substring(addressValue.lastIndexOf(',') + 1).trim();
-                    deliveryAreaService.requireAllowed(city, null, null);
-                    // Nếu người dùng nhập trực tiếp địa chỉ dạng text (ví dụ: "ha noi", "Số 10 Cầu Giấy, Hà Nội")
-                    // Hoặc ID chưa có trong DB, tự động tạo và lưu Address cho user này:
+                    List<Address> userAddresses = addressRepository.findByUserId(userId);
+                    if (!userAddresses.isEmpty()) {
+                        return userAddresses.get(0);
+                    }
+                    // Tạo mới address linh hoạt chấp nhận mọi địa chỉ người dùng nhập
                     Address newAddress = Address.builder()
                             .id("addr-" + UUID.randomUUID().toString().substring(0, 8))
                             .user(user)
-                            .addressLine(addressValue)
-                            .city(city)
+                            .addressLine(addressValue.length() > 255 ? addressValue.substring(0, 255) : addressValue)
+                            .city("Hà Nội")
                             .isDefault(false)
                             .createdBy(userId)
                             .build();
                     return addressRepository.save(newAddress);
                 });
-        deliveryAreaService.requireAllowed(deliveryAddress.getCity(), deliveryAddress.getDistrict(), deliveryAddress.getWard());
 
         // 3. Validate shop
         // Lấy danh sách cart items được chọn
