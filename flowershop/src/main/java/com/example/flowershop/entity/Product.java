@@ -63,6 +63,10 @@ public class Product {
     @Builder.Default
     private Integer stock = 0;
 
+    @Builder.Default
+    @Column(name = "admin_hidden", nullable = false)
+    private boolean adminHidden = false;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status")
     @Builder.Default

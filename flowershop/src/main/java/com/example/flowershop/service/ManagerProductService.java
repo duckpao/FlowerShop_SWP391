@@ -16,152 +16,60 @@ import java.util.*;
 @Service
 @Transactional(readOnly = true)
 public class ManagerProductService {
-
-    public record Input(@NotBlank
-            @Size(max = 255) String name, @NotNull
-            @Size(max = 5000) String description,
-            @NotBlank
-            @Size(max = 36) String categoryId, @NotNull
-            @DecimalMin("0.01")
-            @Digits(integer = 10, fraction = 2) BigDecimal price,
-            @NotNull
-            @Min(0)
-            @Max(1000000) Integer stock, @NotNull ProductStatus status) {
-
-    }
-
-    public record Result(String id, String shopId, String categoryId, String categoryName, String name, String description, BigDecimal price, Integer stock, ProductStatus status, java.util.List<String> images) {
-
-    }
-
-    public record Results(List<Result> content, int page, int totalPages, long totalElements) {
-
-    }
-
-    public record CategoryOption(String id, String name) {
-
-    }
-
-    public record CatalogItem(String id, String shopId, String shopName, String categoryId, String categoryName, String name, String description, BigDecimal price, Integer stock, java.util.List<String> images) {
-
-    }
-
-    public record CatalogResults(List<CatalogItem> content, int page, int totalPages, long totalElements) {
-
-    }
-
-    public record ImageItem(String id, String url, boolean primary, int displayOrder) {
-
-    }
-
-    public record VideoItem(String id, String url, String title, String description, int displayOrder) {
-
-    }
-
-    public record VideoInfo(String url, String title, String description) {
-
-    }
-
-    public record Detail(String id, String shopId, String shopName, String categoryId, String categoryName, String name, String description, BigDecimal price, Integer stock, List<String> images, List<VideoInfo> videos) {
-
-    }
-    private static final Set<String> ALLOWED_IMAGE_TYPES = Set.of("image/jpeg", "image/png", "image/webp");
-    private static final long MAX_IMAGE_BYTES = 5 * 1024 * 1024;
-    private static final Set<String> ALLOWED_VIDEO_TYPES = Set.of("video/mp4", "video/webm", "video/quicktime");
-    private static final long MAX_VIDEO_BYTES = 50 * 1024 * 1024;
-    private final ShopRepository shops;
-    private final ProductRepository products;
-    private final CategoryRepository categories;
-    private final ProductImageRepository images;
-    private final ProductVideoRepository videos;
-    private final CloudinaryService cloudinary;
-
-    public ManagerProductService(ShopRepository s, ProductRepository p, CategoryRepository c, ProductImageRepository images, ProductVideoRepository videos, CloudinaryService cloudinary) {
-        shops = s;
-        products = p;
-        categories = c;
-        this.images = images;
-        this.videos = videos;
-        this.cloudinary = cloudinary;
-    }
-
-    private static ResponseStatusException missing() {
-        return new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy shop hoặc sản phẩm.");
-    }
-
-    private Shop owned(String id, String actor, boolean write) {
-        var shop = (write ? shops.findForUpdate(id) : shops.findById(id)).orElseThrow(ManagerProductService::missing);
-        if (!shop.getOwner().getId().equals(actor)) {
-            throw missing();
-        }
-        if (write && (shop.getStatus() != ShopStatus.ACTIVE || shop.getOwner().getRole() != UserRole.SHOP || shop.getOwner().getStatus() != UserStatus.ACTIVE)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Shop phải được duyệt và đang hoạt động để quản lý mặt hàng.");
-        }
+    public record ImageInput(@NotBlank @Size(max=500)
+        @Pattern(regexp="https://[^\\s]+",message="Ảnh phải là URL HTTPS") String url, boolean primary) {}
+    /** images = null giữ nguyên ảnh cũ; khác null thì thay toàn bộ danh sách. */
+    public record Input(@NotBlank @Size(max=255) String name,@NotNull @Size(max=5000) String description,
+        @NotBlank @Size(max=36) String categoryId,@NotNull @DecimalMin("0.01") @Digits(integer=10,fraction=2) BigDecimal price,
+        @NotNull @Min(0) @Max(1000000) Integer stock,@NotNull ProductStatus status,
+        @jakarta.validation.Valid @Size(max=10) List<ImageInput> images) {}
+    public record Result(String id,String shopId,String categoryId,String categoryName,String name,String description,BigDecimal price,Integer stock,ProductStatus status,boolean adminHidden,List<String> images) {}
+    public record Results(List<Result> content,int page,int totalPages,long totalElements) {}
+    public record CategoryOption(String id,String name) {}
+    public record ImageItem(String id,String imageUrl,boolean primary,int displayOrder) {}
+    public record VideoItem(String id,String videoUrl,String title,String description,int displayOrder) {}
+    private static final long MAX_IMAGE_BYTES = 5L*1024*1024;
+    private static final long MAX_VIDEO_BYTES = 50L*1024*1024;
+    private static final Set<String> ALLOWED_IMAGE_TYPES = Set.of("image/jpeg","image/png","image/webp");
+    private static final Set<String> ALLOWED_VIDEO_TYPES = Set.of("video/mp4","video/webm","video/quicktime");
+    private final ShopRepository shops;private final ProductRepository products;private final CategoryRepository categories;
+    private final ProductImageRepository images;private final ProductVideoRepository videos;private final CloudinaryService cloudinary;
+    public ManagerProductService(ShopRepository s,ProductRepository p,CategoryRepository c,ProductImageRepository i,ProductVideoRepository v,CloudinaryService cl) {shops=s;products=p;categories=c;images=i;videos=v;cloudinary=cl;}
+    private static ResponseStatusException missing() {return new ResponseStatusException(HttpStatus.NOT_FOUND,"Không tìm thấy shop hoặc sản phẩm.");}
+    private Shop owned(String id,String actor,boolean write) {
+        var shop=(write?shops.findForUpdate(id):shops.findById(id)).orElseThrow(ManagerProductService::missing);
+        if(!shop.getOwner().getId().equals(actor)) throw missing();
+        if(write && (shop.getStatus()!=ShopStatus.ACTIVE || shop.getOwner().getRole()!=UserRole.SHOP || shop.getOwner().getStatus()!=UserStatus.ACTIVE)) throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Shop phải được duyệt và đang hoạt động để quản lý mặt hàng.");
         return shop;
     }
-
-    private Result result(Product p) {
-        var urls = images.findByProductIdOrderByDisplayOrderAsc(p.getId()).stream().map(ProductImage::getImageUrl).toList();
-        return new Result(p.getId(), p.getShop().getId(), p.getCategory().getId(), p.getCategory().getName(), p.getName(), p.getDescription(), p.getPrice(), p.getStock(), p.getStatus(), urls);
-    }
-
-    private Pageable page(int page) {
-        if (page < 0 || page > 100000) {
-            throw new IllegalArgumentException("Trang không hợp lệ.");
-        
-        }return PageRequest.of(page, 20, Sort.by(Sort.Order.desc("createdDate"), Sort.Order.asc("id")));
-    }
-
-    private Results response(Page<Product> p) {
-        return new Results(p.getContent().stream().map(this::result).toList(), p.getNumber(), p.getTotalPages(), p.getTotalElements());
-    }
-
-    public Results list(String shop, String actor, int page) {
-        owned(shop, actor, false);
-        return response(products.findByShopId(shop, page(page)));
-    }
-
-    public Results published(String shop, int page) {
-        shops.findById(shop).filter(s -> s.getStatus() == ShopStatus.ACTIVE).orElseThrow(ManagerProductService::missing);
-        return response(products.findByShopIdAndStatus(shop, ProductStatus.ACTIVE, page(page)));
-    }
-
-    public List<CategoryOption> categories() {
-        return categories.findByStatusOrderByNameAsc(CategoryStatus.ACTIVE).stream().map(c -> new CategoryOption(c.getId(), c.getName())).toList();
-    }
-
-    private CatalogItem catalogItem(Product p) {
-        var urls = images.findByProductIdOrderByDisplayOrderAsc(p.getId()).stream().map(ProductImage::getImageUrl).toList();
-        return new CatalogItem(p.getId(), p.getShop().getId(), p.getShop().getName(), p.getCategory().getId(), p.getCategory().getName(), p.getName(), p.getDescription(), p.getPrice(), p.getStock(), urls);
-    }
-
-    public CatalogResults catalog(String categoryId, String q, int page) {
-        String query = (q == null || q.isBlank()) ? null : q.strip();
-        if (query != null && query.length() > 100) {
-            throw new IllegalArgumentException("Từ khóa tìm kiếm quá dài.");
+    // Ảnh chính đứng đầu: giao diện dựng lại cờ primary theo vị trí, nên thứ tự này giữ đúng ảnh chính khi sửa sản phẩm.
+    private Result result(Product p) {return new Result(p.getId(),p.getShop().getId(),p.getCategory().getId(),p.getCategory().getName(),p.getName(),p.getDescription(),p.getPrice(),p.getStock(),p.getStatus(),p.isAdminHidden(),
+        images.findByProductIdOrderByDisplayOrderAscIdAsc(p.getId()).stream()
+            .sorted(java.util.Comparator.comparingInt(i->Boolean.TRUE.equals(i.getIsPrimary())?0:1))
+            .map(ProductImage::getImageUrl).toList());}
+    private Pageable page(int page) {if(page<0 || page>100000) throw new IllegalArgumentException("Trang không hợp lệ.");return PageRequest.of(page,20,Sort.by(Sort.Order.desc("createdDate"),Sort.Order.asc("id")));}
+    private Results response(Page<Product> p) {return new Results(p.getContent().stream().map(this::result).toList(),p.getNumber(),p.getTotalPages(),p.getTotalElements());}
+    public Results list(String shop,String actor,int page) {owned(shop,actor,false);return response(products.findByShopId(shop,page(page)));}
+    public List<CategoryOption> categories() {return categories.findByStatusOrderByNameAsc(CategoryStatus.ACTIVE).stream().map(c->new CategoryOption(c.getId(),c.getName())).toList();}
+    @Transactional public Result save(String shopId,String id,String actor,Input input) {
+        var shop=owned(shopId,actor,true);
+        var product=id==null?new Product():products.findByIdAndShopId(id,shopId).orElseThrow(ManagerProductService::missing);
+        var category=categories.findById(input.categoryId()).filter(c->c.getStatus()==CategoryStatus.ACTIVE).orElseThrow(()->new IllegalArgumentException("Danh mục không hợp lệ hoặc đã ngừng hoạt động."));
+        if(id==null) {product.setId(UUID.randomUUID().toString());product.setShop(shop);product.setCreatedBy(actor);}
+        // adminHidden không nằm trong Input nên cờ kiểm duyệt của Admin luôn được giữ nguyên.
+        product.setName(input.name().strip());product.setDescription(input.description().strip());product.setCategory(category);product.setPrice(input.price());product.setStock(input.stock());product.setStatus(input.status());product.setLastModifyBy(actor);
+        var stored=products.saveAndFlush(product);
+        if(input.images()!=null) {
+            images.deleteByProductId(stored.getId());images.flush();
+            var list=input.images();
+            int primary=java.util.stream.IntStream.range(0,list.size()).filter(i->list.get(i).primary()).findFirst().orElse(0);
+            for(int i=0;i<list.size();i++)
+                images.save(ProductImage.builder().id(UUID.randomUUID().toString()).product(stored)
+                    .imageUrl(list.get(i).url().strip()).isPrimary(i==primary).displayOrder(i)
+                    .createdBy(actor).lastModifyBy(actor).build());
+            images.flush();
         }
-        var result = products.searchCatalog(ProductStatus.ACTIVE, ShopStatus.ACTIVE, (categoryId == null || categoryId.isBlank()) ? null : categoryId, query, page(page));
-        return new CatalogResults(result.getContent().stream().map(this::catalogItem).toList(), result.getNumber(), result.getTotalPages(), result.getTotalElements());
-    }
-
-    @Transactional
-    public Result save(String shopId, String id, String actor, Input input) {
-        var shop = owned(shopId, actor, true);
-        var product = id == null ? new Product() : products.findByIdAndShopId(id, shopId).orElseThrow(ManagerProductService::missing);
-        var category = categories.findById(input.categoryId()).filter(c -> c.getStatus() == CategoryStatus.ACTIVE).orElseThrow(() -> new IllegalArgumentException("Danh mục không hợp lệ hoặc đã ngừng hoạt động."));
-        if (id == null) {
-            product.setId(UUID.randomUUID().toString());
-            product.setShop(shop);
-            product.setCreatedBy(actor);
-        }
-        product.setName(input.name().strip());
-        product.setDescription(input.description().strip());
-        product.setCategory(category);
-        product.setPrice(input.price());
-        product.setStock(input.stock());
-        product.setStatus(input.status());
-        product.setLastModifyBy(actor);
-        return result(products.saveAndFlush(product));
+        return result(stored);
     }
 
     @Transactional
@@ -259,13 +167,5 @@ public class ManagerProductService {
         products.findByIdAndShopId(productId, shopId).orElseThrow(ManagerProductService::missing);
         var video = videos.findByIdAndProductId(videoId, productId).orElseThrow(ManagerProductService::missing);
         videos.delete(video);
-    }
-
-    public Detail detail(String productId) {
-        var product = products.findById(productId).filter(p -> p.getStatus() == ProductStatus.ACTIVE && p.getShop().getStatus() == ShopStatus.ACTIVE).orElseThrow(ManagerProductService::missing);
-        var urls = images.findByProductIdOrderByDisplayOrderAsc(productId).stream().map(ProductImage::getImageUrl).toList();
-        var vids = videos.findByProductIdOrderByDisplayOrderAsc(productId).stream().map(v -> new VideoInfo(v.getVideoUrl(), v.getTitle(), v.getDescription())).toList();
-        return new Detail(product.getId(), product.getShop().getId(), product.getShop().getName(), product.getCategory().getId(), product.getCategory().getName(),
-                product.getName(), product.getDescription(), product.getPrice(), product.getStock(), urls, vids);
     }
 }
