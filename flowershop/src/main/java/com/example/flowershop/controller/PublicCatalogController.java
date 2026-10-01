@@ -2,8 +2,10 @@ package com.example.flowershop.controller;
 
 import com.example.flowershop.service.CatalogService;
 import com.example.flowershop.service.ProductReviewService;
+import com.example.flowershop.entity.enums.ProductType;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 @RestController
@@ -25,10 +27,13 @@ public class PublicCatalogController {
     public CatalogService.Results browse(@RequestParam(defaultValue = "") String q,
             @RequestParam(required = false) String categoryId,
             @RequestParam(required = false) String shopId,
+            @RequestParam(required = false) ProductType type,
+            @RequestParam(required = false) BigDecimal minPrice,
+            @RequestParam(required = false) BigDecimal maxPrice,
             @RequestParam(defaultValue = "newest") String sort,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "12") int size) {
-        return catalog.browse(q, categoryId, shopId, sort, page, size);
+        return catalog.browse(q, categoryId, shopId, type, minPrice, maxPrice, sort, page, size);
     }
 
     @GetMapping("/products/{id}")
