@@ -237,6 +237,35 @@ private static ResponseStatusException notFound() {
         return status;
     }
 
+    @Transactional
+    public DeliveryStatus simulateDelivered(String shopId, String actor, String orderId) {
+        owned(shopId, actor);
+        Order o = orders.findByIdAndShopId(orderId, shopId).orElseThrow(ManagerOrderService::notFound);
+        Delivery d = deliveries.findByOrderId(orderId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Đơn hàng chưa có vận đơn GHN."));
+
+        try {
+            ghn.switchStatus(d.getTrackingCode(), "delivered");
+        } catch (Exception e) {
+            // Log if needed
+        }
+
+        d.setStatus(DeliveryStatus.DELIVERED);
+        d.setLastModifyBy(actor);
+        deliveries.save(d);
+
+        o.setStatus(OrderStatus.COMPLETED);
+        o.setLastModifyBy(actor);
+        orders.save(o);
+
+        payments.findByOrderId(orderId).forEach(p -> {
+            p.setStatus(PaymentStatus.SUCCESS);
+            p.setLastModifyBy(actor);
+        });
+
+        return DeliveryStatus.DELIVERED;
+    }
+
     public record QueueCount(long pendingCount) {}
     public record CancelRequest(String reason) {}
 

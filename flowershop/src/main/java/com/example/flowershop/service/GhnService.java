@@ -203,4 +203,9 @@ public class GhnService {
         String status = data.path("status").asText();
         return STATUS_MAP.getOrDefault(status, DeliveryStatus.FAILED);
     }
+
+    public void switchStatus(String orderCode, String targetStatus) {
+        ensureConfigured();
+        post("/shiip/public-api/v2/switch-status/" + targetStatus, Map.of("order_code", orderCode));
+    }
 }

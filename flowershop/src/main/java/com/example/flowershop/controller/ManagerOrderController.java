@@ -51,6 +51,13 @@ public class ManagerOrderController {
         return service.refreshStatus(shopId, u.id(), id).name();
     }
 
+    @PostMapping("/{id}/simulate-delivered")
+    @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
+    public String simulateDelivered(@PathVariable String shopId, @PathVariable String id,
+                                    @AuthenticationPrincipal CurrentUser u) {
+        return service.simulateDelivered(shopId, u.id(), id).name();
+    }
+
     @GetMapping("/queue")
     public ManagerOrderService.Results queue(@PathVariable String shopId, @AuthenticationPrincipal CurrentUser u,
                                             @RequestParam(defaultValue = "0") int page,
