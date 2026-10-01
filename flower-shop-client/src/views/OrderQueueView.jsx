@@ -136,6 +136,16 @@ export default function OrderQueueView({ shop: initialShop }) {
         } catch (e) { setError(e.message) } finally { setBusy(false) }
     }
 
+    const simulateDelivered = async orderSummary => {
+        if (!confirm('Bạn có muốn giả lập GHN giao thành công cho đơn hàng này?')) return
+        setBusy(true); setError(''); setNotice('')
+        try {
+            await managerOrderService.simulateDelivered(shop.id, orderSummary.id)
+            setNotice(`Đã giả lập giao thành công đơn hàng ${orderSummary.id.substring(0,8)} trên GHN. Đơn chuyển sang Hoàn thành!`)
+            load(page)
+        } catch (e) { setError(e.message) } finally { setBusy(false) }
+    }
+
     const openCancelModal = (orderSummary) => {
         setSelectedOrder(orderSummary)
         setCancelReason('')
@@ -251,9 +261,14 @@ export default function OrderQueueView({ shop: initialShop }) {
                                                     )}
                                                     
                                                     {o.status === 'DELIVERING' && (
-                                                        <Button size="sm" variant="outline" className="text-brand-600 border-brand-200 hover:bg-brand-50" onClick={() => refreshShippingStatus(o)} disabled={busy}>
-                                                            Cập nhật trạng thái giao hàng
-                                                        </Button>
+                                                        <>
+                                                            <Button size="sm" variant="outline" className="text-brand-600 border-brand-200 hover:bg-brand-50" onClick={() => refreshShippingStatus(o)} disabled={busy}>
+                                                                Kiểm tra GHN
+                                                            </Button>
+                                                            <Button size="sm" className="bg-success-600 hover:bg-success-700 text-white" onClick={() => simulateDelivered(o)} disabled={busy}>
+                                                                Giả lập Giao xong
+                                                            </Button>
+                                                        </>
                                                     )}
                                                     
                                                     {(o.status === 'PENDING' || o.status === 'AWAITING_DEPOSIT' || o.status === 'PROCESSING') && (
