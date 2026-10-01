@@ -13,7 +13,7 @@ export function useCatalogController() {
   useEffect(() => {
     let active = true
     catalogService.categories()
-      .then(list => { if (active) setCategories(list) })
+      .then(list => { if (active) setCategories(Array.isArray(list) ? list : []) })
       .catch(() => { if (active) setCategories([]) })
     return () => { active = false }
   }, [])

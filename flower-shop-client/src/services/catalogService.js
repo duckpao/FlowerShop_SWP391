@@ -1,5 +1,7 @@
+import { API_BASE } from '../apiBase'
+
 async function get(path) {
-  const response = await fetch(path, { cache: 'no-store' })
+  const response = await fetch(`${API_BASE}${path}`, { cache: 'no-store' })
   const data = await response.json().catch(() => ({}))
   if (!response.ok) {
     const error = new Error(data.message || 'Không tải được dữ liệu sản phẩm.')
