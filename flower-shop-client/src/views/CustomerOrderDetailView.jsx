@@ -12,7 +12,7 @@ const statusColors = {
     PENDING:'warning', PROCESSING:'info', DELIVERING:'info', COMPLETED:'success', CANCELLED:'error', REFUNDED:'error'
 }
 const statusLabels = {
-    PENDING:'Chờ xác nhận', PROCESSING:'Đang xử lý', DELIVERING:'Đang giao', COMPLETED:'Đã giao', CANCELLED:'Đã hủy', REFUNDED:'Đã hoàn tiền'
+    PENDING:'Chờ xác nhận', PROCESSING:'Đang chuẩn bị', DELIVERING:'Đang giao', COMPLETED:'Đã giao', CANCELLED:'Đã hủy', REFUNDED:'Đã hoàn tiền'
 }
 
 export default function CustomerOrderDetailView() {

@@ -15,7 +15,7 @@ const statusColors = {
     COMPLETED: 'success', CANCELLED: 'error', REFUNDED: 'error',
 }
 const statusLabels = {
-    PENDING: 'Chờ xác nhận', PROCESSING: 'Đang xử lý', DELIVERING: 'Đang giao',
+    PENDING: 'Chờ xác nhận', PROCESSING: 'Đang chuẩn bị', DELIVERING: 'Đang giao',
     COMPLETED: 'Đã giao', CANCELLED: 'Đã hủy', REFUNDED: 'Đã hoàn tiền',
 }
 
