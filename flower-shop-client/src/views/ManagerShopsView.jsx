@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { useManagerShopController } from "../controllers/useManagerShopController";
 import { shopStatusLabels } from "../models/shopModel";
 import StaffApplicationsView from "./StaffApplicationsView";
@@ -14,6 +15,42 @@ export default function ManagerShopsView({ role, section = "all" }) {
   const c = useManagerShopController(role);
   const editable =
     role === "SHOP" && ["ACTIVE", "PENDING"].includes(c.selected?.status);
+
+  // GHN Address logic
+  const [provinces, setProvinces] = useState([]);
+  const [districts, setDistricts] = useState([]);
+  const [wards, setWards] = useState([]);
+
+  useEffect(() => {
+    fetch('/api/public/ghn/provinces').then(r => r.json()).then(setProvinces).catch(console.error);
+  }, []);
+
+  useEffect(() => {
+    if (c.address?._ghnProvinceId) {
+      fetch(`/api/public/ghn/provinces/${c.address._ghnProvinceId}/districts`)
+        .then(r => r.json()).then(setDistricts).catch(console.error);
+    } else {
+      setDistricts([]);
+    }
+  }, [c.address?._ghnProvinceId]);
+
+  useEffect(() => {
+    if (c.address?.ghnDistrictId) {
+      fetch(`/api/public/ghn/districts/${c.address.ghnDistrictId}/wards`)
+        .then(r => r.json()).then(setWards).catch(console.error);
+    } else {
+      setWards([]);
+    }
+  }, [c.address?.ghnDistrictId]);
+
+  useEffect(() => {
+    if (provinces.length > 0 && c.address?.city && !c.address._ghnProvinceId) {
+      const prov = provinces.find(p => p.name === c.address.city);
+      if (prov) {
+        c.setAddress(prev => ({ ...prev, _ghnProvinceId: prov.id }));
+      }
+    }
+  }, [provinces, c.address?.city]);
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -147,29 +184,90 @@ export default function ManagerShopsView({ role, section = "all" }) {
                     <form onSubmit={c.saveAddress}>
                       <fieldset disabled={c.busy || !editable} className="space-y-4">
                         <div>
-                          <Label>Thành phố</Label>
-                          <Input required readOnly value={c.address.city} />
+                          <Label>Tỉnh / Thành phố</Label>
+                          <select 
+                            required
+                            className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900"
+                            value={c.address.city || ''} 
+                            onChange={(e) => {
+                              const selectedOpt = e.target.options[e.target.selectedIndex];
+                              c.setAddress({
+                                ...c.address, 
+                                city: selectedOpt.text,
+                                // We store province ID temporarily in ghnProvinceId to fetch districts, but it's not sent to backend
+                                _ghnProvinceId: e.target.value,
+                                district: '',
+                                ghnDistrictId: '',
+                                ward: '',
+                                ghnWardCode: ''
+                              })
+                            }}
+                          >
+                            <option value="">Chọn Tỉnh / Thành phố</option>
+                            {provinces.map(p => (
+                              <option key={p.id} value={p.id}>{p.name}</option>
+                            ))}
+                          </select>
                         </div>
-                        {[
-                          ["district", "Quận / Huyện", 100],
-                          ["ward", "Phường / Xã", 100],
-                          ["addressLine", "Số nhà, đường", 255],
-                        ].map(([key, label, max]) => (
-                          <div key={key}>
-                            <Label>{label}</Label>
-                            <Input
-                              required
-                              maxLength={max}
-                              value={c.address[key]}
-                              onChange={(e) =>
-                                c.setAddress({
-                                  ...c.address,
-                                  [key]: e.target.value,
-                                })
-                              }
-                            />
-                          </div>
-                        ))}
+                        
+                        <div>
+                          <Label>Quận / Huyện</Label>
+                          <select 
+                            required
+                            disabled={!c.address.city || !districts.length}
+                            className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 disabled:bg-gray-100 dark:disabled:bg-gray-800"
+                            value={c.address.ghnDistrictId || ''} 
+                            onChange={(e) => {
+                              const selectedOpt = e.target.options[e.target.selectedIndex];
+                              c.setAddress({
+                                ...c.address, 
+                                district: selectedOpt.text,
+                                ghnDistrictId: Number(e.target.value),
+                                ward: '',
+                                ghnWardCode: ''
+                              })
+                            }}
+                          >
+                            <option value="">Chọn Quận / Huyện</option>
+                            {districts.map(d => (
+                              <option key={d.id} value={d.id}>{d.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                        
+                        <div>
+                          <Label>Phường / Xã</Label>
+                          <select 
+                            required
+                            disabled={!c.address.ghnDistrictId || !wards.length}
+                            className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 disabled:bg-gray-100 dark:disabled:bg-gray-800"
+                            value={c.address.ghnWardCode || ''} 
+                            onChange={(e) => {
+                              const selectedOpt = e.target.options[e.target.selectedIndex];
+                              c.setAddress({
+                                ...c.address, 
+                                ward: selectedOpt.text,
+                                ghnWardCode: e.target.value
+                              })
+                            }}
+                          >
+                            <option value="">Chọn Phường / Xã</option>
+                            {wards.map(w => (
+                              <option key={w.id} value={w.id}>{w.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                        
+                        <div>
+                          <Label>Số nhà, đường</Label>
+                          <Input
+                            required
+                            maxLength={255}
+                            value={c.address.addressLine || ''}
+                            onChange={(e) => c.setAddress({ ...c.address, addressLine: e.target.value })}
+                          />
+                        </div>
+                        
                         <Button type="submit">Lưu địa chỉ shop</Button>
                       </fieldset>
                     </form>
