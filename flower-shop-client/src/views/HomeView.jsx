@@ -72,7 +72,7 @@ export default function HomeView({ auth }) {
           </div>
         )}
 
-        {!c.selected && <ProductCatalogView />}
+        {!c.selected && <ProductCatalogView auth={auth} isEmbedded={true} />}
         
         {!c.selected && (
           <section className="space-y-6">
