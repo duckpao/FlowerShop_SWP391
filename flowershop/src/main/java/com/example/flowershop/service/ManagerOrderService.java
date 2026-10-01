@@ -194,8 +194,8 @@ private static ResponseStatusException notFound() {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Chỉ có thể hủy đơn hàng đang chờ xử lý.");
         }
         o.setStatus(OrderStatus.CANCELLED);
+        o.setCancelReason(reason);
         o.setLastModifyBy(actor);
-        // Note: Reason is captured but not saved as Order table lacks a note/reason field in current schema
     }
 
     private OrderDetailResponse buildDetail(Order o) {

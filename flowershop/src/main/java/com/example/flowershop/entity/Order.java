@@ -62,6 +62,15 @@ public class Order {
     @Column(name = "deposit_amount", precision = 12, scale = 2)
     private BigDecimal depositAmount = BigDecimal.ZERO;
 
+    @Column(name = "customer_note", columnDefinition = "TEXT")
+    private String customerNote;
+
+    @Column(name = "cancel_reason", columnDefinition = "TEXT")
+    private String cancelReason;
+
+    @Column(name = "shop_note", columnDefinition = "TEXT")
+    private String shopNote;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status")
     @Builder.Default

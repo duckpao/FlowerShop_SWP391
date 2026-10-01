@@ -43,4 +43,24 @@ public class ManagerOrderController {
                                  @AuthenticationPrincipal CurrentUser u) {
         return service.refreshStatus(shopId, u.id(), id).name();
     }
+
+    @GetMapping("/queue")
+    public ManagerOrderService.Results queue(@PathVariable String shopId, @AuthenticationPrincipal CurrentUser u,
+                                            @RequestParam(defaultValue = "0") int page,
+                                            @RequestParam(required = false) String status) {
+        return service.queue(shopId, u.id(), page, status);
+    }
+
+    @GetMapping("/queue/count")
+    public ManagerOrderService.QueueCount queueCount(@PathVariable String shopId, @AuthenticationPrincipal CurrentUser u) {
+        return service.queueCount(shopId, u.id());
+    }
+
+    @PostMapping("/{id}/cancel")
+    @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
+    public void cancel(@PathVariable String shopId, @PathVariable String id,
+                       @RequestBody java.util.Map<String, String> body,
+                       @AuthenticationPrincipal CurrentUser u) {
+        service.cancel(shopId, u.id(), id, body.get("reason"));
+    }
 }
