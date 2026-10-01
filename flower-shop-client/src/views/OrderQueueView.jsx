@@ -12,13 +12,23 @@ import { EyeIcon } from '../icons'
 const statusColors = {
     PENDING: 'warning',
     AWAITING_DEPOSIT: 'warning',
-    PROCESSING: 'info'
+    DEPOSIT_PAID: 'info',
+    PROCESSING: 'info',
+    DELIVERING: 'primary',
+    COMPLETED: 'success',
+    CANCELLED: 'error',
+    REFUNDED: 'error'
 }
 
 const statusLabels = {
     PENDING: 'Chờ xác nhận',
     AWAITING_DEPOSIT: 'Chờ đặt cọc',
-    PROCESSING: 'Đang chuẩn bị'
+    DEPOSIT_PAID: 'Đã cọc',
+    PROCESSING: 'Đang chuẩn bị',
+    DELIVERING: 'Đang giao',
+    COMPLETED: 'Đã hoàn thành',
+    CANCELLED: 'Đã hủy',
+    REFUNDED: 'Đã hoàn tiền'
 }
 
 function timeAgo(dateString) {
@@ -40,7 +50,7 @@ export default function OrderQueueView({ shop: initialShop }) {
     const [shop, setShop] = useState(initialShop)
     const [data, setData] = useState(null)
     const [page, setPage] = useState(0)
-    const [statusFilter, setStatusFilter] = useState('') // '' means all queue statuses
+    const [statusFilter, setStatusFilter] = useState('')
     const [busy, setBusy] = useState(false)
     const [error, setError] = useState('')
     const [notice, setNotice] = useState('')
@@ -71,8 +81,17 @@ export default function OrderQueueView({ shop: initialShop }) {
     }
     useEffect(() => { if (shop) load(0) }, [shop?.id, statusFilter])
 
+    const confirmOrder = async orderId => {
+        setBusy(true); setError(''); setNotice('')
+        try {
+            await managerOrderService.confirm(shop.id, orderId)
+            setNotice(`Đã xác nhận đơn hàng, bắt đầu chuẩn bị hoa.`)
+            load(page)
+        } catch (e) { setError(e.message) } finally { setBusy(false) }
+    }
+
     const ship = async orderId => {
-        if (!confirm('Xác nhận & tạo vận đơn GHN cho đơn hàng này?')) return
+        if (!confirm('Xác nhận tạo mã vận đơn GHN & chuyển sang giao hàng?')) return
         setBusy(true); setError(''); setNotice('')
         try {
             const r = await managerOrderService.ship(shop.id, orderId)
@@ -108,6 +127,15 @@ export default function OrderQueueView({ shop: initialShop }) {
         }
     }
 
+    const refreshShippingStatus = async orderSummary => {
+        setBusy(true); setError(''); setNotice('')
+        try {
+            const status = await managerOrderService.refreshStatus(shop.id, orderSummary.id)
+            setNotice(`Cập nhật trạng thái GHN thành công. Trạng thái hiện tại: ${status}`)
+            load(page)
+        } catch (e) { setError(e.message) } finally { setBusy(false) }
+    }
+
     const openCancelModal = (orderSummary) => {
         setSelectedOrder(orderSummary)
         setCancelReason('')
@@ -120,9 +148,9 @@ export default function OrderQueueView({ shop: initialShop }) {
         <div className="space-y-6">
             <ComponentCard title={
                 <div className="flex items-center gap-3">
-                    Hàng chờ xử lý đơn hàng
+                    Quản lý đơn hàng
                     {data?.totalElements > 0 && (
-                        <span className="flex items-center justify-center rounded-full bg-error-500 px-2 py-0.5 text-xs font-medium text-white">
+                        <span className="flex items-center justify-center rounded-full bg-brand-500 px-2 py-0.5 text-xs font-medium text-white">
                             {data.totalElements}
                         </span>
                     )}
@@ -130,25 +158,23 @@ export default function OrderQueueView({ shop: initialShop }) {
             }>
                 {/* Tabs / Filters */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-                    <div className="flex space-x-2 border-b border-gray-200 dark:border-gray-800">
-                        <button
-                            onClick={() => setStatusFilter('')}
-                            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${statusFilter === '' ? 'border-brand-500 text-brand-500' : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
-                        >
-                            Tất cả chờ xử lý
-                        </button>
-                        <button
-                            onClick={() => setStatusFilter('PENDING')}
-                            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${statusFilter === 'PENDING' ? 'border-brand-500 text-brand-500' : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
-                        >
-                            Chờ xác nhận
-                        </button>
-                        <button
-                            onClick={() => setStatusFilter('PROCESSING')}
-                            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${statusFilter === 'PROCESSING' ? 'border-brand-500 text-brand-500' : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
-                        >
-                            Đang chuẩn bị
-                        </button>
+                    <div className="flex space-x-2 border-b border-gray-200 dark:border-gray-800 overflow-x-auto whitespace-nowrap pb-1">
+                        {[
+                            { id: '', label: 'Tất cả' },
+                            { id: 'PENDING', label: 'Chờ xác nhận' },
+                            { id: 'PROCESSING', label: 'Đang chuẩn bị' },
+                            { id: 'DELIVERING', label: 'Đang giao' },
+                            { id: 'COMPLETED', label: 'Hoàn thành' },
+                            { id: 'CANCELLED', label: 'Đã hủy' }
+                        ].map(tab => (
+                            <button
+                                key={tab.id}
+                                onClick={() => setStatusFilter(tab.id)}
+                                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${statusFilter === tab.id ? 'border-brand-500 text-brand-500' : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+                            >
+                                {tab.label}
+                            </button>
+                        ))}
                     </div>
                     <Button size="sm" variant="outline" onClick={() => load(page)} disabled={busy}>
                         Tải lại dữ liệu
@@ -164,7 +190,7 @@ export default function OrderQueueView({ shop: initialShop }) {
                         <svg className="h-16 w-16 text-gray-300 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
                         </svg>
-                        <p>Hiện không có đơn hàng nào cần xử lý.</p>
+                        <p>Hiện không có đơn hàng nào.</p>
                     </div>
                 )}
                 
@@ -211,12 +237,24 @@ export default function OrderQueueView({ shop: initialShop }) {
                                                     </button>
                                                     
                                                     {o.status === 'PENDING' && (
-                                                        <Button size="sm" onClick={() => ship(o.id)} disabled={busy}>
-                                                            Xác nhận & Giao
+                                                        <Button size="sm" onClick={() => confirmOrder(o.id)} disabled={busy}>
+                                                            Xác nhận đơn hàng
                                                         </Button>
                                                     )}
                                                     
-                                                    {(o.status === 'PENDING' || o.status === 'AWAITING_DEPOSIT') && (
+                                                    {o.status === 'PROCESSING' && (
+                                                        <Button size="sm" className="bg-brand-600 hover:bg-brand-700 text-white" onClick={() => ship(o.id)} disabled={busy}>
+                                                            Tạo mã vận đơn GHN & Giao
+                                                        </Button>
+                                                    )}
+                                                    
+                                                    {o.status === 'DELIVERING' && (
+                                                        <Button size="sm" variant="outline" className="text-brand-600 border-brand-200 hover:bg-brand-50" onClick={() => refreshShippingStatus(o)} disabled={busy}>
+                                                            Cập nhật trạng thái giao hàng
+                                                        </Button>
+                                                    )}
+                                                    
+                                                    {(o.status === 'PENDING' || o.status === 'AWAITING_DEPOSIT' || o.status === 'PROCESSING') && (
                                                         <Button size="sm" variant="outline" className="text-error-500 hover:bg-error-50 hover:border-error-200" onClick={() => openCancelModal(o)} disabled={busy}>
                                                             Hủy đơn
                                                         </Button>
@@ -281,8 +319,18 @@ export default function OrderQueueView({ shop: initialShop }) {
                             <div className="space-x-3">
                                 <Button variant="outline" onClick={() => setDetailModalOpen(false)}>Đóng</Button>
                                 {orderDetail.status === 'PENDING' && (
-                                    <Button onClick={() => { setDetailModalOpen(false); ship(orderDetail.id); }}>
-                                        Xác nhận & Giao
+                                    <Button onClick={() => { setDetailModalOpen(false); confirmOrder(orderDetail.id); }}>
+                                        Xác nhận đơn hàng
+                                    </Button>
+                                )}
+                                {orderDetail.status === 'PROCESSING' && (
+                                    <Button className="bg-brand-600 hover:bg-brand-700 text-white" onClick={() => { setDetailModalOpen(false); ship(orderDetail.id); }}>
+                                        Tạo mã vận đơn GHN & Giao
+                                    </Button>
+                                )}
+                                {orderDetail.status === 'DELIVERING' && (
+                                    <Button variant="outline" className="text-brand-600 border-brand-200 hover:bg-brand-50" onClick={() => { setDetailModalOpen(false); refreshShippingStatus(orderDetail); }}>
+                                        Cập nhật trạng thái giao hàng
                                     </Button>
                                 )}
                             </div>
