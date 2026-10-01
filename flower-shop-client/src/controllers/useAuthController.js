@@ -10,7 +10,7 @@ export function useAuthController() {
   useEffect(() => {
     let active = true
     authService.me().then(current => {
-      if (active) {
+      if (active && current) {
         setUser(current); setPage('account');
         if (window.location.pathname === '/login') {
           if (current.role === 'ADMIN') routerNavigate('/admin');
@@ -96,7 +96,11 @@ export function useAuthController() {
   }
   async function checkSession() {
     setBusy(true); setError('')
-    try { setUser(await authService.me()); setNotice('Phiên đăng nhập đang hoạt động.') }
+    try {
+      const current = await authService.me()
+      if (!current) throw new Error('Phiên đăng nhập không còn hiệu lực.')
+      setUser(current); setNotice('Phiên đăng nhập đang hoạt động.')
+    }
     catch (failure) { setUser(null); navigate('signin'); setError(failure.message) }
     finally { setBusy(false) }
   }

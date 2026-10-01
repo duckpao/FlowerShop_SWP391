@@ -1,5 +1,5 @@
 import { useShopSearchController } from "../controllers/useShopSearchController";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import ManagerNotificationsView from "./ManagerNotificationsView";
 import ManagerApplicationView from "./ManagerApplicationView";
 import ProductsView from "./ProductsView";
@@ -13,7 +13,30 @@ const statuses = {
 
 export default function HomeView({ auth }) {
   const c = useShopSearchController(auth.user);
-  const [browseTab, setBrowseTab] = useState("products");
+  const [browseTab, setBrowseTab] = useState(() =>
+    window.location.hash === "#shops" ? "shops" : "products",
+  );
+
+  useEffect(() => {
+    const syncBrowseTab = () => {
+      setBrowseTab(window.location.hash === "#shops" ? "shops" : "products");
+    };
+    window.addEventListener("hashchange", syncBrowseTab);
+    return () => window.removeEventListener("hashchange", syncBrowseTab);
+  }, []);
+
+  useEffect(() => {
+    const targetId = window.location.hash.slice(1);
+    if (targetId === "shops" || targetId === "products") {
+      document.getElementById(targetId)?.scrollIntoView();
+    }
+  }, [browseTab]);
+
+  const selectBrowseTab = (tab) => {
+    setBrowseTab(tab);
+    const hash = tab === "shops" ? "#shops" : "#products";
+    if (window.location.hash !== hash) window.location.hash = hash;
+  };
   return (
     <div className="bg-gray-50 dark:bg-gray-900 flex-1">
       <main className="mx-auto w-full max-w-7xl py-8 space-y-12">
@@ -70,12 +93,12 @@ export default function HomeView({ auth }) {
           <section id="discover" className="space-y-6">
             <div role="tablist" aria-label="Khám phá cửa hàng và sản phẩm" className="flex gap-2 border-b border-gray-200 dark:border-white/10">
               <button type="button" role="tab" aria-selected={browseTab === "products"} aria-controls="products-panel"
-                onClick={() => setBrowseTab("products")}
+                onClick={() => selectBrowseTab("products")}
                 className={`border-b-2 px-4 py-3 text-sm font-semibold transition-colors ${browseTab === "products" ? "border-brand-500 text-brand-600 dark:text-brand-400" : "border-transparent text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"}`}>
                 Sản phẩm
               </button>
               <button type="button" role="tab" aria-selected={browseTab === "shops"} aria-controls="shops-panel"
-                onClick={() => setBrowseTab("shops")}
+                onClick={() => selectBrowseTab("shops")}
                 className={`border-b-2 px-4 py-3 text-sm font-semibold transition-colors ${browseTab === "shops" ? "border-brand-500 text-brand-600 dark:text-brand-400" : "border-transparent text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"}`}>
                 Cửa hàng
               </button>
@@ -86,7 +109,7 @@ export default function HomeView({ auth }) {
                 <ProductCatalogView auth={auth} shops={c.shops} />
               </div>
             ) : (
-              <section id="shops-panel" role="tabpanel" aria-label="Danh sách cửa hàng" className="space-y-6">
+              <section id="shops" role="tabpanel" aria-label="Danh sách cửa hàng" className="space-y-6">
                 <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
                   <div>
                     <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Cửa hàng hoa</h2>

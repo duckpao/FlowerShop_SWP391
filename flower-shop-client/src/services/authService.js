@@ -41,6 +41,10 @@ async function refresh() {
   if (!refreshPromise) {
     const run = async () => {
       const data = await request('refresh', { method: 'POST' })
+      if (!data.accessToken) {
+        authModel.clear()
+        return null
+      }
       authModel.setToken(data.accessToken)
       return data.user
     }
@@ -61,11 +65,19 @@ export const authService = {
     return request(path, options)
   },
   async authenticatedRequest(path, options = {}) {
-    if (!authModel.getToken()) await refresh()
+    if (!authModel.getToken()) {
+      const user = await refresh()
+      if (!user) {
+        const error = new Error('Vui lòng đăng nhập để tiếp tục.')
+        error.status = 401
+        throw error
+      }
+    }
     try { return await request(path, { ...options, bearer: true }) }
     catch (error) {
       if (error.status !== 401) throw error
-      await refresh()
+      const user = await refresh()
+      if (!user) throw error
       return request(path, { ...options, bearer: true })
     }
   },

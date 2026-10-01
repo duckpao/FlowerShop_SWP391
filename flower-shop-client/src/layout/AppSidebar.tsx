@@ -78,8 +78,11 @@ const AppSidebar: React.FC = () => {
 
   const isActive = useCallback(
     (path: string) => {
-      // Cho public routes có hash link
-      if (path.includes('#')) return location.hash === path.substring(path.indexOf('#')) || (path === '/' && location.pathname === '/' && !location.hash);
+      if (path.includes('#')) {
+        const [pathname, hash] = path.split('#');
+        return location.pathname === (pathname || '/') && location.hash === `#${hash}`;
+      }
+      if (path === '/') return location.pathname === '/' && !location.hash;
       return location.pathname === path;
     },
     [location],
