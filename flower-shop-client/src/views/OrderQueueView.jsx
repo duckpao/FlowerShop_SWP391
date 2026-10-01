@@ -74,7 +74,7 @@ export default function OrderQueueView({ shop: initialShop }) {
     const load = pg => {
         if (!shop) return
         setBusy(true); setError(''); setNotice('')
-        managerOrderService.getQueue(shop.id, pg, statusFilter || null)
+        managerOrderService.list(shop.id, pg, statusFilter || null)
             .then(d => { setData(d); setPage(pg) })
             .catch(e => setError(e.message))
             .finally(() => setBusy(false))
@@ -228,13 +228,15 @@ export default function OrderQueueView({ shop: initialShop }) {
                                             </TableCell>
                                             <TableCell className="text-right">
                                                 <div className="flex items-center justify-end gap-2">
-                                                    <button 
-                                                        title="Xem chi tiết"
+                                                    <Button 
+                                                        size="sm" 
+                                                        variant="outline"
                                                         onClick={() => viewDetail(o)} 
-                                                        className="p-2 text-gray-500 hover:text-brand-500 hover:bg-brand-50 rounded-lg transition-colors dark:hover:bg-gray-800"
+                                                        disabled={busy}
                                                     >
-                                                        <EyeIcon className="w-5 h-5" />
-                                                    </button>
+                                                        <EyeIcon className="w-4 h-4 mr-1 inline" />
+                                                        Chi tiết
+                                                    </Button>
                                                     
                                                     {o.status === 'PENDING' && (
                                                         <Button size="sm" onClick={() => confirmOrder(o.id)} disabled={busy}>
