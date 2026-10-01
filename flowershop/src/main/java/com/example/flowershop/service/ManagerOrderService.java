@@ -140,10 +140,15 @@ private static ResponseStatusException notFound() {
         if (toName == null || toName.isBlank()) toName = "Khách hàng";
 
         String toPhone = o.getRecipientPhone() != null && !o.getRecipientPhone().isBlank() ? o.getRecipientPhone() : o.getCustomer().getPhone();
-        if (toPhone == null || toPhone.isBlank()) toPhone = "0962924380";
+        if (toPhone == null || toPhone.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Số điện thoại người nhận không được để trống.");
+        }
 
         String fromName = o.getShop().getName() != null && !o.getShop().getName().isBlank() ? o.getShop().getName() : "FlowerShop";
-        String fromPhone = o.getShop().getOwner() != null && o.getShop().getOwner().getPhone() != null && !o.getShop().getOwner().getPhone().isBlank() ? o.getShop().getOwner().getPhone() : "0987654321";
+        String fromPhone = o.getShop().getOwner() != null && o.getShop().getOwner().getPhone() != null && !o.getShop().getOwner().getPhone().isBlank() ? o.getShop().getOwner().getPhone() : null;
+        if (fromPhone == null || fromPhone.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Số điện thoại của cửa hàng (hoặc chủ shop) không được để trống.");
+        }
 
         String toFullAddress = (toAddr.getAddressLine() != null ? toAddr.getAddressLine() : "") + ", " +
                 (toAddr.getWard() != null ? toAddr.getWard() : "") + ", " +
@@ -174,46 +179,47 @@ private static ResponseStatusException notFound() {
     }
 
     private void resolveGhnAddress(Address addr) {
-        if (addr.getCity() == null || addr.getCity().isBlank()) addr.setCity("Hà Nội");
-        if (addr.getDistrict() == null || addr.getDistrict().isBlank()) addr.setDistrict("Quận Cầu Giấy");
-        if (addr.getWard() == null || addr.getWard().isBlank()) addr.setWard("Phường Quan Hoa");
+        if (addr.getCity() == null || addr.getCity().isBlank()) return;
 
         try {
             var provinces = ghn.provinces();
             var matchedProvince = provinces.stream()
                     .filter(p -> p.name().equalsIgnoreCase(addr.getCity()) || addr.getCity().toLowerCase().contains(p.name().toLowerCase()) || p.name().toLowerCase().contains(addr.getCity().toLowerCase()))
                     .findFirst()
-                    .orElse(provinces.stream().filter(p -> p.name().contains("Hà Nội")).findFirst().orElse(null));
+                    .orElse(null);
 
-            if (matchedProvince != null) {
+            if (matchedProvince != null && addr.getDistrict() != null && !addr.getDistrict().isBlank()) {
                 int provId = Integer.parseInt(matchedProvince.id());
                 var districts = ghn.districts(provId);
                 var matchedDistrict = districts.stream()
                         .filter(dist -> dist.name().equalsIgnoreCase(addr.getDistrict()) || addr.getDistrict().toLowerCase().contains(dist.name().toLowerCase()) || dist.name().toLowerCase().contains(addr.getDistrict().toLowerCase()))
                         .findFirst()
-                        .orElse(districts.isEmpty() ? null : districts.get(0));
+                        .orElse(null);
 
                 if (matchedDistrict != null) {
                     int distId = Integer.parseInt(matchedDistrict.id());
                     addr.setGhnDistrictId(distId);
 
-                    var wards = ghn.wards(distId);
-                    var matchedWard = wards.stream()
-                            .filter(w -> w.name().equalsIgnoreCase(addr.getWard()) || addr.getWard().toLowerCase().contains(w.name().toLowerCase()) || w.name().toLowerCase().contains(addr.getWard().toLowerCase()))
-                            .findFirst()
-                            .orElse(wards.isEmpty() ? null : wards.get(0));
+                    if (addr.getWard() != null && !addr.getWard().isBlank()) {
+                        var wards = ghn.wards(distId);
+                        var matchedWard = wards.stream()
+                                .filter(w -> w.name().equalsIgnoreCase(addr.getWard()) || addr.getWard().toLowerCase().contains(w.name().toLowerCase()) || w.name().toLowerCase().contains(addr.getWard().toLowerCase()))
+                                .findFirst()
+                                .orElse(null);
 
-                    if (matchedWard != null) {
-                        addr.setGhnWardCode(matchedWard.id());
+                        if (matchedWard != null) {
+                            addr.setGhnWardCode(matchedWard.id());
+                        }
                     }
                 }
             }
         } catch (Exception e) {
-            // log error and fallback
+            // Log error if needed, but do not assign hardcoded fallback values
         }
-
-        if (addr.getGhnDistrictId() == null) addr.setGhnDistrictId(3440);
-        if (addr.getGhnWardCode() == null) addr.setGhnWardCode("1A0307");
+        
+        if (addr.getGhnDistrictId() == null || addr.getGhnWardCode() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Không thể tự động phân giải mã GHN cho địa chỉ này. Vui lòng cập nhật lại địa chỉ với hệ thống GHN.");
+        }
     }
 
     @Transactional
