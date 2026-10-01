@@ -43,7 +43,6 @@ public class OrderService {
     private final ProductRepository productRepository;
     private final PaymentRepository paymentRepository;
     private final CouponRepository couponRepository;
-    private final DeliveryAreaService deliveryAreaService;
 
     /**
      * Tạo đơn hàng từ các cart items đã chọn.
