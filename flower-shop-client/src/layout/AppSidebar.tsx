@@ -7,6 +7,7 @@ import { managerOrderService } from "../services/managerOrderService";
 import {
   BoxCubeIcon,
   CalenderIcon,
+  CartIcon,
   ChevronDownIcon,
   GridIcon,
   HorizontaLDots,

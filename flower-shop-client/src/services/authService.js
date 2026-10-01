@@ -30,6 +30,7 @@ async function request(path, { method = 'GET', body, bearer = false, headers: cu
   if (!response.ok) {
     const error = new Error(data.errors ? Object.values(data.errors).join(' ') : data.message || 'Yêu cầu thất bại. Vui lòng thử lại.')
     error.status = response.status
+    error.fieldErrors = data.errors || {}
     if (path !== 'refresh' && error.status !== 401 && error.status !== 403) {
       toast.error(error.message)
     }
@@ -99,5 +100,6 @@ export const authService = {
     await request('logout', { method: 'POST' })
     authModel.clear()
   },
+  refresh: () => refresh(),
   clear: () => authModel.clear(),
 }

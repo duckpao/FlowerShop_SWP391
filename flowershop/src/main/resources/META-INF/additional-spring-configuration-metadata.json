@@ -1,0 +1,70 @@
+{
+  "properties": [
+    {
+      "name": "sepay.merchant-id",
+      "type": "java.lang.String",
+      "description": "Mã Merchant ID của SePay Gateway"
+    },
+    {
+      "name": "sepay.secret-key",
+      "type": "java.lang.String",
+      "description": "Khóa bí mật Secret Key tạo chữ ký HMAC-SHA256"
+    },
+    {
+      "name": "sepay.checkout-url",
+      "type": "java.lang.String",
+      "description": "Đường dẫn cổng thanh toán SePay (Sandbox/Production)"
+    },
+    {
+      "name": "sepay.fe-base-url",
+      "type": "java.lang.String",
+      "description": "Đường dẫn gốc của Frontend"
+    },
+    {
+      "name": "sepay.success-url",
+      "type": "java.lang.String",
+      "description": "URL chuyển hướng khi thanh toán thành công"
+    },
+    {
+      "name": "sepay.error-url",
+      "type": "java.lang.String",
+      "description": "URL chuyển hướng khi thanh toán thất bại"
+    },
+    {
+      "name": "sepay.cancel-url",
+      "type": "java.lang.String",
+      "description": "URL chuyển hướng khi khách hủy thanh toán"
+    },
+    {
+      "name": "sepay.ipn-secret",
+      "type": "java.lang.String",
+      "description": "Khóa bí mật xác thực webhook IPN"
+    },
+    {
+      "name": "sepay.bank-id",
+      "type": "java.lang.String",
+      "description": "Mã ngân hàng (ví dụ: MBBank)"
+    },
+    {
+      "name": "sepay.account-number",
+      "type": "java.lang.String",
+      "description": "Số tài khoản ngân hàng nhận tiền"
+    },
+    {
+      "name": "sepay.account-name",
+      "type": "java.lang.String",
+      "description": "Tên chủ tài khoản ngân hàng"
+    },
+    {
+      "name": "sepay.va-prefix",
+      "type": "java.lang.String",
+      "description": "Tiền tố tài khoản ảo SePay (ví dụ: TKPNXT)"
+    },
+    {
+      "name": "sepay.api-key",
+      "type": "java.lang.String",
+      "description": "API Key kết nối SePay Bank"
+    }
+  ]
+}
+

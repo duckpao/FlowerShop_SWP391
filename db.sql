@@ -143,6 +143,8 @@ CREATE TABLE Orders (
     customer_id VARCHAR(36) NOT NULL,
     shop_id VARCHAR(36) NOT NULL,
     delivery_address_id VARCHAR(36) NOT NULL,
+    recipient_name VARCHAR(255),
+    recipient_phone VARCHAR(20),
     coupon_id VARCHAR(36),
     order_type ENUM('STANDARD', 'CUSTOM') DEFAULT 'STANDARD',
     sub_total DECIMAL(12, 2) NOT NULL,

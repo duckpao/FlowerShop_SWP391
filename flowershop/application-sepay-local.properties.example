@@ -1,0 +1,11 @@
+# Copy this file to application-sepay-local.properties in the flowershop directory.
+# The copied file is git-ignored. Get Sandbox credentials from the team's SePay test account.
+sepay.merchant-id=
+sepay.secret-key=
+sepay.checkout-url=https://pay-sandbox.sepay.vn/v1/checkout/init
+sepay.api-base-url=https://pgapi-sandbox.sepay.vn
+sepay.success-url=http://localhost:8080/payment/success
+sepay.error-url=http://localhost:8080/payment/error
+sepay.cancel-url=http://localhost:8080/payment/cancel
+# Configure an IPN secret and public callback URL only when testing IPN from SePay.
+sepay.ipn-secret=

@@ -29,15 +29,19 @@ public class SecurityConfig {
 
         http
                 .cors(Customizer.withDefaults())
+                .csrf(csrf -> csrf.ignoringRequestMatchers("/api/payments/sepay/ipn", "/api/sepay/ipn", "/api/webhook/sepay"))
                 .sessionManagement(session -> session.sessionCreationPolicy(org.springframework.security.config.http.SessionCreationPolicy.STATELESS))
                 .addFilterBefore(new com.example.flowershop.security.JwtAuthenticationFilter(tokenAuth),
                         org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter.class)
 
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.GET, "/", "/index.html", "/assets/**", "/images/**", "/vite.svg", "/favicon.svg", "/icons.svg",
-                                "/login", "/account", "/admin", "/admin/shops", "/admin/approvals", "/admin/users", "/admin/profile", "/admin/categories",
-                                "/shop-admin", "/shop-admin/staff", "/shop-admin/products", "/shop-admin/shop", "/shop-admin/orders", "/shop-admin/order-queue", "/shop-admin/profile", "/products", "/products/*", "/favorites", "/shops/*", "/checkout", "/orders", "/orders/*").permitAll()
-                        .requestMatchers(HttpMethod.GET,"/api/public/shops","/api/public/shops/*","/api/public/shops/*/products","/api/public/products","/api/public/products/*","/api/public/categories","/api/public/ghn/provinces","/api/public/ghn/provinces/*/districts","/api/public/ghn/districts/*/wards").permitAll()
+                                "/login", "/account", "/admin", "/admin/**", "/shop-admin", "/shop-admin/**",
+                                "/products", "/products/*", "/favorites", "/shops/*", "/checkout", "/orders", "/orders/*",
+                                "/cart", "/home", "/payment/**", "/invitations/accept").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/public/shops", "/api/public/shops/*", "/api/public/shops/*/products", "/api/public/products", "/api/public/products/*", "/api/public/categories", "/api/public/ghn/provinces", "/api/public/ghn/provinces/*/districts", "/api/public/ghn/districts/*/wards").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/payments/sepay/ipn", "/api/sepay/ipn", "/api/webhook/sepay").permitAll()
+                        .requestMatchers("/api/cart/**", "/api/orders/**", "/api/payments/**", "/api/payment/**", "/api/sepay/checkout/**").hasRole("CUSTOMER")
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                         .requestMatchers(
                                 HttpMethod.GET,

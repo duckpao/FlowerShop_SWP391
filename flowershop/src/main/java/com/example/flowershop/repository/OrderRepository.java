@@ -5,8 +5,23 @@ import com.example.flowershop.entity.enums.OrderStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import jakarta.persistence.LockModeType;
+import java.time.LocalDateTime;
+import java.util.Optional;
+import java.util.List;
 
 public interface OrderRepository extends JpaRepository<Order, String> {
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT o FROM Order o WHERE o.id = :id")
+    Optional<Order> findByIdForUpdate(@Param("id") String id);
+
+    List<Order> findByCustomerIdOrderByCreatedDateDesc(String customerId);
+
+    List<Order> findByStatusAndCreatedDateBefore(com.example.flowershop.entity.enums.OrderStatus status, LocalDateTime threshold);
+
     boolean existsByDeliveryAddressId(String addressId);
     org.springframework.data.domain.Page<Order> findByShopIdAndStatusIn(String shopId, java.util.Collection<com.example.flowershop.entity.enums.OrderStatus> statuses, org.springframework.data.domain.Pageable pageable);
     long countByShopIdAndStatusIn(String shopId, java.util.Collection<com.example.flowershop.entity.enums.OrderStatus> statuses);
