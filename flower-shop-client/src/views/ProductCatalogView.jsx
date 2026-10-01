@@ -1,7 +1,6 @@
 import { useCatalogController } from '../controllers/useCatalogController'
 import { useFavoriteToggle } from '../controllers/useFavoritesController'
 import { formatPrice, ratingLabel, sortOptions } from '../models/productModel'
-import '../styles/account.css'
 import '../styles/catalog.css'
 
 export default function ProductCatalogView({ auth }) {

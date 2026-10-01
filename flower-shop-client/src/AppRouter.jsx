@@ -9,6 +9,9 @@ import ProductDetailView from "./views/ProductDetailView";
 import AcceptInvitationView from "./views/AcceptInvitationView";
 import { useAuthController } from "./controllers/useAuthController";
 import { AuthProvider } from "./context/AuthContext";
+import CheckoutView from "./views/CheckoutView";
+import CustomerOrdersView from "./views/CustomerOrdersView";
+import CustomerOrderDetailView from "./views/CustomerOrderDetailView";
 
 export default function AppRouter() {
   return (
@@ -33,6 +36,9 @@ function AppRouterContent() {
         <Route element={<AppLayout />}>
           <Route path="/" element={<HomeView auth={controller} />} />
           <Route path="/products/:id" element={<ProductDetailViewWrapper />} />
+          <Route path="/checkout" element={<CheckoutView />} />
+          <Route path="/orders" element={<CustomerOrdersView />} />
+          <Route path="/orders/:id" element={<CustomerOrderDetailView />} />
           <Route path="/admin/*" element={<AdminDashboardView user={controller.user} logout={controller.logout} busy={controller.busy} error={controller.error} path={location.pathname} />} />
           <Route path="/shop-admin/*" element={<ManagerDashboardView user={controller.user} logout={controller.logout} busy={controller.busy} error={controller.error} path={location.pathname} />} />
         </Route>

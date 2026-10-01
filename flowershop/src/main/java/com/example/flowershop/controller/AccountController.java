@@ -18,8 +18,7 @@ import java.util.List;
 @PreAuthorize("hasAnyRole('ADMIN','CUSTOMER','SHOP','SHOP_STAFF')")
 public class AccountController {
     private final AccountService accounts;
-    private final DeliveryAreaService areas;
-    public AccountController(AccountService accounts, DeliveryAreaService areas) { this.accounts=accounts; this.areas=areas; }
+    public AccountController(AccountService accounts) { this.accounts=accounts; }
     @GetMapping("/profile")
     public ProfileResponse profile(@AuthenticationPrincipal CurrentUser user) { return accounts.profile(user.id()); }
     @PutMapping("/profile")
@@ -27,8 +26,6 @@ public class AccountController {
     public ProfileResponse update(@AuthenticationPrincipal CurrentUser user, @Valid @RequestBody ProfileRequest request) {
         return accounts.updateProfile(user.id(),request);
     }
-    @GetMapping("/delivery-areas") @PreAuthorize("hasRole('CUSTOMER')")
-    public List<String> areas() { return areas.list(); }
     @GetMapping("/addresses") @PreAuthorize("hasRole('CUSTOMER')")
     public List<AddressResponse> addresses(@AuthenticationPrincipal CurrentUser user) { return accounts.list(user.id()); }
     @PostMapping("/addresses") @ResponseStatus(org.springframework.http.HttpStatus.CREATED)

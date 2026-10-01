@@ -11,7 +11,7 @@ CREATE TABLE Users (
     google_id NVARCHAR(255) UNIQUE,
     full_name NVARCHAR(100),
     phone NVARCHAR(20),
-    role ENUM('ADMIN', 'SHOP', 'CUSTOMER', 'SHOP_STAFF') NOT NULL,
+    role ENUM('ADMIN', 'SHOP', 'CUSTOMER', 'DELIVERY', 'SHOP_STAFF') NOT NULL,
     is_email_verified BOOLEAN DEFAULT FALSE,
     status ENUM('ACTIVE', 'INACTIVE', 'BANNED') DEFAULT 'ACTIVE',
     created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -42,6 +42,8 @@ CREATE TABLE Addresses (
     ward NVARCHAR(100),
     district NVARCHAR(100),
     city NVARCHAR(100),
+    ghn_ward_code NVARCHAR(20),
+    ghn_district_id INT,
     is_default BOOLEAN DEFAULT FALSE,
     created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_by NVARCHAR(36),
@@ -184,6 +186,7 @@ CREATE TABLE Products (
     price DECIMAL(12, 2) NOT NULL,
     stock INT NOT NULL DEFAULT 0,
     status ENUM('ACTIVE', 'INACTIVE', 'OUT_OF_STOCK') DEFAULT 'ACTIVE',
+    admin_hidden BOOLEAN NOT NULL DEFAULT FALSE,
     created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_by NVARCHAR(36),
     last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -270,6 +273,7 @@ CREATE TABLE Orders (
     order_type ENUM('STANDARD', 'CUSTOM') DEFAULT 'STANDARD',
     sub_total DECIMAL(12, 2) NOT NULL,
     discount_amount DECIMAL(12, 2) DEFAULT 0.00,
+    shipping_fee DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
     total_amount DECIMAL(12, 2) NOT NULL,
     deposit_amount DECIMAL(12, 2) DEFAULT 0.00,
     status ENUM('PENDING', 'AWAITING_DEPOSIT', 'DEPOSIT_PAID', 'PROCESSING', 'DELIVERING', 'COMPLETED', 'CANCELLED', 'REFUNDED') DEFAULT 'PENDING',
@@ -403,7 +407,7 @@ CREATE TABLE Product_Reviews (
     id NVARCHAR(36) PRIMARY KEY,
     product_id NVARCHAR(36) NOT NULL,
     user_id NVARCHAR(36) NOT NULL,
-    order_id NVARCHAR(36) NOT NULL, -- Đánh giá dựa trên đơn hàng thực tế
+    order_id NVARCHAR(36) NULL, -- Đánh giá dựa trên đơn hàng thực tế
     rating INT CHECK (rating >= 1 AND rating <= 5),
     comment TEXT,
     media JSON, -- Ảnh, video khách hàng tải lên
@@ -414,7 +418,8 @@ CREATE TABLE Product_Reviews (
     last_modify_by NVARCHAR(36),
     FOREIGN KEY (product_id) REFERENCES Products(id),
     FOREIGN KEY (user_id) REFERENCES Users(id),
-    FOREIGN KEY (order_id) REFERENCES Orders(id)
+    FOREIGN KEY (order_id) REFERENCES Orders(id),
+    UNIQUE KEY uq_review_user_product (user_id, product_id)
 );
 
 CREATE TABLE Favorite_Products (
@@ -632,3 +637,161 @@ INSERT INTO Staff_Invitations (id, shop_id, email, token_hash, expires_at, issue
 
 INSERT INTO Manager_Applications (id, user_id, full_name, phone, shop_name, description, address_line, city, district, ward, status, submitted_at) VALUES
 ('57fa5524-687a-4464-a8a0-846690b9d696', 'dcca63c5-cff9-4dc7-b27a-6a80d5cee5b5', 'Trần Thị B', '0987654321', 'B Flower House', 'Xin mở shop hoa online phục vụ khu vực Cầu Giấy.', 'Số 10, Ngõ 20, Đường Cầu Giấy', 'Hà Nội', 'Cầu Giấy', 'Dịch Vọng', 'PENDING', '2026-09-25 14:00:00');
+USE flower_shop_db;
+
+
+UPDATE Users SET full_name = CONVERT(BINARY(CONVERT(full_name USING latin1)) USING utf8mb4)
+ WHERE full_name IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(full_name USING latin1)) USING utf8mb4) IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(full_name USING latin1)) USING utf8mb4) <> full_name
+   AND (CHAR_LENGTH(CONVERT(full_name USING latin1)) - CHAR_LENGTH(REPLACE(CONVERT(full_name USING latin1), '?', ''))) = (CHAR_LENGTH(full_name) - CHAR_LENGTH(REPLACE(full_name, '?', '')));
+UPDATE Shops SET name = CONVERT(BINARY(CONVERT(name USING latin1)) USING utf8mb4)
+ WHERE name IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(name USING latin1)) USING utf8mb4) IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(name USING latin1)) USING utf8mb4) <> name
+   AND (CHAR_LENGTH(CONVERT(name USING latin1)) - CHAR_LENGTH(REPLACE(CONVERT(name USING latin1), '?', ''))) = (CHAR_LENGTH(name) - CHAR_LENGTH(REPLACE(name, '?', '')));
+UPDATE Shops SET description = CONVERT(BINARY(CONVERT(description USING latin1)) USING utf8mb4)
+ WHERE description IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(description USING latin1)) USING utf8mb4) IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(description USING latin1)) USING utf8mb4) <> description
+   AND (CHAR_LENGTH(CONVERT(description USING latin1)) - CHAR_LENGTH(REPLACE(CONVERT(description USING latin1), '?', ''))) = (CHAR_LENGTH(description) - CHAR_LENGTH(REPLACE(description, '?', '')));
+UPDATE Addresses SET address_line = CONVERT(BINARY(CONVERT(address_line USING latin1)) USING utf8mb4)
+ WHERE address_line IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(address_line USING latin1)) USING utf8mb4) IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(address_line USING latin1)) USING utf8mb4) <> address_line
+   AND (CHAR_LENGTH(CONVERT(address_line USING latin1)) - CHAR_LENGTH(REPLACE(CONVERT(address_line USING latin1), '?', ''))) = (CHAR_LENGTH(address_line) - CHAR_LENGTH(REPLACE(address_line, '?', '')));
+UPDATE Addresses SET city = CONVERT(BINARY(CONVERT(city USING latin1)) USING utf8mb4)
+ WHERE city IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(city USING latin1)) USING utf8mb4) IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(city USING latin1)) USING utf8mb4) <> city
+   AND (CHAR_LENGTH(CONVERT(city USING latin1)) - CHAR_LENGTH(REPLACE(CONVERT(city USING latin1), '?', ''))) = (CHAR_LENGTH(city) - CHAR_LENGTH(REPLACE(city, '?', '')));
+UPDATE Addresses SET district = CONVERT(BINARY(CONVERT(district USING latin1)) USING utf8mb4)
+ WHERE district IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(district USING latin1)) USING utf8mb4) IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(district USING latin1)) USING utf8mb4) <> district
+   AND (CHAR_LENGTH(CONVERT(district USING latin1)) - CHAR_LENGTH(REPLACE(CONVERT(district USING latin1), '?', ''))) = (CHAR_LENGTH(district) - CHAR_LENGTH(REPLACE(district, '?', '')));
+UPDATE Addresses SET ward = CONVERT(BINARY(CONVERT(ward USING latin1)) USING utf8mb4)
+ WHERE ward IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(ward USING latin1)) USING utf8mb4) IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(ward USING latin1)) USING utf8mb4) <> ward
+   AND (CHAR_LENGTH(CONVERT(ward USING latin1)) - CHAR_LENGTH(REPLACE(CONVERT(ward USING latin1), '?', ''))) = (CHAR_LENGTH(ward) - CHAR_LENGTH(REPLACE(ward, '?', '')));
+UPDATE Categories SET name = CONVERT(BINARY(CONVERT(name USING latin1)) USING utf8mb4)
+ WHERE name IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(name USING latin1)) USING utf8mb4) IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(name USING latin1)) USING utf8mb4) <> name
+   AND (CHAR_LENGTH(CONVERT(name USING latin1)) - CHAR_LENGTH(REPLACE(CONVERT(name USING latin1), '?', ''))) = (CHAR_LENGTH(name) - CHAR_LENGTH(REPLACE(name, '?', '')));
+UPDATE Categories SET description = CONVERT(BINARY(CONVERT(description USING latin1)) USING utf8mb4)
+ WHERE description IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(description USING latin1)) USING utf8mb4) IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(description USING latin1)) USING utf8mb4) <> description
+   AND (CHAR_LENGTH(CONVERT(description USING latin1)) - CHAR_LENGTH(REPLACE(CONVERT(description USING latin1), '?', ''))) = (CHAR_LENGTH(description) - CHAR_LENGTH(REPLACE(description, '?', '')));
+UPDATE Products SET name = CONVERT(BINARY(CONVERT(name USING latin1)) USING utf8mb4)
+ WHERE name IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(name USING latin1)) USING utf8mb4) IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(name USING latin1)) USING utf8mb4) <> name
+   AND (CHAR_LENGTH(CONVERT(name USING latin1)) - CHAR_LENGTH(REPLACE(CONVERT(name USING latin1), '?', ''))) = (CHAR_LENGTH(name) - CHAR_LENGTH(REPLACE(name, '?', '')));
+UPDATE Products SET description = CONVERT(BINARY(CONVERT(description USING latin1)) USING utf8mb4)
+ WHERE description IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(description USING latin1)) USING utf8mb4) IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(description USING latin1)) USING utf8mb4) <> description
+   AND (CHAR_LENGTH(CONVERT(description USING latin1)) - CHAR_LENGTH(REPLACE(CONVERT(description USING latin1), '?', ''))) = (CHAR_LENGTH(description) - CHAR_LENGTH(REPLACE(description, '?', '')));
+UPDATE Product_Videos SET title = CONVERT(BINARY(CONVERT(title USING latin1)) USING utf8mb4)
+ WHERE title IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(title USING latin1)) USING utf8mb4) IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(title USING latin1)) USING utf8mb4) <> title
+   AND (CHAR_LENGTH(CONVERT(title USING latin1)) - CHAR_LENGTH(REPLACE(CONVERT(title USING latin1), '?', ''))) = (CHAR_LENGTH(title) - CHAR_LENGTH(REPLACE(title, '?', '')));
+UPDATE Product_Videos SET description = CONVERT(BINARY(CONVERT(description USING latin1)) USING utf8mb4)
+ WHERE description IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(description USING latin1)) USING utf8mb4) IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(description USING latin1)) USING utf8mb4) <> description
+   AND (CHAR_LENGTH(CONVERT(description USING latin1)) - CHAR_LENGTH(REPLACE(CONVERT(description USING latin1), '?', ''))) = (CHAR_LENGTH(description) - CHAR_LENGTH(REPLACE(description, '?', '')));
+UPDATE Deliveries SET tracking_notes = CONVERT(BINARY(CONVERT(tracking_notes USING latin1)) USING utf8mb4)
+ WHERE tracking_notes IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(tracking_notes USING latin1)) USING utf8mb4) IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(tracking_notes USING latin1)) USING utf8mb4) <> tracking_notes
+   AND (CHAR_LENGTH(CONVERT(tracking_notes USING latin1)) - CHAR_LENGTH(REPLACE(CONVERT(tracking_notes USING latin1), '?', ''))) = (CHAR_LENGTH(tracking_notes) - CHAR_LENGTH(REPLACE(tracking_notes, '?', '')));
+UPDATE Chat_Messages SET message = CONVERT(BINARY(CONVERT(message USING latin1)) USING utf8mb4)
+ WHERE message IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(message USING latin1)) USING utf8mb4) IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(message USING latin1)) USING utf8mb4) <> message
+   AND (CHAR_LENGTH(CONVERT(message USING latin1)) - CHAR_LENGTH(REPLACE(CONVERT(message USING latin1), '?', ''))) = (CHAR_LENGTH(message) - CHAR_LENGTH(REPLACE(message, '?', '')));
+UPDATE Custom_Order_Requests SET description = CONVERT(BINARY(CONVERT(description USING latin1)) USING utf8mb4)
+ WHERE description IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(description USING latin1)) USING utf8mb4) IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(description USING latin1)) USING utf8mb4) <> description
+   AND (CHAR_LENGTH(CONVERT(description USING latin1)) - CHAR_LENGTH(REPLACE(CONVERT(description USING latin1), '?', ''))) = (CHAR_LENGTH(description) - CHAR_LENGTH(REPLACE(description, '?', '')));
+UPDATE Product_Reviews SET comment = CONVERT(BINARY(CONVERT(comment USING latin1)) USING utf8mb4)
+ WHERE comment IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(comment USING latin1)) USING utf8mb4) IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(comment USING latin1)) USING utf8mb4) <> comment
+   AND (CHAR_LENGTH(CONVERT(comment USING latin1)) - CHAR_LENGTH(REPLACE(CONVERT(comment USING latin1), '?', ''))) = (CHAR_LENGTH(comment) - CHAR_LENGTH(REPLACE(comment, '?', '')));
+UPDATE Product_Reviews SET shop_reply = CONVERT(BINARY(CONVERT(shop_reply USING latin1)) USING utf8mb4)
+ WHERE shop_reply IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(shop_reply USING latin1)) USING utf8mb4) IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(shop_reply USING latin1)) USING utf8mb4) <> shop_reply
+   AND (CHAR_LENGTH(CONVERT(shop_reply USING latin1)) - CHAR_LENGTH(REPLACE(CONVERT(shop_reply USING latin1), '?', ''))) = (CHAR_LENGTH(shop_reply) - CHAR_LENGTH(REPLACE(shop_reply, '?', '')));
+UPDATE Blogs SET title = CONVERT(BINARY(CONVERT(title USING latin1)) USING utf8mb4)
+ WHERE title IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(title USING latin1)) USING utf8mb4) IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(title USING latin1)) USING utf8mb4) <> title
+   AND (CHAR_LENGTH(CONVERT(title USING latin1)) - CHAR_LENGTH(REPLACE(CONVERT(title USING latin1), '?', ''))) = (CHAR_LENGTH(title) - CHAR_LENGTH(REPLACE(title, '?', '')));
+UPDATE Blogs SET content = CONVERT(BINARY(CONVERT(content USING latin1)) USING utf8mb4)
+ WHERE content IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(content USING latin1)) USING utf8mb4) IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(content USING latin1)) USING utf8mb4) <> content
+   AND (CHAR_LENGTH(CONVERT(content USING latin1)) - CHAR_LENGTH(REPLACE(CONVERT(content USING latin1), '?', ''))) = (CHAR_LENGTH(content) - CHAR_LENGTH(REPLACE(content, '?', '')));
+UPDATE Blog_Comments SET content = CONVERT(BINARY(CONVERT(content USING latin1)) USING utf8mb4)
+ WHERE content IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(content USING latin1)) USING utf8mb4) IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(content USING latin1)) USING utf8mb4) <> content
+   AND (CHAR_LENGTH(CONVERT(content USING latin1)) - CHAR_LENGTH(REPLACE(CONVERT(content USING latin1), '?', ''))) = (CHAR_LENGTH(content) - CHAR_LENGTH(REPLACE(content, '?', '')));
+UPDATE Customer_Occasions SET title = CONVERT(BINARY(CONVERT(title USING latin1)) USING utf8mb4)
+ WHERE title IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(title USING latin1)) USING utf8mb4) IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(title USING latin1)) USING utf8mb4) <> title
+   AND (CHAR_LENGTH(CONVERT(title USING latin1)) - CHAR_LENGTH(REPLACE(CONVERT(title USING latin1), '?', ''))) = (CHAR_LENGTH(title) - CHAR_LENGTH(REPLACE(title, '?', '')));
+UPDATE Refunds SET reason = CONVERT(BINARY(CONVERT(reason USING latin1)) USING utf8mb4)
+ WHERE reason IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(reason USING latin1)) USING utf8mb4) IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(reason USING latin1)) USING utf8mb4) <> reason
+   AND (CHAR_LENGTH(CONVERT(reason USING latin1)) - CHAR_LENGTH(REPLACE(CONVERT(reason USING latin1), '?', ''))) = (CHAR_LENGTH(reason) - CHAR_LENGTH(REPLACE(reason, '?', '')));
+
+-- Cá»™t JSON
+UPDATE Products SET components = CONVERT(BINARY(CONVERT(CAST(components AS CHAR) USING latin1)) USING utf8mb4)
+ WHERE components IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(CAST(components AS CHAR) USING latin1)) USING utf8mb4) IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(CAST(components AS CHAR) USING latin1)) USING utf8mb4) <> CAST(components AS CHAR)
+   AND (CHAR_LENGTH(CONVERT(CAST(components AS CHAR) USING latin1)) - CHAR_LENGTH(REPLACE(CONVERT(CAST(components AS CHAR) USING latin1), '?', ''))) = (CHAR_LENGTH(CAST(components AS CHAR)) - CHAR_LENGTH(REPLACE(CAST(components AS CHAR), '?', '')));
+UPDATE Custom_Order_Requests SET desired_components = CONVERT(BINARY(CONVERT(CAST(desired_components AS CHAR) USING latin1)) USING utf8mb4)
+ WHERE desired_components IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(CAST(desired_components AS CHAR) USING latin1)) USING utf8mb4) IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(CAST(desired_components AS CHAR) USING latin1)) USING utf8mb4) <> CAST(desired_components AS CHAR)
+   AND (CHAR_LENGTH(CONVERT(CAST(desired_components AS CHAR) USING latin1)) - CHAR_LENGTH(REPLACE(CONVERT(CAST(desired_components AS CHAR) USING latin1), '?', ''))) = (CHAR_LENGTH(CAST(desired_components AS CHAR)) - CHAR_LENGTH(REPLACE(CAST(desired_components AS CHAR), '?', '')));
+UPDATE Order_Details SET custom_materials = CONVERT(BINARY(CONVERT(CAST(custom_materials AS CHAR) USING latin1)) USING utf8mb4)
+ WHERE custom_materials IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(CAST(custom_materials AS CHAR) USING latin1)) USING utf8mb4) IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(CAST(custom_materials AS CHAR) USING latin1)) USING utf8mb4) <> CAST(custom_materials AS CHAR)
+   AND (CHAR_LENGTH(CONVERT(CAST(custom_materials AS CHAR) USING latin1)) - CHAR_LENGTH(REPLACE(CONVERT(CAST(custom_materials AS CHAR) USING latin1), '?', ''))) = (CHAR_LENGTH(CAST(custom_materials AS CHAR)) - CHAR_LENGTH(REPLACE(CAST(custom_materials AS CHAR), '?', '')));
+UPDATE Chat_Messages SET media = CONVERT(BINARY(CONVERT(CAST(media AS CHAR) USING latin1)) USING utf8mb4)
+ WHERE media IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(CAST(media AS CHAR) USING latin1)) USING utf8mb4) IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(CAST(media AS CHAR) USING latin1)) USING utf8mb4) <> CAST(media AS CHAR)
+   AND (CHAR_LENGTH(CONVERT(CAST(media AS CHAR) USING latin1)) - CHAR_LENGTH(REPLACE(CONVERT(CAST(media AS CHAR) USING latin1), '?', ''))) = (CHAR_LENGTH(CAST(media AS CHAR)) - CHAR_LENGTH(REPLACE(CAST(media AS CHAR), '?', '')));
+UPDATE Product_Reviews SET media = CONVERT(BINARY(CONVERT(CAST(media AS CHAR) USING latin1)) USING utf8mb4)
+ WHERE media IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(CAST(media AS CHAR) USING latin1)) USING utf8mb4) IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(CAST(media AS CHAR) USING latin1)) USING utf8mb4) <> CAST(media AS CHAR)
+   AND (CHAR_LENGTH(CONVERT(CAST(media AS CHAR) USING latin1)) - CHAR_LENGTH(REPLACE(CONVERT(CAST(media AS CHAR) USING latin1), '?', ''))) = (CHAR_LENGTH(CAST(media AS CHAR)) - CHAR_LENGTH(REPLACE(CAST(media AS CHAR), '?', '')));
+UPDATE Payments SET gateway_response = CONVERT(BINARY(CONVERT(CAST(gateway_response AS CHAR) USING latin1)) USING utf8mb4)
+ WHERE gateway_response IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(CAST(gateway_response AS CHAR) USING latin1)) USING utf8mb4) IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(CAST(gateway_response AS CHAR) USING latin1)) USING utf8mb4) <> CAST(gateway_response AS CHAR)
+   AND (CHAR_LENGTH(CONVERT(CAST(gateway_response AS CHAR) USING latin1)) - CHAR_LENGTH(REPLACE(CONVERT(CAST(gateway_response AS CHAR) USING latin1), '?', ''))) = (CHAR_LENGTH(CAST(gateway_response AS CHAR)) - CHAR_LENGTH(REPLACE(CAST(gateway_response AS CHAR), '?', '')));
+UPDATE Refunds SET gateway_response = CONVERT(BINARY(CONVERT(CAST(gateway_response AS CHAR) USING latin1)) USING utf8mb4)
+ WHERE gateway_response IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(CAST(gateway_response AS CHAR) USING latin1)) USING utf8mb4) IS NOT NULL
+   AND CONVERT(BINARY(CONVERT(CAST(gateway_response AS CHAR) USING latin1)) USING utf8mb4) <> CAST(gateway_response AS CHAR)
+   AND (CHAR_LENGTH(CONVERT(CAST(gateway_response AS CHAR) USING latin1)) - CHAR_LENGTH(REPLACE(CONVERT(CAST(gateway_response AS CHAR) USING latin1), '?', ''))) = (CHAR_LENGTH(CAST(gateway_response AS CHAR)) - CHAR_LENGTH(REPLACE(CAST(gateway_response AS CHAR), '?', '')));
+
+-- Dá»n báº£ng thÄƒm dÃ² náº¿u cÃ²n sÃ³t tá»« lÃºc cháº©n Ä‘oÃ¡n.
+DROP TABLE IF EXISTS _charset_probe;

@@ -11,6 +11,7 @@ import Input from "@/components/form/input/InputField"
 import Select from "@/components/form/Select"
 import Label from "@/components/form/Label"
 import ComponentCard from "@/components/common/ComponentCard"
+import GhnAddressPicker from "@/components/GhnAddressPicker"
 
 export default function AccountView({ user, logout, checkSession, busy: authBusy, error: authError, notice: authNotice }) {
   const c = useAccountController(user)
@@ -188,35 +189,9 @@ export default function AccountView({ user, logout, checkSession, busy: authBusy
                     {c.editing ? 'Sửa địa chỉ' : 'Thêm địa chỉ'}
                   </h3>
                   <form onSubmit={c.saveAddress}>
-                    <fieldset disabled={busy || !c.cities.length} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <Label>Tỉnh / Thành phố</Label>
-                        <Select 
-                          required 
-                          value={c.address.city} 
-                          onChange={e => c.setAddress({ ...c.address, city: e.target.value })}
-                        >
-                          <option value="">Chọn khu vực</option>
-                          {c.cities.map(city => <option key={city} value={city}>{city}</option>)}
-                        </Select>
-                      </div>
-                      <div>
-                        <Label>Quận / Huyện</Label>
-                        <Input 
-                          required 
-                          maxLength={100} 
-                          value={c.address.district} 
-                          onChange={e => c.setAddress({ ...c.address, district: e.target.value })} 
-                        />
-                      </div>
-                      <div>
-                        <Label>Phường / Xã</Label>
-                        <Input 
-                          required 
-                          maxLength={100} 
-                          value={c.address.ward} 
-                          onChange={e => c.setAddress({ ...c.address, ward: e.target.value })} 
-                        />
+                    <fieldset disabled={busy} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="md:col-span-2">
+                        <GhnAddressPicker value={c.address} onChange={c.setAddress} />
                       </div>
                       <div className="md:col-span-2">
                         <Label>Số nhà, đường, tòa nhà</Label>

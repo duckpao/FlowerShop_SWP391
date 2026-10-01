@@ -51,6 +51,10 @@ public class Order {
     @Column(name = "discount_amount", precision = 12, scale = 2)
     private BigDecimal discountAmount = BigDecimal.ZERO;
 
+    @Builder.Default
+    @Column(name = "shipping_fee", nullable = false, precision = 12, scale = 2)
+    private BigDecimal shippingFee = BigDecimal.ZERO;
+
     @Column(name = "total_amount", nullable = false, precision = 12, scale = 2)
     private BigDecimal totalAmount;
 

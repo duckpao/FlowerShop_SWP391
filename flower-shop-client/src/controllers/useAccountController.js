@@ -6,7 +6,6 @@ export function useAccountController(user) {
   const [profile, setProfile] = useState(null)
   const [form, setForm] = useState({ fullName: '', phone: '' })
   const [addresses, setAddresses] = useState([])
-  const [cities, setCities] = useState([])
   const [address, setAddress] = useState(emptyAddress())
   const [editing, setEditing] = useState(null)
   const [busy, setBusy] = useState(true)
@@ -16,11 +15,10 @@ export function useAccountController(user) {
   useEffect(() => {
     let active = true
     setBusy(true); setError('')
-    Promise.all([accountService.profile(), ...(user.role === 'CUSTOMER' ? [accountService.addresses(), accountService.cities()] : [])])
-      .then(([p, list = [], allowed = []]) => {
+    Promise.all([accountService.profile(), ...(user.role === 'CUSTOMER' ? [accountService.addresses()] : [])])
+      .then(([p, list = []]) => {
         if (!active) return
-        setProfile(p); setForm(profileInput(p)); setAddresses(list); setCities(allowed)
-        setAddress(emptyAddress(allowed[0] || '')); setEditing(null)
+        setProfile(p); setForm(profileInput(p)); setAddresses(list); setAddress(emptyAddress()); setEditing(null)
       }).catch(e => { if (active) setError(e.message) })
       .finally(() => { if (active) setBusy(false) })
     return () => { active = false }
@@ -29,7 +27,7 @@ export function useAccountController(user) {
     setBusy(true); setError(''); setNotice('')
     try { await action() } catch (e) { setError(e.message) } finally { setBusy(false) }
   }
-  const cancel = () => { setEditing(null); setAddress(emptyAddress(cities[0] || '')) }
+  const cancel = () => { setEditing(null); setAddress(emptyAddress()) }
   const saveProfile = e => {
     e.preventDefault()
     return run(async () => {
@@ -57,7 +55,7 @@ export function useAccountController(user) {
   })
   const edit = item => {
     setEditing(item.id)
-    setAddress({ addressLine: item.addressLine || '', city: item.city || '', district: item.district || '', ward: item.ward || '', isDefault: item.isDefault })
+    setAddress({ addressLine: item.addressLine || '', district: item.district || '', ward: item.ward || '', isDefault: item.isDefault })
     setError(''); setNotice('')
   }
   return {

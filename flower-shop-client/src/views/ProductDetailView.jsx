@@ -2,7 +2,6 @@ import { useProductDetailController } from '../controllers/useProductDetailContr
 import { useFavoriteToggle } from '../controllers/useFavoritesController'
 import ProductReviewsView from './ProductReviewsView'
 import { formatPrice } from '../models/productModel'
-import '../styles/account.css'
 import '../styles/catalog.css'
 
 export default function ProductDetailView({ auth, productId }) {

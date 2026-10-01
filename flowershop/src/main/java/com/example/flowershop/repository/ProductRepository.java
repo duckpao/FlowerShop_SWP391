@@ -2,10 +2,13 @@ package com.example.flowershop.repository;
 import com.example.flowershop.entity.Product;
 import com.example.flowershop.entity.enums.ProductStatus;
 import com.example.flowershop.entity.enums.ShopStatus;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.domain.*;
+import org.springframework.data.repository.query.Param;
 import java.util.List;
 import java.util.Optional;
 public interface ProductRepository extends JpaRepository<Product,String>, JpaSpecificationExecutor<Product> {
@@ -20,4 +23,8 @@ public interface ProductRepository extends JpaRepository<Product,String>, JpaSpe
          + "and p.shop.status = com.example.flowershop.entity.enums.ShopStatus.ACTIVE "
          + "group by p.category.id")
     List<Object[]> countVisibleByCategory();
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select p from Product p where p.id = :id")
+    Optional<Product> findByIdForUpdate(@Param("id") String id);
 }

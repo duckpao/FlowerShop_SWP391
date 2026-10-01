@@ -233,6 +233,10 @@ export default function ManagerShopsView({ role, section = "all" }) {
           {role === "SHOP" && ["all", "products"].includes(section) && (
             <ProductsView key={`products-${c.selected.id}`} shop={c.selected} manage />
           )}
+
+          {role === "SHOP" && ["all", "orders"].includes(section) && (
+            <ManagerOrdersView key={`orders-${c.selected.id}`} shop={c.selected} onBack={() => c.setSection("all")} />
+          )}
         </div>
       )}
     </div>

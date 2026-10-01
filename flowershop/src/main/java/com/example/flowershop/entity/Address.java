@@ -40,6 +40,12 @@ public class Address {
     @Column(name = "city", length = 100)
     private String city;
 
+    @Column(name = "ghn_ward_code", length = 20)
+    private String ghnWardCode;
+
+    @Column(name = "ghn_district_id")
+    private Integer ghnDistrictId;
+
     @Builder.Default
     @Column(name = "is_default")
     private Boolean isDefault = false;

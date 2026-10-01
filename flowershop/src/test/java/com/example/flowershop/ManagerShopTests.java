@@ -76,7 +76,7 @@ class ManagerShopTests {
         assertThatThrownBy(()->service.staff(shop.getId(),other.getId())).isInstanceOf(ResponseStatusException.class);
     }
     @Test void shopAddressSeparateFromCustomerAndOwnerOnly() {
-        var request=new AddressRequest("12 Test","Hà Nội","Test","Test",true);
+        var request=new AddressRequest("12 Test","Hà Nội","Test","Test","00001",1442,true);
         service.saveAddress(shop.getId(),owner.getId(),request); service.saveAddress(shop.getId(),owner.getId(),request);
         assertThat(service.address(shop.getId(),owner.getId())).hasSize(1);
         assertThat(addresses.findByUserIdAndShopIsNullOrderByCreatedDateAscIdAsc(owner.getId())).isEmpty();

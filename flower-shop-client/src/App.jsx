@@ -48,7 +48,7 @@ function AuthApp() {
   if (path === '/account' && controller.user) return <><a href="/">Trang chủ</a><AuthView {...controller} /></>
   const productMatch = path.match(/^\/products\/([^/]+)$/)
   if (productMatch) return <ProductDetailView id={decodeURIComponent(productMatch[1])} />
-  if (['/shop-admin', '/shop-admin/staff', '/shop-admin/products', '/shop-admin/shop', '/shop-admin/profile'].includes(path)) {
+  if (['/shop-admin', '/shop-admin/staff', '/shop-admin/products', '/shop-admin/shop', '/shop-admin/orders', '/shop-admin/order-queue', '/shop-admin/profile'].includes(path)) {
     if (controller.busy && !controller.user) return <main className="account-page"><p role="status">Đang kiểm tra đăng nhập…</p></main>
     if (!controller.user) return <main className="account-page"><h1>Trang quản trị shop</h1><a href="/login">Đăng nhập</a></main>
     if (controller.user.role === 'SHOP') return <ManagerDashboardView {...controller} path={path === '/shop-admin' && new URLSearchParams(window.location.search).has('notifications') ? '/shop-admin/staff' : path} />
