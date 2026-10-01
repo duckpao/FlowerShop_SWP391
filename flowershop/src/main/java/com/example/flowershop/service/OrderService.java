@@ -27,8 +27,10 @@ import java.util.HashSet;
 import java.time.LocalDateTime;
 import java.math.RoundingMode;
 import java.util.Optional;
+import lombok.extern.slf4j.Slf4j;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class OrderService {
@@ -311,6 +313,58 @@ public class OrderService {
                     .createdDate(order.getCreatedDate())
                     .build();
         }).collect(Collectors.toList());
+    }
+
+    /**
+     * Tự động hủy đơn hàng quá 10 phút chưa thanh toán.
+     * Hoàn lại tồn kho cho từng sản phẩm, hoàn lại coupon (nếu có), và hủy các payment pending.
+     */
+    @Transactional
+    public void cancelExpiredOrder(String orderId, String reason) {
+        Order order = orderRepository.findByIdForUpdate(orderId).orElse(null);
+        if (order == null || order.getStatus() != OrderStatus.PENDING) {
+            return;
+        }
+
+        log.info("Tự động hủy đơn hàng quá 10 phút chưa thanh toán: #{} (Lý do: {})", order.getId(), reason);
+
+        // 1. Cập nhật trạng thái Order sang CANCELLED
+        order.setStatus(OrderStatus.CANCELLED);
+        order.setLastModifyBy("SYSTEM_AUTO_CANCEL");
+        orderRepository.save(order);
+
+        // 2. Hoàn lại stock cho các sản phẩm trong đơn
+        List<OrderDetail> details = orderDetailRepository.findByOrderId(order.getId());
+        for (OrderDetail item : details) {
+            if (item.getProduct() != null) {
+                Product product = productRepository.findByIdForUpdate(item.getProduct().getId()).orElse(null);
+                if (product != null) {
+                    product.setStock(product.getStock() + item.getQuantity());
+                    product.setLastModifyBy("SYSTEM_AUTO_CANCEL");
+                    productRepository.save(product);
+                    log.info("Hoàn lại stock sản phẩm {}: +{}", product.getId(), item.getQuantity());
+                }
+            }
+        }
+
+        // 3. Hoàn lại lượt dùng coupon nếu có
+        if (order.getCouponId() != null && !order.getCouponId().isBlank()) {
+            couponRepository.findById(order.getCouponId()).ifPresent(coupon -> {
+                coupon.setUsedCount(Math.max(0, coupon.getUsedCount() - 1));
+                couponRepository.save(coupon);
+                log.info("Hoàn lại coupon: {}", coupon.getCode());
+            });
+        }
+
+        // 4. Hủy các payment PENDING của đơn hàng
+        List<Payment> payments = paymentRepository.findByOrderId(order.getId());
+        for (Payment payment : payments) {
+            if (payment.getStatus() == PaymentStatus.PENDING) {
+                payment.setStatus(PaymentStatus.FAILED);
+                payment.setLastModifyBy("SYSTEM_AUTO_CANCEL");
+                paymentRepository.save(payment);
+            }
+        }
     }
 }
 

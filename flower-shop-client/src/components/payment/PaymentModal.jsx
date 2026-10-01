@@ -7,6 +7,9 @@ export default function PaymentModal({ isOpen, onClose, orderId, onPaymentSucces
   const [error, setError] = useState(null);
   const [copiedField, setCopiedField] = useState(null);
   const [isPaid, setIsPaid] = useState(false);
+  const [isCancelled, setIsCancelled] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [timeLeft, setTimeLeft] = useState(600); // 10 phút = 600 giây
 
   // 1. Lấy thông tin mã VietQR khi mở Modal
   useEffect(() => {
@@ -16,6 +19,9 @@ export default function PaymentModal({ isOpen, onClose, orderId, onPaymentSucces
     setLoading(true);
     setError(null);
     setIsPaid(false);
+    setIsCancelled(false);
+    setCancelReason('');
+    setTimeLeft(600);
 
     paymentApi.createQrPayment(orderId)
       .then((data) => {
@@ -31,9 +37,27 @@ export default function PaymentModal({ isOpen, onClose, orderId, onPaymentSucces
     return () => { isMounted = false; };
   }, [isOpen, orderId]);
 
-  // 2. Polling kiểm tra trạng thái thanh toán mỗi 2.5 giây
+  // 2. Đếm ngược 10 phút
   useEffect(() => {
-    if (!isOpen || !orderId || isPaid) return;
+    if (!isOpen || !orderId || isPaid || isCancelled) return;
+
+    const timer = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          setIsCancelled(true);
+          setCancelReason('Đã hết thời gian 10 phút quét mã thanh toán. Đơn hàng đã tự động bị hủy.');
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [isOpen, orderId, isPaid, isCancelled]);
+
+  // 3. Polling kiểm tra trạng thái thanh toán mỗi 2.5 giây
+  useEffect(() => {
+    if (!isOpen || !orderId || isPaid || isCancelled) return;
 
     const interval = setInterval(() => {
       paymentApi.checkPaymentStatus(orderId)
@@ -42,13 +66,18 @@ export default function PaymentModal({ isOpen, onClose, orderId, onPaymentSucces
             setIsPaid(true);
             clearInterval(interval);
             if (onPaymentSuccess) onPaymentSuccess(res);
+          } else if (res.orderStatus === 'CANCELLED') {
+            setIsCancelled(true);
+            setCancelReason(res.message || 'Đơn hàng đã hết hạn thanh toán (quá 10 phút) và đã tự động hủy.');
+            clearInterval(interval);
           }
         })
         .catch((e) => console.log('Polling check error:', e));
     }, 2500);
 
     return () => clearInterval(interval);
-  }, [isOpen, orderId, isPaid, onPaymentSuccess]);
+  }, [isOpen, orderId, isPaid, isCancelled, onPaymentSuccess]);
+
 
   const handleCopy = (text, fieldName) => {
     navigator.clipboard.writeText(text);
@@ -109,9 +138,48 @@ export default function PaymentModal({ isOpen, onClose, orderId, onPaymentSucces
             </div>
           )}
 
-          {/* MÀN HÌNH QUÉT MÃ QR & THÔNG TIN CHUYỂN KHOẢN (Theo thiết kế 1) */}
-          {!loading && !error && !isPaid && qrData && (
+          {/* MÀN HÌNH ĐƠN HÀNG BỊ HỦY DO QUÁ HẠN 10 PHÚT */}
+          {isCancelled && (
+            <div style={styles.cancelledView}>
+              <div style={styles.cancelIconCircle}>
+                <span style={styles.cancelIcon}>✕</span>
+              </div>
+              <h2 style={styles.cancelTitle}>Đơn hàng đã hết hạn thanh toán</h2>
+              <p style={styles.cancelDesc}>
+                {cancelReason || 'Đơn hàng đã quá hạn 10 phút chưa hoàn tất thanh toán nên hệ thống đã tự động hủy đơn và hoàn lại số lượng sản phẩm vào kho.'}
+              </p>
+              <div style={styles.paidInfoBox}>
+                <span>Mã đơn hàng:</span>
+                <strong>{orderId}</strong>
+              </div>
+              <button style={styles.cancelBtn} onClick={onClose}>
+                Đóng & Quay lại giỏ hàng
+              </button>
+            </div>
+          )}
+
+          {/* MÀN HÌNH QUÉT MÃ QR & THÔNG TIN CHUYỂN KHOẢN */}
+          {!loading && !error && !isPaid && !isCancelled && qrData && (
             <div>
+              {/* Đếm ngược 10 phút */}
+              <div style={{ textAlign: 'center', marginBottom: 14 }}>
+                <div style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '6px 16px',
+                  borderRadius: 20,
+                  fontSize: 13,
+                  fontWeight: 700,
+                  background: timeLeft < 120 ? '#fff5f5' : '#f0fdf4',
+                  color: timeLeft < 120 ? '#e03131' : '#15803d',
+                  border: timeLeft < 120 ? '1px solid #ffc9c9' : '1px solid #bbf7d0',
+                }}>
+                  <span style={{ fontSize: 16 }}>⏱️</span>
+                  <span>Thời gian quét mã còn lại: <strong>{Math.floor(timeLeft / 60)}:{(timeLeft % 60) < 10 ? '0' : ''}{timeLeft % 60}</strong></span>
+                </div>
+              </div>
+
               <div style={styles.instruction}>
                 Mở ứng dụng ngân hàng bất kỳ để <strong>quét mã QR</strong> hoặc chuyển khoản theo thông tin bên dưới:
               </div>
@@ -449,5 +517,53 @@ const styles = {
     fontWeight: 700,
     cursor: 'pointer',
   },
+  cancelledView: {
+    textAlign: 'center',
+    padding: '30px 10px',
+  },
+  cancelIconCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: '50%',
+    background: '#fff5f5',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    margin: '0 auto 16px',
+    border: '2px solid #ffc9c9',
+  },
+  cancelIcon: {
+    fontSize: 34,
+    color: '#e03131',
+    fontWeight: 900,
+  },
+  cancelTitle: {
+    fontSize: 22,
+    fontWeight: 800,
+    color: '#1a1a1a',
+    marginBottom: 8,
+  },
+  cancelDesc: {
+    color: '#666',
+    fontSize: 14,
+    maxWidth: 480,
+    margin: '0 auto 20px',
+    lineHeight: 1.5,
+  },
+  cancelBtn: {
+    display: 'block',
+    width: '100%',
+    maxWidth: 280,
+    margin: '0 auto',
+    padding: '12px 0',
+    background: '#e03131',
+    color: '#fff',
+    border: 'none',
+    borderRadius: 10,
+    fontSize: 15,
+    fontWeight: 700,
+    cursor: 'pointer',
+  },
 };
+
 

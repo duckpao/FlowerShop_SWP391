@@ -34,6 +34,7 @@ public class SePayGatewayService {
 
     private final OrderRepository orderRepository;
     private final PaymentRepository paymentRepository;
+    private final OrderService orderService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Value("${sepay.merchant-id:SP-TEST-001}")
@@ -90,6 +91,11 @@ public class SePayGatewayService {
         }
         if (order.getStatus() == OrderStatus.CANCELLED) {
             throw ApiException.badRequest("Đơn hàng này đã bị hủy, không thể thanh toán.");
+        }
+        if (order.getStatus() == OrderStatus.PENDING && order.getCreatedDate() != null
+                && order.getCreatedDate().plusMinutes(10).isBefore(java.time.LocalDateTime.now())) {
+            orderService.cancelExpiredOrder(order.getId(), "Quá hạn 10 phút không quét mã thanh toán");
+            throw ApiException.badRequest("Đơn hàng đã hết hạn thanh toán (quá 10 phút) và đã tự động hủy.");
         }
         if (order.getStatus() != OrderStatus.PENDING && order.getStatus() != OrderStatus.DEPOSIT_PAID
                 && order.getStatus() != OrderStatus.AWAITING_DEPOSIT) {
@@ -252,6 +258,11 @@ public class SePayGatewayService {
         if (payment.getOrder().getStatus() == OrderStatus.CANCELLED) {
             return Map.of("success", false, "message", "Order cancelled");
         }
+        if (payment.getOrder().getStatus() == OrderStatus.PENDING && payment.getOrder().getCreatedDate() != null
+                && payment.getOrder().getCreatedDate().plusMinutes(10).isBefore(java.time.LocalDateTime.now())) {
+            orderService.cancelExpiredOrder(payment.getOrder().getId(), "Quá hạn 10 phút không quét mã thanh toán");
+            return Map.of("success", false, "message", "Order expired and cancelled");
+        }
 
         // Lấy thông tin giao dịch từ SePay
         SePayIpnPayload.IpnTransaction transaction = payload.getTransaction();
@@ -315,6 +326,13 @@ public class SePayGatewayService {
     public boolean reconcileWithSePayGateway(Payment payment) {
         if (payment == null || payment.getPaymentMethod() != PaymentMethod.ONLINE || payment.getInvoiceNumber() == null) return false;
         if (payment.getStatus() == PaymentStatus.SUCCESS) return true;
+        if (payment.getOrder() != null && payment.getOrder().getStatus() == OrderStatus.CANCELLED) return false;
+        if (payment.getOrder() != null && payment.getOrder().getStatus() == OrderStatus.PENDING
+                && payment.getOrder().getCreatedDate() != null
+                && payment.getOrder().getCreatedDate().plusMinutes(10).isBefore(java.time.LocalDateTime.now())) {
+            orderService.cancelExpiredOrder(payment.getOrder().getId(), "Quá hạn 10 phút không quét mã thanh toán");
+            return false;
+        }
 
         try {
             String invoiceNumber = payment.getInvoiceNumber();
@@ -403,12 +421,29 @@ public class SePayGatewayService {
             throw ApiException.forbidden("Bạn không có quyền xem thông tin giao dịch này.");
         }
 
-        // Tự động đối soát trực tiếp với SePay pgapi nếu trạng thái chưa là SUCCESS
-        if (payment.getStatus() != PaymentStatus.SUCCESS) {
+        // Tự động hủy nếu đã quá hạn 10 phút
+        if (payment.getOrder() != null && payment.getOrder().getStatus() == OrderStatus.PENDING
+                && payment.getOrder().getCreatedDate() != null
+                && payment.getOrder().getCreatedDate().plusMinutes(10).isBefore(java.time.LocalDateTime.now())) {
+            orderService.cancelExpiredOrder(payment.getOrder().getId(), "Quá hạn 10 phút không quét mã thanh toán");
+            payment = paymentRepository.findByInvoiceNumberForUpdate(invoiceNumber).orElse(payment);
+        }
+
+        // Tự động đối soát trực tiếp với SePay pgapi nếu trạng thái chưa là SUCCESS và đơn chưa bị hủy
+        if (payment.getStatus() != PaymentStatus.SUCCESS && payment.getOrder().getStatus() != OrderStatus.CANCELLED) {
             reconcileWithSePayGateway(payment);
         }
 
         boolean isPaid = payment.getStatus() == PaymentStatus.SUCCESS;
+        String message;
+        if (isPaid) {
+            message = "Thanh toán thành công qua SePay Gateway!";
+        } else if (payment.getOrder() != null && payment.getOrder().getStatus() == OrderStatus.CANCELLED) {
+            message = "Đơn hàng đã bị hủy do quá thời gian thanh toán (10 phút).";
+        } else {
+            message = "Đang chờ thanh toán...";
+        }
+
         return PaymentStatusResponse.builder()
                 .paymentId(payment.getId())
                 .orderId(payment.getOrder().getId())
@@ -420,7 +455,7 @@ public class SePayGatewayService {
                 .paidAmount(isPaid ? payment.getAmount() : BigDecimal.ZERO)
                 .paymentType(payment.getPaymentType() != null ? payment.getPaymentType().name() : "FULL")
                 .transactionNo(payment.getGatewayTransactionNo())
-                .message(isPaid ? "Thanh toán thành công qua SePay Gateway!" : "Đang chờ thanh toán...")
+                .message(message)
                 .paidAt(payment.getLastModifyDate())
                 .build();
     }
@@ -439,12 +474,29 @@ public class SePayGatewayService {
             throw ApiException.forbidden("Bạn không có quyền xem thông tin giao dịch này.");
         }
 
-        // Tự động đối soát trực tiếp với SePay pgapi nếu trạng thái chưa là SUCCESS
-        if (payment.getStatus() != PaymentStatus.SUCCESS) {
+        // Tự động hủy nếu đã quá hạn 10 phút
+        if (payment.getOrder() != null && payment.getOrder().getStatus() == OrderStatus.PENDING
+                && payment.getOrder().getCreatedDate() != null
+                && payment.getOrder().getCreatedDate().plusMinutes(10).isBefore(java.time.LocalDateTime.now())) {
+            orderService.cancelExpiredOrder(payment.getOrder().getId(), "Quá hạn 10 phút không quét mã thanh toán");
+            payment = paymentRepository.findById(paymentId).orElse(payment);
+        }
+
+        // Tự động đối soát trực tiếp với SePay pgapi nếu trạng thái chưa là SUCCESS và đơn chưa bị hủy
+        if (payment.getStatus() != PaymentStatus.SUCCESS && payment.getOrder().getStatus() != OrderStatus.CANCELLED) {
             reconcileWithSePayGateway(payment);
         }
 
         boolean isPaid = payment.getStatus() == PaymentStatus.SUCCESS;
+        String message;
+        if (isPaid) {
+            message = "Thanh toán thành công qua SePay Gateway!";
+        } else if (payment.getOrder() != null && payment.getOrder().getStatus() == OrderStatus.CANCELLED) {
+            message = "Đơn hàng đã bị hủy do quá thời gian thanh toán (10 phút).";
+        } else {
+            message = "Đang chờ thanh toán...";
+        }
+
         return PaymentStatusResponse.builder()
                 .paymentId(payment.getId())
                 .orderId(payment.getOrder().getId())
@@ -456,7 +508,7 @@ public class SePayGatewayService {
                 .paidAmount(isPaid ? payment.getAmount() : BigDecimal.ZERO)
                 .paymentType(payment.getPaymentType() != null ? payment.getPaymentType().name() : "FULL")
                 .transactionNo(payment.getGatewayTransactionNo())
-                .message(isPaid ? "Thanh toán thành công qua SePay Gateway!" : "Đang chờ thanh toán...")
+                .message(message)
                 .paidAt(payment.getLastModifyDate())
                 .build();
     }

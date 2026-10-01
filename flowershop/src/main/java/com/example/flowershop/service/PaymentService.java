@@ -33,6 +33,7 @@ public class PaymentService {
     private final OrderRepository orderRepository;
     private final PaymentRepository paymentRepository;
     private final SePayGatewayService sePayGatewayService;
+    private final OrderService orderService;
 
     @Value("${sepay.bank-id:MB}")
     private String bankId;
@@ -62,11 +63,17 @@ public class PaymentService {
     /**
      * 1. Sinh thông tin thanh toán VietQR cho đơn hàng
      */
-    @Transactional(readOnly = true)
+    @Transactional
     public PaymentQrResponse generatePaymentQr(String orderId, String userId) {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> ApiException.notFound("Không tìm thấy đơn hàng với id: " + orderId));
         requireOwner(order, userId);
+
+        if (order.getStatus() == OrderStatus.PENDING && order.getCreatedDate() != null
+                && order.getCreatedDate().plusMinutes(10).isBefore(java.time.LocalDateTime.now())) {
+            orderService.cancelExpiredOrder(order.getId(), "Quá hạn 10 phút không quét mã thanh toán");
+            throw ApiException.badRequest("Đơn hàng đã hết hạn thanh toán (quá 10 phút) và đã tự động hủy.");
+        }
 
         if (order.getStatus() != OrderStatus.PENDING) {
             throw ApiException.badRequest("Đơn hàng này đã được thanh toán hoặc không ở trạng thái chờ.");
@@ -146,6 +153,14 @@ public class PaymentService {
             return Map.of("success", false, "message", "Order not found from content");
         }
 
+        // Kiểm tra nếu đơn hàng đã quá hạn 10 phút
+        if (matchedOrder.getStatus() == OrderStatus.PENDING && matchedOrder.getCreatedDate() != null
+                && matchedOrder.getCreatedDate().plusMinutes(10).isBefore(java.time.LocalDateTime.now())) {
+            orderService.cancelExpiredOrder(matchedOrder.getId(), "Quá hạn 10 phút không quét mã thanh toán");
+            log.warn("Đơn hàng #{} đã quá hạn 10 phút thanh toán trước khi nhận webhook.", matchedOrder.getId());
+            return Map.of("success", false, "message", "Order expired and cancelled");
+        }
+
         BigDecimal transferAmount = webhookDto.getTransferAmount() != null
                 ? webhookDto.getTransferAmount()
                 : BigDecimal.ZERO;
@@ -198,17 +213,35 @@ public class PaymentService {
                 .orElseThrow(() -> ApiException.notFound("Không tìm thấy đơn hàng với id: " + orderId));
         requireOwner(order, userId);
 
-        // Nếu có bản ghi payment chưa thành công -> chủ động đối soát với SePay
-        Optional<Payment> latestPaymentOpt = paymentRepository.findTopByOrderIdOrderByCreatedDateDesc(orderId);
-        if (latestPaymentOpt.isPresent()) {
-            Payment payment = latestPaymentOpt.get();
-            if (payment.getPaymentMethod() == PaymentMethod.ONLINE && payment.getStatus() != PaymentStatus.SUCCESS) {
-                sePayGatewayService.reconcileWithSePayGateway(payment);
+        // Kiểm tra xem đơn hàng PENDING đã quá 10 phút chưa -> tự động hủy nếu quá hạn
+        if (order.getStatus() == OrderStatus.PENDING && order.getCreatedDate() != null
+                && order.getCreatedDate().plusMinutes(10).isBefore(java.time.LocalDateTime.now())) {
+            orderService.cancelExpiredOrder(order.getId(), "Quá hạn 10 phút không quét mã thanh toán");
+            order = orderRepository.findById(orderId).orElse(order);
+        }
+
+        // Nếu có bản ghi payment chưa thành công và đơn chưa bị hủy -> chủ động đối soát với SePay
+        if (order.getStatus() != OrderStatus.CANCELLED) {
+            Optional<Payment> latestPaymentOpt = paymentRepository.findTopByOrderIdOrderByCreatedDateDesc(orderId);
+            if (latestPaymentOpt.isPresent()) {
+                Payment payment = latestPaymentOpt.get();
+                if (payment.getPaymentMethod() == PaymentMethod.ONLINE && payment.getStatus() != PaymentStatus.SUCCESS) {
+                    sePayGatewayService.reconcileWithSePayGateway(payment);
+                }
             }
         }
 
         Optional<Payment> latestPayment = paymentRepository.findTopByOrderIdOrderByCreatedDateDesc(orderId);
         boolean isPaid = latestPayment.map(p -> p.getStatus() == PaymentStatus.SUCCESS).orElse(false);
+
+        String message;
+        if (isPaid) {
+            message = "Đơn hàng đã được thanh toán thành công!";
+        } else if (order.getStatus() == OrderStatus.CANCELLED) {
+            message = "Đơn hàng đã bị hủy do hết thời gian chờ thanh toán (10 phút).";
+        } else {
+            message = "Đang chờ thanh toán...";
+        }
 
         return PaymentStatusResponse.builder()
                 .orderId(order.getId())
@@ -216,7 +249,7 @@ public class PaymentService {
                 .isPaid(isPaid)
                 .paidAmount(latestPayment.filter(p -> p.getStatus() == PaymentStatus.SUCCESS).map(Payment::getAmount).orElse(BigDecimal.ZERO))
                 .transactionNo(latestPayment.map(Payment::getGatewayTransactionNo).orElse(null))
-                .message(isPaid ? "Đơn hàng đã được thanh toán thành công!" : "Đang chờ thanh toán...")
+                .message(message)
                 .build();
     }
 

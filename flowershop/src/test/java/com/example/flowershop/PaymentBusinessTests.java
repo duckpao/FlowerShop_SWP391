@@ -8,16 +8,19 @@ import com.example.flowershop.entity.User;
 import com.example.flowershop.entity.enums.*;
 import com.example.flowershop.repository.OrderRepository;
 import com.example.flowershop.repository.PaymentRepository;
+import com.example.flowershop.service.OrderService;
 import com.example.flowershop.service.PaymentService;
 import com.example.flowershop.service.SePayGatewayService;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
 
 class PaymentBusinessTests {
@@ -25,12 +28,15 @@ class PaymentBusinessTests {
     void repeatedCheckoutReusesPendingInvoice() {
         OrderRepository orders = mock(OrderRepository.class);
         PaymentRepository payments = mock(PaymentRepository.class);
-        SePayGatewayService service = new SePayGatewayService(orders, payments);
+        OrderService orderService = mock(OrderService.class);
+        SePayGatewayService service = new SePayGatewayService(orders, payments, orderService);
         ReflectionTestUtils.setField(service, "merchantId", "merchant-test");
         ReflectionTestUtils.setField(service, "secretKey", "secret-test");
         Order order = Order.builder().id("12345678-0000-0000-0000-000000000000")
                 .customer(User.builder().id("customer-1").build())
-                .status(OrderStatus.PENDING).totalAmount(new BigDecimal("100000")).build();
+                .status(OrderStatus.PENDING).totalAmount(new BigDecimal("100000"))
+                .createdDate(LocalDateTime.now())
+                .build();
         Payment pending = Payment.builder().id("payment-1").order(order).paymentMethod(PaymentMethod.ONLINE)
                 .paymentType(PaymentType.FULL).status(PaymentStatus.PENDING)
                 .amount(new BigDecimal("100000")).invoiceNumber("invoice-1").build();
@@ -49,7 +55,8 @@ class PaymentBusinessTests {
         OrderRepository orders = mock(OrderRepository.class);
         PaymentRepository payments = mock(PaymentRepository.class);
         SePayGatewayService gateway = mock(SePayGatewayService.class);
-        PaymentService service = new PaymentService(orders, payments, gateway);
+        OrderService orderService = mock(OrderService.class);
+        PaymentService service = new PaymentService(orders, payments, gateway, orderService);
         Order order = Order.builder().id("order-1").customer(User.builder().id("customer-1").build())
                 .status(OrderStatus.PROCESSING).build();
         Payment cod = Payment.builder().order(order).paymentMethod(PaymentMethod.COD)
@@ -68,9 +75,12 @@ class PaymentBusinessTests {
     void ipnWithWrongAmountCannotConfirmOrder() {
         OrderRepository orders = mock(OrderRepository.class);
         PaymentRepository payments = mock(PaymentRepository.class);
-        SePayGatewayService service = new SePayGatewayService(orders, payments);
+        OrderService orderService = mock(OrderService.class);
+        SePayGatewayService service = new SePayGatewayService(orders, payments, orderService);
         ReflectionTestUtils.setField(service, "ipnSecret", "test-secret");
-        Order order = Order.builder().id("order-1").status(OrderStatus.PENDING).build();
+        Order order = Order.builder().id("order-1").status(OrderStatus.PENDING)
+                .createdDate(LocalDateTime.now())
+                .build();
         Payment payment = Payment.builder().order(order).amount(new BigDecimal("100000"))
                 .status(PaymentStatus.PENDING).paymentType(PaymentType.FULL).build();
         when(payments.findByInvoiceNumberForUpdate("invoice-1")).thenReturn(Optional.of(payment));
@@ -91,4 +101,26 @@ class PaymentBusinessTests {
         assertThat(order.getStatus()).isEqualTo(OrderStatus.PENDING);
         verify(orders, never()).save(any());
     }
+
+    @Test
+    void orderPendingAfter10MinutesIsCancelledWhenCheckingStatus() {
+        OrderRepository orders = mock(OrderRepository.class);
+        PaymentRepository payments = mock(PaymentRepository.class);
+        SePayGatewayService gateway = mock(SePayGatewayService.class);
+        OrderService orderService = mock(OrderService.class);
+        PaymentService service = new PaymentService(orders, payments, gateway, orderService);
+
+        Order order = Order.builder().id("order-expired")
+                .customer(User.builder().id("customer-1").build())
+                .status(OrderStatus.PENDING)
+                .createdDate(LocalDateTime.now().minusMinutes(11))
+                .build();
+        when(orders.findById("order-expired")).thenReturn(Optional.of(order));
+
+        var result = service.checkPaymentStatus("order-expired", "customer-1");
+
+        verify(orderService).cancelExpiredOrder(eq("order-expired"), anyString());
+        assertThat(result.isPaid()).isFalse();
+    }
 }
+
