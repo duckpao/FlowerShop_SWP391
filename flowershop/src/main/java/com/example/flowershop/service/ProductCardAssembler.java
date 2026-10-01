@@ -3,6 +3,7 @@ package com.example.flowershop.service;
 import com.example.flowershop.entity.Product;
 import com.example.flowershop.entity.ProductImage;
 import com.example.flowershop.entity.enums.ProductStatus;
+import com.example.flowershop.entity.enums.ProductType;
 import com.example.flowershop.entity.enums.ShopStatus;
 import com.example.flowershop.repository.ProductImageRepository;
 import com.example.flowershop.repository.ProductReviewRepository;
@@ -21,7 +22,7 @@ public class ProductCardAssembler {
      * available gộp mọi lý do không hiển thị; adminHidden tách riêng để trang kiểm duyệt của Admin
      * phân biệt được "Admin ẩn" với "shop tự ẩn" hoặc "shop bị khoá".
      */
-    public record ProductCard(String id, String name, BigDecimal price, Integer stock,
+    public record ProductCard(String id, String name, ProductType type, BigDecimal price, Integer stock,
             ProductStatus status, String shopId, String shopName, String categoryId,
             String categoryName, String imageUrl, double rating, long reviewCount,
             boolean available, boolean adminHidden) {}
@@ -74,7 +75,7 @@ public class ProductCardAssembler {
         Map<String, double[]> rating = ratings(ids);
         return products.stream().map(p -> {
             double[] summary = rating.getOrDefault(p.getId(), new double[]{0d, 0d});
-            return new ProductCard(p.getId(), p.getName(), p.getPrice(), p.getStock(), p.getStatus(),
+            return new ProductCard(p.getId(), p.getName(), p.getType(), p.getPrice(), p.getStock(), p.getStatus(),
                     p.getShop().getId(), p.getShop().getName(), p.getCategory().getId(),
                     p.getCategory().getName(), image.get(p.getId()),
                     Math.round(summary[0] * 10) / 10.0, (long) summary[1], visible(p), p.isAdminHidden());

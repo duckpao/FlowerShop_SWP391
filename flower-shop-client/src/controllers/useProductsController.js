@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { productService as api } from '../services/productService'
 
-const empty = () => ({ name: '', description: '', categoryId: '', price: '', stock: 0, status: 'ACTIVE', images: [] })
+const empty = () => ({ name: '', description: '', categoryId: '', price: '', stock: 0, status: 'ACTIVE', type: 'READY_MADE', images: [] })
 
 export function useProductsController(shopId, manage) {
   const [data, setData] = useState(null)
@@ -53,7 +53,7 @@ export function useProductsController(shopId, manage) {
     setEditing(p.id)
     setForm({
       name: p.name, description: p.description || '', categoryId: p.categoryId,
-      price: p.price, stock: p.stock, status: p.status,
+      price: p.price, stock: p.stock, status: p.status, type: p.type || 'READY_MADE',
       images: (p.images || []).map((url, index) => ({ url, primary: index === 0 })),
     })
   }

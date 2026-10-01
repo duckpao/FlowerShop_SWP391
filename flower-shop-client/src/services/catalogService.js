@@ -15,4 +15,5 @@ export const catalogService = {
   browse: params => get(`/api/public/products?${new URLSearchParams(params)}`),
   detail: id => get(`/api/public/products/${encodeURIComponent(id)}`),
   categories: () => get('/api/public/categories'),
+  shops: () => get('/api/public/shops'),
 }

@@ -3,6 +3,7 @@ import AdminShopsView from "./AdminShopsView";
 import AdminManagerApplicationsView from "./AdminManagerApplicationsView";
 import AdminCustomersView from "./AdminCustomersView";
 import AdminProfileView from "./AdminProfileView";
+import AdminCategoriesView from "./AdminCategoriesView";
 import ComponentCard from "../components/common/ComponentCard";
 import PageMeta from "../components/common/PageMeta";
 import PageBreadCrumb from "../components/common/PageBreadCrumb";
@@ -37,6 +38,16 @@ const options = [
       </svg>
     ),
     description: "Xem đơn đăng ký mở shop, kiểm tra thông tin và duyệt hoặc từ chối yêu cầu.",
+  },
+  {
+    href: "/admin/categories",
+    title: "Danh mục & kiểm duyệt",
+    icon: (
+      <svg className="w-8 h-8 text-brand-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5h16M4 12h16M4 19h10M6 3v4m6-4v4m6-4v4" />
+      </svg>
+    ),
+    description: "Quản lý danh mục sản phẩm và kiểm duyệt nội dung đang bán.",
   },
 ];
 
@@ -88,6 +99,7 @@ export default function AdminDashboardView({ user, logout, busy, error, path }) 
       
       {path === "/admin/shops" && <AdminShopsView />}
       {path === "/admin/users" && <AdminCustomersView />}
+      {path === "/admin/categories" && <AdminCategoriesView />}
       {profile && <AdminProfileView user={user} />}
       {path === "/admin/approvals" && (
         <>

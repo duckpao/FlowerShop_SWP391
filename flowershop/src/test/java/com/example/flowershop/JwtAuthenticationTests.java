@@ -122,12 +122,17 @@ class JwtAuthenticationTests {
         assertThat(auth.login(new LoginRequest(user.getEmail(),"NewPassword123456")).user().id()).isEqualTo(user.getId());
     }
     @Test void httpCookieCsrfAndBearerFlow() throws Exception {
+        mvc.perform(get("/images/logo/logo.svg")).andExpect(status().isOk());
         String body="{\"email\":\"jwt@example.com\",\"password\":\""+password+"\"}";
         mvc.perform(post("/api/auth/login").contentType("application/json").content(body)).andExpect(status().isForbidden());
         var csrf=mvc.perform(get("/api/auth/csrf")).andReturn();
         var session=(MockHttpSession)csrf.getRequest().getSession(false);
         var matcher=Pattern.compile("\"token\":\"([^\"]+)\"").matcher(csrf.getResponse().getContentAsString()); assertThat(matcher.find()).isTrue();
         String value=matcher.group(1);
+        mvc.perform(post("/api/auth/refresh").session(session).header("X-CSRF-TOKEN",value))
+            .andExpect(status().isNoContent());
+        mvc.perform(post("/api/auth/refresh").session(session).cookie(new Cookie("refresh_token","invalid"))
+            .header("X-CSRF-TOKEN",value)).andExpect(status().isNoContent());
         var result=mvc.perform(post("/api/auth/login").session(session).header("X-CSRF-TOKEN",value)
                 .contentType("application/json").content(body)).andExpect(status().isOk()).andReturn();
         String json=result.getResponse().getContentAsString();
