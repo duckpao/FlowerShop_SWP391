@@ -4,6 +4,7 @@ import com.example.flowershop.entity.Product;
 import com.example.flowershop.entity.ProductImage;
 import com.example.flowershop.entity.enums.CategoryStatus;
 import com.example.flowershop.entity.enums.ProductStatus;
+import com.example.flowershop.entity.enums.ProductType;
 import com.example.flowershop.entity.enums.ShopStatus;
 import com.example.flowershop.repository.CategoryRepository;
 import com.example.flowershop.repository.ProductImageRepository;
@@ -30,7 +31,7 @@ public class CatalogService {
     public record Results(List<ProductCard> content, int page, int size,
                           long totalElements, int totalPages) {}
 
-    public record ProductDetail(String id, String name, String description, BigDecimal price,
+    public record ProductDetail(String id, String name, ProductType type, String description, BigDecimal price,
             Integer stock, String shopId, String shopName, String categoryId, String categoryName,
             List<String> images, double rating, long reviewCount) {}
 
@@ -57,8 +58,21 @@ public class CatalogService {
     }
 
     public Results browse(String q, String categoryId, String shopId, String sort, int page, int size) {
+        return browse(q, categoryId, shopId, null, null, null, sort, page, size);
+    }
+
+    public Results browse(String q, String categoryId, String shopId, BigDecimal minPrice,
+                          BigDecimal maxPrice, String sort, int page, int size) {
+        return browse(q, categoryId, shopId, null, minPrice, maxPrice, sort, page, size);
+    }
+
+    public Results browse(String q, String categoryId, String shopId, ProductType type,
+                          BigDecimal minPrice, BigDecimal maxPrice, String sort, int page, int size) {
         if (page < 0 || page > 100000 || size < 1 || size > 100)
             throw new IllegalArgumentException("Trang từ 0 đến 100000, kích thước từ 1 đến 100.");
+        if ((minPrice != null && minPrice.signum() < 0) || (maxPrice != null && maxPrice.signum() < 0)
+                || (minPrice != null && maxPrice != null && minPrice.compareTo(maxPrice) > 0))
+            throw new IllegalArgumentException("Khoảng giá không hợp lệ.");
         String raw = q == null ? "" : q.strip();
         if (raw.length() > 100) throw new IllegalArgumentException("Từ khóa tối đa 100 ký tự.");
         String term = raw.toLowerCase(Locale.ROOT).replace("!", "!!").replace("%", "!%").replace("_", "!_");
@@ -80,6 +94,9 @@ public class CatalogService {
                 predicates.add(cb.equal(root.get("category").get("id"), categoryId));
             if (shopId != null && !shopId.isBlank())
                 predicates.add(cb.equal(shop.get("id"), shopId));
+            if (type != null) predicates.add(cb.equal(root.get("type"), type));
+            if (minPrice != null) predicates.add(cb.greaterThanOrEqualTo(root.get("price"), minPrice));
+            if (maxPrice != null) predicates.add(cb.lessThanOrEqualTo(root.get("price"), maxPrice));
             if (!term.isEmpty())
                 predicates.add(cb.like(cb.lower(root.get("name")), "%" + term + "%", '!'));
             return cb.and(predicates.toArray(Predicate[]::new));
@@ -98,7 +115,7 @@ public class CatalogService {
                 .sorted(Comparator.comparingInt(i -> Boolean.TRUE.equals(i.getIsPrimary()) ? 0 : 1))
                 .map(ProductImage::getImageUrl).toList();
         double[] summary = assembler.ratings(List.of(productId)).getOrDefault(productId, new double[]{0d, 0d});
-        return new ProductDetail(p.getId(), p.getName(), p.getDescription(), p.getPrice(), p.getStock(),
+        return new ProductDetail(p.getId(), p.getName(), p.getType(), p.getDescription(), p.getPrice(), p.getStock(),
                 p.getShop().getId(), p.getShop().getName(), p.getCategory().getId(),
                 p.getCategory().getName(), urls, Math.round(summary[0] * 10) / 10.0, (long) summary[1]);
     }

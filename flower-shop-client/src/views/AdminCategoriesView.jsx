@@ -7,7 +7,7 @@ const statusLabels = { ACTIVE: 'Đang dùng', INACTIVE: 'Ngừng dùng' }
 export default function AdminCategoriesView() {
   const c = useAdminCategoriesController()
   return <>
-    <section className="account-card">
+    <section className="catalog-panel catalog-management">
       <h2>Danh mục sản phẩm</h2>
       {c.error && <p role="alert" className="message error">{c.error}</p>}
       {c.notice && <p role="status" className="message success">{c.notice}</p>}
@@ -15,7 +15,7 @@ export default function AdminCategoriesView() {
       <button disabled={c.busy} onClick={c.reload}>Tải lại</button>
 
       {!c.categories.length && !c.busy && <p>Chưa có danh mục nào. Thêm danh mục để Manager đăng được sản phẩm.</p>}
-      <ul className="address-list">{c.categories.map(x => <li key={x.id}>
+      <ul className="catalog-list">{c.categories.map(x => <li key={x.id}>
         <strong>{x.name}</strong>
         <p>{x.description || 'Chưa có mô tả'}</p>
         <p className="muted">{statusLabels[x.status] || x.status} · {x.productCount} sản phẩm đang bán</p>
@@ -23,7 +23,7 @@ export default function AdminCategoriesView() {
       </li>)}</ul>
 
       <h3>{c.editing ? 'Sửa danh mục' : 'Thêm danh mục'}</h3>
-      <form onSubmit={c.save}><fieldset disabled={c.busy}>
+      <form onSubmit={c.save} className="catalog-form"><fieldset disabled={c.busy}>
         <label>Tên danh mục<input required maxLength={100} value={c.form.name}
           onChange={e => c.setForm({ ...c.form, name: e.target.value })} /></label>
         <label>Mô tả<textarea maxLength={1000} value={c.form.description}
@@ -37,7 +37,7 @@ export default function AdminCategoriesView() {
       </fieldset></form>
     </section>
 
-    <section className="account-card">
+    <section className="catalog-panel catalog-management">
       <h2>Kiểm duyệt sản phẩm toàn sàn</h2>
       <form onSubmit={c.search}><fieldset disabled={c.busy}>
         <label>Tìm theo tên sản phẩm<input maxLength={100} value={c.query}
@@ -48,7 +48,7 @@ export default function AdminCategoriesView() {
       {c.products && <>
         <p>{c.products.totalElements} sản phẩm</p>
         {!c.products.content.length && <p>Không có sản phẩm phù hợp.</p>}
-        <ul className="address-list">{c.products.content.map(p => <li key={p.id}>
+        <ul className="catalog-list">{c.products.content.map(p => <li key={p.id}>
           <strong>{p.name}</strong>
           <p className="muted">{p.shopName} · {p.categoryName} · {formatPrice(p.price)}</p>
           <p className="muted">{p.adminHidden
