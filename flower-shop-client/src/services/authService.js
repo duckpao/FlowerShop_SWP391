@@ -85,5 +85,6 @@ export const authService = {
     await request('logout', { method: 'POST' })
     authModel.clear()
   },
+  refresh: () => refresh(),
   clear: () => authModel.clear(),
 }

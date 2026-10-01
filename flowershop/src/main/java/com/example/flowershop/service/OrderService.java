@@ -90,7 +90,10 @@ public class OrderService {
                     Address newAddress = Address.builder()
                             .id("addr-" + UUID.randomUUID().toString().substring(0, 8))
                             .user(user)
-                            .addressLine(addressValue.length() > 255 ? addressValue.substring(0, 255) : addressValue)
+           
+           
+           
+                          .addressLine(addressValue.length() > 255 ? addressValue.substring(0, 255) : addressValue)
                             .city("Hà Nội")
                             .isDefault(false)
                             .createdBy(userId)

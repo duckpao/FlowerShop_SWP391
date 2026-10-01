@@ -35,13 +35,19 @@ axiosClient.interceptors.response.use(
     if (error.response?.status === 401 && !error.config?._retried) {
       error.config._retried = true;
       try {
-        await authService.me();
+        await authService.refresh();
+        const token = authModel.getToken();
+        if (token) {
+          error.config.headers.Authorization = `Bearer ${token}`;
+        }
         return axiosClient(error.config);
-      } catch { /* The session has expired. */ }
+      } catch {
+        authModel.clear();
+      }
     }
     const message =
       error.response?.data?.message ||
-      error.message ||
+      (error.response?.status === 401 ? 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại để tiếp tục.' : error.message) ||
       'Có lỗi xảy ra, vui lòng thử lại.';
     return Promise.reject(new Error(message));
   }
