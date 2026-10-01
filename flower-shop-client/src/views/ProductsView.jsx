@@ -1,17 +1,17 @@
 import { useProductsController } from '../controllers/useProductsController'
-import { formatPrice, productStatusLabels, ratingLabel } from '../models/productModel'
+import { formatPrice, productStatusLabels, productTypeLabels, ratingLabel } from '../models/productModel'
 import '../styles/catalog.css'
 
 export default function ProductsView({ shop, manage = false }) {
   const c = useProductsController(shop.id, manage)
   const disabled = c.busy || shop.status !== 'ACTIVE'
-  return <section className="account-card">
+  return <section className="catalog-panel catalog-management">
     <h2>{manage ? 'Quản lý mặt hàng của shop' : 'Sản phẩm của cửa hàng'}</h2>
     {c.error && <p role="alert" className="message error">{c.error}</p>}
     {c.notice && <p role="status" className="message success">{c.notice}</p>}
     <button disabled={c.busy} onClick={c.reload}>Tải lại sản phẩm</button>
 
-    {manage && <form onSubmit={c.save}>
+    {manage && <form onSubmit={c.save} className="catalog-form">
       <h3>{c.editing ? 'Sửa sản phẩm' : 'Đăng sản phẩm mới'}</h3>
       <fieldset disabled={disabled}>
         <label>Tên sản phẩm<input required maxLength={255} value={c.form.name} onChange={e => c.setForm({ ...c.form, name: e.target.value })} /></label>
@@ -24,6 +24,9 @@ export default function ProductsView({ shop, manage = false }) {
         <label>Tồn kho<input required type="number" min="0" max="1000000" step="1" value={c.form.stock} onChange={e => c.setForm({ ...c.form, stock: e.target.value })} /></label>
         <label>Trạng thái<select value={c.form.status} onChange={e => c.setForm({ ...c.form, status: e.target.value })}>
           {Object.entries(productStatusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        </select></label>
+        <label>Loại bó hoa<select value={c.form.type} onChange={e => c.setForm({ ...c.form, type: e.target.value })}>
+          {Object.entries(productTypeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select></label>
 
         <h4>Ảnh sản phẩm</h4>
@@ -52,6 +55,9 @@ export default function ProductsView({ shop, manage = false }) {
               ? <img className="catalog-thumb" src={p.imageUrl} alt={p.name} loading="lazy" />
               : <div className="catalog-thumb-empty">Chưa có ảnh</div>)}
         <h3>{manage ? p.name : <a href={`/products/${encodeURIComponent(p.id)}`}>{p.name}</a>}</h3>
+        <span className={`catalog-type ${p.type === 'CUSTOM' ? 'catalog-type-custom' : ''}`}>
+          {productTypeLabels[p.type] || productTypeLabels.READY_MADE}
+        </span>
         <span className="price">{formatPrice(p.price)}</span>
         <span className="muted">{p.categoryName} · Còn {p.stock}</span>
         {!manage && <span className="muted">{ratingLabel(p)}</span>}

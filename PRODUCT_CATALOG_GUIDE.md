@@ -3,7 +3,8 @@
 File này hướng dẫn **sử dụng và test thủ công**. Cần biết đã viết những file nào, nghiệp vụ ra sao
 và vì sao thiết kế như vậy thì xem [PRODUCT_CATALOG_IMPLEMENTATION.md](PRODUCT_CATALOG_IMPLEMENTATION.md).
 
-Chạy migration `flowershop/sql/011_product_catalog.sql` trên database `flower_shop_db` rồi khởi động lại backend.
+Chạy các migration chưa áp dụng theo thứ tự trong `flowershop/sql/` trên database `flower_shop_db`,
+bao gồm `013_product_type.sql`, rồi khởi động lại backend.
 Không chạy lại `database.sql` trên DB đang có dữ liệu vì file đó xóa database.
 
 Sáu chức năng trong tài liệu này: Product List, Product Details (kèm review), Product Management,
@@ -11,8 +12,10 @@ Favorite Product, View Favorite Product và Product Category.
 
 ## Luồng chính
 
-1. Mở http://localhost:8080/products — danh sách sản phẩm của **tất cả** shop ACTIVE. Tìm theo tên,
-   lọc theo danh mục (kèm số sản phẩm), sắp xếp mới nhất / giá tăng / giá giảm, có phân trang.
+1. Mở trang chủ hoặc http://localhost:8080/products — tab Sản phẩm hiển thị danh sách sản phẩm của
+   **tất cả** shop ACTIVE; tab Cửa hàng tìm shop theo tên. Sản phẩm lọc theo tên, danh mục, shop,
+   loại bó hoa (có sẵn / custom), khoảng giá và sắp xếp mới nhất / giá tăng / giá giảm; cả hai tab dùng
+   được khi chưa đăng nhập. Shop chọn loại bó hoa khi đăng sản phẩm.
 2. Bấm tên sản phẩm để mở `/products/{id}`: gallery ảnh, giá, tồn kho, danh mục, link tới shop,
    điểm trung bình và danh sách đánh giá.
 3. Customer đăng nhập bấm **♡ Lưu yêu thích** ở trang danh sách hoặc trang chi tiết. Khách chưa đăng nhập
@@ -41,12 +44,14 @@ nên chỉ Admin ghi được.
 
 | Method | URL | Chức năng |
 |---|---|---|
-| GET | `/api/public/products?q=&categoryId=&shopId=&sort=&page=&size=` | Product List toàn sàn |
+| GET | `/api/public/products?q=&categoryId=&shopId=&type=&minPrice=&maxPrice=&sort=&page=&size=` | Product List toàn sàn |
 | GET | `/api/public/products/{id}` | Product Details, kèm ảnh và điểm trung bình |
 | GET | `/api/public/products/{id}/reviews?page=` | Đánh giá của sản phẩm |
 | GET | `/api/public/categories` | Product Category, kèm số sản phẩm đang bán |
 | GET | `/api/public/shops/{shopId}/products?page=` | Sản phẩm trong một shop |
 
+`minPrice` và `maxPrice` là tuỳ chọn, không âm; giá tối thiểu không được lớn hơn giá tối đa.
+`type` nhận `READY_MADE` (bó hoa có sẵn) hoặc `CUSTOM` (bó hoa custom); bỏ trống để xem cả hai.
 `sort` nhận `newest` (mặc định), `price_asc`, `price_desc`; giá trị khác trả 400.
 `size` từ 1 đến 100, mặc định 12. Từ khóa tối đa 100 ký tự và được escape nên `%` hay `_`
 không trở thành ký tự đại diện.
@@ -73,8 +78,11 @@ Body sản phẩm của Manager nhận thêm `images`, tối đa 10 phần tử:
 
 ```json
 {"name":"Bó hoa hồng","description":"Hoa tươi","categoryId":"cat-01","price":250000,"stock":10,
- "status":"ACTIVE","images":[{"url":"https://.../a.jpg","primary":true},{"url":"https://.../b.jpg","primary":false}]}
+ "status":"ACTIVE","type":"READY_MADE","images":[{"url":"https://.../a.jpg","primary":true},{"url":"https://.../b.jpg","primary":false}]}
 ```
+
+Sản phẩm cũ và request không gửi `type` được xem là `READY_MADE`. Khi cập nhật sản phẩm, Manager có thể
+chuyển giữa `READY_MADE` và `CUSTOM`.
 
 Bỏ trường `images` (hoặc gửi `null`) thì ảnh cũ được giữ nguyên; gửi một mảng thì thay toàn bộ danh sách.
 Luôn có đúng một ảnh chính: nếu không đánh dấu, ảnh đầu tiên được chọn.
