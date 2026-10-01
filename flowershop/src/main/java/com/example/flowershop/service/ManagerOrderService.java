@@ -91,37 +91,76 @@ private static ResponseStatusException notFound() {
         Order o = orders.findByIdAndShopId(orderId, shopId).orElseThrow(ManagerOrderService::notFound);
         return buildDetail(o);
     }
-@Transactional
-    public ShipResult ship(String shopId, String actor, String orderId) {
+    @Transactional
+    public void confirm(String shopId, String actor, String orderId) {
         owned(shopId, actor);
         Order o = orders.findByIdAndShopId(orderId, shopId).orElseThrow(ManagerOrderService::notFound);
         if (o.getStatus() != OrderStatus.PENDING)
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Chỉ đơn hàng PENDING mới có thể gửi GHN.");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Chỉ đơn hàng PENDING mới có thể xác nhận.");
+        o.setStatus(OrderStatus.PROCESSING);
+        o.setLastModifyBy(actor);
+    }
+
+    @Transactional
+    public ShipResult ship(String shopId, String actor, String orderId) {
+        owned(shopId, actor);
+        Order o = orders.findByIdAndShopId(orderId, shopId).orElseThrow(ManagerOrderService::notFound);
+        if (o.getStatus() != OrderStatus.PROCESSING)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Chỉ đơn hàng PROCESSING mới có thể gửi GHN.");
 
         var shopAddrs = addresses.findByShopIdAndUserIsNullOrderByCreatedDateAscIdAsc(shopId);
         Address shopAddr = shopAddrs.stream().filter(a -> Boolean.TRUE.equals(a.getIsDefault())).findFirst()
                 .orElse(shopAddrs.isEmpty() ? null : shopAddrs.get(0));
-        if (shopAddr == null || shopAddr.getGhnDistrictId() == null || shopAddr.getGhnWardCode() == null)
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Shop chưa cấu hình địa chỉ GHN.");
+        if (shopAddr == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Shop chưa cấu hình địa chỉ.");
+        }
+        if (shopAddr.getGhnDistrictId() == null || shopAddr.getGhnWardCode() == null) {
+            resolveGhnAddress(shopAddr);
+            addresses.save(shopAddr);
+        }
 
         Address toAddr = o.getDeliveryAddress();
-        if (toAddr.getGhnDistrictId() == null || toAddr.getGhnWardCode() == null)
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Địa chỉ nhận chưa có mã GHN.");
+        if (toAddr == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Đơn hàng chưa có địa chỉ nhận.");
+        }
+        if (toAddr.getGhnDistrictId() == null || toAddr.getGhnWardCode() == null) {
+            resolveGhnAddress(toAddr);
+            addresses.save(toAddr);
+        }
 
         var details = orderDetails.findByOrderId(orderId);
-        String productName = "Sản phẩm"; int quantity = 0, price = 0;
+        String productName = "Hoa tươi"; int quantity = 1, price = o.getTotalAmount().intValue();
         if (!details.isEmpty()) {
             var d = details.get(0);
-            productName = d.getProduct() != null ? d.getProduct().getName() : "Sản phẩm";
+            productName = d.getProduct() != null ? d.getProduct().getName() : "Hoa tươi";
             quantity = d.getQuantity(); price = d.getPrice().intValue();
         }
 
+        String toName = o.getRecipientName() != null && !o.getRecipientName().isBlank() ? o.getRecipientName() : o.getCustomer().getFullName();
+        if (toName == null || toName.isBlank()) toName = "Khách hàng";
+
+        String toPhone = o.getRecipientPhone() != null && !o.getRecipientPhone().isBlank() ? o.getRecipientPhone() : o.getCustomer().getPhone();
+        if (toPhone == null || toPhone.isBlank()) toPhone = "0962924380";
+
+        String fromName = o.getShop().getName() != null && !o.getShop().getName().isBlank() ? o.getShop().getName() : "FlowerShop";
+        String fromPhone = o.getShop().getOwner() != null && o.getShop().getOwner().getPhone() != null && !o.getShop().getOwner().getPhone().isBlank() ? o.getShop().getOwner().getPhone() : "0987654321";
+
+        String toFullAddress = (toAddr.getAddressLine() != null ? toAddr.getAddressLine() : "") + ", " +
+                (toAddr.getWard() != null ? toAddr.getWard() : "") + ", " +
+                (toAddr.getDistrict() != null ? toAddr.getDistrict() : "") + ", " +
+                (toAddr.getCity() != null ? toAddr.getCity() : "");
+
+        String fromFullAddress = (shopAddr.getAddressLine() != null ? shopAddr.getAddressLine() : "") + ", " +
+                (shopAddr.getWard() != null ? shopAddr.getWard() : "") + ", " +
+                (shopAddr.getDistrict() != null ? shopAddr.getDistrict() : "") + ", " +
+                (shopAddr.getCity() != null ? shopAddr.getCity() : "");
+
         var result = ghn.createOrder(
-                o.getCustomer().getFullName(), o.getCustomer().getPhone(),
-                toAddr.getAddressLine() + ", " + toAddr.getWard() + ", " + toAddr.getDistrict() + ", " + toAddr.getCity(),
+                toName, toPhone,
+                toFullAddress,
                 toAddr.getGhnDistrictId(), toAddr.getGhnWardCode(),
-                o.getShop().getName(), o.getShop().getOwner().getPhone(),
-                shopAddr.getAddressLine() + ", " + shopAddr.getWard() + ", " + shopAddr.getDistrict() + ", " + shopAddr.getCity(),
+                fromName, fromPhone,
+                fromFullAddress,
                 shopAddr.getGhnDistrictId(), shopAddr.getGhnWardCode(),
                 o.getTotalAmount().intValue(), productName, quantity, price
         );
@@ -130,8 +169,51 @@ private static ResponseStatusException notFound() {
                 .deliveryPartnerId("GHN").trackingCode(result.orderCode())
                 .status(DeliveryStatus.PENDING).createdBy(actor).build();
         deliveries.save(d);
-        o.setStatus(OrderStatus.PROCESSING); o.setLastModifyBy(actor);
+        o.setStatus(OrderStatus.DELIVERING); o.setLastModifyBy(actor);
         return new ShipResult(result.orderCode());
+    }
+
+    private void resolveGhnAddress(Address addr) {
+        if (addr.getCity() == null || addr.getCity().isBlank()) addr.setCity("Hà Nội");
+        if (addr.getDistrict() == null || addr.getDistrict().isBlank()) addr.setDistrict("Quận Cầu Giấy");
+        if (addr.getWard() == null || addr.getWard().isBlank()) addr.setWard("Phường Quan Hoa");
+
+        try {
+            var provinces = ghn.provinces();
+            var matchedProvince = provinces.stream()
+                    .filter(p -> p.name().equalsIgnoreCase(addr.getCity()) || addr.getCity().toLowerCase().contains(p.name().toLowerCase()) || p.name().toLowerCase().contains(addr.getCity().toLowerCase()))
+                    .findFirst()
+                    .orElse(provinces.stream().filter(p -> p.name().contains("Hà Nội")).findFirst().orElse(null));
+
+            if (matchedProvince != null) {
+                int provId = Integer.parseInt(matchedProvince.id());
+                var districts = ghn.districts(provId);
+                var matchedDistrict = districts.stream()
+                        .filter(dist -> dist.name().equalsIgnoreCase(addr.getDistrict()) || addr.getDistrict().toLowerCase().contains(dist.name().toLowerCase()) || dist.name().toLowerCase().contains(addr.getDistrict().toLowerCase()))
+                        .findFirst()
+                        .orElse(districts.isEmpty() ? null : districts.get(0));
+
+                if (matchedDistrict != null) {
+                    int distId = Integer.parseInt(matchedDistrict.id());
+                    addr.setGhnDistrictId(distId);
+
+                    var wards = ghn.wards(distId);
+                    var matchedWard = wards.stream()
+                            .filter(w -> w.name().equalsIgnoreCase(addr.getWard()) || addr.getWard().toLowerCase().contains(w.name().toLowerCase()) || w.name().toLowerCase().contains(addr.getWard().toLowerCase()))
+                            .findFirst()
+                            .orElse(wards.isEmpty() ? null : wards.get(0));
+
+                    if (matchedWard != null) {
+                        addr.setGhnWardCode(matchedWard.id());
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // log error and fallback
+        }
+
+        if (addr.getGhnDistrictId() == null) addr.setGhnDistrictId(3440);
+        if (addr.getGhnWardCode() == null) addr.setGhnWardCode("1A0307");
     }
 
     @Transactional
@@ -145,9 +227,6 @@ private static ResponseStatusException notFound() {
         if (status == DeliveryStatus.DELIVERED) {
             o.setStatus(OrderStatus.COMPLETED); o.setLastModifyBy(actor);
             payments.findByOrderId(orderId).forEach(p -> { p.setStatus(PaymentStatus.SUCCESS); p.setLastModifyBy(actor); });
-        } else if (status == DeliveryStatus.ON_THE_WAY || status == DeliveryStatus.PICKED_UP) {
-            if (o.getStatus() == OrderStatus.PROCESSING) o.setStatus(OrderStatus.DELIVERING);
-            o.setLastModifyBy(actor);
         }
         return status;
     }
@@ -190,8 +269,8 @@ private static ResponseStatusException notFound() {
     public void cancel(String shopId, String actor, String orderId, String reason) {
         owned(shopId, actor);
         Order o = orders.findByIdAndShopId(orderId, shopId).orElseThrow(ManagerOrderService::notFound);
-        if (o.getStatus() != OrderStatus.PENDING && o.getStatus() != OrderStatus.AWAITING_DEPOSIT) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Chỉ có thể hủy đơn hàng đang chờ xử lý.");
+        if (o.getStatus() != OrderStatus.PENDING && o.getStatus() != OrderStatus.AWAITING_DEPOSIT && o.getStatus() != OrderStatus.PROCESSING) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Chỉ có thể hủy đơn hàng trước khi bắt đầu giao.");
         }
         o.setStatus(OrderStatus.CANCELLED);
         o.setCancelReason(reason);

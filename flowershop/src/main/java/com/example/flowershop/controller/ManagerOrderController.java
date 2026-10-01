@@ -30,6 +30,13 @@ public class ManagerOrderController {
         return service.detail(shopId, u.id(), id);
     }
 
+    @PostMapping("/{id}/confirm")
+    @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
+    public void confirm(@PathVariable String shopId, @PathVariable String id,
+                                               @AuthenticationPrincipal CurrentUser u) {
+        service.confirm(shopId, u.id(), id);
+    }
+
     @PostMapping("/{id}/ship")
     @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
     public ManagerOrderService.ShipResult ship(@PathVariable String shopId, @PathVariable String id,
