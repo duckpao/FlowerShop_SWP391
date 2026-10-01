@@ -19,6 +19,47 @@ function GhnAddressPicker({ value, onChange }) {
             .catch(e => setError(e.message))
     }, [])
 
+    // Sync initial state from value when provinces are loaded
+    useEffect(() => {
+        if (provinces.length > 0 && value?.city && !provinceId) {
+            const cityName = value.city.trim().toLowerCase();
+            const prov = provinces.find(p => p.name.trim().toLowerCase() === cityName || p.name.trim().toLowerCase().includes(cityName) || cityName.includes(p.name.trim().toLowerCase()));
+            if (prov) {
+                setProvinceId(prov.id);
+            }
+        }
+    }, [provinces, value?.city, provinceId])
+
+    useEffect(() => {
+        if (provinceId) {
+            ghnService.districts(provinceId)
+                .then(data => {
+                    setDistricts(data || []);
+                    if (value?.ghnDistrictId) {
+                        setDistrictId(String(value.ghnDistrictId));
+                    }
+                })
+                .catch(e => setError(e.message))
+        } else {
+            setDistricts([]);
+        }
+    }, [provinceId])
+
+    useEffect(() => {
+        if (districtId) {
+            ghnService.wards(districtId)
+                .then(data => {
+                    setWards(data || []);
+                    if (value?.ghnWardCode) {
+                        setWardCode(value.ghnWardCode);
+                    }
+                })
+                .catch(e => setError(e.message))
+        } else {
+            setWards([]);
+        }
+    }, [districtId])
+
     // When province changes, load districts
     const onProvinceChange = useCallback(id => {
         setProvinceId(id)
@@ -26,14 +67,9 @@ function GhnAddressPicker({ value, onChange }) {
         setWardCode('')
         setDistricts([])
         setWards([])
-        const prov = provinces.find(p => p.id === id)
-        const city = prov ? prov.name : value?.city || ''
-        onChange?.({ ...value, city, ghnDistrictId: null, ghnWardCode: '' })
-        if (id) {
-            ghnService.districts(id)
-                .then(data => setDistricts(data || []))
-                .catch(e => setError(e.message))
-        }
+        const prov = provinces.find(p => String(p.id) === String(id))
+        const city = prov ? prov.name : ''
+        onChange?.({ ...value, city, district: '', ward: '', ghnDistrictId: null, ghnWardCode: '' })
     }, [provinces, value, onChange])
 
     // When district changes, load wards
@@ -41,20 +77,15 @@ function GhnAddressPicker({ value, onChange }) {
         setDistrictId(id)
         setWardCode('')
         setWards([])
-        const dist = districts.find(d => d.id === id)
-        const district = dist ? dist.name : value?.district || ''
-        onChange?.({ ...value, district, ghnDistrictId: id ? parseInt(id) : null, ghnWardCode: '' })
-        if (id) {
-            ghnService.wards(id)
-                .then(data => setWards(data || []))
-                .catch(e => setError(e.message))
-        }
+        const dist = districts.find(d => String(d.id) === String(id))
+        const district = dist ? dist.name : ''
+        onChange?.({ ...value, district, ward: '', ghnDistrictId: id ? parseInt(id) : null, ghnWardCode: '' })
     }, [districts, value, onChange])
 
     // When ward changes
     const onWardChange = useCallback(code => {
         setWardCode(code)
-        const w = wards.find(w => w.id === code)
+        const w = wards.find(w => String(w.id) === String(code))
         onChange?.({ ...value, ward: w ? w.name : '', ghnWardCode: code })
     }, [wards, value, onChange])
 
