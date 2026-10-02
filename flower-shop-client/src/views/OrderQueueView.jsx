@@ -301,20 +301,35 @@ export default function OrderQueueView({ shop: initialShop }) {
                     <p className="text-gray-500">Đang tải chi tiết...</p>
                 ) : (
                     <div className="space-y-6">
-                        <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div className="grid grid-cols-2 gap-4 text-sm bg-gray-50 dark:bg-gray-800/50 p-4 rounded-lg">
                             <div>
-                                <p className="text-gray-500">Khách hàng</p>
-                                <p className="font-medium text-gray-900 dark:text-white">{orderDetail.customerName}</p>
-                                <p className="text-gray-600 dark:text-gray-400">{orderDetail.customerPhone}</p>
+                                <p className="text-gray-500 font-medium mb-1">Địa chỉ người gửi (Shop)</p>
+                                <p className="font-medium text-gray-900 dark:text-white">FPTU Smart Floral</p>
+                                <p className="text-gray-600 dark:text-gray-400 mt-1 line-clamp-2">{orderDetail.shopAddress || 'Chưa cấu hình địa chỉ Shop'}</p>
                             </div>
                             <div>
-                                <p className="text-gray-500">Giao đến</p>
-                                <p className="font-medium text-gray-900 dark:text-white">{orderDetail.deliveryAddress}</p>
+                                <p className="text-gray-500 font-medium mb-1">Địa chỉ người nhận</p>
+                                <p className="font-medium text-gray-900 dark:text-white">
+                                    {orderDetail.recipientName || orderDetail.customerName}
+                                    <span className="text-gray-500 ml-2 font-normal">{orderDetail.recipientPhone || orderDetail.customerPhone}</span>
+                                </p>
+                                <p className="text-gray-600 dark:text-gray-400 mt-1 line-clamp-2">{orderDetail.deliveryAddress}</p>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4 text-sm px-2">
+                            <div>
+                                <p className="text-gray-500">Mã vận đơn (GHN):</p>
+                                <p className="font-medium text-gray-900 dark:text-white">{orderDetail.delivery?.trackingCode || 'Chưa có'}</p>
+                            </div>
+                            <div>
+                                <p className="text-gray-500">Trạng thái thanh toán:</p>
+                                <p className="font-medium text-gray-900 dark:text-white">{orderDetail.payment?.status === 'SUCCESS' ? 'Đã thanh toán' : 'Chưa thanh toán'}</p>
                             </div>
                         </div>
                         
                         <div>
-                            <p className="text-gray-500 mb-2 text-sm">Sản phẩm</p>
+                            <p className="text-gray-500 mb-2 text-sm px-2">Sản phẩm</p>
                             <div className="border border-gray-200 dark:border-gray-800 rounded-lg divide-y divide-gray-200 dark:divide-gray-800">
                                 {orderDetail.items.map((item, idx) => (
                                     <div key={idx} className="flex justify-between p-3 text-sm">
