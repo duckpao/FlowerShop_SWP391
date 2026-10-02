@@ -24,6 +24,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+// Ánh xạ entity Product <-> bảng Products. Service gọi setter/getter; Hibernate dùng @Column/@JoinColumn để đọc/ghi SQL.
+// shop_id -> Shops, category_id -> Categories; ảnh/review/favorite liên kết ngược về product_id ở các bảng riêng.
 @Entity
 @Table(name = "Products")
 @Getter
@@ -37,6 +39,7 @@ public class Product {
     @Column(name = "id", length = 36)
     private String id;
 
+    // LAZY: thông tin shop có thể chỉ được tải khi getter được dùng; service cần transaction khi dựng DTO.
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "shop_id", nullable = false)
     private Shop shop;
@@ -70,6 +73,7 @@ public class Product {
     private ProductType type = ProductType.READY_MADE;
 
     @Builder.Default
+    // Cờ kiểm duyệt độc lập với status của Shop; chỉ AdminCatalogService.setHidden thay đổi qua API.
     @Column(name = "admin_hidden", nullable = false)
     private boolean adminHidden = false;
 
@@ -78,6 +82,7 @@ public class Product {
     @Builder.Default
     private ProductStatus status = ProductStatus.ACTIVE;
 
+    // Hibernate tự điền thời gian tạo/cập nhật; actor được service ghi vào createdBy/lastModifyBy.
     @CreationTimestamp
     @Column(name = "created_date", updatable = false)
     private LocalDateTime createdDate;

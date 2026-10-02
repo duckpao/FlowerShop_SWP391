@@ -22,6 +22,9 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder(12);
     }
 
+    // Mọi request FE đi qua chuỗi bảo mật trước controller: xác thực Bearer, kiểm tra role và CSRF cho lệnh ghi.
+    // Đường dẫn đọc review /api/public/products/{id}/reviews chưa có trong permitAll bên dưới;
+    // nó rơi vào anyRequest().authenticated(), trong khi reviewService.list ở FE không gửi Bearer.
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http, com.example.flowershop.service.TokenAuthService tokenAuth,
             org.springframework.core.env.Environment environment, com.example.flowershop.repository.UserRepository users)

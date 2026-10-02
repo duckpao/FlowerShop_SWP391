@@ -135,6 +135,7 @@ export default function ManagerDashboardView({
         </>
       )}
       
+      {/* /shop-admin/products chọn section=products -> ManagerShopsView -> ProductsView với manage=true. */}
       {current && (
         <ManagerShopsView
           key={current.section}

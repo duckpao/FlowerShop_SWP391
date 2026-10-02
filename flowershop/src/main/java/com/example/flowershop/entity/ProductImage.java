@@ -7,6 +7,7 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
 
+// Bảng Product_Images: nhiều ảnh thuộc một Product qua product_id; image_url lưu URL, is_primary chọn ảnh đại diện.
 @Entity
 @Table(name = "Product_Images")
 @Getter

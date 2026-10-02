@@ -3,6 +3,8 @@ import { useFavoriteToggle } from '../controllers/useFavoritesController'
 import { formatPrice, productTypeLabels, ratingLabel, sortOptions } from '../models/productModel'
 import '../styles/catalog.css'
 
+// Product List + Product Category: hook useCatalogController tải dữ liệu/bộ lọc; useFavoriteToggle xử lý nút tim.
+// View chỉ hiển thị state và chuyển sự kiện onSubmit/onChange/onClick sang các hàm của hook.
 export default function ProductCatalogView({ auth, shops }) {
   const c = useCatalogController(shops)
   const favorites = useFavoriteToggle(auth?.user)

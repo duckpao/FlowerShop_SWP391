@@ -7,6 +7,8 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
 
+// Bảng Product_Reviews: nối user_id và product_id; mỗi cặp chỉ có một review nhờ unique constraint.
+// shop_reply nằm trên cùng bản ghi; order_id có thể null, luồng review hiện tại không buộc đã mua hàng.
 @Entity
 @Table(name = "Product_Reviews",
         uniqueConstraints = @UniqueConstraint(name = "uq_review_user_product",

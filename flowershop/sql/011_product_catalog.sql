@@ -1,3 +1,4 @@
+-- Schema hỗ trợ kiểm duyệt sản phẩm và review. File SQL là migration, không được gọi theo từng request FE.
 USE flower_shop_db;
 
 -- Thứ tự quan trọng: `mysql < file` dừng ở lệnh lỗi đầu tiên, nên lệnh bắt buộc phải đứng trước

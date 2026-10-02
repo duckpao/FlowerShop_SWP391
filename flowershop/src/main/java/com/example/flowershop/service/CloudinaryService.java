@@ -37,14 +37,17 @@ public class CloudinaryService {
         this.apiSecret = apiSecret;
     }
 
+    // Nhánh upload ảnh sản phẩm: chuyển bytes sang dịch vụ Cloudinary và trả secure_url để service lưu DB.
     public String upload(byte[] bytes, String filename, String contentType) {
         return upload(bytes, filename, contentType, "image", IMAGE_FOLDER, "Upload ảnh lên Cloudinary thất bại.", "Cloudinary không trả về URL ảnh.");
     }
 
+    // Nhánh video dùng chung cơ chế upload nhưng chọn resourceType=video và thư mục riêng.
     public String uploadVideo(byte[] bytes, String filename, String contentType) {
         return upload(bytes, filename, contentType, "video", VIDEO_FOLDER, "Upload video lên Cloudinary thất bại.", "Cloudinary không trả về URL video.");
     }
 
+    // Ký request -> tạo multipart -> HTTP POST Cloudinary -> đọc secure_url; không thực thi truy vấn database.
     private String upload(byte[] bytes, String filename, String contentType, String resourceType, String folder, String uploadErrorMessage, String missingUrlMessage) {
         if (cloudName.isBlank() || apiKey.isBlank() || apiSecret.isBlank())
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Chưa cấu hình Cloudinary trên server.");

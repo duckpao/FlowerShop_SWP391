@@ -18,6 +18,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+// Bảng Product_Videos: nhiều video thuộc một Product; video_url là đường dẫn file đã upload, không phải dữ liệu nhị phân.
 @Entity
 @Table(name = "Product_Videos")
 @Getter

@@ -14,6 +14,7 @@ export function useManagerShopController(role) {
     let active = true
     setBusy(true)
     setSelected(null); setMembers([])
+    // Tiền đề của màn hình quản lý sản phẩm: tải shop của tài khoản để có selected.id truyền xuống ProductsView.
     api.list(role).then(async s => {
       if (!active) return
       if (role === 'SHOP' && s.length > 1) throw new Error('Dữ liệu chưa đúng: mỗi Manager chỉ được quản lý một shop.')

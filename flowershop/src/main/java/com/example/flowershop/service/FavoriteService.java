@@ -16,6 +16,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
+// Nối CUSTOMER với Product qua Favorite_Products; dùng ProductCardAssembler để trả cùng cấu trúc thẻ với catalog.
 @Service
 @Transactional(readOnly = true)
 public class FavoriteService {
@@ -37,6 +38,7 @@ public class FavoriteService {
     }
 
     @Transactional
+    // Chỉ cho lưu sản phẩm visible; khóa ghép (userId, productId) giúp mỗi khách lưu một lần; saveAndFlush ghi DB.
     public void add(String userId, String productId) {
         Product product = products.findById(productId).filter(ProductCardAssembler::visible)
                 .orElseThrow(FavoriteService::missing);
@@ -52,10 +54,12 @@ public class FavoriteService {
 
     /** Bỏ thứ chưa lưu vẫn thành công: deleteById không ném lỗi khi bản ghi không tồn tại. */
     @Transactional
+    // deleteById với khóa ghép -> DELETE Favorite_Products của đúng người dùng/sản phẩm.
     public void remove(String userId, String productId) {
         favorites.deleteById(new FavoriteProductId(userId, productId));
     }
 
+    // findOwned lọc theo userId, 12 mục/trang -> lấy Product của từng mục -> assembler.cards trả FE.
     public CatalogService.Results mine(String userId, int page) {
         if (page < 0 || page > 100000) throw new IllegalArgumentException("Trang không hợp lệ.");
         Page<FavoriteProduct> result = favorites.findOwned(userId, PageRequest.of(page, 12,

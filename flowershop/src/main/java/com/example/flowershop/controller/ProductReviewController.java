@@ -11,6 +11,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+// API ghi/sửa/xóa review của CUSTOMER và phản hồi của SHOP; API đọc công khai nằm ở PublicCatalogController.
 @RestController
 @SecurityRequirement(name = "bearerAuth")
 public class ProductReviewController {
@@ -20,6 +21,7 @@ public class ProductReviewController {
 
     @GetMapping("/api/customer/products/{id}/reviews")
     @PreAuthorize("hasRole('CUSTOMER')")
+    // GET review của mình -> reviews.mine; chưa có trả 404 để FE mở form viết mới.
     public ProductReviewService.ReviewResult mine(@PathVariable String id,
             @AuthenticationPrincipal CurrentUser user) {
         return reviews.mine(id, user.id());
@@ -28,6 +30,7 @@ public class ProductReviewController {
     @PostMapping("/api/customer/products/{id}/reviews")
     @PreAuthorize("hasRole('CUSTOMER')") @ResponseStatus(HttpStatus.CREATED)
     @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
+    // POST {rating, comment} -> reviews.write; @Valid buộc rating 1..5 và comment tối đa 2000 ký tự.
     public ProductReviewService.ReviewResult write(@PathVariable String id,
             @AuthenticationPrincipal CurrentUser user,
             @Valid @RequestBody ProductReviewService.ReviewInput body) {
@@ -37,6 +40,7 @@ public class ProductReviewController {
     @PutMapping("/api/customer/products/{id}/reviews")
     @PreAuthorize("hasRole('CUSTOMER')")
     @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
+    // PUT -> chỉ sửa review của user.id() trên sản phẩm id.
     public ProductReviewService.ReviewResult update(@PathVariable String id,
             @AuthenticationPrincipal CurrentUser user,
             @Valid @RequestBody ProductReviewService.ReviewInput body) {
@@ -46,6 +50,7 @@ public class ProductReviewController {
     @DeleteMapping("/api/customer/products/{id}/reviews")
     @PreAuthorize("hasRole('CUSTOMER')") @ResponseStatus(HttpStatus.NO_CONTENT)
     @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
+    // DELETE -> chỉ xóa review của user.id(); trả 204.
     public void delete(@PathVariable String id, @AuthenticationPrincipal CurrentUser user) {
         reviews.delete(id, user.id());
     }
@@ -53,6 +58,7 @@ public class ProductReviewController {
     @PutMapping("/api/shop/mine/{shopId}/reviews/{reviewId}/reply")
     @PreAuthorize("hasRole('SHOP')")
     @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
+    // PUT {reply} -> reviews.reply: service kiểm tra shop thuộc người gọi và review thuộc shop.
     public ProductReviewService.ReviewResult reply(@PathVariable String shopId,
             @PathVariable String reviewId, @AuthenticationPrincipal CurrentUser user,
             @Valid @RequestBody ProductReviewService.ReplyInput body) {

@@ -5,6 +5,8 @@ import { formatPrice, productTypeLabels } from '../models/productModel'
 import '../styles/account.css'
 import '../styles/catalog.css'
 
+// Product Details: productId từ AppRouter -> hook tải chi tiết; nút tim dùng useFavoriteToggle.
+// Khi đã có product mới gắn ProductReviewsView; phần review tự gọi API riêng, không nằm trong JSON chi tiết.
 export default function ProductDetailView({ auth, productId }) {
   const c = useProductDetailController(productId)
   const favorites = useFavoriteToggle(auth?.user)

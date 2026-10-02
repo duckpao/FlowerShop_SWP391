@@ -39,6 +39,7 @@ public class ManagerShopService {
         a.setIsDefault(true); a.setLastModifyBy(actor);
         return com.example.flowershop.dto.account.AddressResponse.from(addresses.save(a));
     }
+    // ManagerShopController.mine -> findByOwnerIdOrderByNameAsc -> FE nhận shopId để gọi API sản phẩm.
     public List<ShopResponse> mine(String actor) { return shops.findByOwnerIdOrderByNameAsc(actor).stream().map(ShopResponse::from).toList(); }
     private Shop owned(String id,String actor,boolean write) {
         Shop s=(write?shops.findForUpdate(id):shops.findById(id)).orElseThrow(ManagerShopService::missing);

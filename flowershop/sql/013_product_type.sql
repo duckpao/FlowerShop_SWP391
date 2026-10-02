@@ -1,3 +1,4 @@
+-- Cột Product.type mà CatalogService lọc và ManagerProductService lưu; mặc định READY_MADE cho sản phẩm cũ.
 USE flower_shop_db;
 
 -- Existing catalog products are ready-made unless a shop explicitly marks them as custom.

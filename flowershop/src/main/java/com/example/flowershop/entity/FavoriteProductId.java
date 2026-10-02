@@ -5,6 +5,7 @@ import lombok.*;
 
 import java.io.Serializable;
 
+// Khóa chính ghép (userId, productId) của Favorite_Products; EqualsAndHashCode so sánh theo cả hai trường.
 @Embeddable
 @Getter
 @Setter

@@ -16,6 +16,8 @@ import java.util.List;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final TokenAuthService auth;
     public JwtAuthenticationFilter(TokenAuthService auth) { this.auth=auth; }
+    // authService FE gửi Authorization: Bearer ... -> TokenAuthService.authenticate -> CurrentUser.
+    // Lưu user/ROLE vào SecurityContext để @PreAuthorize và @AuthenticationPrincipal trong các controller sử dụng.
     @Override protected void doFilterInternal(HttpServletRequest request,HttpServletResponse response,FilterChain chain)
             throws ServletException,IOException {
         String header=request.getHeader("Authorization");

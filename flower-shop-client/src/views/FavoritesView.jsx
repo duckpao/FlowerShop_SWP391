@@ -3,6 +3,8 @@ import { formatPrice, ratingLabel } from '../models/productModel'
 import '../styles/account.css'
 import '../styles/catalog.css'
 
+// View Favorite Product: kiểm tra tài khoản trên UI, hook gọi GET danh sách và DELETE khi bỏ lưu.
+// available=false vẫn hiện sản phẩm đã lưu nhưng bỏ link chi tiết và báo Không còn bán.
 export default function FavoritesView({ auth }) {
   const c = useFavoritesController(auth?.user)
 

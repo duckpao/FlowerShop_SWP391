@@ -106,6 +106,7 @@ export default function HomeView({ auth }) {
 
             {browseTab === "products" ? (
               <div id="products-panel" role="tabpanel" aria-label="Danh sách sản phẩm">
+                {/* Trang chủ tái sử dụng ProductCatalogView: cùng luồng API với trang /products. */}
                 <ProductCatalogView auth={auth} shops={c.shops} />
               </div>
             ) : (

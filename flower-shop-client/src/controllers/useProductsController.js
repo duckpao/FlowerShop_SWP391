@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { productService as api } from '../services/productService'
 
+// Giá trị khởi tạo/reset form; editing=null nghĩa là tạo mới, có id nghĩa là cập nhật sản phẩm đó.
 const empty = () => ({ name: '', description: '', categoryId: '', price: '', stock: 0, status: 'ACTIVE', type: 'READY_MADE', images: [] })
 
 export function useProductsController(shopId, manage) {
@@ -19,17 +20,22 @@ export function useProductsController(shopId, manage) {
   useEffect(() => {
     let active = true
     setBusy(true)
+    // Shop: list + categories chạy song song. Khách xem shop: chỉ published, không lấy danh mục quản lý.
+    // save/hide tăng revision để effect tải lại danh sách từ BE sau khi ghi thành công.
     Promise.all([manage ? api.list(shopId, page) : api.published(shopId, page), manage ? api.categories(shopId) : Promise.resolve([])])
       .then(([data, categories]) => { if (active) { setData(data); setCategories(categories); setError('') } })
       .catch(e => { if (active) setError(e.message) }).finally(() => { if (active) setBusy(false) })
     return () => { active = false }
   }, [shopId, manage, page, revision])
 
+  // Bọc tác vụ ghi: bật busy, bắt lỗi, tăng revision sau thành công và luôn tắt busy.
   async function run(action) {
     setBusy(true); setError(''); setNotice('')
     try { await action(); setRevision(x => x + 1) } catch (e) { setError(e.message) } finally { setBusy(false) }
   }
 
+  // Nút Lưu -> chuẩn hóa giá/tồn kho thành số, bỏ URL rỗng -> productService.save.
+  // editing có id: PUT; chưa có id: POST. images gửi lên sẽ thay toàn bộ danh sách ảnh ở BE.
   const save = e => {
     e.preventDefault()
     return run(async () => {
@@ -43,12 +49,14 @@ export function useProductsController(shopId, manage) {
     })
   }
 
+// Xác nhận ẩn -> DELETE API; BE chỉ đổi Products.status=INACTIVE, không xóa hàng trong database.
   const hide = id => {
     if (window.confirm('Ẩn sản phẩm khỏi cửa hàng?')) {
       return run(async () => { await api.hide(shopId, id); setNotice('Đã ẩn sản phẩm.') })
     }
   }
 
+// Nút Sửa chỉ đưa dữ liệu vào form tại FE; tới khi bấm Lưu mới gọi BE.
   const edit = p => {
     setEditing(p.id)
     setForm({
@@ -59,6 +67,7 @@ export function useProductsController(shopId, manage) {
   }
 
   // Ảnh là danh sách URL; đúng một ảnh được đánh dấu chính.
+// Các hàm ảnh bên dưới chỉ sửa form trong bộ nhớ; save mới gửi danh sách URL xuống BE.
   const addImage = () => setForm(f => ({ ...f, images: [...f.images, { url: '', primary: f.images.length === 0 }] }))
   const setImageUrl = (index, url) => setForm(f => ({ ...f, images: f.images.map((i, x) => x === index ? { ...i, url } : i) }))
   const setPrimaryImage = index => setForm(f => ({ ...f, images: f.images.map((i, x) => ({ ...i, primary: x === index })) }))

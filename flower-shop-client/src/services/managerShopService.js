@@ -6,6 +6,7 @@ export const managerShopService = {
   invitations: id => call(`${base}/${encodeURIComponent(id)}/invitations`),
   invite: (id, email) => call(`${base}/${encodeURIComponent(id)}/invitations`, 'POST', { email }),
   cancelInvite: (id, invitationId) => call(`${base}/${encodeURIComponent(id)}/invitations/${encodeURIComponent(invitationId)}`, 'DELETE'),
+  // Với SHOP: GET /api/shop/mine -> ManagerShopController.mine; id trả về được dùng trong API sản phẩm.
   list: role => call(role === 'SHOP' ? base : '/api/staff/shops'),
   save: (id, body) => call(`${base}/${encodeURIComponent(id)}`, 'PUT', body),
   staff: id => call(`${base}/${encodeURIComponent(id)}/staff`),

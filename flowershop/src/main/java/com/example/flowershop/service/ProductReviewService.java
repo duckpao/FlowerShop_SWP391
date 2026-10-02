@@ -24,6 +24,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
+// Nghiệp vụ review của Product Details. ReviewInput/ReplyInput nhận JSON, ReviewResult/Results là JSON trả về.
+// Luồng hiện tại không kiểm tra đơn đã mua; order_id của review có thể null.
 @Service
 @Transactional(readOnly = true)
 public class ProductReviewService {
@@ -63,11 +65,13 @@ public class ProductReviewService {
                 r.getRating(), r.getComment(), r.getShopReply(), r.getCreatedDate());
     }
 
+    // Dùng quy tắc công khai của assembler, không cho list/write trên sản phẩm đã ẩn.
     private Product visibleProduct(String productId) {
         return products.findById(productId).filter(ProductCardAssembler::visible)
                 .orElseThrow(ProductReviewService::missing);
     }
 
+    // Kiểm tra sản phẩm công khai -> findByProductId phân trang 10 mục -> map ReviewResult.
     public Results list(String productId, int page) {
         if (page < 0 || page > 100000) throw new IllegalArgumentException("Trang không hợp lệ.");
         // Endpoint này công khai: phải áp dụng đúng quy tắc hiển thị, nếu không đánh giá của
@@ -80,12 +84,14 @@ public class ProductReviewService {
     }
 
     /** Đánh giá của chính người đang đăng nhập, để giao diện mở sẵn chế độ sửa. 404 nếu chưa có. */
+    // findByProductIdAndUserId tìm đúng review của người gọi; không có thì ném 404.
     public ReviewResult mine(String productId, String actor) {
         return result(reviews.findByProductIdAndUserId(productId, actor)
                 .orElseThrow(ProductReviewService::missing));
     }
 
     @Transactional
+    // Kiểm tra visible và chưa review -> tạo ProductReview với user/product -> saveAndFlush; trùng trả 409.
     public ReviewResult write(String productId, String actor, ReviewInput input) {
         Product product = visibleProduct(productId);
         if (reviews.findByProductIdAndUserId(productId, actor).isPresent())
@@ -98,6 +104,7 @@ public class ProductReviewService {
     }
 
     @Transactional
+    // Tìm theo productId + actor để sửa đúng review của mình; ghi rating/comment bằng saveAndFlush.
     public ReviewResult update(String productId, String actor, ReviewInput input) {
         ProductReview review = reviews.findByProductIdAndUserId(productId, actor)
                 .orElseThrow(ProductReviewService::missing);
@@ -108,12 +115,14 @@ public class ProductReviewService {
     }
 
     @Transactional
+    // Tìm review của mình rồi repository.delete -> xóa bản ghi Product_Reviews.
     public void delete(String productId, String actor) {
         reviews.delete(reviews.findByProductIdAndUserId(productId, actor)
                 .orElseThrow(ProductReviewService::missing));
     }
 
     @Transactional
+    // Khóa shop, kiểm tra owner + shop ACTIVE + review thuộc shop -> ghi shopReply trên chính review đó.
     public ReviewResult reply(String shopId, String reviewId, String actor, String reply) {
         Shop shop = shops.findForUpdate(shopId).orElseThrow(ProductReviewService::missing);
         if (!shop.getOwner().getId().equals(actor)) throw missing();

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { favoriteService } from '../services/favoriteService'
 
+// Dành cho trang /favorites: CUSTOMER -> tải page 12 sản phẩm; revision dùng để tải lại sau khi bỏ lưu.
 export function useFavoritesController(user) {
   const [data, setData] = useState(null)
   const [page, setPage] = useState(0)
@@ -13,6 +14,7 @@ export function useFavoritesController(user) {
     if (user?.role !== 'CUSTOMER') { setData(null); return }
     let active = true
     setBusy(true); setError('')
+    // GET /api/customer/favorites?page=... -> FavoriteController.mine -> FavoriteService.mine.
     favoriteService.mine(page)
       .then(value => { if (active) setData(value) })
       .catch(e => { if (active) setError(e.message) })
@@ -20,6 +22,7 @@ export function useFavoritesController(user) {
     return () => { active = false }
   }, [user, page, revision])
 
+// DELETE thành công rồi tăng revision; effect đọc lại trang hiện tại từ database.
   async function remove(productId) {
     setBusy(true); setError(''); setNotice('')
     try {
@@ -33,6 +36,7 @@ export function useFavoritesController(user) {
 }
 
 /** Tập id đã lưu + hành động bật/tắt, dùng chung cho trang danh sách và trang chi tiết. */
+// Dành cho nút tim ở danh sách/chi tiết: saved là Set id đã lưu, không phải toàn bộ thông tin sản phẩm.
 export function useFavoriteToggle(user) {
   const [saved, setSaved] = useState(() => new Set())
   const [error, setError] = useState('')
@@ -46,6 +50,8 @@ export function useFavoriteToggle(user) {
     return () => { active = false }
   }, [user])
 
+  // Chưa là CUSTOMER thì chuyển tới login; đã là CUSTOMER thì chọn PUT thêm hoặc DELETE bỏ.
+  // Chỉ cập nhật Set sau khi BE thành công, nên lỗi request không giả vờ đã lưu được.
   async function toggle(productId) {
     if (user?.role !== 'CUSTOMER') {
       window.location.assign(`/login?next=${encodeURIComponent(window.location.pathname)}`)

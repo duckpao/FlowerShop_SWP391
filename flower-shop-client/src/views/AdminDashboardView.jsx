@@ -99,6 +99,7 @@ export default function AdminDashboardView({ user, logout, busy, error, path }) 
       
       {path === "/admin/shops" && <AdminShopsView />}
       {path === "/admin/users" && <AdminCustomersView />}
+      {/* Điểm vào quản lý danh mục + kiểm duyệt sản phẩm; xử lý nghiệp vụ nằm trong AdminCategoriesView. */}
       {path === "/admin/categories" && <AdminCategoriesView />}
       {profile && <AdminProfileView user={user} />}
       {path === "/admin/approvals" && (

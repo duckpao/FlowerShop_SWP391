@@ -8,6 +8,7 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
 
+// Bảng Categories cung cấp danh mục cho Products.category_id. INACTIVE ngừng chọn mới; không tự ẩn sản phẩm cũ.
 @Entity
 @Table(name = "Categories")
 @Getter

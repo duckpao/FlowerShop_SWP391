@@ -58,6 +58,7 @@ public class TokenAuthService {
         return new Tokens(jwt.issue(user.getId(),session.getId(),"access",Instant.now().plusSeconds(600)),600,CurrentUser.from(user),refresh);
     }
     @Transactional(readOnly=true)
+    // Request favorite/review/quản lý sản phẩm dùng method này: kiểm tra JWT, session và user trong DB; trả role hiện tại.
     public CurrentUser authenticate(String raw) {
         var claims=jwt.decode(raw,"access");
         AuthSession session=sessions.findById(claims.getClaimAsString("sid")).orElseThrow(TokenAuthService::invalid);

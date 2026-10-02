@@ -1,6 +1,8 @@
 import { useProductReviewsController } from '../controllers/useProductReviewsController'
 import '../styles/catalog.css'
 
+// Phần review của Product Details: hook tải danh sách + review của mình, nhận thao tác gửi/sửa/xóa/phản hồi.
+// ownsShop bên dưới chỉ kiểm tra role SHOP để hiện form; BE mới kiểm tra có thật sự sở hữu shop này hay không.
 export default function ProductReviewsView({ product, auth }) {
   const c = useProductReviewsController(product.id, auth?.user)
   const user = auth?.user

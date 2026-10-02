@@ -1,8 +1,11 @@
 import { authService } from './authService'
 
+// URL review của CUSTOMER không chứa userId: BE lấy người dùng từ token, tránh FE chọn tài khoản khác.
 const mine = id => `/api/customer/products/${encodeURIComponent(id)}/reviews`
 
 export const reviewService = {
+  // Đọc review dùng URL tương đối cùng origin, không kèm Bearer. SecurityConfig hiện thiếu permitAll
+  // cho đường dẫn /api/public/products/{id}/reviews, nên có thể bị 401 trước khi tới controller.
   async list(id, page) {
     const response = await fetch(`/api/public/products/${encodeURIComponent(id)}/reviews?page=${page}`, { cache: 'no-store' })
     if (!response.ok) throw new Error('Không tải được đánh giá.')
@@ -15,6 +18,7 @@ export const reviewService = {
     catch (error) { if (error.status === 404) return null; throw error }
   },
 
+  // POST/PUT gửi JSON {rating, comment}; DELETE không cần body; reply gửi JSON {reply} theo shopId/reviewId.
   write: (id, body) => authService.authenticatedRequest(mine(id), { method: 'POST', body }),
   update: (id, body) => authService.authenticatedRequest(mine(id), { method: 'PUT', body }),
   remove: id => authService.authenticatedRequest(mine(id), { method: 'DELETE' }),

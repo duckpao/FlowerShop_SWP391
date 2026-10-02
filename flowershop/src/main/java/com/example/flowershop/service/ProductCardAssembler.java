@@ -69,6 +69,8 @@ public class ProductCardAssembler {
      * Yêu cầu các Product đang được quản lý trong transaction đang mở: Product.shop và
      * Product.category là LAZY nên entity detached sẽ ném LazyInitializationException.
      */
+    // CatalogService/FavoriteService/AdminCatalogService đều gọi cards: gom id -> lấy ảnh + điểm theo lô -> ghép thẻ.
+    // Đây là chuyển entity sang DTO trả FE, không phải lưu một bảng ProductCard mới.
     public List<ProductCard> cards(List<Product> products) {
         List<String> ids = products.stream().map(Product::getId).toList();
         Map<String, String> image = primaryImages(ids);

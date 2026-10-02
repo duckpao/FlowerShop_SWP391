@@ -2,6 +2,8 @@ import { useProductsController } from '../controllers/useProductsController'
 import { formatPrice, productStatusLabels, productTypeLabels, ratingLabel } from '../models/productModel'
 import '../styles/catalog.css'
 
+// Product Management: manage=true mở form Shop; manage=false chỉ xem sản phẩm công khai của một shop.
+// useProductsController chọn API theo manage. Form hiện tại lưu URL ảnh HTTPS, chưa gọi API upload ảnh/video.
 export default function ProductsView({ shop, manage = false }) {
   const c = useProductsController(shop.id, manage)
   const disabled = c.busy || shop.status !== 'ACTIVE'

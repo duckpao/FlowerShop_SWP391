@@ -41,6 +41,7 @@ export default function PublicShopView() {
         <h1>{shop.name}</h1>
         <p>{shop.description || 'Cửa hàng chưa thêm mô tả.'}</p>
       </section>
+      {/* Không truyền manage: ProductsView gọi API công khai chỉ lấy sản phẩm của shop.id này. */}
       <ProductsView key={shop.id} shop={shop} />
     </>}
   </main>

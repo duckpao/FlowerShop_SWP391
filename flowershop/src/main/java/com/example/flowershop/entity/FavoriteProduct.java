@@ -7,6 +7,8 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
 
+// Bảng Favorite_Products lưu quan hệ khách hàng yêu thích sản phẩm. @EmbeddedId chứa khóa ghép.
+// @MapsId nối hai thành phần khóa với User/Product; bỏ favorite không xóa User hay Product.
 @Entity
 @Table(name = "Favorite_Products")
 @Getter

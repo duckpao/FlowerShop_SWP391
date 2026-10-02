@@ -10,6 +10,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+// Đường trả lỗi của các luồng sản phẩm: lỗi service/validation/DB -> HTTP status + JSON message/errors.
+// authService/catalogService đọc JSON này rồi hook đặt error để View hiển thị; lỗi chặn ở Security có thể không đi qua đây.
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 

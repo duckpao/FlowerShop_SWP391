@@ -35,6 +35,8 @@ function AppRouterContent() {
         {/* All routes wrapped in AppLayout which now handles public/admin nav items dynamically */}
         <Route element={<AppLayout />}>
           <Route path="/" element={<HomeView auth={controller} />} />
+          {/* Luồng sản phẩm: /products -> danh sách + lọc danh mục; /products/:id -> chi tiết + review.
+              /favorites -> sản phẩm đã lưu; hai dashboard bên dưới mở màn hình quản lý theo vai trò. */}
           <Route path="/products" element={<ProductCatalogView auth={controller} />} />
           <Route path="/products/:id" element={<ProductDetailViewWrapper auth={controller} />} />
           <Route path="/shops/:id" element={<PublicShopView />} />
@@ -47,6 +49,7 @@ function AppRouterContent() {
   );
 }
 
+// Lấy id từ URL rồi truyền xuống ProductDetailView -> useProductDetailController -> API chi tiết.
 function ProductDetailViewWrapper({ auth }) {
   const location = useLocation();
   const match = location.pathname.match(/^\/products\/([^/]+)$/);

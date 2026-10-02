@@ -24,6 +24,8 @@ import org.springframework.web.server.ResponseStatusException;
 import java.math.BigDecimal;
 import java.util.*;
 
+// Nghiệp vụ đọc công khai cho danh sách, chi tiết, danh mục. Controller gọi service; service gọi repository, không nhận SQL từ FE.
+// readOnly mở transaction đọc để truy cập cả quan hệ LAZY shop/category khi dựng JSON kết quả.
 @Service
 @Transactional(readOnly = true)
 public class CatalogService {
@@ -66,6 +68,8 @@ public class CatalogService {
         return browse(q, categoryId, shopId, null, minPrice, maxPrice, sort, page, size);
     }
 
+    // Bản browse đầy đủ: 1) kiểm tra tham số; 2) dựng bộ lọc; 3) repository phân trang; 4) assembler dựng thẻ.
+    // Hai overload phía trên chỉ bổ sung các tham số còn thiếu rồi gọi về bản này.
     public Results browse(String q, String categoryId, String shopId, ProductType type,
                           BigDecimal minPrice, BigDecimal maxPrice, String sort, int page, int size) {
         if (page < 0 || page > 100000 || size < 1 || size > 100)
@@ -84,6 +88,8 @@ public class CatalogService {
             default -> throw new IllegalArgumentException("Cách sắp xếp không hợp lệ.");
         };
 
+        // Specification mô tả điều kiện WHERE bằng tên thuộc tính Java; Hibernate đổi thành SQL theo entity.
+        // Chỉ ACTIVE + không adminHidden + shop ACTIVE. Không lọc theo status của Category hay stock > 0.
         Specification<Product> spec = (root, query, cb) -> {
             var shop = root.join("shop");
             var predicates = new ArrayList<Predicate>();
@@ -102,11 +108,14 @@ public class CatalogService {
             return cb.and(predicates.toArray(Predicate[]::new));
         };
 
+        // JpaSpecificationExecutor thực thi truy vấn dữ liệu/phân trang ở DB; assembler bổ sung ảnh và review.
+        // Results.content được FE map ra thẻ; totalPages/totalElements dùng cho nút chuyển trang và tổng số.
         Page<Product> result = products.findAll(spec, PageRequest.of(page, size, order));
         return new Results(assembler.cards(result.getContent()), page, size,
                 result.getTotalElements(), result.getTotalPages());
     }
 
+    // findById -> kiểm tra visible -> lấy ảnh theo productId -> tính rating/count -> trả ProductDetail.
     public ProductDetail detail(String productId) {
         Product p = products.findById(productId).filter(ProductCardAssembler::visible)
                 .orElseThrow(CatalogService::missing);
@@ -120,6 +129,7 @@ public class CatalogService {
                 p.getCategory().getName(), urls, Math.round(summary[0] * 10) / 10.0, (long) summary[1]);
     }
 
+    // countVisibleByCategory đếm nhóm sản phẩm, ghép vào danh mục ACTIVE từ CategoryRepository.
     public List<CategoryCard> categories() {
         Map<String, Long> counts = new HashMap<>();
         for (Object[] row : products.countVisibleByCategory())
@@ -130,6 +140,7 @@ public class CatalogService {
     }
 
     /** Sản phẩm đang bán của một shop; chuyển từ ManagerProductService sang đây. */
+    // Kiểm tra shop ACTIVE rồi tái dùng browse với shopId cố định, 20 sản phẩm/trang.
     public Results published(String shopId, int page) {
         shops.findById(shopId).filter(s -> s.getStatus() == ShopStatus.ACTIVE)
                 .orElseThrow(CatalogService::missing);

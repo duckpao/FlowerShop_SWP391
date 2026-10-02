@@ -4,6 +4,8 @@ import '../styles/catalog.css'
 
 const statusLabels = { ACTIVE: 'Đang dùng', INACTIVE: 'Ngừng dùng' }
 
+// Màn hình /admin/categories gồm quản lý danh mục và kiểm duyệt sản phẩm.
+// useAdminCategoriesController nối sự kiện form/nút với API; Admin ở đây chỉ ẩn/bỏ ẩn sản phẩm, không sửa giá/tên.
 export default function AdminCategoriesView() {
   const c = useAdminCategoriesController()
   return <>

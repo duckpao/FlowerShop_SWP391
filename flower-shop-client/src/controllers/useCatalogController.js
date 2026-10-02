@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { catalogService } from '../services/catalogService'
 import { emptyProductFilter } from '../models/productModel'
 
+// Controller FE đang được ProductCatalogView dùng (không phải useProductCatalogController).
+// filter là bộ lọc đã áp dụng; draft/priceDraft chỉ là dữ liệu đang gõ, chờ nhấn Tìm sản phẩm.
 export function useCatalogController(initialShops) {
   const [filter, setFilter] = useState(emptyProductFilter)
   const [draft, setDraft] = useState('')
@@ -14,6 +16,7 @@ export function useCatalogController(initialShops) {
 
   useEffect(() => {
     let active = true
+    // GET /api/public/categories -> PublicCatalogController.categories -> CatalogService.categories.
     catalogService.categories()
       .then(list => { if (active) setCategories(Array.isArray(list) ? list : []) })
       .catch(() => { if (active) setCategories([]) })
@@ -26,6 +29,7 @@ export function useCatalogController(initialShops) {
       setShops(Array.isArray(initialShops) ? initialShops : [])
       return () => { active = false }
     }
+    // GET /api/public/shops -> PublicShopController.search: dữ liệu cho ô lọc Cửa hàng.
     catalogService.shops()
       .then(list => { if (active) setShops(Array.isArray(list) ? list : []) })
       .catch(() => { if (active) setShops([]) })
@@ -35,6 +39,8 @@ export function useCatalogController(initialShops) {
   useEffect(() => {
     let active = true
     setBusy(true); setError('')
+    // Mỗi lần filter đổi, gửi GET /api/public/products?...; BE trả content + thông tin phân trang.
+    // active chỉ ngăn response cũ ghi đè state sau cleanup; không hủy request HTTP đã gửi.
     catalogService.browse(filter)
       .then(value => {
         if (!active) return
@@ -50,6 +56,7 @@ export function useCatalogController(initialShops) {
     return () => { active = false }
   }, [filter])
 
+  // Chặn submit tải lại trang, kiểm tra khoảng giá rồi áp dụng từ khóa/giá; quay về page=0.
   const search = event => {
     event.preventDefault()
     const minPrice = priceDraft.minPrice.trim()
@@ -63,6 +70,7 @@ export function useCatalogController(initialShops) {
 
   return {
     filter, draft, setDraft, priceDraft, setPriceDraft, data, categories, shops, busy, error, search,
+    // Các setter đổi filter -> effect browse chạy lại; trang đánh số từ 0, UI hiển thị cộng 1.
     setCategory: categoryId => setFilter(current => ({ ...current, categoryId, page: 0 })),
     setShop: shopId => setFilter(current => ({ ...current, shopId, page: 0 })),
     setType: type => setFilter(current => ({ ...current, type, page: 0 })),

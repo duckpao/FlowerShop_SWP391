@@ -15,6 +15,7 @@ import java.util.List;
 public class ManagerShopController {
     private final ManagerShopService service;
     public ManagerShopController(ManagerShopService service) { this.service=service; }
+    // Tiền đề Product Management: trả shop của CurrentUser để FE truyền shop.id vào ProductsView.
     @GetMapping public List<ShopResponse> mine(@AuthenticationPrincipal CurrentUser u) { return service.mine(u.id()); }
     @GetMapping("/{id}/address") public List<com.example.flowershop.dto.account.AddressResponse> address(@PathVariable String id,@AuthenticationPrincipal CurrentUser u) { return service.address(id,u.id()); }
     @PutMapping("/{id}/address") @Parameter(name="X-CSRF-TOKEN",in=ParameterIn.HEADER,required=true)

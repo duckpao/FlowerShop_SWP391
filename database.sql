@@ -162,6 +162,7 @@ CREATE TABLE Manager_Applications (
 -- ==========================================
 -- M02: PRODUCT & CATALOG
 -- ==========================================
+-- Product Category: danh mục được Products.category_id tham chiếu; các API chọn mới chỉ lấy ACTIVE.
 CREATE TABLE Categories (
     id NVARCHAR(36) PRIMARY KEY,
     name NVARCHAR(100) NOT NULL,
@@ -173,6 +174,7 @@ CREATE TABLE Categories (
     last_modify_by NVARCHAR(36)
 );
 
+-- Product List/Details/Management: bảng sản phẩm; entity Product ánh xạ shop_id và category_id sang quan hệ Java.
 CREATE TABLE Products (
     id NVARCHAR(36) PRIMARY KEY,
     shop_id NVARCHAR(36) NOT NULL,
@@ -192,6 +194,7 @@ CREATE TABLE Products (
     FOREIGN KEY (category_id) REFERENCES Categories(id)
 );
 
+-- Ảnh cho thẻ/chi tiết/form sản phẩm: lưu URL và cờ ảnh chính; file ảnh không lưu trực tiếp trong DB.
 CREATE TABLE Product_Images (
     id NVARCHAR(36) PRIMARY KEY,
     product_id NVARCHAR(36) NOT NULL,
@@ -205,6 +208,7 @@ CREATE TABLE Product_Images (
     FOREIGN KEY (product_id) REFERENCES Products(id) ON DELETE CASCADE
 );
 
+-- Nhánh API video sản phẩm: lưu URL Cloudinary; giao diện ProductsView hiện chưa gọi nhánh upload video.
 CREATE TABLE Product_Videos (
     id NVARCHAR(36) PRIMARY KEY,
     product_id NVARCHAR(36) NOT NULL,
@@ -399,6 +403,7 @@ CREATE TABLE Refunds (
 -- ==========================================
 -- M07: REVIEW & CUSTOMER ENGAGEMENT
 -- ==========================================
+-- Product Details/review: đọc theo product_id, sửa theo product_id + user_id; xem migration 011 cho review không buộc đơn hàng.
 CREATE TABLE Product_Reviews (
     id NVARCHAR(36) PRIMARY KEY,
     product_id NVARCHAR(36) NOT NULL,
@@ -417,6 +422,7 @@ CREATE TABLE Product_Reviews (
     FOREIGN KEY (order_id) REFERENCES Orders(id)
 );
 
+-- Favorite/View Favorite: mỗi quan hệ (user_id, product_id) là một sản phẩm được khách lưu.
 CREATE TABLE Favorite_Products (
     user_id NVARCHAR(36) NOT NULL,
     product_id NVARCHAR(36) NOT NULL,

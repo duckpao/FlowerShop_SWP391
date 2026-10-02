@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { catalogService } from '../services/catalogService'
 
+// productId đổi hoặc reload tăng revision -> effect gọi lại catalogService.detail và cập nhật product.
 export function useProductDetailController(productId) {
   const [product, setProduct] = useState(null)
   const [busy, setBusy] = useState(true)
@@ -10,6 +11,7 @@ export function useProductDetailController(productId) {
   useEffect(() => {
     let active = true
     setBusy(true); setError('')
+    // GET /api/public/products/{id} -> CatalogService.detail; 404 gồm cả không tồn tại và không được công khai.
     catalogService.detail(productId)
       .then(value => { if (active) setProduct(value) })
       .catch(e => {

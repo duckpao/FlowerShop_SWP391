@@ -2,6 +2,8 @@ import toast from 'react-hot-toast'
 import { authModel } from '../models/authModel'
 import { API_BASE } from '../apiBase'
 
+// Cầu nối HTTP dùng chung cho quản lý sản phẩm, favorite và ghi review:
+// lấy CSRF cho lệnh ghi -> gắn Bearer nếu cần -> JSON.stringify (hoặc FormData) -> fetch -> đọc JSON/lỗi.
 async function request(path, { method = 'GET', body, bearer = false } = {}) {
   const isFormData = body instanceof FormData
   const headers = {}
@@ -64,6 +66,8 @@ export const authService = {
     if (!import.meta.env.DEV || !/^\/api\/admin\/(customers|shops)([/?]|$)/.test(path)) throw new Error('Chế độ thử nghiệm chỉ có trên local.')
     return request(path, options)
   },
+  // Các service nghiệp vụ gọi đây để có token; nếu thiếu thì refresh, gặp 401 thì refresh và thử lại một lần.
+  // Token chỉ xác định người gọi; quyền CUSTOMER/SHOP/ADMIN còn được BE kiểm tra trước controller.
   async authenticatedRequest(path, options = {}) {
     if (!authModel.getToken()) {
       const user = await refresh()

@@ -2,6 +2,7 @@ package com.example.flowershop.controller;
 import com.example.flowershop.service.CatalogService;
 import org.springframework.web.bind.annotation.*;
 
+// GET sản phẩm của một shop từ ProductsView manage=false -> list -> CatalogService.published -> browse.
 @RestController
 public class PublicProductController {
     private final CatalogService catalog;

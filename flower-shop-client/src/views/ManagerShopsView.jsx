@@ -230,6 +230,7 @@ export default function ManagerShopsView({ role, section = "all" }) {
             </div>
           )}
 
+          {/* selected là shop đã tải; truyền id shop xuống ProductsView để mọi request quản lý có đúng shopId. */}
           {role === "SHOP" && ["all", "products"].includes(section) && (
             <ProductsView key={`products-${c.selected.id}`} shop={c.selected} manage />
           )}
