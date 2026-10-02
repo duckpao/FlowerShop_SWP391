@@ -20,7 +20,8 @@ public class ManagerOrderService {
                                BigDecimal totalAmount, String status, java.time.LocalDateTime createdDate) {}
 
     public record OrderDetailResponse(String id, String customerId, String customerName, String customerPhone,
-                                      String deliveryAddress, String status, BigDecimal subTotal,
+                                      String recipientName, String recipientPhone, String deliveryAddress, 
+                                      String shopAddress, String status, BigDecimal subTotal,
                                       BigDecimal shippingFee, BigDecimal totalAmount,
                                       java.time.LocalDateTime createdDate, String note,
                                       List<OrderItemResponse> items, DeliveryInfo delivery, PaymentInfo payment) {}
@@ -321,10 +322,36 @@ private static ResponseStatusException notFound() {
                 .map(d -> new DeliveryInfo(d.getTrackingCode(), d.getDeliveryPartnerId(), d.getStatus().name())).orElse(null);
         PaymentInfo pi = payments.findByOrderId(o.getId()).stream().findFirst()
                 .map(p -> new PaymentInfo(p.getId(), p.getPaymentMethod().name(), p.getStatus().name(), p.getAmount())).orElse(null);
+        
         var a = o.getDeliveryAddress();
-        String addr = a != null ? a.getAddressLine() + ", " + a.getWard() + ", " + a.getDistrict() + ", " + a.getCity() : "";
-        return new OrderDetailResponse(o.getId(), o.getCustomer().getId(), o.getCustomer().getFullName(),
-                o.getCustomer().getPhone(), addr, o.getStatus().name(), o.getSubTotal(), o.getShippingFee(),
-                o.getTotalAmount(), o.getCreatedDate(), null, items, di, pi);
+        String toAddr = a != null ? (a.getAddressLine() != null ? a.getAddressLine() : "") + ", " + 
+                                    (a.getWard() != null ? a.getWard() : "") + ", " + 
+                                    (a.getDistrict() != null ? a.getDistrict() : "") + ", " + 
+                                    (a.getCity() != null ? a.getCity() : "") : "";
+        toAddr = toAddr.replaceAll("null, ", "").replaceAll("^, ", "").replaceAll(", $", "");
+
+        String fromAddr = "";
+        if (o.getShop() != null) {
+            var shopAddrs = addresses.findByShopIdAndUserIsNullOrderByCreatedDateAscIdAsc(o.getShop().getId());
+            Address shopAddr = shopAddrs.stream().filter(addr -> Boolean.TRUE.equals(addr.getIsDefault())).findFirst()
+                    .orElse(shopAddrs.isEmpty() ? null : shopAddrs.get(0));
+            if (shopAddr != null) {
+                fromAddr = (shopAddr.getAddressLine() != null ? shopAddr.getAddressLine() : "") + ", " + 
+                           (shopAddr.getWard() != null ? shopAddr.getWard() : "") + ", " + 
+                           (shopAddr.getDistrict() != null ? shopAddr.getDistrict() : "") + ", " + 
+                           (shopAddr.getCity() != null ? shopAddr.getCity() : "");
+                fromAddr = fromAddr.replaceAll("null, ", "").replaceAll("^, ", "").replaceAll(", $", "");
+            }
+        }
+
+        String toName = o.getRecipientName() != null && !o.getRecipientName().isBlank() ? o.getRecipientName() : (o.getCustomer() != null ? o.getCustomer().getFullName() : "Khách hàng");
+        String toPhone = o.getRecipientPhone() != null && !o.getRecipientPhone().isBlank() ? o.getRecipientPhone() : (o.getCustomer() != null ? o.getCustomer().getPhone() : "");
+
+        return new OrderDetailResponse(o.getId(), o.getCustomer() != null ? o.getCustomer().getId() : null, 
+                o.getCustomer() != null ? o.getCustomer().getFullName() : null,
+                o.getCustomer() != null ? o.getCustomer().getPhone() : null,
+                toName, toPhone, toAddr, fromAddr, o.getStatus().name(), 
+                o.getSubTotal(), o.getShippingFee(), o.getTotalAmount(), 
+                o.getCreatedDate(), null, items, di, pi);
     }
 }

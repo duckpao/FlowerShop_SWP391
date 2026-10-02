@@ -304,7 +304,7 @@ export default function OrderQueueView({ shop: initialShop }) {
                         <div className="grid grid-cols-2 gap-4 text-sm bg-gray-50 dark:bg-gray-800/50 p-4 rounded-lg">
                             <div>
                                 <p className="text-gray-500 font-medium mb-1">Địa chỉ người gửi (Shop)</p>
-                                <p className="font-medium text-gray-900 dark:text-white">FPTU Smart Floral</p>
+                                <p className="font-medium text-gray-900 dark:text-white">{shop?.name || 'Shop'}</p>
                                 <p className="text-gray-600 dark:text-gray-400 mt-1 line-clamp-2">{orderDetail.shopAddress || 'Chưa cấu hình địa chỉ Shop'}</p>
                             </div>
                             <div>
