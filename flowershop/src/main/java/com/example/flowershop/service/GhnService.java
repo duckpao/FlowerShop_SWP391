@@ -186,9 +186,13 @@ public class GhnService {
             HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
             JsonNode json = mapper.readTree(response.body());
             int code = json.path("code").asInt(-1);
-            if (response.statusCode() != 200 || code != 200)
-                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
-                        json.path("message").asText("GHN " + path + " thất bại."));
+            if (response.statusCode() != 200 || code != 200) {
+                String msg = json.path("message").asText("GHN " + path + " thất bại.");
+                if (msg.contains("inside_warehouse_route_by_address") || msg.contains("Connection not open") || json.path("code_message").asText("").contains("WAREHOUSE_NOT_FOUND")) {
+                    msg = "Máy chủ GHN Sandbox đang gặp sự cố kết nối định tuyến kho (inside_warehouse_route_by_address - Connection not open). Đây là lỗi gián đoạn từ phía GHN Sandbox, vui lòng thử lại sau ít phút.";
+                }
+                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, msg);
+            }
             return json.path("data");
         } catch (ResponseStatusException e) {
             throw e;
