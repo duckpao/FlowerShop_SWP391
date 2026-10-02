@@ -1,3 +1,4 @@
+
 package com.example.flowershop.config;
 
 import jakarta.servlet.DispatcherType;
@@ -36,12 +37,13 @@ public class SecurityConfig {
 
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.GET, "/", "/index.html", "/assets/**", "/vite.svg", "/favicon.svg", "/icons.svg",
-                                "/shop-admin", "/shop-admin/staff", "/shop-admin/products", "/shop-admin/shop", "/shop-admin/profile", "/shops/*",
-                                "/products/*", "/cart", "/home", "/payment/**", "/login", "/account", "/admin", "/admin/approvals",
-                                "/admin/shops", "/admin/users", "/admin/profile", "/invitations/accept").permitAll()
+                                "/login", "/account", "/admin", "/admin/**",
+                                "/shop-admin", "/shop-admin/**", "/shops/*",
+                                "/products", "/products/*", "/cart", "/home", "/payment/**", "/favorites", "/invitations/accept").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/public/shops", "/api/public/shops/*", "/api/public/shops/*/products", "/api/public/products", "/api/public/products/*", "/api/public/categories").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/payments/sepay/ipn", "/api/sepay/ipn", "/api/webhook/sepay").permitAll()
                         .requestMatchers("/api/cart/**", "/api/orders/**", "/api/payments/**", "/api/payment/**", "/api/sepay/checkout/**").hasRole("CUSTOMER")
+
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                         .requestMatchers(
                                 HttpMethod.GET,
@@ -58,7 +60,7 @@ public class SecurityConfig {
 
                         .requestMatchers(
                                 HttpMethod.POST,
-                                "/api/auth/login",
+                                "/api/auth/login", "/api/auth/captcha",
                                 "/api/auth/refresh",
                                 "/api/auth/logout",
                                 "/api/auth/register",

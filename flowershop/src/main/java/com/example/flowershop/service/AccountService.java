@@ -43,9 +43,8 @@ public class AccountService {
             address=find(list,id);
             if (orders.existsByDeliveryAddressId(id)) throw inUse();
         }
-        areas.requireAllowed(request.city(), request.district(), request.ward());
         address.setAddressLine(request.addressLine().strip()); address.setCity(request.city().strip());
-        address.setDistrict(request.district().strip()); address.setWard(request.ward().strip());
+        address.setDistrict(""); address.setWard(request.ward().strip());
         address.setLastModifyBy(userId);
         boolean makeDefault = request.isDefault() || list.isEmpty() || Boolean.TRUE.equals(address.getIsDefault())
                 || list.stream().noneMatch(a -> Boolean.TRUE.equals(a.getIsDefault()));
@@ -55,7 +54,6 @@ public class AccountService {
     }
     public AddressResponse setDefault(String userId, String id) {
         lock(userId); var list=owned(userId); var selected=find(list,id);
-        areas.requireAllowed(selected.getCity(),selected.getDistrict(),selected.getWard());
         list.forEach(a -> { a.setIsDefault(a.getId().equals(id)); a.setLastModifyBy(userId); });
         return AddressResponse.from(selected);
     }

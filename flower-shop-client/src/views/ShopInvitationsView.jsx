@@ -49,7 +49,7 @@ export default function ShopInvitationsView({ shop }) {
       )}
 
       <div className="mb-8 max-w-md">
-        <form onSubmit={c.send}>
+        <form noValidate onSubmit={c.send}>
           <fieldset disabled={disabled} className="space-y-4">
             <div>
               <Label>Email người nhận</Label>
@@ -59,9 +59,12 @@ export default function ShopInvitationsView({ shop }) {
                     required
                     type="email"
                     maxLength={50}
+                    aria-invalid={!!c.emailError}
+                    aria-describedby="invitation-email-error"
                     value={c.email}
                     onChange={(e) => c.setEmail(e.target.value)}
                   />
+                  <p id="invitation-email-error" className="text-sm text-error-500" aria-live="polite">{c.emailError}</p>
                 </div>
                 <Button type="submit">Gửi lời mời</Button>
               </div>

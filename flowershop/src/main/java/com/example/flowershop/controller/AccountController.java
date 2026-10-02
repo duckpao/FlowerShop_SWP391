@@ -27,28 +27,28 @@ public class AccountController {
     public ProfileResponse update(@AuthenticationPrincipal CurrentUser user, @Valid @RequestBody ProfileRequest request) {
         return accounts.updateProfile(user.id(),request);
     }
-    @GetMapping("/delivery-areas") @PreAuthorize("hasRole('CUSTOMER')")
+    @GetMapping("/delivery-areas") 
     public List<String> areas() { return areas.list(); }
-    @GetMapping("/addresses") @PreAuthorize("hasRole('CUSTOMER')")
+    @GetMapping("/addresses") 
     public List<AddressResponse> addresses(@AuthenticationPrincipal CurrentUser user) { return accounts.list(user.id()); }
     @PostMapping("/addresses") @ResponseStatus(org.springframework.http.HttpStatus.CREATED)
-    @PreAuthorize("hasRole('CUSTOMER')")
+    
     @Parameter(name="X-CSRF-TOKEN",in=ParameterIn.HEADER,required=true)
     public AddressResponse add(@AuthenticationPrincipal CurrentUser user,@Valid @RequestBody AddressRequest request) {
         return accounts.save(user.id(),null,request);
     }
-    @PutMapping("/addresses/{id}") @PreAuthorize("hasRole('CUSTOMER')")
+    @PutMapping("/addresses/{id}") 
     @Parameter(name="X-CSRF-TOKEN",in=ParameterIn.HEADER,required=true)
     public AddressResponse updateAddress(@AuthenticationPrincipal CurrentUser user,@PathVariable String id,@Valid @RequestBody AddressRequest request) {
         return accounts.save(user.id(),id,request);
     }
-    @PutMapping("/addresses/{id}/default") @PreAuthorize("hasRole('CUSTOMER')")
+    @PutMapping("/addresses/{id}/default") 
     @Parameter(name="X-CSRF-TOKEN",in=ParameterIn.HEADER,required=true)
     public AddressResponse setDefault(@AuthenticationPrincipal CurrentUser user,@PathVariable String id) {
         return accounts.setDefault(user.id(),id);
     }
     @DeleteMapping("/addresses/{id}") @ResponseStatus(org.springframework.http.HttpStatus.NO_CONTENT)
-    @PreAuthorize("hasRole('CUSTOMER')")
+    
     @Parameter(name="X-CSRF-TOKEN",in=ParameterIn.HEADER,required=true)
     public void delete(@AuthenticationPrincipal CurrentUser user,@PathVariable String id) { accounts.delete(user.id(),id); }
 }

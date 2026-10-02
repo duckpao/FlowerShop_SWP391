@@ -33,6 +33,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class JwtAuthenticationTests {
     @Autowired TokenAuthService auth;
     @Autowired JwtService jwt;
+    @Autowired com.example.flowershop.security.CaptchaService captcha;
     @Autowired UserRepository users;
     @Autowired AuthSessionRepository sessions;
     @Autowired OtpChallengeRepository challenges;
@@ -43,10 +44,22 @@ class JwtAuthenticationTests {
     private User user;
     private final String password="FlowerShop123";
     @BeforeEach void setup() {
+        captcha.clear("jwt@example.com");
         sessions.deleteAll(); challenges.deleteAll(); users.deleteAll(); reset(mail);
         user=users.saveAndFlush(User.builder().id(UUID.randomUUID().toString()).email("jwt@example.com")
                 .fullName("JWT Test").role(UserRole.CUSTOMER).status(UserStatus.ACTIVE)
                 .isEmailVerified(true).passwordHash(encoder.encode(password)).build());
+    }
+    @Test void fifthWrongPasswordRequiresSingleUseCaptcha() {
+        for(int i=0;i<4;i++) assertThatThrownBy(() -> auth.login(new LoginRequest(user.getEmail(),"wrong"))).isInstanceOf(org.springframework.security.core.AuthenticationException.class);
+        assertThatThrownBy(() -> auth.login(new LoginRequest(user.getEmail(),"wrong"))).isInstanceOf(com.example.flowershop.exception.CaptchaRequiredException.class);
+        assertThatThrownBy(this::login).isInstanceOf(com.example.flowershop.exception.CaptchaRequiredException.class);
+        var image=captcha.create(user.getEmail(),"login");
+        var map=(java.util.Map<?,?>) org.springframework.test.util.ReflectionTestUtils.getField(captcha,"challenges");
+        String answer=org.springframework.test.util.ReflectionTestUtils.invokeMethod(map.get(image.id()),"answer");
+        assertThat(auth.login(new LoginRequest(user.getEmail(),password,image.id(),answer)).user().id()).isEqualTo(user.getId());
+        assertThatThrownBy(() -> captcha.verify(user.getEmail(),"login",image.id(),answer)).isInstanceOf(com.example.flowershop.exception.CaptchaRequiredException.class);
+        assertThat(captcha.required(user.getEmail())).isFalse();
     }
     private TokenAuthService.Tokens login() { return auth.login(new LoginRequest(user.getEmail(),password)); }
     @Test void loginReturnsSafeUserAndValidAccessToken() {

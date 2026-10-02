@@ -1,8 +1,10 @@
+import { validateEmail } from '../models/emailValidation'
 import { useEffect, useState } from 'react'
 import { managerShopService as api } from '../services/managerShopService'
 export function useInvitationsController(shop) {
   const [items, setItems] = useState([])
   const [email, setEmail] = useState('')
+  const [emailError, setEmailError] = useState('')
   const [busy, setBusy] = useState(true)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -18,11 +20,11 @@ export function useInvitationsController(shop) {
     setBusy(true); setError(''); setNotice('')
     try { await action(); setNotice(message); setRevision(x => x + 1) } catch (e) { setError(e.message) } finally { setBusy(false) }
   }
-  function send(e) { e.preventDefault(); return run(() => api.invite(shop.id, email.trim()), 'Đã tiếp nhận gửi lời mời. Người nhận kiểm tra hộp thư và Spam.') }
+  function send(e) { e.preventDefault(); const message = validateEmail(email,50); setEmailError(message); if(message) return; return run(() => api.invite(shop.id, email.trim()), 'Đã tiếp nhận gửi lời mời. Người nhận kiểm tra hộp thư và Spam.') }
   function resend(item) { return run(() => api.invite(shop.id, item.email), 'Đã tiếp nhận gửi lại. Mã lời mời cũ không còn hiệu lực.') }
   function cancel(item) {
     if (!window.confirm(`Hủy lời mời gửi đến ${item.email}?`)) return
     return run(() => api.cancelInvite(shop.id, item.id), 'Đã hủy lời mời.')
   }
-  return { items, email, setEmail, busy, error, notice, send, resend, cancel, retry: () => setRevision(x => x + 1) }
+  return { items, email, emailError, setEmail: value => {setEmail(value); setEmailError(validateEmail(value,50))}, busy, error, notice, send, resend, cancel, retry: () => setRevision(x => x + 1) }
 }

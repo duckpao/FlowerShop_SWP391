@@ -16,7 +16,7 @@ import java.util.*;
 
 @Service @Transactional(readOnly=true)
 public class StaffInvitationService {
-    public record SendRequest(@NotBlank @Email @Size(max=50) String email) {}
+    public record SendRequest(@NotBlank @Email @Size(max=50) @com.example.flowershop.dto.auth.ValidEmail String email) {}
     public record AcceptRequest(@NotBlank @Size(max=100) String code) {
         @Override public String toString() { return "AcceptRequest[redacted]"; }
     }

@@ -1,5 +1,6 @@
 import { Toaster } from 'react-hot-toast';
-import { Route, BrowserRouter as Router, Routes, useLocation } from "react-router";
+import { Navigate, Route, BrowserRouter as Router, Routes, useLocation } from "react-router";
+import AccountView from './views/AccountView';
 import AppLayout from "./layout/AppLayout";
 import AuthView from "./views/AuthView";
 import HomeView from "./views/HomeView";
@@ -38,16 +39,20 @@ function AppRouterContent() {
           {/* All routes wrapped in AppLayout which handles public/admin/shop nav items dynamically */}
           <Route element={<AppLayout />}>
             <Route path="/" element={<HomeView auth={controller} />} />
+            <Route path="/account" element={controller.busy ? <p>Đang tải hồ sơ…</p> : controller.user ? <AccountView {...controller} /> : <Navigate to="/login" replace />} />
             <Route path="/products/:id" element={<ProductDetailViewWrapper />} />
             <Route path="/cart" element={<CartPageWrapper />} />
             <Route path="/payment/success" element={<PaymentSuccessPage />} />
             <Route path="/payment/error" element={<PaymentErrorPage />} />
             <Route path="/payment/cancel" element={<PaymentCancelPage />} />
+            <Route path="/admin/profile" element={<Navigate to="/account" replace />} />
+            <Route path="/shop-admin/profile" element={<Navigate to="/account" replace />} />
             <Route path="/admin/*" element={<AdminDashboardView user={controller.user} logout={controller.logout} busy={controller.busy} error={controller.error} path={location.pathname} />} />
             <Route path="/shop-admin/*" element={<ManagerDashboardView user={controller.user} logout={controller.logout} busy={controller.busy} error={controller.error} path={location.pathname} />} />
           </Route>
         </Routes>
       </CartProvider>
+
     </AuthProvider>
   );
 }
