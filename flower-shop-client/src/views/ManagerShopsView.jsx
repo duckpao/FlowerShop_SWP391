@@ -11,38 +11,63 @@ import TextArea from "../components/form/input/TextArea";
 import Label from "../components/form/Label";
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "../components/ui/table";
 
+/**
+ * View Quản lý Cửa hàng (ManagerShopsView).
+ * Dành cho chủ cửa hàng (role === 'SHOP') hoặc nhân viên để xem và quản lý:
+ * 1. Thông tin hồ sơ shop (Tên, mô tả, logo).
+ * 2. Cấu hình địa chỉ kho lấy hàng chuẩn 3 cấp theo API Giao Hàng Nhanh (GHN).
+ * 3. Quản lý danh sách nhân viên của cửa hàng.
+ * 4. Tích hợp các module con: Duyệt đơn ứng tuyển (StaffApplicationsView), Quản lý sản phẩm (ProductsView).
+ * 
+ * @param {string} role - Quyền người dùng ('SHOP' hoặc 'SHOP_STAFF')
+ * @param {string} section - Mục đang hiển thị ('all', 'shop', 'staff', 'products', 'orders')
+ */
 export default function ManagerShopsView({ role, section = "all" }) {
+  // Hook điều khiển logic cửa hàng (load thông tin, cập nhật hồ sơ, đổi địa chỉ, bật/tắt nhân viên)
   const c = useManagerShopController(role);
+  
+  // Chỉ cho phép chỉnh sửa nếu là chủ shop và shop đang ACTIVE hoặc PENDING
   const editable =
     role === "SHOP" && ["ACTIVE", "PENDING"].includes(c.selected?.status);
 
-  // GHN Address logic
-  const [provinces, setProvinces] = useState([]);
-  const [districts, setDistricts] = useState([]);
-  const [wards, setWards] = useState([]);
+  // --- LOGIC ĐỊA CHỈ GIAO HÀNG NHANH (GHN 3 CẤP: TỈNH -> HUYỆN -> XÃ) ---
+  const [provinces, setProvinces] = useState([]); // Danh sách Tỉnh / Thành phố từ GHN
+  const [districts, setDistricts] = useState([]); // Danh sách Quận / Huyện theo Tỉnh đã chọn
+  const [wards, setWards] = useState([]);         // Danh sách Phường / Xã theo Huyện đã chọn
 
+  // 1. Tải danh sách Tỉnh/Thành phố khi component mount
   useEffect(() => {
-    fetch('/api/public/ghn/provinces').then(r => r.json()).then(setProvinces).catch(console.error);
+    fetch('/api/public/ghn/provinces')
+      .then(r => r.json())
+      .then(setProvinces)
+      .catch(console.error);
   }, []);
 
+  // 2. Khi Tỉnh thay đổi -> Tải danh sách Quận/Huyện tương ứng từ GHN
   useEffect(() => {
     if (c.address?._ghnProvinceId) {
       fetch(`/api/public/ghn/provinces/${c.address._ghnProvinceId}/districts`)
-        .then(r => r.json()).then(setDistricts).catch(console.error);
+        .then(r => r.json())
+        .then(setDistricts)
+        .catch(console.error);
     } else {
       setDistricts([]);
     }
   }, [c.address?._ghnProvinceId]);
 
+  // 3. Khi Quận/Huyện thay đổi -> Tải danh sách Phường/Xã tương ứng từ GHN
   useEffect(() => {
     if (c.address?.ghnDistrictId) {
       fetch(`/api/public/ghn/districts/${c.address.ghnDistrictId}/wards`)
-        .then(r => r.json()).then(setWards).catch(console.error);
+        .then(r => r.json())
+        .then(setWards)
+        .catch(console.error);
     } else {
       setWards([]);
     }
   }, [c.address?.ghnDistrictId]);
 
+  // 4. Đồng bộ mã Tỉnh GHN nếu địa chỉ ban đầu của shop chỉ có tên text (city)
   useEffect(() => {
     if (provinces.length > 0 && c.address?.city && !c.address._ghnProvinceId) {
       const cityName = (c.address.city || '').trim().toLowerCase();
@@ -57,6 +82,7 @@ export default function ManagerShopsView({ role, section = "all" }) {
     }
   }, [provinces, c.address?.city, c.address?._ghnProvinceId]);
 
+  // Xác định màu sắc badge theo trạng thái cửa hàng
   const getStatusColor = (status) => {
     switch (status) {
       case "ACTIVE": return "success";

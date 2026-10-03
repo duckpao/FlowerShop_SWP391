@@ -9,6 +9,9 @@ import ComponentCard from '../components/common/ComponentCard'
 import { Modal } from '../components/ui/modal'
 import { EyeIcon } from '../icons'
 
+/**
+ * Bảng màu sắc tương ứng với từng trạng thái đơn hàng
+ */
 const statusColors = {
     PENDING: 'warning',
     AWAITING_DEPOSIT: 'warning',
@@ -20,6 +23,9 @@ const statusColors = {
     REFUNDED: 'error'
 }
 
+/**
+ * Nhãn tiếng Việt tương ứng với từng trạng thái đơn hàng
+ */
 const statusLabels = {
     PENDING: 'Chờ xác nhận',
     AWAITING_DEPOSIT: 'Chờ đặt cọc',
@@ -31,6 +37,9 @@ const statusLabels = {
     REFUNDED: 'Đã hoàn tiền'
 }
 
+/**
+ * Hàm định dạng thời gian tương đối (ví dụ: "5 phút trước", "2 giờ trước")
+ */
 function timeAgo(dateString) {
     const seconds = Math.floor((new Date() - new Date(dateString)) / 1000)
     let interval = seconds / 31536000
@@ -46,22 +55,31 @@ function timeAgo(dateString) {
     return Math.floor(seconds) + " giây trước"
 }
 
+/**
+ * View Quản lý Đơn hàng của Cửa hàng (OrderQueueView).
+ * Thực hiện quy trình đơn hàng 4 bước:
+ * 1. PENDING (Chờ xác nhận): Shop bấm "Xác nhận đơn hàng" -> Chuyển sang PROCESSING.
+ * 2. PROCESSING (Đang chuẩn bị): Shop làm hoa, bấm "Tạo mã vận đơn GHN & Giao" -> Tạo vận đơn GHN, chuyển sang DELIVERING.
+ * 3. DELIVERING (Đang giao): Bấm "Kiểm tra GHN" để đồng bộ hoặc "Giả lập Giao xong" trên môi trường test.
+ * 4. COMPLETED (Hoàn thành): Đơn hoàn tất, tiền về tài khoản shop.
+ */
 export default function OrderQueueView({ shop: initialShop }) {
     const [shop, setShop] = useState(initialShop)
     const [data, setData] = useState(null)
     const [page, setPage] = useState(0)
-    const [statusFilter, setStatusFilter] = useState('')
+    const [statusFilter, setStatusFilter] = useState('') // Bộ lọc trạng thái tab
     const [busy, setBusy] = useState(false)
     const [error, setError] = useState('')
     const [notice, setNotice] = useState('')
     
-    // Modal states
+    // State quản lý Modal xem chi tiết và Modal hủy đơn
     const [detailModalOpen, setDetailModalOpen] = useState(false)
     const [cancelModalOpen, setCancelModalOpen] = useState(false)
     const [selectedOrder, setSelectedOrder] = useState(null)
     const [cancelReason, setCancelReason] = useState('')
     const [orderDetail, setOrderDetail] = useState(null)
 
+    // Nếu không truyền shop từ props, tự động lấy shop đầu tiên thuộc quyền quản lý của user
     useEffect(() => {
         if (initialShop) return
         let active = true
@@ -71,6 +89,9 @@ export default function OrderQueueView({ shop: initialShop }) {
         return () => { active = false }
     }, [initialShop])
 
+    /**
+     * Tải danh sách đơn hàng từ backend theo trang và bộ lọc trạng thái
+     */
     const load = pg => {
         if (!shop) return
         setBusy(true); setError(''); setNotice('')
@@ -81,6 +102,9 @@ export default function OrderQueueView({ shop: initialShop }) {
     }
     useEffect(() => { if (shop) load(0) }, [shop?.id, statusFilter])
 
+    /**
+     * Bước 1: Xác nhận đơn hàng (PENDING -> PROCESSING)
+     */
     const confirmOrder = async orderId => {
         setBusy(true); setError(''); setNotice('')
         try {
@@ -90,6 +114,9 @@ export default function OrderQueueView({ shop: initialShop }) {
         } catch (e) { setError(e.message) } finally { setBusy(false) }
     }
 
+    /**
+     * Bước 2: Tạo vận đơn GHN & Chuyển giao hàng (PROCESSING -> DELIVERING)
+     */
     const ship = async orderId => {
         if (!confirm('Xác nhận tạo mã vận đơn GHN & chuyển sang giao hàng?')) return
         setBusy(true); setError(''); setNotice('')
@@ -100,6 +127,9 @@ export default function OrderQueueView({ shop: initialShop }) {
         } catch (e) { setError(e.message) } finally { setBusy(false) }
     }
 
+    /**
+     * Hủy đơn hàng trước khi giao (kèm lý do bắt buộc)
+     */
     const cancel = async () => {
         if (!cancelReason.trim()) {
             alert('Vui lòng nhập lý do hủy đơn')
@@ -115,6 +145,9 @@ export default function OrderQueueView({ shop: initialShop }) {
         } catch (e) { setError(e.message) } finally { setBusy(false) }
     }
 
+    /**
+     * Mở modal xem thông tin chi tiết đơn hàng (sản phẩm, địa chỉ người gửi, người nhận, GHN tracking)
+     */
     const viewDetail = async orderSummary => {
         setSelectedOrder(orderSummary)
         setDetailModalOpen(true)
@@ -127,6 +160,9 @@ export default function OrderQueueView({ shop: initialShop }) {
         }
     }
 
+    /**
+     * Đồng bộ trạng thái mới nhất từ hệ thống GHN về hệ thống FlowerShop
+     */
     const refreshShippingStatus = async orderSummary => {
         setBusy(true); setError(''); setNotice('')
         try {
@@ -136,6 +172,9 @@ export default function OrderQueueView({ shop: initialShop }) {
         } catch (e) { setError(e.message) } finally { setBusy(false) }
     }
 
+    /**
+     * Giả lập GHN giao thành công (cho môi trường test/sandbox) -> chuyển sang COMPLETED
+     */
     const simulateDelivered = async orderSummary => {
         if (!confirm('Bạn có muốn giả lập GHN giao thành công cho đơn hàng này?')) return
         setBusy(true); setError(''); setNotice('')
@@ -146,6 +185,9 @@ export default function OrderQueueView({ shop: initialShop }) {
         } catch (e) { setError(e.message) } finally { setBusy(false) }
     }
 
+    /**
+     * Mở modal nhập lý do hủy đơn
+     */
     const openCancelModal = (orderSummary) => {
         setSelectedOrder(orderSummary)
         setCancelReason('')
