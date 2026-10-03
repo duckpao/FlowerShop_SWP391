@@ -12,13 +12,26 @@ import org.springframework.web.server.ResponseStatusException;
 import java.math.BigDecimal;
 import java.util.*;
 
+/**
+ * Service xử lý nghiệp vụ quản lý đơn hàng dành cho Chủ shop (Shop Manager).
+ * Bao gồm các luồng chính:
+ * 1. Xem danh sách đơn hàng và hàng đợi (Order Queue).
+ * 2. Xác nhận đơn hàng (PENDING -> PROCESSING).
+ * 3. Tạo mã vận đơn GHN và chuyển trạng thái giao hàng (PROCESSING -> DELIVERING).
+ * 4. Đồng bộ / Giả lập trạng thái giao hàng GHN (DELIVERING -> COMPLETED).
+ * 5. Hủy đơn hàng trước khi giao.
+ */
 @Service
 @Transactional(readOnly = true)
 public class ManagerOrderService {
 
+    // --- CÁC DTO RECORDS PHỤC VỤ TRẢ VỀ DỮ LIỆU ---
+
+    /** Tóm tắt đơn hàng hiển thị trong danh sách bảng */
     public record OrderSummary(String id, String customerName, String customerPhone,
                                BigDecimal totalAmount, String status, java.time.LocalDateTime createdDate) {}
 
+    /** Chi tiết đầy đủ của đơn hàng hiển thị trong modal xem chi tiết */
     public record OrderDetailResponse(String id, String customerId, String customerName, String customerPhone,
                                       String recipientName, String recipientPhone, String deliveryAddress, 
                                       String shopAddress, String status, BigDecimal subTotal,
@@ -26,14 +39,19 @@ public class ManagerOrderService {
                                       java.time.LocalDateTime createdDate, String note,
                                       List<OrderItemResponse> items, DeliveryInfo delivery, PaymentInfo payment) {}
 
+    /** Thông tin từng món hàng trong đơn */
     public record OrderItemResponse(String productId, String productName, BigDecimal price, Integer quantity) {}
 
+    /** Thông tin vận đơn đối tác giao hàng (GHN) */
     public record DeliveryInfo(String trackingCode, String deliveryPartnerId, String status) {}
 
+    /** Thông tin thanh toán (phương thức, trạng thái, số tiền) */
     public record PaymentInfo(String id, String method, String status, BigDecimal amount) {}
 
+    /** Kết quả phân trang danh sách đơn hàng */
     public record Results(List<OrderSummary> content, int page, int totalPages, long totalElements) {}
 
+    /** Kết quả trả về sau khi tạo vận đơn GHN thành công */
     public record ShipResult(String trackingCode) {}
 
     private final OrderRepository orders;
@@ -55,10 +73,16 @@ public class ManagerOrderService {
         this.addresses = addresses;
         this.ghn = ghn;
     }
-private static ResponseStatusException notFound() {
+
+    /** Tạo ngoại lệ 404 khi không tìm thấy đơn hàng */
+    private static ResponseStatusException notFound() {
         return new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy đơn hàng.");
     }
 
+    /**
+     * Kiểm tra quyền sở hữu của người thao tác (actor) đối với shopId.
+     * Đảm bảo người dùng chỉ có thể quản lý đúng shop thuộc quyền của mình.
+     */
     private Shop owned(String shopId, String actor) {
         Shop s = shops.findById(shopId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy shop."));
@@ -67,6 +91,9 @@ private static ResponseStatusException notFound() {
         return s;
     }
 
+    /**
+     * Lấy danh sách tất cả đơn hàng của shop theo phân trang và lọc theo trạng thái nếu có.
+     */
     public Results list(String shopId, String actor, int page, String status) {
         owned(shopId, actor);
         Pageable pageable = PageRequest.of(page, 20, Sort.by(Sort.Order.desc("createdDate"), Sort.Order.asc("id")));
@@ -87,11 +114,19 @@ private static ResponseStatusException notFound() {
         return new Results(content, page, result.getTotalPages(), result.getTotalElements());
     }
 
+    /**
+     * Xem thông tin chi tiết một đơn hàng của shop (kèm sản phẩm, địa chỉ, vận đơn, thanh toán).
+     */
     public OrderDetailResponse detail(String shopId, String actor, String orderId) {
         owned(shopId, actor);
         Order o = orders.findByIdAndShopId(orderId, shopId).orElseThrow(ManagerOrderService::notFound);
         return buildDetail(o);
     }
+
+    /**
+     * Xác nhận đơn hàng: Chuyển trạng thái từ PENDING (Chờ xác nhận) sang PROCESSING (Đang chuẩn bị).
+     * Lúc này shop bắt đầu làm hoa, chưa gọi API vận chuyển GHN.
+     */
     @Transactional
     public void confirm(String shopId, String actor, String orderId) {
         owned(shopId, actor);
@@ -102,6 +137,16 @@ private static ResponseStatusException notFound() {
         o.setLastModifyBy(actor);
     }
 
+    /**
+     * Tạo vận đơn GHN và chuyển đơn sang DELIVERING (Đang giao).
+     * Quy trình:
+     * 1. Xác thực đơn hàng đang ở trạng thái PROCESSING.
+     * 2. Lấy địa chỉ lấy hàng mặc định của Shop (tự động phân giải mã GHN nếu là dữ liệu cũ).
+     * 3. Lấy địa chỉ nhận hàng của khách (tự động phân giải mã GHN nếu chưa có).
+     * 4. Gọi API GHN /shipping-order/create với đầy đủ thông tin người gửi, người nhận, kích thước và hàng hóa.
+     * 5. Lưu bản ghi Delivery với tracking code nhận được từ GHN.
+     * 6. Cập nhật Order sang DELIVERING.
+     */
     @Transactional
     public ShipResult ship(String shopId, String actor, String orderId) {
         owned(shopId, actor);
@@ -109,6 +154,7 @@ private static ResponseStatusException notFound() {
         if (o.getStatus() != OrderStatus.PROCESSING)
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Chỉ đơn hàng PROCESSING mới có thể gửi GHN.");
 
+        // Lấy địa chỉ kho/shop gửi hàng
         var shopAddrs = addresses.findByShopIdAndUserIsNullOrderByCreatedDateAscIdAsc(shopId);
         Address shopAddr = shopAddrs.stream().filter(a -> Boolean.TRUE.equals(a.getIsDefault())).findFirst()
                 .orElse(shopAddrs.isEmpty() ? null : shopAddrs.get(0));
@@ -120,6 +166,7 @@ private static ResponseStatusException notFound() {
             addresses.save(shopAddr);
         }
 
+        // Lấy địa chỉ người nhận
         Address toAddr = o.getDeliveryAddress();
         if (toAddr == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Đơn hàng chưa có địa chỉ nhận.");
@@ -179,6 +226,15 @@ private static ResponseStatusException notFound() {
         return new ShipResult(result.orderCode());
     }
 
+    /**
+     * Tự động phân giải địa chỉ dạng chuỗi (Tỉnh/Huyện/Xã) sang mã GHN tương ứng (ghnDistrictId, ghnWardCode).
+     * Phương thức này phục vụ tương thích ngược cho các địa chỉ cũ trong database chưa có mã định danh GHN.
+     * Quy trình:
+     * 1. Gọi API GHN lấy danh sách tỉnh thành và tìm tỉnh khớp với tên thành phố.
+     * 2. Lấy danh sách quận/huyện của tỉnh đó và tìm huyện khớp với tên quận/huyện.
+     * 3. Lấy danh sách phường/xã của huyện đó và tìm xã khớp với tên phường/xã.
+     * 4. Gán mã ghnDistrictId và ghnWardCode vào Entity Address. Nếu không tìm thấy, ném lỗi 400 yêu cầu cập nhật lại.
+     */
     private void resolveGhnAddress(Address addr) {
         if (addr.getCity() == null || addr.getCity().isBlank()) return;
 
@@ -215,7 +271,7 @@ private static ResponseStatusException notFound() {
                 }
             }
         } catch (Exception e) {
-            // Log error if needed, but do not assign hardcoded fallback values
+            // Không gán cứng giá trị mặc định để đảm bảo dữ liệu chính xác
         }
         
         if (addr.getGhnDistrictId() == null || addr.getGhnWardCode() == null) {
@@ -223,6 +279,10 @@ private static ResponseStatusException notFound() {
         }
     }
 
+    /**
+     * Đồng bộ trạng thái vận đơn thực tế từ API GHN về hệ thống.
+     * Nếu GHN báo đã giao (DELIVERED): Tự động chuyển đơn hàng sang COMPLETED và cập nhật trạng thái thanh toán sang SUCCESS.
+     */
     @Transactional
     public DeliveryStatus refreshStatus(String shopId, String actor, String orderId) {
         owned(shopId, actor);
@@ -238,6 +298,10 @@ private static ResponseStatusException notFound() {
         return status;
     }
 
+    /**
+     * Giả lập giao hàng thành công trên môi trường thử nghiệm (Sandbox / Dev).
+     * Gọi endpoint đổi trạng thái của GHN Sandbox, đồng thời cập nhật trạng thái đơn thành COMPLETED.
+     */
     @Transactional
     public DeliveryStatus simulateDelivered(String shopId, String actor, String orderId) {
         owned(shopId, actor);
@@ -248,7 +312,7 @@ private static ResponseStatusException notFound() {
         try {
             ghn.switchStatus(d.getTrackingCode(), "delivered");
         } catch (Exception e) {
-            // Log if needed
+            // Ghi log nếu cần; tiếp tục cập nhật cơ sở dữ liệu nội bộ
         }
 
         d.setStatus(DeliveryStatus.DELIVERED);
@@ -267,9 +331,15 @@ private static ResponseStatusException notFound() {
         return DeliveryStatus.DELIVERED;
     }
 
+    /** DTO chứa số lượng đơn hàng cần xử lý */
     public record QueueCount(long pendingCount) {}
+
+    /** DTO chứa lý do hủy đơn hàng */
     public record CancelRequest(String reason) {}
 
+    /**
+     * Lấy danh sách hàng đợi xử lý của shop (chỉ bao gồm các đơn PENDING, AWAITING_DEPOSIT, PROCESSING).
+     */
     public Results queue(String shopId, String actor, int page, String status) {
         owned(shopId, actor);
         Pageable pageable = PageRequest.of(page, 20, Sort.by(Sort.Order.desc("createdDate"), Sort.Order.asc("id")));
@@ -295,12 +365,19 @@ private static ResponseStatusException notFound() {
         return new Results(content, page, result.getTotalPages(), result.getTotalElements());
     }
 
+    /**
+     * Đếm tổng số đơn hàng đang chờ xác nhận hoặc chờ đặt cọc.
+     */
     public QueueCount queueCount(String shopId, String actor) {
         owned(shopId, actor);
         long count = orders.countByShopIdAndStatusIn(shopId, List.of(OrderStatus.PENDING, OrderStatus.AWAITING_DEPOSIT));
         return new QueueCount(count);
     }
 
+    /**
+     * Hủy đơn hàng trước khi chuyển sang giai đoạn giao hàng.
+     * Chỉ cho phép hủy khi đơn ở trạng thái PENDING, AWAITING_DEPOSIT hoặc PROCESSING.
+     */
     @Transactional
     public void cancel(String shopId, String actor, String orderId, String reason) {
         owned(shopId, actor);
@@ -313,6 +390,14 @@ private static ResponseStatusException notFound() {
         o.setLastModifyBy(actor);
     }
 
+    /**
+     * Helper tổng hợp chi tiết đơn hàng (OrderDetailResponse) đầy đủ thông tin:
+     * - Sản phẩm trong đơn (tên, số lượng, giá).
+     * - Địa chỉ người nhận và số điện thoại người nhận.
+     * - Địa chỉ người gửi (Shop).
+     * - Vận đơn đối tác giao hàng (mã vận đơn tracking code).
+     * - Thông tin thanh toán (phương thức, trạng thái thanh toán).
+     */
     private OrderDetailResponse buildDetail(Order o) {
         var items = orderDetails.findByOrderId(o.getId()).stream()
                 .map(d -> new OrderItemResponse(d.getProduct() != null ? d.getProduct().getId() : null,
@@ -323,6 +408,7 @@ private static ResponseStatusException notFound() {
         PaymentInfo pi = payments.findByOrderId(o.getId()).stream().findFirst()
                 .map(p -> new PaymentInfo(p.getId(), p.getPaymentMethod().name(), p.getStatus().name(), p.getAmount())).orElse(null);
         
+        // Định dạng địa chỉ người nhận
         var a = o.getDeliveryAddress();
         String toAddr = a != null ? (a.getAddressLine() != null ? a.getAddressLine() : "") + ", " + 
                                     (a.getWard() != null ? a.getWard() : "") + ", " + 
@@ -330,6 +416,7 @@ private static ResponseStatusException notFound() {
                                     (a.getCity() != null ? a.getCity() : "") : "";
         toAddr = toAddr.replaceAll("null, ", "").replaceAll("^, ", "").replaceAll(", $", "");
 
+        // Định dạng địa chỉ gửi hàng của Shop
         String fromAddr = "";
         if (o.getShop() != null) {
             var shopAddrs = addresses.findByShopIdAndUserIsNullOrderByCreatedDateAscIdAsc(o.getShop().getId());
