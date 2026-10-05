@@ -23,6 +23,8 @@ public class AccountService {
         this.addresses = addresses;
         this.orders = orders;
         this.areas = areas;
+    public AccountService(UserRepository users, AddressRepository addresses, OrderRepository orders) {
+        this.users=users; this.addresses=addresses; this.orders=orders;
     }
 
     @Transactional(readOnly = true)
@@ -60,6 +62,9 @@ public class AccountService {
         address.setCity(request.city().strip());
         address.setDistrict("");
         address.setWard(request.ward().strip());
+        address.setAddressLine(request.addressLine().strip()); address.setCity(request.city().strip());
+        address.setDistrict(request.district().strip()); address.setWard(request.ward().strip());
+        address.setGhnWardCode(request.ghnWardCode().strip()); address.setGhnDistrictId(request.ghnDistrictId());
         address.setLastModifyBy(userId);
         boolean makeDefault = request.isDefault() || list.isEmpty() || Boolean.TRUE.equals(address.getIsDefault())
                 || list.stream().noneMatch(a -> Boolean.TRUE.equals(a.getIsDefault()));
@@ -80,6 +85,8 @@ public class AccountService {
             a.setIsDefault(a.getId().equals(id));
             a.setLastModifyBy(userId);
         });
+        lock(userId); var list=owned(userId); var selected=find(list,id);
+        list.forEach(a -> { a.setIsDefault(a.getId().equals(id)); a.setLastModifyBy(userId); });
         return AddressResponse.from(selected);
     }
 

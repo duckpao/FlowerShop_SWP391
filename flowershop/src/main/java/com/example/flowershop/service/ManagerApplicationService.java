@@ -24,9 +24,9 @@ public class ManagerApplicationService {
     public record Results(List<Result> content,int page,int totalPages,long totalElements) {}
     private final ManagerApplicationRepository applications; private final UserRepository users;
     private final ShopRepository shops; private final AddressRepository addresses;
-    private final AuthSessionRepository sessions; private final DeliveryAreaService areas;
-    public ManagerApplicationService(ManagerApplicationRepository a,UserRepository u,ShopRepository s,AddressRepository ad,AuthSessionRepository se,DeliveryAreaService ar) {
-        applications=a;users=u;shops=s;addresses=ad;sessions=se;areas=ar;
+    private final AuthSessionRepository sessions;
+    public ManagerApplicationService(ManagerApplicationRepository a,UserRepository u,ShopRepository s,AddressRepository ad,AuthSessionRepository se) {
+        applications=a;users=u;shops=s;addresses=ad;sessions=se;
     }
     private Result response(ManagerApplication a) { return new Result(a.getId(),a.getUser().getEmail(),a.getFullName(),a.getPhone(),a.getShopName(),a.getDescription(),a.getAddressLine(),a.getCity(),a.getDistrict(),a.getWard(),a.getStatus(),a.getReviewNote(),a.getSubmittedAt(),a.getShopId()); }
     private static ResponseStatusException conflict(String message) {return new ResponseStatusException(HttpStatus.CONFLICT,message);}
@@ -43,7 +43,6 @@ public class ManagerApplicationService {
     }
     @Transactional public Result submit(String actor,Input input) {
         var user=users.findByIdForUpdate(actor).orElseThrow(ManagerApplicationService::missing);eligible(user);
-        areas.requireAllowed(input.city(),input.district(),input.ward());
         var a=applications.findByUserId(actor).orElseGet(ManagerApplication::new);
         if(a.getId()!=null && !"REJECTED".equals(a.getStatus())) throw conflict("Bạn đã có đơn đang chờ hoặc đã được duyệt.");
         if(a.getId()==null) a.setId(UUID.randomUUID().toString());
@@ -58,7 +57,7 @@ public class ManagerApplicationService {
         var a=applications.lock(id).orElseThrow(ManagerApplicationService::missing);
         if(!"PENDING".equals(a.getStatus())) throw conflict("Đơn đã được xử lý. Hãy tải lại.");
         if(decision.approve()) {
-            eligible(user);areas.requireAllowed(a.getCity(),a.getDistrict(),a.getWard());
+            eligible(user);
             var shop=Shop.builder().id(UUID.randomUUID().toString()).owner(user).name(a.getShopName()).description(a.getDescription()).status(ShopStatus.ACTIVE).createdBy(admin).build();
             shops.saveAndFlush(shop);
             addresses.save(Address.builder().id(UUID.randomUUID().toString()).shop(shop).addressLine(a.getAddressLine()).city(a.getCity()).district(a.getDistrict()).ward(a.getWard()).isDefault(true).createdBy(admin).build());

@@ -33,7 +33,8 @@ export const productService = {
     return response.json()
   },
   async catalog(page, categoryId, q) {
-    const params = new URLSearchParams({ page })
+    const params = new URLSearchParams()
+    if (page !== undefined && page !== null && page !== '') params.set('page', page)
     if (categoryId) params.set('categoryId', categoryId)
     if (q) params.set('q', q)
     const response = await fetch(`${API_BASE}/api/public/products?${params}`)

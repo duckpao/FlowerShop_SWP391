@@ -26,7 +26,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest(properties={"spring.datasource.url=jdbc:h2:mem:accounttest;MODE=MySQL;DB_CLOSE_DELAY=-1",
         "spring.datasource.username=sa","spring.datasource.password=","spring.datasource.driver-class-name=org.h2.Driver",
-        "spring.jpa.hibernate.ddl-auto=create-drop","app.delivery.allowed-cities=Hà Nội","debug=false"})
+        "spring.jpa.hibernate.ddl-auto=create-drop","debug=false"})
 @AutoConfigureMockMvc
 class AccountTests {
     @Autowired AccountService accounts;
@@ -61,7 +61,7 @@ class AccountTests {
         return users.saveAndFlush(User.builder().id(UUID.randomUUID().toString()).email(email).fullName("Test User")
                 .passwordHash(encoder.encode("FlowerShop123")).role(UserRole.CUSTOMER).status(UserStatus.ACTIVE).isEmailVerified(true).build());
     }
-    AddressRequest input(boolean def) { return new AddressRequest("12 Đường Test","Hà Nội","Khu vực Test","Phường Test",def); }
+    AddressRequest input(boolean def) { return new AddressRequest("12 Đường Test","Hà Nội","Khu vực Test","Phường Test","00001",1442,def); }
     void expect404(Runnable operation) {
         assertThatThrownBy(operation::run).isInstanceOfSatisfying(ResponseStatusException.class,e -> assertThat(e.getStatusCode().value()).isEqualTo(404));
     }
@@ -99,11 +99,14 @@ class AccountTests {
                 .andExpect(status().isOk()).andExpect(jsonPath("$[0]").value("Hà Nội"));
         mvc.perform(post("/api/account/addresses").header("Authorization",bearer).session(httpSession).header("X-CSRF-TOKEN",csrf)
                 .contentType("application/json").content("{\"addressLine\":\"12 Test\",\"city\":\"Đà Nẵng\",\"district\":\"Test\",\"ward\":\"Test\",\"isDefault\":false}"))
+    @Test void anyCityIsAcceptedNationwide() throws Exception {
+        mvc.perform(post("/api/account/addresses").header("Authorization",bearer).session(httpSession).header("X-CSRF-TOKEN",csrf)
+                .contentType("application/json").content("{\"addressLine\":\"12 Test\",\"city\":\"Đà Nẵng\",\"district\":\"Test\",\"ward\":\"Test\",\"ghnWardCode\":\"20308\",\"ghnDistrictId\":1490}"))
                 .andExpect(status().isCreated());
         assertThat(addresses.count()).isEqualTo(1);
     }
     @Test void httpAddressLifecycleUsesJwtOwnerAndReturnsExpectedShapes() throws Exception {
-        String body="{\"addressLine\":\"12 Test\",\"city\":\"Hà Nội\",\"district\":\"Test\",\"ward\":\"Test\",\"isDefault\":false,\"userId\":\""+other.getId()+"\"}";
+        String body="{\"addressLine\":\"12 Test\",\"city\":\"Hà Nội\",\"district\":\"Test\",\"ward\":\"Test\",\"ghnWardCode\":\"00001\",\"ghnDistrictId\":1442,\"isDefault\":false,\"userId\":\""+other.getId()+"\"}";
         mvc.perform(post("/api/account/addresses").header("Authorization",bearer).session(httpSession).header("X-CSRF-TOKEN",csrf)
                 .contentType("application/json").content(body)).andExpect(status().isCreated())
                 .andExpect(jsonPath("$.isDefault").value(true)).andExpect(jsonPath("$.user").doesNotExist());
@@ -128,7 +131,7 @@ class AccountTests {
         var second=accounts.save(user.getId(),null,input(true));
         assertThat(accounts.list(user.getId()).stream().filter(AddressResponse::isDefault)).hasSize(1);
         accounts.setDefault(user.getId(),first.id());
-        var changed=accounts.save(user.getId(),second.id(),new AddressRequest("25 Test","Hà Nội","Test","Test",false));
+        var changed=accounts.save(user.getId(),second.id(),new AddressRequest("25 Test","Hà Nội","Test","Test","00001",1442,false));
         assertThat(changed.addressLine()).isEqualTo("25 Test");
         accounts.delete(user.getId(),first.id());
         assertThat(accounts.list(user.getId())).singleElement().satisfies(a -> assertThat(a.isDefault()).isTrue());

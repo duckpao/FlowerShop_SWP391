@@ -52,7 +52,7 @@ class AdminCatalogTests extends ManagerShopTests {
         assertThat(catalog.browse("", null, null, "newest", 0, 12).content()).isEmpty();
         managerProducts.save(shop.getId(), item.getId(), owner.getId(),
                 new ManagerProductService.Input("Bó hồng", "Mô tả", category.getId(),
-                        new BigDecimal("100000"), 5, ProductStatus.ACTIVE, null));
+                        new BigDecimal("100000"), 5, ProductStatus.ACTIVE, null, null));
         assertThat(products.findById(item.getId()).orElseThrow().isAdminHidden()).isTrue();
         assertThat(catalog.browse("", null, null, "newest", 0, 12).content()).isEmpty();
         service.setHidden(item.getId(), false, admin.getId());

@@ -6,25 +6,28 @@ import '../styles/catalog.css'
 export default function FavoritesView({ auth }) {
   const c = useFavoritesController(auth?.user)
 
-  if (auth?.busy && !auth?.user) return <main className="account-page"><p role="status">Đang kiểm tra đăng nhập…</p></main>
+  if (auth?.busy && !auth?.user) return <main className="catalog-page"><p role="status">Đang kiểm tra đăng nhập…</p></main>
 
-  if (!auth?.user) return <main className="account-page">
-    <h1>Sản phẩm yêu thích</h1>
-    <p>Hãy đăng nhập bằng tài khoản Khách hàng để xem danh sách đã lưu.</p>
-    <a href="/login?next=%2Ffavorites">Đăng nhập</a>
+  if (!auth?.user) return <main className="catalog-page">
+    <header className="catalog-page-header"><h1>Sản phẩm yêu thích</h1><a href="/">Trang chủ</a></header>
+    <section className="catalog-panel">
+      <p>Hãy đăng nhập bằng tài khoản Khách hàng để xem danh sách đã lưu.</p>
+      <a href="/login?next=%2Ffavorites">Đăng nhập</a>
+    </section>
   </main>
 
-  if (auth.user.role !== 'CUSTOMER') return <main className="account-page">
-    <h1>Sản phẩm yêu thích</h1>
-    <p>Chỉ tài khoản Khách hàng mới có danh sách sản phẩm yêu thích.</p>
-    <a href="/">Về trang chủ</a>
+  if (auth.user.role !== 'CUSTOMER') return <main className="catalog-page">
+    <header className="catalog-page-header"><h1>Sản phẩm yêu thích</h1><a href="/">Trang chủ</a></header>
+    <section className="catalog-panel">
+      <p>Chỉ tài khoản Khách hàng mới có danh sách sản phẩm yêu thích.</p>
+      <a href="/">Về trang chủ</a>
+    </section>
   </main>
 
-  return <main className="account-page">
-    <header className="account-header">
-      <div><h1>✿ Sản phẩm yêu thích</h1><p>{auth.user.email}</p></div>
-      <a href="/products">Tất cả sản phẩm</a>
-      <a href="/">Trang chủ</a>
+  return <main className="catalog-page">
+    <header className="catalog-page-header">
+      <div><h1>Sản phẩm yêu thích</h1><p>{auth.user.email}</p></div>
+      <nav className="flex flex-wrap gap-4"><a href="/products">Tất cả sản phẩm</a><a href="/">Trang chủ</a></nav>
     </header>
 
     {c.busy && <p role="status">Đang tải…</p>}
@@ -40,6 +43,9 @@ export default function FavoritesView({ auth }) {
         {p.imageUrl
           ? <img className="catalog-thumb" src={p.imageUrl} alt={p.name} loading="lazy" />
           : <div className="catalog-thumb-empty">Chưa có ảnh</div>}
+        <span className={`catalog-type ${p.type === 'CUSTOM' ? 'catalog-type-custom' : ''}`}>
+          {p.type === 'CUSTOM' ? 'Bó hoa custom' : 'Bó hoa có sẵn'}
+        </span>
         <h3>{p.available
           ? <a href={`/products/${encodeURIComponent(p.id)}`}>{p.name}</a>
           : p.name}</h3>

@@ -31,11 +31,17 @@ public class ManagerProductService {
     /** images = null giữ nguyên ảnh cũ; khác null thì thay toàn bộ danh sách. */
     public record Input(@NotBlank @Size(max=255) String name,@NotNull @Size(max=5000) String description,
         @NotBlank @Size(max=36) String categoryId,@NotNull @DecimalMin("0.01") @Digits(integer=10,fraction=2) BigDecimal price,
-        @NotNull @Min(0) @Max(1000000) Integer stock,@NotNull ProductStatus status,
+        @NotNull @Min(0) @Max(1000000) Integer stock,@NotNull ProductStatus status, ProductType type,
         @jakarta.validation.Valid @Size(max=10) List<ImageInput> images) {}
-    public record Result(String id,String shopId,String categoryId,String categoryName,String name,String description,BigDecimal price,Integer stock,ProductStatus status,boolean adminHidden,List<String> images) {}
+    public record Result(String id,String shopId,String categoryId,String categoryName,String name,String description,BigDecimal price,Integer stock,ProductStatus status,ProductType type,boolean adminHidden,List<String> images) {}
     public record Results(List<Result> content,int page,int totalPages,long totalElements) {}
     public record CategoryOption(String id,String name) {}
+    public record ImageItem(String id,String imageUrl,boolean primary,int displayOrder) {}
+    public record VideoItem(String id,String videoUrl,String title,String description,int displayOrder) {}
+    private static final long MAX_IMAGE_BYTES = 5L*1024*1024;
+    private static final long MAX_VIDEO_BYTES = 50L*1024*1024;
+    private static final Set<String> ALLOWED_IMAGE_TYPES = Set.of("image/jpeg","image/png","image/webp");
+    private static final Set<String> ALLOWED_VIDEO_TYPES = Set.of("video/mp4","video/webm","video/quicktime");
     private final ShopRepository shops;private final ProductRepository products;private final CategoryRepository categories;
     private final ProductImageRepository images;
     private final ProductVideoRepository videos;
@@ -44,6 +50,8 @@ public class ManagerProductService {
                                  ProductVideoRepository v,CloudinaryService cloud) {
         shops=s;products=p;categories=c;images=i;videos=v;cloudinary=cloud;
     }
+    private final ProductImageRepository images;private final ProductVideoRepository videos;private final CloudinaryService cloudinary;
+    public ManagerProductService(ShopRepository s,ProductRepository p,CategoryRepository c,ProductImageRepository i,ProductVideoRepository v,CloudinaryService cl) {shops=s;products=p;categories=c;images=i;videos=v;cloudinary=cl;}
     private static ResponseStatusException missing() {return new ResponseStatusException(HttpStatus.NOT_FOUND,"Không tìm thấy shop hoặc sản phẩm.");}
     private Shop owned(String id,String actor,boolean write) {
         var shop=(write?shops.findForUpdate(id):shops.findById(id)).orElseThrow(ManagerProductService::missing);
@@ -52,7 +60,7 @@ public class ManagerProductService {
         return shop;
     }
     // Ảnh chính đứng đầu: giao diện dựng lại cờ primary theo vị trí, nên thứ tự này giữ đúng ảnh chính khi sửa sản phẩm.
-    private Result result(Product p) {return new Result(p.getId(),p.getShop().getId(),p.getCategory().getId(),p.getCategory().getName(),p.getName(),p.getDescription(),p.getPrice(),p.getStock(),p.getStatus(),p.isAdminHidden(),
+    private Result result(Product p) {return new Result(p.getId(),p.getShop().getId(),p.getCategory().getId(),p.getCategory().getName(),p.getName(),p.getDescription(),p.getPrice(),p.getStock(),p.getStatus(),p.getType(),p.isAdminHidden(),
         images.findByProductIdOrderByDisplayOrderAscIdAsc(p.getId()).stream()
             .sorted(java.util.Comparator.comparingInt(i->Boolean.TRUE.equals(i.getIsPrimary())?0:1))
             .map(ProductImage::getImageUrl).toList());}
@@ -66,7 +74,7 @@ public class ManagerProductService {
         var category=categories.findById(input.categoryId()).filter(c->c.getStatus()==CategoryStatus.ACTIVE).orElseThrow(()->new IllegalArgumentException("Danh mục không hợp lệ hoặc đã ngừng hoạt động."));
         if(id==null) {product.setId(UUID.randomUUID().toString());product.setShop(shop);product.setCreatedBy(actor);}
         // adminHidden không nằm trong Input nên cờ kiểm duyệt của Admin luôn được giữ nguyên.
-        product.setName(input.name().strip());product.setDescription(input.description().strip());product.setCategory(category);product.setPrice(input.price());product.setStock(input.stock());product.setStatus(input.status());product.setLastModifyBy(actor);
+        product.setName(input.name().strip());product.setDescription(input.description().strip());product.setCategory(category);product.setPrice(input.price());product.setStock(input.stock());product.setStatus(input.status());product.setType(input.type()==null?ProductType.READY_MADE:input.type());product.setLastModifyBy(actor);
         var stored=products.saveAndFlush(product);
         if(input.images()!=null) {
             images.deleteByProductId(stored.getId());images.flush();
@@ -176,13 +184,5 @@ public class ManagerProductService {
         products.findByIdAndShopId(productId, shopId).orElseThrow(ManagerProductService::missing);
         var video = videos.findByIdAndProductId(videoId, productId).orElseThrow(ManagerProductService::missing);
         videos.delete(video);
-    }
-
-    public Detail detail(String productId) {
-        var product = products.findById(productId).filter(p -> p.getStatus() == ProductStatus.ACTIVE && p.getShop().getStatus() == ShopStatus.ACTIVE).orElseThrow(ManagerProductService::missing);
-        var urls = images.findByProductIdOrderByDisplayOrderAsc(productId).stream().map(ProductImage::getImageUrl).toList();
-        var vids = videos.findByProductIdOrderByDisplayOrderAsc(productId).stream().map(v -> new VideoInfo(v.getVideoUrl(), v.getTitle(), v.getDescription())).toList();
-        return new Detail(product.getId(), product.getShop().getId(), product.getShop().getName(), product.getCategory().getId(), product.getCategory().getName(),
-                product.getName(), product.getDescription(), product.getPrice(), product.getStock(), urls, vids);
     }
 }

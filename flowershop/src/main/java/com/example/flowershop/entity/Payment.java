@@ -42,6 +42,9 @@ public class Payment {
     @Column(name = "gateway_transaction_no", length = 100)
     private String gatewayTransactionNo;
 
+    @Column(name = "invoice_number", length = 100, unique = true)
+    private String invoiceNumber;
+
     @Column(name = "gateway_response", columnDefinition = "json")
     private String gatewayResponse;
 

@@ -7,6 +7,7 @@ import Button from "@/components/ui/button/Button"
 import Input from "@/components/form/input/InputField"
 import Label from "@/components/form/Label"
 import ComponentCard from "@/components/common/ComponentCard"
+import GhnAddressPicker from "@/components/GhnAddressPicker"
 
 export default function AccountView({ user, logout, checkSession, busy: authBusy, error: authError, notice: authNotice }) {
   const c = useAccountController(user)
@@ -102,6 +103,11 @@ export default function AccountView({ user, logout, checkSession, busy: authBusy
             <ComponentCard title="Địa chỉ cá nhân">
               <div className="space-y-6">
 
+                <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
+                  <p className="text-sm text-blue-800 dark:text-blue-300">
+                    Khu vực hỗ trợ: <span className="font-semibold">Toàn quốc (qua Giao Hàng Nhanh - GHN)</span>. Tối đa 10 địa chỉ.
+                  </p>
+                </div>
 
                 {!c.addresses.length ? (
                   <p className="text-gray-500 dark:text-gray-400 text-center py-4">Bạn chưa có địa chỉ cá nhân.</p>
@@ -170,6 +176,9 @@ export default function AccountView({ user, logout, checkSession, busy: authBusy
                   <form onSubmit={c.saveAddress}>
                     <fieldset disabled={busy} className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <LocationFields address={c.address} setAddress={c.setAddress} />
+                      <div className="md:col-span-2">
+                        <GhnAddressPicker value={c.address} onChange={c.setAddress} />
+                      </div>
                       <div className="md:col-span-2">
                         <Label>Số nhà, đường, tòa nhà</Label>
                         <Input 

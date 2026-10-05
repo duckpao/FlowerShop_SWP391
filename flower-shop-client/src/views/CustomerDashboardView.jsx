@@ -4,6 +4,8 @@ import ManagerApplicationView from './ManagerApplicationView'
 import '../styles/admin.css'
 
 const options = [
+  { href: '/home', key: 'home', title: 'Cửa hàng hoa mẫu', icon: '🌸', description: 'Xem các bó hoa thiết kế và thêm vào giỏ hàng.' },
+  { href: '/cart', key: 'cart', title: 'Giỏ hàng của tôi', icon: '🛒', description: 'Xem giỏ hàng và thanh toán SePay / COD.' },
   { href: '/?view=shops', key: 'shops', title: 'Tìm cửa hàng hoa', icon: '❀', description: 'Tìm shop, xem sản phẩm và đăng ký làm nhân viên.' },
   { href: '/?view=applications', key: 'applications', title: 'Đơn ứng tuyển', icon: '♙', description: 'Theo dõi phản hồi và kết quả đăng ký làm nhân viên.' },
   { href: '/?view=manager', key: 'manager', title: 'Đăng ký mở shop', icon: '⌂', description: 'Gửi đơn mở cửa hàng và theo dõi kết quả xét duyệt.' },

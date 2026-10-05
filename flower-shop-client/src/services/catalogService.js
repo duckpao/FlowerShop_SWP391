@@ -1,5 +1,7 @@
+import { API_BASE } from '../apiBase'
+
 async function get(path) {
-  const response = await fetch(path, { cache: 'no-store' })
+  const response = await fetch(`${API_BASE}${path}`, { cache: 'no-store' })
   const data = await response.json().catch(() => ({}))
   if (!response.ok) {
     const error = new Error(data.message || 'Không tải được dữ liệu sản phẩm.')
@@ -10,7 +12,16 @@ async function get(path) {
 }
 
 export const catalogService = {
-  browse: params => get(`/api/public/products?${new URLSearchParams(params)}`),
+  browse: params => {
+    const searchParams = new URLSearchParams()
+    Object.entries(params || {}).forEach(([key, val]) => {
+      if (val !== undefined && val !== null && val !== '') {
+        searchParams.set(key, val)
+      }
+    })
+    return get(`/api/public/products?${searchParams.toString()}`)
+  },
   detail: id => get(`/api/public/products/${encodeURIComponent(id)}`),
   categories: () => get('/api/public/categories'),
+  shops: () => get('/api/public/shops'),
 }

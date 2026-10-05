@@ -1,10 +1,11 @@
 import { authService } from './authService'
+import { API_BASE } from '../apiBase'
 
 const mine = id => `/api/customer/products/${encodeURIComponent(id)}/reviews`
 
 export const reviewService = {
   async list(id, page) {
-    const response = await fetch(`/api/public/products/${encodeURIComponent(id)}/reviews?page=${page}`, { cache: 'no-store' })
+    const response = await fetch(`${API_BASE}/api/public/products/${encodeURIComponent(id)}/reviews?page=${page}`, { cache: 'no-store' })
     if (!response.ok) throw new Error('Không tải được đánh giá.')
     return response.json()
   },

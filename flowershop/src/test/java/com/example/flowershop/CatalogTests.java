@@ -123,6 +123,33 @@ class CatalogTests extends ManagerShopTests {
                 .containsExactly("Đắt", "Rẻ");
     }
 
+    @Test void browseFiltersByPriceRange() {
+        product("Rẻ", "50000", ProductStatus.ACTIVE);
+        var inRange = product("Vừa", "150000", ProductStatus.ACTIVE);
+        product("Đắt", "900000", ProductStatus.ACTIVE);
+        assertThat(catalog.browse("", null, null, new BigDecimal("100000"),
+                new BigDecimal("200000"), "newest", 0, 12).content())
+                .extracting(com.example.flowershop.service.ProductCardAssembler.ProductCard::id)
+                .containsExactly(inRange.getId());
+        assertThatThrownBy(() -> catalog.browse("", null, null, new BigDecimal("200000"),
+                new BigDecimal("100000"), "newest", 0, 12))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test void browseFiltersByProductTypeAndLegacyProductsDefaultToReadyMade() {
+        var readyMade = product("Bó có sẵn", "120000", ProductStatus.ACTIVE);
+        var custom = product("Bó thiết kế", "250000", ProductStatus.ACTIVE);
+        custom.setType(ProductType.CUSTOM);
+        products.saveAndFlush(custom);
+
+        assertThat(products.findById(readyMade.getId()).orElseThrow().getType())
+                .isEqualTo(ProductType.READY_MADE);
+        assertThat(catalog.browse("", null, null, ProductType.CUSTOM, null, null,
+                "newest", 0, 12).content())
+                .extracting(com.example.flowershop.service.ProductCardAssembler.ProductCard::id)
+                .containsExactly(custom.getId());
+    }
+
     @Test void browseEscapesWildcardsInSearchTerm() {
         product("Bó hồng", "50000", ProductStatus.ACTIVE);
         assertThat(catalog.browse("%", null, null, "newest", 0, 12).content()).isEmpty();
@@ -196,4 +223,18 @@ class CatalogTests extends ManagerShopTests {
         mvc.perform(get("/api/public/products/khong-ton-tai")).andExpect(status().isNotFound());
         mvc.perform(get("/api/public/products?size=500")).andExpect(status().isBadRequest());
     }
+
+        @Test void publicCatalogFiltersByProductTypeWithoutLogin() throws Exception {
+                product("Bó có sẵn", "100000", ProductStatus.ACTIVE);
+                var custom = product("Bó custom", "200000", ProductStatus.ACTIVE);
+                custom.setType(ProductType.CUSTOM);
+                products.saveAndFlush(custom);
+
+                mvc.perform(get("/api/public/products?type=CUSTOM"))
+                                .andExpect(status().isOk())
+                                .andExpect(jsonPath("$.content").isArray())
+                                .andExpect(jsonPath("$.content.length()").value(1))
+                                .andExpect(jsonPath("$.content[0].name").value("Bó custom"))
+                                .andExpect(jsonPath("$.content[0].type").value("CUSTOM"));
+        }
 }

@@ -1,16 +1,9 @@
 import { useShopSearchController } from "../controllers/useShopSearchController";
+import { useEffect, useState } from "react";
 import ManagerNotificationsView from "./ManagerNotificationsView";
 import ManagerApplicationView from "./ManagerApplicationView";
 import ProductsView from "./ProductsView";
 import ProductCatalogView from "./ProductCatalogView";
-import { Link } from "react-router";
-
-const roles = {
-  CUSTOMER: "Customer",
-  SHOP_STAFF: "Staff",
-  SHOP: "Manager",
-  ADMIN: "Admin",
-};
 
 const statuses = {
   PENDING: "Chờ duyệt",
@@ -20,6 +13,30 @@ const statuses = {
 
 export default function HomeView({ auth }) {
   const c = useShopSearchController(auth.user);
+  const [browseTab, setBrowseTab] = useState(() =>
+    window.location.hash === "#shops" ? "shops" : "products",
+  );
+
+  useEffect(() => {
+    const syncBrowseTab = () => {
+      setBrowseTab(window.location.hash === "#shops" ? "shops" : "products");
+    };
+    window.addEventListener("hashchange", syncBrowseTab);
+    return () => window.removeEventListener("hashchange", syncBrowseTab);
+  }, []);
+
+  useEffect(() => {
+    const targetId = window.location.hash.slice(1);
+    if (targetId === "shops" || targetId === "products") {
+      document.getElementById(targetId)?.scrollIntoView();
+    }
+  }, [browseTab]);
+
+  const selectBrowseTab = (tab) => {
+    setBrowseTab(tab);
+    const hash = tab === "shops" ? "#shops" : "#products";
+    if (window.location.hash !== hash) window.location.hash = hash;
+  };
   return (
     <div className="bg-gray-50 dark:bg-gray-900 flex-1">
       <main className="mx-auto w-full max-w-7xl py-8 space-y-12">
@@ -72,69 +89,69 @@ export default function HomeView({ auth }) {
           </div>
         )}
 
-        {!c.selected && <ProductCatalogView />}
-        
         {!c.selected && (
-          <section className="space-y-6">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Tìm cửa hàng hoa</h2>
-                <p className="text-gray-500 dark:text-gray-400 mt-1">
-                  Hiển thị tối đa 50 shop đang hoạt động. Nhập tên để thu hẹp kết quả.
-                </p>
-              </div>
-              
-              <form onSubmit={c.search} className="flex gap-2">
-                <input
-                  type="search"
-                  placeholder="Nhập tên shop..."
-                  className="rounded-lg border border-gray-300 px-4 py-2 text-gray-900 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-white/10 dark:bg-gray-800 dark:text-white min-w-[250px]"
-                  maxLength={100}
-                  value={c.query}
-                  onChange={(e) => c.setQuery(e.target.value)}
-                />
-                <button 
-                  type="submit" 
-                  disabled={c.busy}
-                  className="px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-lg transition-colors font-medium disabled:opacity-50"
-                >
-                  Tìm kiếm
-                </button>
-              </form>
+          <section id="discover" className="space-y-6">
+            <div role="tablist" aria-label="Khám phá cửa hàng và sản phẩm" className="flex gap-2 border-b border-gray-200 dark:border-white/10">
+              <button type="button" role="tab" aria-selected={browseTab === "products"} aria-controls="products-panel"
+                onClick={() => selectBrowseTab("products")}
+                className={`border-b-2 px-4 py-3 text-sm font-semibold transition-colors ${browseTab === "products" ? "border-brand-500 text-brand-600 dark:text-brand-400" : "border-transparent text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"}`}>
+                Sản phẩm
+              </button>
+              <button type="button" role="tab" aria-selected={browseTab === "shops"} aria-controls="shops-panel"
+                onClick={() => selectBrowseTab("shops")}
+                className={`border-b-2 px-4 py-3 text-sm font-semibold transition-colors ${browseTab === "shops" ? "border-brand-500 text-brand-600 dark:text-brand-400" : "border-transparent text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"}`}>
+                Cửa hàng
+              </button>
             </div>
 
-            {c.error && (
-              <div className="rounded-lg bg-error-50 dark:bg-error-500/10 p-4" role="alert">
-                <p className="text-sm text-error-600 dark:text-error-500">{c.error}</p>
+            {browseTab === "products" ? (
+              <div id="products-panel" role="tabpanel" aria-label="Danh sách sản phẩm">
+                <ProductCatalogView auth={auth} shops={c.shops} />
               </div>
-            )}
-            {c.notice && (
-              <div className="rounded-lg bg-success-50 dark:bg-success-500/10 p-4" role="status">
-                <p className="text-sm text-success-600 dark:text-success-500">{c.notice}</p>
-              </div>
-            )}
+            ) : (
+              <section id="shops" role="tabpanel" aria-label="Danh sách cửa hàng" className="space-y-6">
+                <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Cửa hàng hoa</h2>
+                    <p className="mt-1 text-gray-500 dark:text-gray-400">Tìm cửa hàng đang hoạt động theo tên.</p>
+                  </div>
+                  <form onSubmit={c.search} className="flex w-full gap-2 md:max-w-xl">
+                    <input type="search" aria-label="Tên cửa hàng" placeholder="Nhập tên cửa hàng..."
+                      className="min-w-0 flex-1 rounded-lg border border-gray-300 px-4 py-2 text-gray-900 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-white/10 dark:bg-gray-800 dark:text-white"
+                      maxLength={100} value={c.query} onChange={(e) => c.setQuery(e.target.value)} />
+                    <button type="submit" disabled={c.busy}
+                      className="rounded-lg bg-brand-500 px-4 py-2 font-medium text-white transition-colors hover:bg-brand-600 disabled:opacity-50">
+                      Tìm shop
+                    </button>
+                  </form>
+                </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {c.shops.map((shop) => (
-                <div key={shop.id} className="rounded-xl border border-gray-200 bg-white dark:border-white/5 dark:bg-white/5 p-6 flex flex-col hover:shadow-md transition-shadow">
-                  <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">{shop.name}</h3>
-                  <p className="text-gray-600 dark:text-gray-400 text-sm flex-1 mb-6 line-clamp-3">
-                    {shop.description || "Chưa có mô tả."}
-                  </p>
-                  <button 
-                    onClick={() => c.select(shop)}
-                    className="w-full py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-800 dark:bg-white/10 dark:hover:bg-white/20 dark:text-white rounded-lg font-medium transition-colors"
-                  >
-                    Vào shop
-                  </button>
+                {c.error && <div className="rounded-lg bg-error-50 p-4 dark:bg-error-500/10" role="alert">
+                  <p className="text-sm text-error-600 dark:text-error-500">{c.error}</p>
+                </div>}
+                {c.notice && <div className="rounded-lg bg-success-50 p-4 dark:bg-success-500/10" role="status">
+                  <p className="text-sm text-success-600 dark:text-success-500">{c.notice}</p>
+                </div>}
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {c.shops.map((shop) => (
+                    <article key={shop.id} className="flex flex-col border-b border-gray-200 py-5 dark:border-white/10">
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{shop.name}</h3>
+                      <p className="mt-2 flex-1 text-sm leading-6 text-gray-600 dark:text-gray-400 line-clamp-3">
+                        {shop.description || "Chưa có mô tả."}
+                      </p>
+                      <button type="button" onClick={() => c.select(shop)}
+                        className="mt-5 self-start rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-600 dark:bg-white dark:text-gray-900">
+                        Xem cửa hàng
+                      </button>
+                    </article>
+                  ))}
+                  {c.shops.length === 0 && !c.busy && (
+                    <p className="col-span-full py-10 text-center text-gray-500 dark:text-gray-400">Không tìm thấy cửa hàng phù hợp.</p>
+                  )}
                 </div>
-              ))}
-              {c.shops.length === 0 && !c.busy && (
-                <div className="col-span-full text-center py-12 text-gray-500 dark:text-gray-400">
-                  Không tìm thấy shop nào.
-                </div>
-              )}
-            </div>
+              </section>
+            )}
           </section>
         )}
 

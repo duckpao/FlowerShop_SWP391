@@ -35,6 +35,12 @@ public class Order {
     @JoinColumn(name = "delivery_address_id", nullable = false)
     private Address deliveryAddress;
 
+    @Column(name = "recipient_name", length = 255)
+    private String recipientName;
+
+    @Column(name = "recipient_phone", length = 20)
+    private String recipientPhone;
+
     // TODO: Coupon Entity will be created in next step
     @Column(name = "coupon_id", length = 36)
     private String couponId;
@@ -51,12 +57,25 @@ public class Order {
     @Column(name = "discount_amount", precision = 12, scale = 2)
     private BigDecimal discountAmount = BigDecimal.ZERO;
 
+    @Builder.Default
+    @Column(name = "shipping_fee", nullable = false, precision = 12, scale = 2)
+    private BigDecimal shippingFee = BigDecimal.ZERO;
+
     @Column(name = "total_amount", nullable = false, precision = 12, scale = 2)
     private BigDecimal totalAmount;
 
     @Builder.Default
     @Column(name = "deposit_amount", precision = 12, scale = 2)
     private BigDecimal depositAmount = BigDecimal.ZERO;
+
+    @Column(name = "customer_note", columnDefinition = "TEXT")
+    private String customerNote;
+
+    @Column(name = "cancel_reason", columnDefinition = "TEXT")
+    private String cancelReason;
+
+    @Column(name = "shop_note", columnDefinition = "TEXT")
+    private String shopNote;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status")

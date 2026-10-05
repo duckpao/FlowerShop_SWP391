@@ -6,32 +6,39 @@ export function useAccountController(user) {
   const [profile, setProfile] = useState(null)
   const [form, setForm] = useState({ fullName: '', phone: '' })
   const [addresses, setAddresses] = useState([])
-  const [cities, setCities] = useState([])
   const [address, setAddress] = useState(emptyAddress())
   const [editing, setEditing] = useState(null)
   const [busy, setBusy] = useState(true)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [reload, setReload] = useState(0)
+  const [serverPhoneError, setServerPhoneError] = useState('')
+  const phoneError = form.phone && !/^0[0-9]{9}$/.test(form.phone)
+    ? 'Số điện thoại phải bắt đầu bằng 0 và có đúng 10 chữ số' : serverPhoneError
   useEffect(() => {
     let active = true
     setBusy(true); setError('')
     Promise.all([accountService.profile(), accountService.addresses()])
       .then(([p, list = [], allowed = []]) => {
+    Promise.all([accountService.profile(), ...(user.role === 'CUSTOMER' ? [accountService.addresses()] : [])])
+      .then(([p, list = []]) => {
         if (!active) return
-        setProfile(p); setForm(profileInput(p)); setAddresses(list); setCities(allowed)
-        setAddress(emptyAddress(allowed[0] || '')); setEditing(null)
+        setProfile(p); setForm(profileInput(p)); setAddresses(list); setAddress(emptyAddress()); setEditing(null)
       }).catch(e => { if (active) setError(e.message) })
       .finally(() => { if (active) setBusy(false) })
     return () => { active = false }
   }, [user.id, user.role, reload])
   async function run(action) {
     setBusy(true); setError(''); setNotice('')
-    try { await action() } catch (e) { setError(e.message) } finally { setBusy(false) }
+    try { await action() } catch (e) {
+      if (e.fieldErrors?.phone) setServerPhoneError(e.fieldErrors.phone)
+      else setError(e.message)
+    } finally { setBusy(false) }
   }
-  const cancel = () => { setEditing(null); setAddress(emptyAddress(cities[0] || '')) }
+  const cancel = () => { setEditing(null); setAddress(emptyAddress()) }
   const saveProfile = e => {
     e.preventDefault()
+    if (phoneError) return
     return run(async () => {
       const p = await accountService.updateProfile({ fullName: form.fullName.trim(), phone: form.phone.trim() })
       setProfile(p); setForm(profileInput(p)); setNotice('Đã cập nhật hồ sơ.')
@@ -41,6 +48,16 @@ export function useAccountController(user) {
     e.preventDefault()
     return run(async () => {
       await accountService.saveAddress(editing, { ...address, addressLine: address.addressLine.trim(), ward: address.ward.trim(), district: '', city: address.city.trim() })
+      await accountService.saveAddress(editing, {
+        ...address,
+        addressLine: address.addressLine?.trim() || '',
+        city: address.city?.trim() || '',
+        district: address.district?.trim() || '',
+        ward: address.ward?.trim() || '',
+        ghnDistrictId: address.ghnDistrictId,
+        ghnWardCode: address.ghnWardCode,
+        isDefault: !!address.isDefault
+      })
       setAddresses(await accountService.addresses()); cancel(); setNotice('Đã lưu địa chỉ.')
     })
   }
@@ -57,11 +74,19 @@ export function useAccountController(user) {
   })
   const edit = item => {
     setEditing(item.id)
-    setAddress({ addressLine: item.addressLine || '', city: item.city || '', district: item.district || '', ward: item.ward || '', isDefault: item.isDefault })
+    setAddress({
+      addressLine: item.addressLine || '',
+      city: item.city || '',
+      district: item.district || '',
+      ward: item.ward || '',
+      ghnDistrictId: item.ghnDistrictId || null,
+      ghnWardCode: item.ghnWardCode || '',
+      isDefault: !!item.isDefault
+    })
     setError(''); setNotice('')
   }
   return {
-    profile, form, setForm, addresses, cities, address, setAddress, editing, busy, error, notice,
+    profile, form, setForm: next => { setServerPhoneError(''); setForm(next) }, phoneError, addresses, address, setAddress, editing, busy, error, notice,
     saveProfile, saveAddress, remove, makeDefault, edit, cancel, retry: () => setReload(x => x + 1)
   }
 }

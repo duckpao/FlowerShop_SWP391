@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { authService } from '../services/authService'
+import { validateAuth } from '../models/authValidation'
 import { useNavigate } from 'react-router'
 import { validateAuth } from '../models/authValidation'
 const post = authService.post
@@ -11,11 +12,14 @@ export function useAuthController() {
   useEffect(() => {
     let active = true
     authService.me().then(current => {
-      if (active) {
+      if (active && current) {
         setUser(current); setPage('account');
         if (window.location.pathname === '/login') {
+          const searchParams = new URLSearchParams(window.location.search);
+          const nextUrl = searchParams.get('next');
           if (current.role === 'ADMIN') routerNavigate('/admin');
           else if (current.role === 'SHOP' || current.role === 'SHOP_STAFF') routerNavigate('/shop-admin');
+          else if (nextUrl) routerNavigate(nextUrl);
           else routerNavigate('/');
         }
       }
@@ -49,6 +53,7 @@ export function useAuthController() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [seconds, setSeconds] = useState(0)
+  const [fieldErrors, setFieldErrors] = useState({})
   useEffect(() => {
     if (seconds <= 0) return
     const timer = setTimeout(() => setSeconds(seconds - 1), 1000)
@@ -57,6 +62,7 @@ export function useAuthController() {
 
   function navigate(next) {
     setFieldErrors({}); setCaptchaRequired(false); setCaptcha(null); setCaptchaAnswer('')
+    setFieldErrors({})
     setPage(next); setError(''); setNotice(''); setPassword(''); setConfirmation(''); setOtp('')
   }
   async function submit(event) {
@@ -65,16 +71,23 @@ export function useAuthController() {
     const errors = validateAuth(page, {email, fullName, password, confirmation, otp})
     setFieldErrors(errors)
     if (Object.keys(errors).length) return
+    const validation = validateAuth(page, { email, fullName, password, confirmation, otp, registrationRole })
+    setFieldErrors(validation)
+    if (Object.keys(validation).length) return
     setBusy(true); setError(''); setNotice('')
     try {
       const address = email.trim().toLowerCase()
       if (page === 'signin') {
         const current = await authService.login(address, password, captchaBody())
         setUser(current); setPassword(''); setPage('account'); setNotice('Đăng nhập thành công.')
+        const searchParams = new URLSearchParams(window.location.search);
+        const nextUrl = searchParams.get('next');
         if (current.role === 'ADMIN') {
           routerNavigate('/admin');
         } else if (current.role === 'SHOP' || current.role === 'SHOP_STAFF') {
           routerNavigate('/shop-admin');
+        } else if (nextUrl) {
+          routerNavigate(nextUrl);
         } else {
           routerNavigate('/');
         }
@@ -104,6 +117,10 @@ export function useAuthController() {
       }
       setCaptchaRequired(false); setCaptcha(null); setCaptchaAnswer('')
     } catch (failure) { await failed(failure) }
+    } catch (failure) {
+      setFieldErrors(Object.fromEntries(Object.entries(failure.fieldErrors || {}).map(([key, message]) => [key.replace(/^account\./, '').replace(/^newPassword$/, 'password').replace(/^confirmPassword$/, 'confirmation'), message])))
+      setError(failure.message || 'Có lỗi xảy ra. Vui lòng thử lại.')
+    }
     finally { setBusy(false) }
   }
   async function resend() {
@@ -117,13 +134,17 @@ export function useAuthController() {
   }
   async function logout() {
     setBusy(true); setError('')
-    try { await authService.logout(); setUser(null); navigate('signin'); setNotice('Đã đăng xuất.') }
+    try { await authService.logout(); setUser(null); navigate('signin'); window.location.replace('/login') }
     catch (failure) { setError(failure.message) }
     finally { setBusy(false) }
   }
   async function checkSession() {
     setBusy(true); setError('')
-    try { setUser(await authService.me()); setNotice('Phiên đăng nhập đang hoạt động.') }
+    try {
+      const current = await authService.me()
+      if (!current) throw new Error('Phiên đăng nhập không còn hiệu lực.')
+      setUser(current); setNotice('Phiên đăng nhập đang hoạt động.')
+    }
     catch (failure) { setUser(null); navigate('signin'); setError(failure.message) }
     finally { setBusy(false) }
   }
@@ -132,4 +153,11 @@ export function useAuthController() {
     setFieldErrors(current => { const next = {...current}; delete next[name]; return next })
   }
   return { registrationRole, setRegistrationRole, fieldErrors, captchaRequired, captcha, captchaAnswer, setCaptchaAnswer, reloadCaptcha, page, email, fullName, password, confirmation, otp, busy: busy || initializing, error, notice, seconds, user, logout, checkSession, setEmail: edit('email', setEmail), setFullName: edit('fullName', setFullName), setPassword: edit('password', setPassword), setConfirmation: edit('confirmation', setConfirmation), setOtp: edit('otp', setOtp), submit, resend, navigate }
+    setFieldErrors(previous => ({ ...previous, [name]: undefined, ...(name === 'password' ? { confirmation: undefined } : {}) }))
+  }
+  return { page, email, fullName, password, confirmation, otp, registrationRole,
+    setRegistrationRole: value => { setRegistrationRole(value); setFieldErrors({}) },
+    fieldErrors, initializing, busy: busy || initializing, error, notice, seconds, user, logout, checkSession,
+    setEmail: edit('email', setEmail), setFullName: edit('fullName', setFullName), setPassword: edit('password', setPassword),
+    setConfirmation: edit('confirmation', setConfirmation), setOtp: edit('otp', setOtp), submit, resend, navigate }
 }

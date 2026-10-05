@@ -25,7 +25,7 @@ và quản lý danh mục của Admin. Cần chạy migration `flowershop/sql/01
 
 ## Database cho các chức năng trên nhánh Quangdv
 
-Sau khi khởi tạo database mới, cần chạy các migration trong `flowershop/sql/` theo thứ tự `001` đến `012` trên database `flower_shop_db` để có các bảng OTP, phiên đăng nhập, nhân viên, đơn đăng ký manager và phần đánh giá/kiểm duyệt sản phẩm.
+Sau khi khởi tạo database mới, cần chạy các migration trong `flowershop/sql/` theo thứ tự `001` đến `012` trên database `flower_shop_db`. Migration `011_online_cod_payment_methods.sql` quy chuẩn dữ liệu cũ về hai phương thức `ONLINE` và `COD`. Migration `012_order_recipient.sql` bổ sung thông tin người nhận đơn hàng.
 
 ### Lỗi font tiếng Việt trong dữ liệu mẫu
 
@@ -45,58 +45,23 @@ Với database đã chạy các migration này, không chạy lại toàn bộ: 
 
 * **Java 17:** Dùng cho môi trường Backend.
 * **Node.js:** Khuyến nghị sử dụng phiên bản LTS để chạy Frontend.
-* **Docker Desktop:** Bắt buộc phải cài đặt và bật trước khi chạy project. Docker được sử dụng để tự động khởi tạo cơ sở dữ liệu MySQL thông qua file `docker-compose.yml`.
+* **MySQL 8.0:** Cài đặt và khởi động MySQL trên máy, lắng nghe tại cổng `3306`.
 
 ---
 
-## 🐳 Hướng dẫn làm việc với Docker (Database)
+## 🛢️ Cấu hình Database (MySQL)
 
-Dự án sử dụng **MySQL 8.0** chạy bằng Docker để đồng bộ môi trường Database cho toàn bộ team.
+Backend kết nối tới MySQL tại `localhost:3306`, database `flower_shop_db`.
 
-Mọi thao tác cấu hình Database, tạo bảng và chèn dữ liệu mẫu đã được tự động hóa thông qua file `database.sql`.
-
-### 1. Khởi động Database
-
-Mở terminal tại thư mục gốc của project, nơi chứa file `docker-compose.yml` và `database.sql`, sau đó chạy:
-
-```bash
-docker-compose up -d
-```
-
-> **Lưu ý:** Lần chạy đầu tiên có thể mất khoảng **15–20 giây** để Docker tự động tạo các bảng và chèn dữ liệu mẫu (Mock Data).
-
-### 2. Xử lý lỗi Database (Reset toàn bộ)
-
-Nếu gặp các lỗi như:
-
-* `Access denied`
-* Sai mật khẩu Database
-* Lỗi kết nối
-* Muốn xóa toàn bộ Database và chạy lại file SQL mới nhất
-
-Hãy chạy:
-
-```bash
-docker-compose down -v
-```
-
-> ⚠️ **Lưu ý:** Hậu tố `-v` rất quan trọng vì nó sẽ xóa Volume chứa dữ liệu Database hiện tại.
-
-Sau đó khởi tạo lại Database:
-
-```bash
-docker-compose up -d
-```
-
-Docker sẽ tạo lại Database từ đầu dựa trên cấu hình và file SQL của project.
+Đảm bảo MySQL đã chạy và database `flower_shop_db` đã được tạo trước khi khởi động backend. Cấu hình kết nối nằm trong `flowershop/src/main/resources/application.properties`.
 
 ---
 
 ## 🚀 Hướng dẫn chạy Backend (Spring Boot)
 
-Backend cung cấp các **RESTful API** và tự động kết nối tới Database MySQL được Docker khởi tạo.
+Backend cung cấp các **RESTful API** và kết nối tới MySQL local.
 
-Database chạy tại **port `3307`**.
+Database chạy tại **port `3306`**.
 
 ### 1. Di chuyển vào thư mục Backend
 
@@ -276,15 +241,13 @@ Hãy đảm bảo `.gitignore` của project được cấu hình đúng và t�
 
 ---
 
-# 📌 Quick Start
+## 📌 Quick Start
 
-Nếu đã cài đầy đủ **Java 17 + Node.js + Docker Desktop**, có thể chạy project theo thứ tự:
+Nếu đã cài đầy đủ **Java 17 + Node.js + MySQL 8.0**, có thể chạy project theo thứ tự:
 
-### 1. Khởi động Database
+### 1. Khởi động MySQL
 
-```bash
-docker-compose up -d
-```
+Đảm bảo dịch vụ MySQL đang chạy tại cổng `3306` và database `flower_shop_db` đã tồn tại.
 
 ### 2. Chạy Backend
 
@@ -322,12 +285,26 @@ http://localhost:8080
 
 ---
 
+## Test thanh toán SePay trên máy cá nhân
+
+Mỗi thành viên dùng thông tin **Sandbox** của SePay. Chủ tài khoản test lấy Merchant ID và Secret Key trong mục Sandbox rồi chia sẻ qua kênh riêng của nhóm. Thành viên cũng có thể tạo tài khoản Sandbox riêng. Không đưa khóa vào Git hoặc file `.example`.
+
+Trong thư mục `flowershop`, sao chép file mẫu và điền `sepay.merchant-id`, `sepay.secret-key`:
+
+```powershell
+Copy-Item application-sepay-local.properties.example application-sepay-local.properties
+.\gradlew.bat bootRun
+```
+
+File `application-sepay-local.properties` đã được Git ignore. File mẫu chọn Checkout và API đối soát của Sandbox, nên có thể thử đặt hàng và thanh toán giả lập mà không dùng tiền thật. Khi thử IPN, cấu hình thêm `sepay.ipn-secret` và URL callback công khai trong SePay; `localhost` không nhận được IPN từ Internet. Nếu không có khóa Sandbox, luồng thanh toán trực tuyến sẽ không khởi tạo được.
+
+Khóa Production từng được commit cần được thu hồi và cấp lại; xóa khóa khỏi bản hiện tại không xóa được lịch sử Git.
+
 ## 🎯 Tổng quan cấu trúc Project
 
 ```text
 Flower-Shop-Marketplace/
 │
-├── docker-compose.yml
 ├── database.sql
 │
 ├── flowershop/              # Backend - Spring Boot

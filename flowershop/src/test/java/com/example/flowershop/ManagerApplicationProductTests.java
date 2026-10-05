@@ -28,7 +28,7 @@ class ManagerApplicationProductTests extends ManagerShopTests {
     ManagerApplicationService.Input application() {return new ManagerApplicationService.Input("Applicant","0912345678","New flower shop","Fresh flowers","12 Test","Hà Nội","Test","Test");}
     ManagerProductService.Input product() {return productWithImages(null);}
     ManagerProductService.Input productWithImages(java.util.List<ManagerProductService.ImageInput> list) {
-        return new ManagerProductService.Input("Rose bouquet","Red roses",category.getId(),new BigDecimal("250000"),10,ProductStatus.ACTIVE,list);
+        return new ManagerProductService.Input("Rose bouquet","Red roses",category.getId(),new BigDecimal("250000"),10,ProductStatus.ACTIVE,null,list);
     }
     @Test void customerStaysCustomerUntilApprovalCreatesExactlyOneShopAndRevokesSessions() {
         var customer=user(UserRole.CUSTOMER);var tokens=auth.login(new LoginRequest(customer.getEmail(),"FlowerShop123"));
