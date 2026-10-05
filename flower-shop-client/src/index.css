@@ -1127,3 +1127,14 @@ pre[class*="language-"].line-numbers {
     min-width: 580px;
   }
 }
+
+/* Mark labels for required native and shared component fields. */
+label:not(:has(span)):has(+ input:required)::after,
+label:not(:has(span)):has(+ select:required)::after,
+label:not(:has(span)):has(+ textarea:required)::after,
+label:not(:has(span)):has(+ div input:required)::after,
+label:not(:has(span)):has(+ div select:required)::after,
+label:not(:has(span)):has(+ div textarea:required)::after {
+  content: " *";
+  color: #d92d20;
+}

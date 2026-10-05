@@ -1,4 +1,5 @@
 import { Toaster } from 'react-hot-toast';
+import AccountView from './views/AccountView';
 import { Route, BrowserRouter as Router, Routes, useLocation, useParams } from "react-router";
 import AppLayout from "./layout/AppLayout";
 import AuthView from "./views/AuthView";

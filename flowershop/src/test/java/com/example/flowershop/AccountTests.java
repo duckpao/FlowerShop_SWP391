@@ -86,14 +86,19 @@ class AccountTests {
                 .contentType("application/json").content("{\"addressLine\":\"\",\"city\":\"Hà Nội\",\"district\":\"\",\"ward\":\"\"}"))
                 .andExpect(status().isBadRequest());
     }
-    @Test void allFourRolesHaveProfilesButOnlyCustomersHaveDeliveryAddresses() throws Exception {
+    @Test void allFourRolesHaveProfilesAndPersonalAddresses() throws Exception {
         for (var role:List.of(UserRole.ADMIN,UserRole.SHOP,UserRole.SHOP_STAFF,UserRole.CUSTOMER)) {
             user.setRole(role); users.saveAndFlush(user);
             mvc.perform(get("/api/account/profile").header("Authorization",bearer)).andExpect(status().isOk());
             mvc.perform(get("/api/account/addresses").header("Authorization",bearer))
-                    .andExpect(status().is(role==UserRole.CUSTOMER ? 200 : 403));
+                    .andExpect(status().isOk());
         }
     }
+    @Test void personalAddressesCanBeOutsideDeliveryArea() throws Exception {
+        mvc.perform(get("/api/account/delivery-areas").header("Authorization",bearer))
+                .andExpect(status().isOk()).andExpect(jsonPath("$[0]").value("Hà Nội"));
+        mvc.perform(post("/api/account/addresses").header("Authorization",bearer).session(httpSession).header("X-CSRF-TOKEN",csrf)
+                .contentType("application/json").content("{\"addressLine\":\"12 Test\",\"city\":\"Đà Nẵng\",\"district\":\"Test\",\"ward\":\"Test\",\"isDefault\":false}"))
     @Test void anyCityIsAcceptedNationwide() throws Exception {
         mvc.perform(post("/api/account/addresses").header("Authorization",bearer).session(httpSession).header("X-CSRF-TOKEN",csrf)
                 .contentType("application/json").content("{\"addressLine\":\"12 Test\",\"city\":\"Đà Nẵng\",\"district\":\"Test\",\"ward\":\"Test\",\"ghnWardCode\":\"20308\",\"ghnDistrictId\":1490}"))
@@ -150,6 +155,15 @@ class AccountTests {
         assertThatThrownBy(()->accounts.delete(user.getId(),a.id())).isInstanceOfSatisfying(ResponseStatusException.class,e->assertThat(e.getStatusCode().value()).isEqualTo(409));
         assertThatThrownBy(()->accounts.save(user.getId(),a.id(),input(false))).isInstanceOfSatisfying(ResponseStatusException.class,e->assertThat(e.getStatusCode().value()).isEqualTo(409));
         assertThat(addresses.existsById(a.id())).isTrue();
+    }
+    @Test void personalAddressDoesNotRequireDistrict() throws Exception {
+        mvc.perform(post("/api/account/addresses").header("Authorization",bearer).session(httpSession).header("X-CSRF-TOKEN",csrf)
+                .contentType("application/json").content("{\"addressLine\":\"12 Test\",\"city\":\"Test Province\",\"ward\":\"Test Ward\",\"isDefault\":false}"))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.district").value(""));
+        assertThat(accounts.list(user.getId())).singleElement().satisfies(a -> {
+            assertThat(a.city()).isEqualTo("Test Province");
+            assertThat(a.ward()).isEqualTo("Test Ward");
+        });
     }
     @Test void addressLimitIsEnforced() {
         for(int i=0;i<10;i++) accounts.save(user.getId(),null,input(false));

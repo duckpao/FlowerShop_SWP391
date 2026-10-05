@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { authService } from '../services/authService'
 import { validateAuth } from '../models/authValidation'
 import { useNavigate } from 'react-router'
+import { validateAuth } from '../models/authValidation'
 const post = authService.post
 
 export function useAuthController() {
@@ -32,6 +33,22 @@ export function useAuthController() {
   const [password, setPassword] = useState('')
   const [confirmation, setConfirmation] = useState('')
   const [otp, setOtp] = useState('')
+  const [fieldErrors, setFieldErrors] = useState({})
+  const [captchaRequired, setCaptchaRequired] = useState(false)
+  const [captcha, setCaptcha] = useState(null)
+  const [captchaAnswer, setCaptchaAnswer] = useState('')
+  const captchaBody = () => captchaRequired ? { captchaId: captcha?.id, captchaAnswer } : {}
+  async function reloadCaptcha() {
+    setCaptcha(null); setCaptchaAnswer('')
+    try { setCaptcha(await post('captcha', { email: email.trim(), purpose: page === 'signin' ? 'login' : page === 'otp' ? 'register' : 'reset' })) }
+    catch (failure) { setError(failure.message) }
+  }
+  async function failed(failure) {
+    setError(failure.message)
+    setFieldErrors(Object.fromEntries(Object.entries(failure.fieldErrors || {}).map(([key,value]) => [key === 'newPassword' ? 'password' : key === 'confirmPassword' ? 'confirmation' : key,value])))
+    if (failure.captchaRequired || captchaRequired) { setCaptchaRequired(true); await reloadCaptcha() }
+  }
+
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -44,11 +61,16 @@ export function useAuthController() {
   }, [seconds])
 
   function navigate(next) {
+    setFieldErrors({}); setCaptchaRequired(false); setCaptcha(null); setCaptchaAnswer('')
     setFieldErrors({})
     setPage(next); setError(''); setNotice(''); setPassword(''); setConfirmation(''); setOtp('')
   }
   async function submit(event) {
     event.preventDefault()
+    if (busy) return
+    const errors = validateAuth(page, {email, fullName, password, confirmation, otp})
+    setFieldErrors(errors)
+    if (Object.keys(errors).length) return
     const validation = validateAuth(page, { email, fullName, password, confirmation, otp, registrationRole })
     setFieldErrors(validation)
     if (Object.keys(validation).length) return
@@ -56,7 +78,7 @@ export function useAuthController() {
     try {
       const address = email.trim().toLowerCase()
       if (page === 'signin') {
-        const current = await authService.login(address, password)
+        const current = await authService.login(address, password, captchaBody())
         setUser(current); setPassword(''); setPage('account'); setNotice('Đăng nhập thành công.')
         const searchParams = new URLSearchParams(window.location.search);
         const nextUrl = searchParams.get('next');
@@ -77,22 +99,24 @@ export function useAuthController() {
           ? await post('register-shop', { account })
           : await post('register', account)
         setEmail(address); setPassword(''); setConfirmation(''); setOtp('')
-        setPage('otp'); setSeconds(60); setNotice(data.message)
+        setPage('otp'); setSeconds(0); setNotice(data.message)
       } else if (page === 'otp') {
-        await post('verify-email', { email: address, otp })
+        await post('verify-email', { email: address, otp, ...captchaBody() })
         setOtp(''); setPage('signin')
         setNotice('Đăng ký thành công! Email của bạn đã được xác thực.')
       } else if (page === 'forgot') {
-        const data = await post('forgot-password', { email: address })
-        setEmail(address); setOtp(''); setPage('reset'); setSeconds(60); setNotice(data.message)
+        const data = await post('forgot-password', { email: address, ...captchaBody() })
+        setEmail(address); setOtp(''); setPage('reset'); setSeconds(0); setNotice(data.message)
       } else if (page === 'reset') {
         if (password !== confirmation) throw new Error('Mật khẩu xác nhận không khớp.')
         if (new TextEncoder().encode(password).length > 72) throw new Error('Mật khẩu không được vượt quá 72 byte UTF-8.')
-        await post('reset-password', { email: address, otp, newPassword: password, confirmPassword: confirmation })
+        await post('reset-password', { email: address, otp, newPassword: password, confirmPassword: confirmation, ...captchaBody() })
         authService.clear(); setUser(null)
         setPassword(''); setConfirmation(''); setOtp(''); setPage('signin')
         setNotice('Đặt lại mật khẩu thành công. Hãy dùng mật khẩu mới khi đăng nhập.')
       }
+      setCaptchaRequired(false); setCaptcha(null); setCaptchaAnswer('')
+    } catch (failure) { await failed(failure) }
     } catch (failure) {
       setFieldErrors(Object.fromEntries(Object.entries(failure.fieldErrors || {}).map(([key, message]) => [key.replace(/^account\./, '').replace(/^newPassword$/, 'password').replace(/^confirmPassword$/, 'confirmation'), message])))
       setError(failure.message || 'Có lỗi xảy ra. Vui lòng thử lại.')
@@ -102,9 +126,10 @@ export function useAuthController() {
   async function resend() {
     setBusy(true); setError(''); setNotice('')
     try {
-      const data = await post(page === 'reset' ? 'forgot-password' : 'resend-verification', { email })
-      setSeconds(60); setNotice(data.message)
-    } catch (failure) { setError(failure.message) }
+      const data = await post(page === 'reset' ? 'forgot-password' : 'resend-verification', { email, ...captchaBody() })
+      setCaptchaRequired(false); setCaptcha(null); setCaptchaAnswer('')
+      setSeconds(0); setNotice(data.message)
+    } catch (failure) { await failed(failure) }
     finally { setBusy(false) }
   }
   async function logout() {
@@ -125,6 +150,9 @@ export function useAuthController() {
   }
   const edit = (name, setter) => value => {
     setter(value)
+    setFieldErrors(current => { const next = {...current}; delete next[name]; return next })
+  }
+  return { registrationRole, setRegistrationRole, fieldErrors, captchaRequired, captcha, captchaAnswer, setCaptchaAnswer, reloadCaptcha, page, email, fullName, password, confirmation, otp, busy: busy || initializing, error, notice, seconds, user, logout, checkSession, setEmail: edit('email', setEmail), setFullName: edit('fullName', setFullName), setPassword: edit('password', setPassword), setConfirmation: edit('confirmation', setConfirmation), setOtp: edit('otp', setOtp), submit, resend, navigate }
     setFieldErrors(previous => ({ ...previous, [name]: undefined, ...(name === 'password' ? { confirmation: undefined } : {}) }))
   }
   return { page, email, fullName, password, confirmation, otp, registrationRole,

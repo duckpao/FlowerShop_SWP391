@@ -8,6 +8,9 @@ import java.util.List;
 import java.util.Optional;
 
 public interface ProductImageRepository extends JpaRepository<ProductImage, String> {
+    List<ProductImage> findByProductIdOrderByDisplayOrderAsc(String productId);
+    long countByProductId(String productId);
+    java.util.Optional<ProductImage> findByIdAndProductId(String id, String productId);
     List<ProductImage> findByProductIdOrderByDisplayOrderAscIdAsc(String productId);
     List<ProductImage> findByProductIdOrderByDisplayOrderAsc(String productId);
     List<ProductImage> findByProductIdInOrderByDisplayOrderAscIdAsc(Collection<String> productIds);

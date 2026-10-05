@@ -18,6 +18,8 @@ export function useAccountController(user) {
   useEffect(() => {
     let active = true
     setBusy(true); setError('')
+    Promise.all([accountService.profile(), accountService.addresses()])
+      .then(([p, list = [], allowed = []]) => {
     Promise.all([accountService.profile(), ...(user.role === 'CUSTOMER' ? [accountService.addresses()] : [])])
       .then(([p, list = []]) => {
         if (!active) return
@@ -45,6 +47,7 @@ export function useAccountController(user) {
   const saveAddress = e => {
     e.preventDefault()
     return run(async () => {
+      await accountService.saveAddress(editing, { ...address, addressLine: address.addressLine.trim(), ward: address.ward.trim(), district: '', city: address.city.trim() })
       await accountService.saveAddress(editing, {
         ...address,
         addressLine: address.addressLine?.trim() || '',

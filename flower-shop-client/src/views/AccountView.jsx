@@ -1,14 +1,10 @@
+import LocationFields from '../components/form/LocationFields'
 import { useAccountController } from '../controllers/useAccountController'
 import { roleLabels } from '../models/authModel'
-import AdminCustomersView from './AdminCustomersView'
-import AdminShopsView from './AdminShopsView'
-import AdminManagerApplicationsView from './AdminManagerApplicationsView'
-import ManagerShopsView from './ManagerShopsView'
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components/ui/table"
 import Badge from "@/components/ui/badge/Badge"
 import Button from "@/components/ui/button/Button"
 import Input from "@/components/form/input/InputField"
-import Select from "@/components/form/Select"
 import Label from "@/components/form/Label"
 import ComponentCard from "@/components/common/ComponentCard"
 import GhnAddressPicker from "@/components/GhnAddressPicker"
@@ -85,13 +81,13 @@ export default function AccountView({ user, logout, checkSession, busy: authBusy
                       <Label>Số điện thoại</Label>
                       <Input 
                         type="tel" 
-                        maxLength={16} 
-                        pattern="[+]?[0-9]{9,15}" 
+                        maxLength={10} 
+                        pattern="0[0-9]{9}" 
                         autoComplete="tel"
                         value={c.form.phone} 
                         onChange={e => c.setForm({ ...c.form, phone: e.target.value })} 
                       />
-                      <p className="text-xs text-gray-500 mt-1">Có thể để trống; nếu nhập cần 9–15 chữ số, có thể bắt đầu bằng +.</p>
+                      <p className="text-xs text-gray-500 mt-1">Có thể để trống; nếu nhập cần 10 chữ số, bắt đầu bằng 0.</p>
                     </div>
                     <Button type="submit" variant="primary" className="w-full">Lưu hồ sơ</Button>
                   </fieldset>
@@ -100,25 +96,13 @@ export default function AccountView({ user, logout, checkSession, busy: authBusy
             </ComponentCard>
           )}
 
-          <div className="space-y-4">
-            {['SHOP', 'SHOP_STAFF'].includes(user.role) && <ManagerShopsView role={user.role} />}
-            {user.role === 'ADMIN' && <AdminCustomersView />}
-            {user.role === 'ADMIN' && (
-              <div className="rounded-xl border border-gray-200 bg-white dark:border-white/5 dark:bg-white/5 p-4">
-                <a href="/admin/approvals" className="text-brand-500 hover:text-brand-600 font-medium">
-                  Mở màn Duyệt yêu cầu đăng ký Manager
-                </a>
-              </div>
-            )}
-            {user.role === 'ADMIN' && <AdminShopsView />}
-            {user.role === 'ADMIN' && <AdminManagerApplicationsView />}
-          </div>
         </div>
 
         <div className="lg:col-span-2 space-y-8">
-          {c.profile && user.role === 'CUSTOMER' && (
-            <ComponentCard title="Địa chỉ giao hàng">
+          {c.profile && (
+            <ComponentCard title="Địa chỉ cá nhân">
               <div className="space-y-6">
+
                 <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
                   <p className="text-sm text-blue-800 dark:text-blue-300">
                     Khu vực hỗ trợ: <span className="font-semibold">Toàn quốc (qua Giao Hàng Nhanh - GHN)</span>. Tối đa 10 địa chỉ.
@@ -126,7 +110,7 @@ export default function AccountView({ user, logout, checkSession, busy: authBusy
                 </div>
 
                 {!c.addresses.length ? (
-                  <p className="text-gray-500 dark:text-gray-400 text-center py-4">Bạn chưa có địa chỉ giao hàng.</p>
+                  <p className="text-gray-500 dark:text-gray-400 text-center py-4">Bạn chưa có địa chỉ cá nhân.</p>
                 ) : (
                   <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-white/10">
                     <Table>
@@ -145,20 +129,13 @@ export default function AccountView({ user, logout, checkSession, busy: authBusy
                               <span className="font-medium text-gray-900 dark:text-white">{item.addressLine}</span>
                             </TableCell>
                             <TableCell>
-                              {[item.ward, item.district, item.city].filter(Boolean).join(', ')}
+                              {[item.ward, item.city].filter(Boolean).join(', ')}
                             </TableCell>
                             <TableCell>
                               {item.isDefault ? <Badge color="primary">Mặc định</Badge> : null}
                             </TableCell>
                             <TableCell className="text-right">
                               <div className="flex justify-end gap-2">
-                                <button 
-                                  disabled={busy} 
-                                  onClick={() => c.edit(item)}
-                                  className="text-sm font-medium text-brand-500 hover:text-brand-600 disabled:opacity-50"
-                                >
-                                  Sửa
-                                </button>
                                 {!item.isDefault && (
                                   <button 
                                     disabled={busy} 
@@ -168,6 +145,14 @@ export default function AccountView({ user, logout, checkSession, busy: authBusy
                                     Đặt mặc định
                                   </button>
                                 )}
+                                <button 
+                                  disabled={busy} 
+                                  onClick={() => c.edit(item)}
+                                  className="text-sm font-medium text-brand-500 hover:text-brand-600 disabled:opacity-50"
+                                >
+                                  Sửa
+                                </button>
+                                
                                 <button 
                                   disabled={busy} 
                                   onClick={() => c.remove(item)}
@@ -190,6 +175,7 @@ export default function AccountView({ user, logout, checkSession, busy: authBusy
                   </h3>
                   <form onSubmit={c.saveAddress}>
                     <fieldset disabled={busy} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <LocationFields address={c.address} setAddress={c.setAddress} />
                       <div className="md:col-span-2">
                         <GhnAddressPicker value={c.address} onChange={c.setAddress} />
                       </div>
