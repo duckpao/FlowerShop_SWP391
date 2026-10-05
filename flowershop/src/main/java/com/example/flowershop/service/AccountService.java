@@ -15,9 +15,8 @@ public class AccountService {
     private final UserRepository users;
     private final AddressRepository addresses;
     private final OrderRepository orders;
-    private final DeliveryAreaService areas;
-    public AccountService(UserRepository users, AddressRepository addresses, OrderRepository orders, DeliveryAreaService areas) {
-        this.users=users; this.addresses=addresses; this.orders=orders; this.areas=areas;
+    public AccountService(UserRepository users, AddressRepository addresses, OrderRepository orders) {
+        this.users=users; this.addresses=addresses; this.orders=orders;
     }
     @Transactional(readOnly=true)
     public ProfileResponse profile(String userId) {
@@ -43,9 +42,9 @@ public class AccountService {
             address=find(list,id);
             if (orders.existsByDeliveryAddressId(id)) throw inUse();
         }
-        areas.requireAllowed(request.city(), request.district(), request.ward());
         address.setAddressLine(request.addressLine().strip()); address.setCity(request.city().strip());
         address.setDistrict(request.district().strip()); address.setWard(request.ward().strip());
+        address.setGhnWardCode(request.ghnWardCode().strip()); address.setGhnDistrictId(request.ghnDistrictId());
         address.setLastModifyBy(userId);
         boolean makeDefault = request.isDefault() || list.isEmpty() || Boolean.TRUE.equals(address.getIsDefault())
                 || list.stream().noneMatch(a -> Boolean.TRUE.equals(a.getIsDefault()));
@@ -55,7 +54,6 @@ public class AccountService {
     }
     public AddressResponse setDefault(String userId, String id) {
         lock(userId); var list=owned(userId); var selected=find(list,id);
-        areas.requireAllowed(selected.getCity(),selected.getDistrict(),selected.getWard());
         list.forEach(a -> { a.setIsDefault(a.getId().equals(id)); a.setLastModifyBy(userId); });
         return AddressResponse.from(selected);
     }

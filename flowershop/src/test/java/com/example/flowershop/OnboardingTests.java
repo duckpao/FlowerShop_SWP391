@@ -68,6 +68,19 @@ class OnboardingTests {
         assertThat(shops.findById(created.get(0).getId()).orElseThrow().getStatus()).isEqualTo(ShopStatus.ACTIVE);
         assertThatThrownBy(()->registration.verify(email,otp)).isInstanceOf(IllegalArgumentException.class);
     }
+    @Test void managerCanRegisterWithoutShopDetails() {
+        String email="simplemanager@example.com";
+        registration.registerShop(new ShopRegisterRequest(new RegisterRequest(email,"FlowerShop123","Manager"),null,null));
+        assertThat(users.findByEmail(email)).isEmpty();
+        registration.verify(email,lastCode("[0-9]{6}"));
+        var manager=users.findByEmail(email).orElseThrow();
+        assertThat(manager.getRole()).isEqualTo(UserRole.SHOP);
+        var created=shops.findByOwnerIdOrderByNameAsc(manager.getId());
+        assertThat(created).hasSize(1);
+        assertThat(created.get(0).getName()).isEqualTo("Cửa hàng của Manager");
+        assertThat(created.get(0).getStatus()).isEqualTo(ShopStatus.PENDING);
+        assertThat(auth.login(new LoginRequest(email,"FlowerShop123")).user().role()).isEqualTo("SHOP");
+    }
     @Test void acceptingRequiresMatchingEmailAndRevokesSessions() {
         var token=auth.login(new LoginRequest(recipient.getEmail(),"FlowerShop123"));String code=invite(recipient.getEmail());
         var stored=invitations.findAll().get(0);assertThat(stored.getTokenHash()).hasSize(64).doesNotContain(code);

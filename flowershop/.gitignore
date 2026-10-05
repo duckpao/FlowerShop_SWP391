@@ -1,5 +1,6 @@
 HELP.md
 application-mail-local.properties
+application-sepay-local.properties
 .gradle
 build/
 !gradle/wrapper/gradle-wrapper.jar

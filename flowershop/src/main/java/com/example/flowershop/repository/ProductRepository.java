@@ -1,17 +1,27 @@
 package com.example.flowershop.repository;
+
 import com.example.flowershop.entity.Product;
 import com.example.flowershop.entity.enums.ProductStatus;
-import com.example.flowershop.entity.enums.ShopStatus;
+import jakarta.persistence.LockModeType;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.domain.*;
+import org.springframework.data.repository.query.Param;
+
 import java.util.List;
 import java.util.Optional;
-public interface ProductRepository extends JpaRepository<Product,String>, JpaSpecificationExecutor<Product> {
-    Page<Product> findByShopId(String shopId,Pageable pageable);
-    Page<Product> findByShopIdAndStatus(String shopId,ProductStatus status,Pageable pageable);
-    Optional<Product> findByIdAndShopId(String id,String shopId);
+
+public interface ProductRepository extends JpaRepository<Product, String>, JpaSpecificationExecutor<Product> {
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT p FROM Product p WHERE p.id = :id")
+    Optional<Product> findByIdForUpdate(@Param("id") String id);
+
+    Page<Product> findByShopId(String shopId, Pageable pageable);
+    Page<Product> findByShopIdAndStatus(String shopId, ProductStatus status, Pageable pageable);
+    Optional<Product> findByIdAndShopId(String id, String shopId);
 
     /** Đếm sản phẩm đang hiển thị công khai theo từng danh mục. */
     @Query("select p.category.id, count(p) from Product p "

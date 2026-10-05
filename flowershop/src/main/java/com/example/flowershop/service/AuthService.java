@@ -31,7 +31,9 @@ public class AuthService {
 
     @Transactional
     public void registerShop(com.example.flowershop.dto.auth.ShopRegisterRequest request) {
-        register(request.account(),request.shopName().strip(),request.description().strip());
+        String name = request.shopName() == null || request.shopName().isBlank()
+                ? "Cửa hàng của " + request.account().fullName().strip() : request.shopName().strip();
+        register(request.account(), name, request.description() == null ? "" : request.description().strip());
     }
 
     private void register(RegisterRequest request,String shopName,String description) {
