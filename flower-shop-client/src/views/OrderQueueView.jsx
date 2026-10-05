@@ -78,6 +78,10 @@ export default function OrderQueueView({ shop: initialShop }) {
     const [selectedOrder, setSelectedOrder] = useState(null)
     const [cancelReason, setCancelReason] = useState('')
     const [orderDetail, setOrderDetail] = useState(null)
+    
+    // State quản lý Modal Cập nhật vận đơn GHN
+    const [updateGhnModalOpen, setUpdateGhnModalOpen] = useState(false)
+    const [updatePayload, setUpdatePayload] = useState({ to_name: '', to_phone: '', weight: 2000, note: 'CHOXEMHANGKHONGTHU' })
 
     // Nếu không truyền shop từ props, tự động lấy shop đầu tiên thuộc quyền quản lý của user
     useEffect(() => {
@@ -192,6 +196,42 @@ export default function OrderQueueView({ shop: initialShop }) {
         setSelectedOrder(orderSummary)
         setCancelReason('')
         setCancelModalOpen(true)
+    }
+
+    /**
+     * Mở modal cập nhật thông tin vận đơn GHN
+     */
+    const openUpdateGhnModal = () => {
+        if (!orderDetail) return;
+        setUpdatePayload({
+            to_name: orderDetail.recipientName || orderDetail.customerName || '',
+            to_phone: orderDetail.recipientPhone || orderDetail.customerPhone || '',
+            weight: 2000,
+            note: 'CHOXEMHANGKHONGTHU'
+        })
+        setUpdateGhnModalOpen(true)
+    }
+
+    /**
+     * Xử lý gọi API cập nhật vận đơn GHN
+     */
+    const handleUpdateGhn = async () => {
+        if (!updatePayload.to_phone) {
+            alert('Vui lòng nhập số điện thoại'); return;
+        }
+        setBusy(true); setError(''); setNotice('');
+        try {
+            await managerOrderService.updateGhnOrder(shop.id, orderDetail.id, {
+                to_name: updatePayload.to_name,
+                to_phone: updatePayload.to_phone,
+                weight: parseInt(updatePayload.weight) || 2000,
+                required_note: updatePayload.note
+            })
+            setNotice(`Cập nhật thông tin vận đơn GHN thành công!`)
+            setUpdateGhnModalOpen(false)
+            setDetailModalOpen(false)
+            load(page)
+        } catch (e) { setError(e.message) } finally { setBusy(false) }
     }
 
     if (!shop) return <div className="p-8"><p className="text-gray-500">Đang tải thông tin shop…</p></div>
@@ -403,9 +443,14 @@ export default function OrderQueueView({ shop: initialShop }) {
                                     </Button>
                                 )}
                                 {orderDetail.status === 'DELIVERING' && (
-                                    <Button variant="outline" className="text-brand-600 border-brand-200 hover:bg-brand-50" onClick={() => { setDetailModalOpen(false); refreshShippingStatus(orderDetail); }}>
-                                        Cập nhật trạng thái giao hàng
-                                    </Button>
+                                    <>
+                                        <Button variant="outline" className="text-brand-600 border-brand-200 hover:bg-brand-50" onClick={openUpdateGhnModal}>
+                                            Sửa vận đơn GHN
+                                        </Button>
+                                        <Button variant="outline" className="text-brand-600 border-brand-200 hover:bg-brand-50" onClick={() => { setDetailModalOpen(false); refreshShippingStatus(orderDetail); }}>
+                                            Cập nhật trạng thái giao hàng
+                                        </Button>
+                                    </>
                                 )}
                             </div>
                         </div>
@@ -440,6 +485,73 @@ export default function OrderQueueView({ shop: initialShop }) {
                         </Button>
                         <Button className="bg-error-500 hover:bg-error-600 text-white" onClick={cancel} disabled={busy || !cancelReason.trim()}>
                             {busy ? 'Đang xử lý...' : 'Xác nhận hủy'}
+                        </Button>
+                    </div>
+                </div>
+            </Modal>
+
+            {/* Update GHN Modal */}
+            <Modal isOpen={updateGhnModalOpen} onClose={() => setUpdateGhnModalOpen(false)} className="max-w-md p-6">
+                <h3 className="mb-2 text-lg font-semibold text-gray-900 dark:text-white">
+                    Cập nhật vận đơn GHN
+                </h3>
+                <p className="text-sm text-gray-500 mb-4">
+                    Thay đổi thông tin giao hàng trên hệ thống GHN. Lưu ý: Không thể thay đổi COD nếu không có mã OTP từ GHN.
+                </p>
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Tên người nhận
+                        </label>
+                        <input
+                            type="text"
+                            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900"
+                            value={updatePayload.to_name}
+                            onChange={(e) => setUpdatePayload({...updatePayload, to_name: e.target.value})}
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Số điện thoại
+                        </label>
+                        <input
+                            type="text"
+                            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900"
+                            value={updatePayload.to_phone}
+                            onChange={(e) => setUpdatePayload({...updatePayload, to_phone: e.target.value})}
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Trọng lượng (gram)
+                        </label>
+                        <input
+                            type="number"
+                            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900"
+                            value={updatePayload.weight}
+                            onChange={(e) => setUpdatePayload({...updatePayload, weight: e.target.value})}
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Ghi chú giao hàng
+                        </label>
+                        <select
+                            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900"
+                            value={updatePayload.note}
+                            onChange={(e) => setUpdatePayload({...updatePayload, note: e.target.value})}
+                        >
+                            <option value="CHOTHUHANG">Cho thử hàng</option>
+                            <option value="CHOXEMHANGKHONGTHU">Cho xem hàng không thử</option>
+                            <option value="KHONGCHOXEMHANG">Không cho xem hàng</option>
+                        </select>
+                    </div>
+                    <div className="flex justify-end gap-3 pt-2">
+                        <Button variant="outline" onClick={() => setUpdateGhnModalOpen(false)} disabled={busy}>
+                            Hủy
+                        </Button>
+                        <Button className="bg-brand-600 hover:bg-brand-700 text-white" onClick={handleUpdateGhn} disabled={busy}>
+                            {busy ? 'Đang cập nhật...' : 'Cập nhật GHN'}
                         </Button>
                     </div>
                 </div>

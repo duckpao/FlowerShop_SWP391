@@ -88,4 +88,12 @@ export const managerOrderService = {
      * @param {string} id - ID đơn hàng
      */
     simulateDelivered: (shopId, id) => authService.authenticatedRequest(`${base(shopId)}/${encodeURIComponent(id)}/simulate-delivered`, { method: 'POST' }),
-}
+    
+    /**
+     * Cập nhật thông tin vận đơn GHN cho đơn hàng.
+     * @param {string} shopId - ID của shop
+     * @param {string} id - ID đơn hàng
+     * @param {object} payload - Các trường cần cập nhật (weight, note, to_name, to_phone...)
+     */
+    updateGhnOrder: (shopId, id, payload) => authService.authenticatedRequest(`${base(shopId)}/${encodeURIComponent(id)}/update-ghn`, { method: 'POST', body: payload }),
+}

@@ -391,6 +391,25 @@ public class ManagerOrderService {
     }
 
     /**
+     * Cập nhật thông tin vận đơn trực tiếp lên GHN cho những đơn đã tạo vận đơn (tối thiểu là DELIVERING).
+     * Gọi API GHN update_order.
+     * @param body Các trường thông tin cần cập nhật trên hệ thống GHN (ví dụ: note, weight)
+     */
+    @Transactional
+    public void updateGhn(String shopId, String actor, String orderId, Map<String, Object> body) {
+        owned(shopId, actor);
+        Order o = orders.findByIdAndShopId(orderId, shopId).orElseThrow(ManagerOrderService::notFound);
+        Delivery d = deliveries.findByOrderId(orderId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Đơn hàng chưa có vận đơn GHN để cập nhật."));
+        
+        try {
+            ghn.updateOrder(d.getTrackingCode(), body);
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Lỗi khi cập nhật vận đơn GHN: " + e.getMessage(), e);
+        }
+    }
+
+    /**
      * Helper tổng hợp chi tiết đơn hàng (OrderDetailResponse) đầy đủ thông tin:
      * - Sản phẩm trong đơn (tên, số lượng, giá).
      * - Địa chỉ người nhận và số điện thoại người nhận.

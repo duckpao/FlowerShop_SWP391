@@ -123,4 +123,16 @@ public class ManagerOrderController {
                        @AuthenticationPrincipal CurrentUser u) {
         service.cancel(shopId, u.id(), id, body.get("reason"));
     }
-}
+
+    /**
+     * Cập nhật thông tin vận đơn trên GHN (chỉ dành cho các đơn hàng đã tạo vận đơn).
+     * @param body Các trường cần cập nhật (ví dụ: note, weight, to_name, to_phone).
+     */
+    @PostMapping("/{id}/update-ghn")
+    @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
+    public void updateGhn(@PathVariable String shopId, @PathVariable String id,
+                          @RequestBody java.util.Map<String, Object> body,
+                          @AuthenticationPrincipal CurrentUser u) {
+        service.updateGhn(shopId, u.id(), id, body);
+    }
+}

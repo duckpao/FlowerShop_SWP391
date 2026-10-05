@@ -212,4 +212,17 @@ public class GhnService {
         ensureConfigured();
         post("/shiip/public-api/v2/switch-status/" + targetStatus, Map.of("order_code", orderCode));
     }
+
+    /**
+     * Gửi yêu cầu cập nhật đơn hàng tới GHN.
+     * @param orderCode Mã vận đơn GHN
+     * @param updateFields Các trường cần cập nhật (weight, note, to_name, to_phone, to_address, to_ward_code, to_district_id, v.v.)
+     */
+    public void updateOrder(String orderCode, Map<String, Object> updateFields) {
+        ensureConfigured();
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("order_code", orderCode);
+        body.putAll(updateFields);
+        post("/shiip/public-api/v2/shipping-order/update", body);
+    }
 }
