@@ -26,9 +26,6 @@ public class AccountController {
     public ProfileResponse update(@AuthenticationPrincipal CurrentUser user, @Valid @RequestBody ProfileRequest request) {
         return accounts.updateProfile(user.id(),request);
     }
-    @GetMapping("/delivery-areas") 
-    public List<String> areas() { return areas.list(); }
-    @GetMapping("/addresses") 
     @GetMapping("/addresses") @PreAuthorize("hasRole('CUSTOMER')")
     public List<AddressResponse> addresses(@AuthenticationPrincipal CurrentUser user) { return accounts.list(user.id()); }
     @PostMapping("/addresses") @ResponseStatus(org.springframework.http.HttpStatus.CREATED)

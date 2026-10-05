@@ -41,7 +41,6 @@ public class Order {
     @Column(name = "recipient_phone", length = 20)
     private String recipientPhone;
 
-    // TODO: Coupon Entity will be created in next step
     @Column(name = "coupon_id", length = 36)
     private String couponId;
 

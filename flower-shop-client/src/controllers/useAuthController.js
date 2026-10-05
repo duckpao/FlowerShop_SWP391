@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { authService } from '../services/authService'
 import { validateAuth } from '../models/authValidation'
 import { useNavigate } from 'react-router'
-import { validateAuth } from '../models/authValidation'
 const post = authService.post
 
 export function useAuthController() {
@@ -45,7 +44,10 @@ export function useAuthController() {
   }
   async function failed(failure) {
     setError(failure.message)
-    setFieldErrors(Object.fromEntries(Object.entries(failure.fieldErrors || {}).map(([key,value]) => [key === 'newPassword' ? 'password' : key === 'confirmPassword' ? 'confirmation' : key,value])))
+    setFieldErrors(Object.fromEntries(Object.entries(failure.fieldErrors || {}).map(([key, value]) => [
+      key.replace(/^account\./, '').replace(/^newPassword$/, 'password').replace(/^confirmPassword$/, 'confirmation'),
+      value
+    ])))
     if (failure.captchaRequired || captchaRequired) { setCaptchaRequired(true); await reloadCaptcha() }
   }
 
@@ -53,7 +55,6 @@ export function useAuthController() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [seconds, setSeconds] = useState(0)
-  const [fieldErrors, setFieldErrors] = useState({})
   useEffect(() => {
     if (seconds <= 0) return
     const timer = setTimeout(() => setSeconds(seconds - 1), 1000)
@@ -62,15 +63,11 @@ export function useAuthController() {
 
   function navigate(next) {
     setFieldErrors({}); setCaptchaRequired(false); setCaptcha(null); setCaptchaAnswer('')
-    setFieldErrors({})
     setPage(next); setError(''); setNotice(''); setPassword(''); setConfirmation(''); setOtp('')
   }
   async function submit(event) {
     event.preventDefault()
     if (busy) return
-    const errors = validateAuth(page, {email, fullName, password, confirmation, otp})
-    setFieldErrors(errors)
-    if (Object.keys(errors).length) return
     const validation = validateAuth(page, { email, fullName, password, confirmation, otp, registrationRole })
     setFieldErrors(validation)
     if (Object.keys(validation).length) return
@@ -117,10 +114,6 @@ export function useAuthController() {
       }
       setCaptchaRequired(false); setCaptcha(null); setCaptchaAnswer('')
     } catch (failure) { await failed(failure) }
-    } catch (failure) {
-      setFieldErrors(Object.fromEntries(Object.entries(failure.fieldErrors || {}).map(([key, message]) => [key.replace(/^account\./, '').replace(/^newPassword$/, 'password').replace(/^confirmPassword$/, 'confirmation'), message])))
-      setError(failure.message || 'Có lỗi xảy ra. Vui lòng thử lại.')
-    }
     finally { setBusy(false) }
   }
   async function resend() {
@@ -153,11 +146,4 @@ export function useAuthController() {
     setFieldErrors(current => { const next = {...current}; delete next[name]; return next })
   }
   return { registrationRole, setRegistrationRole, fieldErrors, captchaRequired, captcha, captchaAnswer, setCaptchaAnswer, reloadCaptcha, page, email, fullName, password, confirmation, otp, busy: busy || initializing, error, notice, seconds, user, logout, checkSession, setEmail: edit('email', setEmail), setFullName: edit('fullName', setFullName), setPassword: edit('password', setPassword), setConfirmation: edit('confirmation', setConfirmation), setOtp: edit('otp', setOtp), submit, resend, navigate }
-    setFieldErrors(previous => ({ ...previous, [name]: undefined, ...(name === 'password' ? { confirmation: undefined } : {}) }))
-  }
-  return { page, email, fullName, password, confirmation, otp, registrationRole,
-    setRegistrationRole: value => { setRegistrationRole(value); setFieldErrors({}) },
-    fieldErrors, initializing, busy: busy || initializing, error, notice, seconds, user, logout, checkSession,
-    setEmail: edit('email', setEmail), setFullName: edit('fullName', setFullName), setPassword: edit('password', setPassword),
-    setConfirmation: edit('confirmation', setConfirmation), setOtp: edit('otp', setOtp), submit, resend, navigate }
 }

@@ -1,4 +1,3 @@
-import LocationFields from '../components/form/LocationFields'
 import { useAccountController } from '../controllers/useAccountController'
 import { roleLabels } from '../models/authModel'
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components/ui/table"
@@ -99,7 +98,7 @@ export default function AccountView({ user, logout, checkSession, busy: authBusy
         </div>
 
         <div className="lg:col-span-2 space-y-8">
-          {c.profile && (
+          {c.profile && user.role === 'CUSTOMER' && (
             <ComponentCard title="Địa chỉ cá nhân">
               <div className="space-y-6">
 
@@ -175,7 +174,6 @@ export default function AccountView({ user, logout, checkSession, busy: authBusy
                   </h3>
                   <form onSubmit={c.saveAddress}>
                     <fieldset disabled={busy} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <LocationFields address={c.address} setAddress={c.setAddress} />
                       <div className="md:col-span-2">
                         <GhnAddressPicker value={c.address} onChange={c.setAddress} />
                       </div>
@@ -214,6 +212,19 @@ export default function AccountView({ user, logout, checkSession, busy: authBusy
                   </form>
                 </div>
               </div>
+            </ComponentCard>
+          )}
+          {c.profile && user.role === 'SHOP' && (
+            <ComponentCard title="Địa chỉ cửa hàng">
+              <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
+                Địa chỉ lấy hàng của cửa hàng được quản lý trong phần cài đặt shop.
+              </p>
+              <a
+                href="/shop-admin/shop"
+                className="inline-flex items-center rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600"
+              >
+                Quản lý địa chỉ cửa hàng
+              </a>
             </ComponentCard>
           )}
         </div>
