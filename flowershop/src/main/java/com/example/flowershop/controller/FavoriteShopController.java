@@ -1,7 +1,6 @@
 package com.example.flowershop.controller;
 
 import com.example.flowershop.dto.auth.CurrentUser;
-import com.example.flowershop.entity.User;
 import com.example.flowershop.service.FavoriteShopService;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.enums.ParameterIn;

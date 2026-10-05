@@ -74,5 +74,10 @@ public interface OrderRepository extends JpaRepository<Order, String> {
      * Lấy danh sách đơn hàng của khách hàng theo phân trang, sắp xếp theo thời gian tạo giảm dần.
      */
     Page<Order> findByCustomerIdOrderByCreatedDateDesc(String customerId, Pageable pageable);
+
+    List<Order> findByCustomerIdAndStatusOrderByCreatedDateDesc(
+        String customerId,
+        OrderStatus status
+);
 }
 

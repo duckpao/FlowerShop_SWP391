@@ -8,9 +8,8 @@ import org.hibernate.annotations.UpdateTimestamp;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "Product_Reviews",
-        uniqueConstraints = @UniqueConstraint(name = "uq_review_user_product",
-                columnNames = {"user_id", "product_id"}))
+@Table(name = "Product_Reviews", uniqueConstraints = @UniqueConstraint(name = "uk_review_order_product", columnNames = {
+        "order_id", "product_id" }))
 @Getter
 @Setter
 @NoArgsConstructor
@@ -30,8 +29,8 @@ public class ProductReview {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = true)
-    @JoinColumn(name = "order_id")
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "order_id", nullable = false)
     private Order order;
 
     @Column(name = "rating")
