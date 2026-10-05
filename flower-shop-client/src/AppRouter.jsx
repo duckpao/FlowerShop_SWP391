@@ -1,5 +1,6 @@
 import { Toaster } from 'react-hot-toast';
-import { Route, BrowserRouter as Router, Routes, useLocation, useParams } from "react-router";
+import AccountView from './views/AccountView';
+import { Navigate, Route, BrowserRouter as Router, Routes, useLocation, useParams } from "react-router";
 import AppLayout from "./layout/AppLayout";
 import AuthView from "./views/AuthView";
 import HomeView from "./views/HomeView";
@@ -45,6 +46,7 @@ function AppRouterContent() {
           {/* All routes wrapped in AppLayout which handles public/admin/shop nav items dynamically */}
           <Route element={<AppLayout />}>
             <Route path="/" element={<HomeView auth={controller} />} />
+            <Route path="/account" element={<AccountViewRoute auth={controller} />} />
             <Route path="/products" element={<ProductCatalogView auth={controller} />} />
             <Route path="/products/:id" element={<ProductDetailViewWrapper auth={controller} />} />
 
@@ -76,6 +78,27 @@ function AppRouterContent() {
         </Routes>
       </CartProvider>
     </AuthProvider>
+  );
+}
+
+function AccountViewRoute({ auth }) {
+  if (auth.busy && !auth.user) {
+    return <p role="status">Đang kiểm tra đăng nhập…</p>;
+  }
+
+  if (!auth.user) {
+    return <Navigate to="/login?next=%2Faccount" replace />;
+  }
+
+  return (
+    <AccountView
+      user={auth.user}
+      logout={auth.logout}
+      checkSession={auth.checkSession}
+      busy={auth.busy}
+      error={auth.error}
+      notice={auth.notice}
+    />
   );
 }
 

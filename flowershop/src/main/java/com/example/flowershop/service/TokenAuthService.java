@@ -20,21 +20,26 @@ public class TokenAuthService {
     private final AuthSessionRepository sessions;
     private final PasswordEncoder encoder;
     private final JwtService jwt;
-    private final String dummyHash;
-    public TokenAuthService(UserRepository users, AuthSessionRepository sessions, PasswordEncoder encoder, JwtService jwt) {
-        this.users=users; this.sessions=sessions; this.encoder=encoder; this.jwt=jwt;
-        dummyHash=encoder.encode(UUID.randomUUID().toString());
+    private final com.example.flowershop.security.CaptchaService captcha;
+    public TokenAuthService(UserRepository users, AuthSessionRepository sessions, PasswordEncoder encoder, JwtService jwt, com.example.flowershop.security.CaptchaService captcha) {
+        this.captcha=captcha; this.users=users; this.sessions=sessions; this.encoder=encoder; this.jwt=jwt;
     }
     public record Tokens(String accessToken, long expiresIn, CurrentUser user, String refreshToken) {
         @Override public String toString() { return "Tokens[redacted]"; }
     }
     @Transactional
     public Tokens login(LoginRequest request) {
+        if(captcha.required(request.email())) captcha.verify(request.email(),"login",request.captchaId(),request.captchaAnswer());
         String id=users.findUserIdByEmail(request.email().strip().toLowerCase(Locale.ROOT)).orElse(null);
         User user=id == null ? null : users.findByIdForUpdate(id).orElse(null);
-        String hash=user == null || user.getPasswordHash() == null ? dummyHash : user.getPasswordHash();
+        if (user == null || user.getPasswordHash() == null) {
+            captcha.failed(request.email());
+            throw invalid();
+        }
+        String hash = user.getPasswordHash();
         boolean matches=request.password().getBytes(StandardCharsets.UTF_8).length <=72 && encoder.matches(request.password(), hash);
-        if (!matches || !eligible(user)) throw invalid();
+        if (!matches || !eligible(user)) { captcha.failed(request.email()); throw invalid(); }
+        captcha.clear(request.email());
         AuthSession session=new AuthSession(); session.setId(UUID.randomUUID().toString());
         session.setUserId(user.getId()); session.setExpiresAt(Instant.now().plusSeconds(604800));
         return rotate(user, session);

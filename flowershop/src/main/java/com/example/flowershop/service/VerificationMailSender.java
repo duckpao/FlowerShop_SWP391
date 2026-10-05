@@ -13,6 +13,17 @@ public class VerificationMailSender {
     @Value("${app.mail.from}") private String from;
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void send(AuthMailEvent event) {
+        if (isOtp(event)) return;
+        deliver(event);
+    }
+    @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
+    public void sendOtp(AuthMailEvent event) {
+        if (isOtp(event)) deliver(event);
+    }
+    private boolean isOtp(AuthMailEvent event) {
+        return event.kind() == AuthMailEvent.Kind.REGISTER_OTP || event.kind() == AuthMailEvent.Kind.RESET_OTP;
+    }
+    private void deliver(AuthMailEvent event) {
         SimpleMailMessage mail = new SimpleMailMessage();
         mail.setFrom(from);
         mail.setTo(event.email());
@@ -63,6 +74,9 @@ public class VerificationMailSender {
                     ? "SMTP authentication failed: check MAIL_USERNAME and Google App Password in the backend terminal."
                     : "SMTP delivery failed: check SMTP host/port, network and sender configuration.";
             log.warn("Auth email delivery failed for user {}, kind {}. {}", event.userId(), event.kind(), reason);
+            if (isOtp(event)) throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE,
+                    "Chưa gửi được email OTP. Vui lòng thử lại sau; nếu vẫn lỗi, liên hệ quản trị kiểm tra cấu hình gửi mail.");
         }
     }
 }

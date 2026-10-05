@@ -1,7 +1,10 @@
+import { validateEmail } from './emailValidation'
 export function validateAuth(page, values) {
   const errors = {}
 
   if (page !== 'otp' && page !== 'reset') {
+    const message = validateEmail(values.email, page === 'register' || page === 'forgot' ? 50 : 255)
+    if (message) errors.email = message
     const email = values.email.trim()
     if (!email) errors.email = 'Vui lòng nhập email.'
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.email = 'Email không đúng định dạng, ví dụ: ten@gmail.com.'
