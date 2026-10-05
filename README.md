@@ -45,58 +45,23 @@ Với database đã chạy các migration này, không chạy lại toàn bộ: 
 
 * **Java 17:** Dùng cho môi trường Backend.
 * **Node.js:** Khuyến nghị sử dụng phiên bản LTS để chạy Frontend.
-* **Docker Desktop:** Bắt buộc phải cài đặt và bật trước khi chạy project. Docker được sử dụng để tự động khởi tạo cơ sở dữ liệu MySQL thông qua file `docker-compose.yml`.
+* **MySQL 8.0:** Cài đặt và khởi động MySQL trên máy, lắng nghe tại cổng `3306`.
 
 ---
 
-## 🐳 Hướng dẫn làm việc với Docker (Database)
+## 🛢️ Cấu hình Database (MySQL)
 
-Dự án sử dụng **MySQL 8.0** chạy bằng Docker để đồng bộ môi trường Database cho toàn bộ team.
+Backend kết nối tới MySQL tại `localhost:3306`, database `flower_shop_db`.
 
-Mọi thao tác cấu hình Database, tạo bảng và chèn dữ liệu mẫu đã được tự động hóa thông qua file `database.sql`.
-
-### 1. Khởi động Database
-
-Mở terminal tại thư mục gốc của project, nơi chứa file `docker-compose.yml` và `database.sql`, sau đó chạy:
-
-```bash
-docker-compose up -d
-```
-
-> **Lưu ý:** Lần chạy đầu tiên có thể mất khoảng **15–20 giây** để Docker tự động tạo các bảng và chèn dữ liệu mẫu (Mock Data).
-
-### 2. Xử lý lỗi Database (Reset toàn bộ)
-
-Nếu gặp các lỗi như:
-
-* `Access denied`
-* Sai mật khẩu Database
-* Lỗi kết nối
-* Muốn xóa toàn bộ Database và chạy lại file SQL mới nhất
-
-Hãy chạy:
-
-```bash
-docker-compose down -v
-```
-
-> ⚠️ **Lưu ý:** Hậu tố `-v` rất quan trọng vì nó sẽ xóa Volume chứa dữ liệu Database hiện tại.
-
-Sau đó khởi tạo lại Database:
-
-```bash
-docker-compose up -d
-```
-
-Docker sẽ tạo lại Database từ đầu dựa trên cấu hình và file SQL của project.
+Đảm bảo MySQL đã chạy và database `flower_shop_db` đã được tạo trước khi khởi động backend. Cấu hình kết nối nằm trong `flowershop/src/main/resources/application.properties`.
 
 ---
 
 ## 🚀 Hướng dẫn chạy Backend (Spring Boot)
 
-Backend cung cấp các **RESTful API** và tự động kết nối tới Database MySQL được Docker khởi tạo.
+Backend cung cấp các **RESTful API** và kết nối tới MySQL local.
 
-Database chạy tại **port `3307`**.
+Database chạy tại **port `3306`**.
 
 ### 1. Di chuyển vào thư mục Backend
 
@@ -276,15 +241,13 @@ Hãy đảm bảo `.gitignore` của project được cấu hình đúng và t�
 
 ---
 
-# 📌 Quick Start
+## 📌 Quick Start
 
-Nếu đã cài đầy đủ **Java 17 + Node.js + Docker Desktop**, có thể chạy project theo thứ tự:
+Nếu đã cài đầy đủ **Java 17 + Node.js + MySQL 8.0**, có thể chạy project theo thứ tự:
 
-### 1. Khởi động Database
+### 1. Khởi động MySQL
 
-```bash
-docker-compose up -d
-```
+Đảm bảo dịch vụ MySQL đang chạy tại cổng `3306` và database `flower_shop_db` đã tồn tại.
 
 ### 2. Chạy Backend
 
@@ -342,7 +305,6 @@ Khóa Production từng được commit cần được thu hồi và cấp lại
 ```text
 Flower-Shop-Marketplace/
 │
-├── docker-compose.yml
 ├── database.sql
 │
 ├── flowershop/              # Backend - Spring Boot
