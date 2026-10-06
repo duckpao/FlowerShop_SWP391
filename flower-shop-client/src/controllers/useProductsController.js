@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { productService as api } from '../services/productService'
 
-const empty = () => ({ name: '', description: '', categoryId: '', price: '', stock: 0, status: 'ACTIVE', type: 'READY_MADE', images: [], imageFiles: [], primaryImageIndex: 0 })
+const empty = () => ({ name: '', description: '', categoryId: '', price: '', stock: 0, status: 'ACTIVE', type: 'READY_MADE', imageFiles: [], primaryImageIndex: 0, primaryImageId: null })
 
 export function useProductsController(shopId, manage) {
   const [data, setData] = useState(null)
@@ -39,7 +39,14 @@ export function useProductsController(shopId, manage) {
 
   async function run(action) {
     setBusy(true); setError(''); setNotice('')
-    try { await action(); setRevision(x => x + 1) } catch (e) { setError(e.message) } finally { setBusy(false) }
+    try {
+      const result = await action()
+      setRevision(x => x + 1)
+      return result ?? true
+    } catch (e) {
+      setError(e.message)
+      return false
+    } finally { setBusy(false) }
   }
 
   const save = e => {
@@ -47,6 +54,10 @@ export function useProductsController(shopId, manage) {
     return run(async () => {
       if (form.imageFiles.length > 10) {
         throw new Error('Không được chọn quá 10 ảnh. Vui lòng bỏ một ảnh trước khi lưu.')
+      }
+      const oversizedImage = form.imageFiles.find(file => file.size > 5 * 1024 * 1024)
+      if (oversizedImage) {
+        throw new Error(`Ảnh ${oversizedImage.name} không được vượt quá 5MB.`)
       }
 
       setUploadingImages(true)
@@ -59,6 +70,7 @@ export function useProductsController(shopId, manage) {
         stock: Number(form.stock),
         status: form.status,
         type: form.type,
+        primaryImageId: form.primaryImageId,
       })], { type: 'application/json' }))
 
       try {
@@ -83,11 +95,6 @@ export function useProductsController(shopId, manage) {
     })
   }
 
-  const setPrimary = async (productId, imageId) => {
-    await api.setPrimaryImage(shopId, productId, imageId)
-    return reload()
-  }
-
   const hide = id => {
     if (window.confirm('Ẩn sản phẩm khỏi cửa hàng?')) {
       return run(async () => { await api.hide(shopId, id); setNotice('Đã ẩn sản phẩm.') })
@@ -99,12 +106,17 @@ export function useProductsController(shopId, manage) {
     setForm({
       name: p.name, description: p.description || '', categoryId: p.categoryId,
       price: p.price, stock: p.stock, status: p.status, type: p.type || 'READY_MADE',
-      images: [], imageFiles: [], primaryImageIndex: 0,
+      imageFiles: [], primaryImageIndex: 0, primaryImageId: null,
     })
     setMediaImages([])
     try {
       const images = await api.images(shopId, p.id)
-      setMediaImages(Array.isArray(images) ? images : [])
+      const loadedImages = Array.isArray(images) ? images : []
+      setMediaImages(loadedImages)
+      setForm(current => ({
+        ...current,
+        primaryImageId: loadedImages.find(image => image.isPrimary)?.id || null,
+      }))
     } catch (e) {
       setError(e.message || 'Không tải được dữ liệu ảnh của sản phẩm.')
     }
@@ -117,9 +129,10 @@ export function useProductsController(shopId, manage) {
     } else {
       setImageSelectionError('')
     }
-    setForm(f => ({ ...f, imageFiles: files, primaryImageIndex: 0 }))
+    setForm(f => ({ ...f, imageFiles: files, primaryImageIndex: 0, primaryImageId: null }))
   }
-  const setPrimaryImage = index => setForm(f => ({ ...f, primaryImageIndex: index }))
+  const setPrimaryImage = index => setForm(f => ({ ...f, primaryImageIndex: index, primaryImageId: null }))
+  const setPrimaryExistingImage = imageId => setForm(f => ({ ...f, primaryImageId: imageId }))
 
   const deleteImage = async (productId, imageId) => {
     await api.deleteImage(shopId, productId, imageId)
@@ -129,7 +142,7 @@ export function useProductsController(shopId, manage) {
 
   return {
     data, categories, form, setForm, editing, page, setPage, busy, error, notice, save, hide, edit,
-    mediaImages, imagePreviews, uploadingImages, uploadingImageName, imageSelectionError, setImageFiles, setPrimaryImage, setPrimary,
+    mediaImages, imagePreviews, uploadingImages, uploadingImageName, imageSelectionError, setImageFiles, setPrimaryImage, setPrimaryExistingImage,
     deleteImage,
     cancel: () => { setEditing(null); setForm(empty()); setMediaImages([]); setImageSelectionError(''); setError(''); setNotice(''); setUploadingImageName('') },
     reload: () => setRevision(x => x + 1),

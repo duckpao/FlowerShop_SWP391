@@ -49,7 +49,8 @@ public class ManagerProductService {
             @NotNull @DecimalMin("0.01") @Digits(integer = 10, fraction = 2) BigDecimal price,
             @NotNull @Min(0) @Max(1000000) Integer stock,
             @NotNull ProductStatus status,
-            ProductType type
+            ProductType type,
+            @Size(max = 36) String primaryImageId
     ) {}
 
     public record Result(
@@ -180,21 +181,22 @@ public class ManagerProductService {
         var imageUrls = input.images() == null ? List.<String>of() : input.images().stream()
                 .map(ImageInput::url)
                 .toList();
-        return saveProduct(shopId, id, actor, input.name(), input.description(), input.categoryId(), input.price(), input.stock(), input.status(), input.type(), imageUrls);
+        return saveProduct(shopId, id, actor, input.name(), input.description(), input.categoryId(), input.price(), input.stock(), input.status(), input.type(), imageUrls, null);
     }
 
     @Transactional
     public Result save(String shopId, String id, String actor, SaveProductInput input, List<MultipartFile> images) {
-        if (images != null && images.size() > 10) {
+        var imageFiles = images == null ? List.<MultipartFile>of() : images;
+        if (imageFiles.size() > 10) {
             throw new IllegalArgumentException("Không được chọn quá 10 ảnh.");
         }
-        if (images == null || images.isEmpty()) {
-            return saveProduct(shopId, id, actor, input.name(), input.description(), input.categoryId(), input.price(), input.stock(), input.status(), input.type(), List.of());
+        imageFiles.forEach(this::validateImageFile);
+        if (imageFiles.isEmpty()) {
+            return saveProduct(shopId, id, actor, input.name(), input.description(), input.categoryId(), input.price(), input.stock(), input.status(), input.type(), List.of(), input.primaryImageId());
         }
 
         var uploadedImages = new ArrayList<String>();
-        for (MultipartFile file : images) {
-            validateImageFile(file);
+        for (MultipartFile file : imageFiles) {
             try {
                 uploadedImages.add(cloudinary.upload(file.getBytes(), file.getOriginalFilename(), file.getContentType()));
             } catch (java.io.IOException e) {
@@ -202,16 +204,21 @@ public class ManagerProductService {
             }
         }
 
-        return saveProduct(shopId, id, actor, input.name(), input.description(), input.categoryId(), input.price(), input.stock(), input.status(), input.type(), uploadedImages);
+        return saveProduct(shopId, id, actor, input.name(), input.description(), input.categoryId(), input.price(), input.stock(), input.status(), input.type(), uploadedImages, input.primaryImageId());
     }
 
     private Result saveProduct(String shopId, String id, String actor, String name, String description, String categoryId,
-                               BigDecimal price, Integer stock, ProductStatus status, ProductType type, List<String> uploadedImages) {
+                               BigDecimal price, Integer stock, ProductStatus status, ProductType type, List<String> uploadedImages, String primaryImageId) {
         var shop = owned(shopId, actor, true);
         var product = id == null ? new Product() : products.findByIdAndShopId(id, shopId).orElseThrow(ManagerProductService::missing);
-        if (id != null && !uploadedImages.isEmpty()) {
-            images.findByProductIdOrderByDisplayOrderAscIdAsc(product.getId())
-                .forEach(image -> image.setIsPrimary(false));
+        var existingImages = id == null || (primaryImageId == null && uploadedImages.isEmpty())
+                ? List.<ProductImage>of()
+                : images.findByProductIdOrderByDisplayOrderAscIdAsc(product.getId());
+        if (primaryImageId != null && existingImages.stream().noneMatch(image -> image.getId().equals(primaryImageId))) {
+            throw new IllegalArgumentException("Ảnh chính không hợp lệ.");
+        }
+        if (primaryImageId != null || !uploadedImages.isEmpty()) {
+            existingImages.forEach(image -> image.setIsPrimary(image.getId().equals(primaryImageId)));
         }
         var category = categories.findById(categoryId)
                 .filter(c -> c.getStatus() == CategoryStatus.ACTIVE)
@@ -238,7 +245,7 @@ public class ManagerProductService {
                     .id(UUID.randomUUID().toString())
                     .product(stored)
                     .imageUrl(uploadedImages.get(i).strip())
-                    .isPrimary(i == 0)
+                    .isPrimary(i == 0 && primaryImageId == null)
                     .displayOrder(i)
                     .createdBy(actor)
                     .lastModifyBy(actor)
@@ -281,44 +288,6 @@ public class ManagerProductService {
     }
 
     @Transactional
-    public List<ImageItem> uploadImage(String shopId, String productId, String actor, MultipartFile file) {
-        owned(shopId, actor, true);
-        var product = products.findByIdAndShopId(productId, shopId).orElseThrow(ManagerProductService::missing);
-        if (file == null || file.isEmpty()) {
-            throw new IllegalArgumentException("Vui lòng chọn ảnh để tải lên.");
-        }
-        if (file.getSize() > MAX_IMAGE_BYTES) {
-            throw new IllegalArgumentException("Ảnh không được vượt quá 5MB.");
-        }
-        if (!ALLOWED_IMAGE_TYPES.contains(file.getContentType())) {
-            throw new IllegalArgumentException("Chỉ nhận ảnh JPEG, PNG hoặc WebP.");
-        }
-        if (images.countByProductId(productId) >= 10) {
-            throw new IllegalArgumentException("Sản phẩm không được có quá 10 ảnh.");
-        }
-
-        String url;
-        try {
-            url = cloudinary.upload(file.getBytes(), file.getOriginalFilename(), file.getContentType());
-        } catch (java.io.IOException e) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Không thể đọc dữ liệu ảnh.", e);
-        }
-
-        long count = images.countByProductId(productId);
-        var image = ProductImage.builder()
-                .id(UUID.randomUUID().toString())
-                .product(product)
-                .imageUrl(url)
-                .isPrimary(count == 0)
-                .displayOrder((int) count)
-                .createdBy(actor)
-                .lastModifyBy(actor)
-                .build();
-        images.saveAndFlush(image);
-        return listImages(shopId, productId, actor);
-    }
-
-    @Transactional
     public void deleteImage(String shopId, String productId, String imageId, String actor) {
         owned(shopId, actor, true);
         products.findByIdAndShopId(productId, shopId).orElseThrow(ManagerProductService::missing);
@@ -330,15 +299,6 @@ public class ManagerProductService {
                     .findFirst()
                     .ifPresent(next -> next.setIsPrimary(true));
         }
-    }
-
-    @Transactional
-    public void setPrimaryImage(String shopId, String productId, String imageId, String actor) {
-        owned(shopId, actor, true);
-        products.findByIdAndShopId(productId, shopId).orElseThrow(ManagerProductService::missing);
-        var image = images.findByIdAndProductId(imageId, productId).orElseThrow(ManagerProductService::missing);
-        images.findByProductIdOrderByDisplayOrderAsc(productId).forEach(item -> item.setIsPrimary(false));
-        image.setIsPrimary(true);
     }
 
     public record VideoItem(String id, String videoUrl, String title, String description, Integer displayOrder) {}

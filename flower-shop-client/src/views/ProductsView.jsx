@@ -30,10 +30,8 @@ export default function ProductsView({ shop, manage = false }) {
 
   const handleSave = async (e) => {
     e.preventDefault()
-    await c.save(e)
-    if (!c.error) {
-      setIsFormOpen(false)
-    }
+    const saved = await c.save(e)
+    if (saved) setIsFormOpen(false)
   }
 
   return (
@@ -155,6 +153,11 @@ export default function ProductsView({ shop, manage = false }) {
         
         <form onSubmit={handleSave} className="min-w-0 p-6">
           <fieldset disabled={disabled} className="min-w-0 space-y-6">
+            {c.error && (
+              <div role="alert" className="rounded-lg bg-error-50 p-3 text-sm text-error-500 dark:bg-error-500/10">
+                {c.error}
+              </div>
+            )}
             <div className="grid min-w-0 grid-cols-1 gap-6 md:grid-cols-2">
               <div className="min-w-0 space-y-4">
                 <div>
@@ -241,13 +244,15 @@ export default function ProductsView({ shop, manage = false }) {
                 {c.mediaImages.map(image => (
                   <div key={image.id} className="flex items-center gap-2 bg-white dark:bg-gray-900 p-2 rounded border border-gray-200 dark:border-gray-700">
                     <img src={image.imageUrl} alt="" className="h-10 w-10 object-cover" />
-                    <button
-                      type="button"
-                      onClick={() => c.setPrimary(c.editing, image.id)}
-                      className={`rounded px-2 py-1 text-xs font-medium ${image.isPrimary ? 'bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-400' : 'text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
-                    >
-                      {image.isPrimary ? 'Ảnh chính' : 'Đặt chính'}
-                    </button>
+                    <label className="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-300">
+                      <input
+                        type="radio"
+                        name="primary-product-image"
+                        checked={c.form.primaryImageId === image.id}
+                        onChange={() => c.setPrimaryExistingImage(image.id)}
+                      />
+                      Ảnh chính
+                    </label>
                     <button type="button" onClick={() => c.deleteImage(c.editing, image.id)} className="p-1 text-error-500 hover:bg-error-50 rounded" aria-label="Xóa ảnh">
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                     </button>
@@ -276,7 +281,7 @@ export default function ProductsView({ shop, manage = false }) {
                             <input
                               type="radio"
                               name="primary-product-image"
-                              checked={c.form.primaryImageIndex === index}
+                              checked={c.form.primaryImageId == null && c.form.primaryImageIndex === index}
                               onChange={() => c.setPrimaryImage(index)}
                             />
                             Ảnh chính

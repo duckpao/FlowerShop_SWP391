@@ -20,10 +20,6 @@ public class ManagerProductController {
     @DeleteMapping("/{id}") @ResponseStatus(org.springframework.http.HttpStatus.NO_CONTENT)
     public void hide(@PathVariable String shopId,@PathVariable String id,@AuthenticationPrincipal CurrentUser u) {service.hide(shopId,id,u.id());}
     @GetMapping("/{id}/images") public List<ManagerProductService.ImageItem> images(@PathVariable String shopId,@PathVariable String id,@AuthenticationPrincipal CurrentUser u) {return service.listImages(shopId,id,u.id());}
-    @PostMapping("/{id}/images") @ResponseStatus(org.springframework.http.HttpStatus.CREATED)
-    public List<ManagerProductService.ImageItem> uploadImage(@PathVariable String shopId,@PathVariable String id,@AuthenticationPrincipal CurrentUser u,@RequestParam("file") MultipartFile file) {return service.uploadImage(shopId,id,u.id(),file);}
-    @PutMapping("/{id}/images/{imageId}/primary")
-    public void setPrimaryImage(@PathVariable String shopId,@PathVariable String id,@PathVariable String imageId,@AuthenticationPrincipal CurrentUser u) {service.setPrimaryImage(shopId,id,imageId,u.id());}
     @DeleteMapping("/{id}/images/{imageId}") @ResponseStatus(org.springframework.http.HttpStatus.NO_CONTENT)
     public void deleteImage(@PathVariable String shopId,@PathVariable String id,@PathVariable String imageId,@AuthenticationPrincipal CurrentUser u) {service.deleteImage(shopId,id,imageId,u.id());}
     @GetMapping("/{id}/videos") public List<ManagerProductService.VideoItem> videos(@PathVariable String shopId,@PathVariable String id,@AuthenticationPrincipal CurrentUser u) {return service.listVideos(shopId,id,u.id());}
