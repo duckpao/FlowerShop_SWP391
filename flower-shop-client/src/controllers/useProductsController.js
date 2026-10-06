@@ -1,20 +1,32 @@
 import { useEffect, useState } from 'react'
 import { productService as api } from '../services/productService'
 
-const empty = () => ({ name: '', description: '', categoryId: '', price: '', stock: 0, status: 'ACTIVE', type: 'READY_MADE', images: [] })
+const empty = () => ({ name: '', description: '', categoryId: '', price: '', stock: 0, status: 'ACTIVE', type: 'READY_MADE', images: [], imageFiles: [], primaryImageIndex: 0 })
 
 export function useProductsController(shopId, manage) {
   const [data, setData] = useState(null)
   const [categories, setCategories] = useState([])
   const [form, setForm] = useState(empty)
+  const [imagePreviews, setImagePreviews] = useState([])
   const [editing, setEditing] = useState(null)
-  const [images, setImages] = useState([])
-  const [videos, setVideos] = useState([])
+  const [mediaImages, setMediaImages] = useState([])
   const [page, setPage] = useState(0)
   const [revision, setRevision] = useState(0)
   const [busy, setBusy] = useState(false)
+  const [uploadingImages, setUploadingImages] = useState(false)
+  const [uploadingImageName, setUploadingImageName] = useState('')
+  const [imageSelectionError, setImageSelectionError] = useState('')
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+
+  useEffect(() => {
+    const previews = form.imageFiles.map(file => ({
+      file,
+      url: URL.createObjectURL(file),
+    }))
+    setImagePreviews(previews)
+    return () => previews.forEach(preview => URL.revokeObjectURL(preview.url))
+  }, [form.imageFiles])
 
   useEffect(() => {
     let active = true
@@ -33,14 +45,47 @@ export function useProductsController(shopId, manage) {
   const save = e => {
     e.preventDefault()
     return run(async () => {
-      await api.save(shopId, editing, {
-        ...form,
+      if (form.imageFiles.length > 10) {
+        throw new Error('Không được chọn quá 10 ảnh. Vui lòng bỏ một ảnh trước khi lưu.')
+      }
+
+      setUploadingImages(true)
+      const formData = new FormData()
+      formData.append('product', new Blob([JSON.stringify({
+        name: form.name,
+        description: form.description,
+        categoryId: form.categoryId,
         price: Number(form.price),
         stock: Number(form.stock),
-        images: form.images.filter(i => i.url.trim()).map(i => ({ url: i.url.trim(), primary: i.primary })),
-      })
-      setEditing(null); setForm(empty()); setNotice('Đã lưu sản phẩm của shop.')
+        status: form.status,
+        type: form.type,
+      })], { type: 'application/json' }))
+
+      try {
+        const orderedFiles = [...form.imageFiles]
+        if (orderedFiles.length > 1) {
+          orderedFiles.unshift(orderedFiles.splice(form.primaryImageIndex, 1)[0])
+        }
+        for (const file of orderedFiles) {
+          setUploadingImageName(file.name)
+          formData.append('images', file)
+        }
+
+        const saved = await api.save(shopId, editing, formData)
+        setEditing(null); setForm(empty()); setMediaImages([]); setImageSelectionError(''); setNotice('Đã lưu sản phẩm của shop.')
+        return saved
+      } catch (uploadError) {
+        throw new Error(uploadError.message || 'Không thể lưu sản phẩm. Vui lòng thử lại.')
+      } finally {
+        setUploadingImages(false)
+        setUploadingImageName('')
+      }
     })
+  }
+
+  const setPrimary = async (productId, imageId) => {
+    await api.setPrimaryImage(shopId, productId, imageId)
+    return reload()
   }
 
   const hide = id => {
@@ -49,29 +94,44 @@ export function useProductsController(shopId, manage) {
     }
   }
 
-  const edit = p => {
+  const edit = async p => {
     setEditing(p.id)
     setForm({
       name: p.name, description: p.description || '', categoryId: p.categoryId,
       price: p.price, stock: p.stock, status: p.status, type: p.type || 'READY_MADE',
-      images: (p.images || []).map((url, index) => ({ url, primary: index === 0 })),
+      images: [], imageFiles: [], primaryImageIndex: 0,
     })
+    setMediaImages([])
+    try {
+      const images = await api.images(shopId, p.id)
+      setMediaImages(Array.isArray(images) ? images : [])
+    } catch (e) {
+      setError(e.message || 'Không tải được dữ liệu ảnh của sản phẩm.')
+    }
   }
 
-  // Ảnh là danh sách URL; đúng một ảnh được đánh dấu chính.
-  const addImage = () => setForm(f => ({ ...f, images: [...f.images, { url: '', primary: f.images.length === 0 }] }))
-  const setImageUrl = (index, url) => setForm(f => ({ ...f, images: f.images.map((i, x) => x === index ? { ...i, url } : i) }))
-  const setPrimaryImage = index => setForm(f => ({ ...f, images: f.images.map((i, x) => ({ ...i, primary: x === index })) }))
-  const removeImage = index => setForm(f => {
-    const images = f.images.filter((_, x) => x !== index)
-    if (images.length && !images.some(i => i.primary)) images[0] = { ...images[0], primary: true }
-    return { ...f, images }
-  })
+  const setImageFiles = files => {
+    if (files.length > 10) {
+      setImageSelectionError('Không được chọn quá 10 ảnh. Đã giữ lại 10 ảnh đầu tiên.')
+      files = files.slice(0, 10)
+    } else {
+      setImageSelectionError('')
+    }
+    setForm(f => ({ ...f, imageFiles: files, primaryImageIndex: 0 }))
+  }
+  const setPrimaryImage = index => setForm(f => ({ ...f, primaryImageIndex: index }))
+
+  const deleteImage = async (productId, imageId) => {
+    await api.deleteImage(shopId, productId, imageId)
+    setMediaImages(current => current.filter(image => image.id !== imageId))
+    return reload()
+  }
 
   return {
     data, categories, form, setForm, editing, page, setPage, busy, error, notice, save, hide, edit,
-    addImage, setImageUrl, setPrimaryImage, removeImage,
-    cancel: () => { setEditing(null); setForm(empty()) },
+    mediaImages, imagePreviews, uploadingImages, uploadingImageName, imageSelectionError, setImageFiles, setPrimaryImage, setPrimary,
+    deleteImage,
+    cancel: () => { setEditing(null); setForm(empty()); setMediaImages([]); setImageSelectionError(''); setError(''); setNotice(''); setUploadingImageName('') },
     reload: () => setRevision(x => x + 1),
   }
 }

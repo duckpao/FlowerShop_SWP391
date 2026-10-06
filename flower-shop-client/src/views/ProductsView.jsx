@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useProductsController } from '../controllers/useProductsController'
 import { formatPrice, productStatusLabels, productTypeLabels, ratingLabel } from '../models/productModel'
 import ComponentCard from '../components/common/ComponentCard'
@@ -10,16 +10,22 @@ export default function ProductsView({ shop, manage = false }) {
   const c = useProductsController(shop.id, manage)
   const disabled = c.busy || shop.status !== 'ACTIVE'
   const [isFormOpen, setIsFormOpen] = useState(false)
+  const imageFileInputRef = useRef(null)
 
   const openForm = () => setIsFormOpen(true)
+  const openNewForm = () => {
+    c.cancel()
+    if (imageFileInputRef.current) imageFileInputRef.current.value = ''
+    openForm()
+  }
   const closeForm = () => {
     setIsFormOpen(false)
     c.cancel()
   }
 
-  const handleEdit = (p) => {
-    c.edit(p)
+  const handleEdit = async (p) => {
     openForm()
+    await c.edit(p)
   }
 
   const handleSave = async (e) => {
@@ -39,7 +45,7 @@ export default function ProductsView({ shop, manage = false }) {
         <div className="flex gap-2">
           <Button variant="outline" disabled={c.busy} onClick={c.reload}>Tải lại</Button>
           {manage && (
-            <Button onClick={openForm} disabled={disabled}>Thêm sản phẩm mới</Button>
+            <Button onClick={openNewForm} disabled={disabled}>Thêm sản phẩm mới</Button>
           )}
         </div>
       </div>
@@ -140,17 +146,17 @@ export default function ProductsView({ shop, manage = false }) {
       )}
 
       {/* Product Form Modal */}
-      <Modal isOpen={isFormOpen} onClose={closeForm} className="max-w-3xl p-0">
+      <Modal isOpen={isFormOpen} onClose={closeForm} className="mx-4 max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-3xl overflow-y-auto p-0">
         <div className="p-6 border-b border-gray-100 dark:border-gray-800">
           <h3 className="text-xl font-semibold text-gray-900 dark:text-white">
             {c.editing ? 'Sửa sản phẩm' : 'Đăng sản phẩm mới'}
           </h3>
         </div>
         
-        <form onSubmit={handleSave} className="p-6">
-          <fieldset disabled={disabled} className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-4">
+        <form onSubmit={handleSave} className="min-w-0 p-6">
+          <fieldset disabled={disabled} className="min-w-0 space-y-6">
+            <div className="grid min-w-0 grid-cols-1 gap-6 md:grid-cols-2">
+              <div className="min-w-0 space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tên sản phẩm *</label>
                   <input required maxLength={255} value={c.form.name} onChange={e => c.setForm({ ...c.form, name: e.target.value })} 
@@ -201,52 +207,99 @@ export default function ProductsView({ shop, manage = false }) {
                 </div>
               </div>
               
-              <div className="space-y-4">
+              <div className="min-w-0 space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Mô tả</label>
-                  <textarea maxLength={5000} rows={5} value={c.form.description} onChange={e => c.setForm({ ...c.form, description: e.target.value })} 
-                    className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900" 
+                  <textarea maxLength={5000} rows={8} value={c.form.description} onChange={e => c.setForm({ ...c.form, description: e.target.value })} 
+                    className="min-h-56 w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 md:min-h-72 dark:border-gray-700 dark:bg-gray-900" 
                   />
                 </div>
                 
-                <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-4 bg-gray-50 dark:bg-gray-800/50">
-                  <div className="flex justify-between items-center mb-2">
-                    <h4 className="text-sm font-medium text-gray-900 dark:text-white">Ảnh sản phẩm</h4>
-                    {c.form.images.length < 10 && (
-                      <button type="button" onClick={c.addImage} className="text-xs text-brand-500 font-medium hover:underline">
-                        + Thêm ảnh
-                      </button>
-                    )}
-                  </div>
-                  <p className="text-xs text-gray-500 mb-3">Dán URL ảnh HTTPS, tối đa 10 ảnh. Ảnh chính hiển thị ở trang danh sách.</p>
-                  
-                  <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                    {c.form.images.map((image, index) => (
-                      <div key={index} className="flex items-center gap-2 bg-white dark:bg-gray-900 p-2 rounded border border-gray-200 dark:border-gray-700">
-                        <input type="url" maxLength={500} pattern="https://.*" placeholder="https://..." value={image.url}
-                          onChange={e => c.setImageUrl(index, e.target.value)} 
-                          className="flex-1 rounded border border-gray-300 px-2 py-1 text-xs focus:border-brand-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800"
-                        />
-                        <label className="flex items-center gap-1 text-xs cursor-pointer">
-                          <input type="radio" name="primary-image" checked={image.primary} onChange={() => c.setPrimaryImage(index)} className="text-brand-500 focus:ring-brand-500" />
-                          <span className="hidden sm:inline">Ảnh chính</span>
-                        </label>
-                        <button type="button" onClick={() => c.removeImage(index)} className="p-1 text-error-500 hover:bg-error-50 rounded">
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                        </button>
-                      </div>
-                    ))}
-                    {c.form.images.length === 0 && (
-                      <p className="text-sm text-gray-500 text-center py-4">Chưa có ảnh nào.</p>
-                    )}
-                  </div>
-                </div>
               </div>
             </div>
 
+            <div className="min-w-0 space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-800/50">
+              <div className="flex justify-between items-center">
+                <h4 className="text-sm font-medium text-gray-900 dark:text-white">Ảnh sản phẩm</h4>
+                <span className="text-xs text-gray-500">Tối đa 10 ảnh</span>
+              </div>
+              <p className="text-xs text-gray-500">Ảnh được xem trước trên thiết bị và chỉ tải lên khi lưu sản phẩm.</p>
+              <input
+                ref={imageFileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                multiple
+                onChange={e => c.setImageFiles(Array.from(e.target.files || []))}
+                className="block w-full text-xs text-gray-600 file:mr-2 file:rounded file:border-0 file:bg-brand-500 file:px-3 file:py-1.5 file:font-medium file:text-white"
+              />
+              {c.imageSelectionError && (
+                <div className="rounded-lg bg-error-50 p-3 text-xs text-error-500 dark:bg-error-500/10">
+                  {c.imageSelectionError}
+                </div>
+              )}
+              <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                {c.mediaImages.map(image => (
+                  <div key={image.id} className="flex items-center gap-2 bg-white dark:bg-gray-900 p-2 rounded border border-gray-200 dark:border-gray-700">
+                    <img src={image.imageUrl} alt="" className="h-10 w-10 object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => c.setPrimary(c.editing, image.id)}
+                      className={`rounded px-2 py-1 text-xs font-medium ${image.isPrimary ? 'bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-400' : 'text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
+                    >
+                      {image.isPrimary ? 'Ảnh chính' : 'Đặt chính'}
+                    </button>
+                    <button type="button" onClick={() => c.deleteImage(c.editing, image.id)} className="p-1 text-error-500 hover:bg-error-50 rounded" aria-label="Xóa ảnh">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                  </div>
+                ))}
+                {(c.mediaImages?.length || 0) === 0 && (c.form.imageFiles?.length || 0) === 0 && (
+                  <p className="text-sm text-gray-500 text-center py-4">Chưa có ảnh nào.</p>
+                )}
+                {c.uploadingImages && (
+                  <div className="flex items-center gap-3 rounded border border-brand-200 bg-brand-50 p-3 text-sm text-brand-700 dark:border-brand-500/30 dark:bg-brand-500/10 dark:text-brand-300">
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-brand-300 border-t-brand-600 dark:border-brand-600 dark:border-t-brand-300" />
+                    <span className="truncate">Đang tải ảnh: {c.uploadingImageName}</span>
+                  </div>
+                )}
+              </div>
+              {c.imagePreviews.length > 0 && (
+                <div className="min-w-0 space-y-2">
+                  <h4 className="text-sm font-medium text-gray-900 dark:text-white">Xem trước ảnh sản phẩm</h4>
+                  <div className="flex min-w-0 max-w-full gap-2 overflow-x-auto pb-2">
+                    {c.imagePreviews.map((preview, index) => (
+                      <label key={`${preview.file.name}-${preview.file.lastModified}-${index}`} className="flex w-44 shrink-0 cursor-pointer items-center gap-2 rounded border border-gray-200 bg-white p-2 dark:border-gray-700 dark:bg-gray-900">
+                        <img src={preview.url} alt={`Xem trước ${preview.file.name}`} className="h-12 w-12 shrink-0 rounded object-cover" />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-xs text-gray-700 dark:text-gray-300">{preview.file.name}</span>
+                          <span className="mt-1 flex items-center gap-1 text-xs text-gray-500">
+                            <input
+                              type="radio"
+                              name="primary-product-image"
+                              checked={c.form.primaryImageIndex === index}
+                              onChange={() => c.setPrimaryImage(index)}
+                            />
+                            Ảnh chính
+                          </span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-800">
-              <Button type="button" variant="outline" onClick={closeForm}>Hủy</Button>
-              <Button type="submit" disabled={!c.categories.length || c.busy}>Lưu sản phẩm</Button>
+              <Button type="button" variant="outline" onClick={closeForm} disabled={c.busy}>Hủy</Button>
+              <Button
+                type="submit"
+                disabled={!c.categories.length || c.busy || c.uploadingImages}
+                startIcon={c.uploadingImages ? (
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                ) : null}
+              >
+                {c.uploadingImages ? 'Đang tải ảnh...' : 'Lưu sản phẩm'}
+              </Button>
             </div>
           </fieldset>
         </form>

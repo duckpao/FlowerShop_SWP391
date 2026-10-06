@@ -4,7 +4,7 @@ const base = id => `/api/shop/mine/${encodeURIComponent(id)}/products`
 export const productService = {
   list: (shop, page) => authService.authenticatedRequest(`${base(shop)}?page=${page}`),
   categories: shop => authService.authenticatedRequest(`${base(shop)}/categories`),
-  save: (shop, id, body) => authService.authenticatedRequest(`${base(shop)}${id ? `/${encodeURIComponent(id)}` : ''}`, { method: id ? 'PUT' : 'POST', body }),
+  save: (shop, id, formData) => authService.authenticatedRequest(`${base(shop)}${id ? `/${encodeURIComponent(id)}` : ''}`, { method: id ? 'PUT' : 'POST', body: formData }),
   hide: (shop, id) => authService.authenticatedRequest(`${base(shop)}/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   images: (shop, productId) => authService.authenticatedRequest(`${base(shop)}/${encodeURIComponent(productId)}/images`),
   uploadImage: (shop, productId, file) => {
@@ -12,6 +12,7 @@ export const productService = {
     body.append('file', file)
     return authService.authenticatedRequest(`${base(shop)}/${encodeURIComponent(productId)}/images`, { method: 'POST', body })
   },
+  setPrimaryImage: (shop, productId, imageId) => authService.authenticatedRequest(`${base(shop)}/${encodeURIComponent(productId)}/images/${encodeURIComponent(imageId)}/primary`, { method: 'PUT' }),
   deleteImage: (shop, productId, imageId) => authService.authenticatedRequest(`${base(shop)}/${encodeURIComponent(productId)}/images/${encodeURIComponent(imageId)}`, { method: 'DELETE' }),
   videos: (shop, productId) => authService.authenticatedRequest(`${base(shop)}/${encodeURIComponent(productId)}/videos`),
   uploadVideo: (shop, productId, file, title, description) => {
