@@ -1,4 +1,4 @@
 package com.example.flowershop.exception;
 public class CaptchaRequiredException extends InvalidOtpException {
-    @Override public String getMessage() { return "Bạn đã nhập sai 5 lần. Vui lòng xác minh CAPTCHA để tiếp tục."; }
+    @Override public String getMessage() { return "Vui lòng nhập mã CAPTCHA trong ảnh để tiếp tục."; }
 }

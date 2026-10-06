@@ -1,4 +1,6 @@
-import LocationFields from '../components/form/LocationFields'
+import PersonalAddressForm from '../components/form/PersonalAddressForm'
+import AddressEditDialog from '../components/form/AddressEditDialog'
+import AvatarUpload from '../components/UserProfile/AvatarUpload'
 import { useAccountController } from '../controllers/useAccountController'
 import { roleLabels } from '../models/authModel'
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components/ui/table"
@@ -7,7 +9,6 @@ import Button from "@/components/ui/button/Button"
 import Input from "@/components/form/input/InputField"
 import Label from "@/components/form/Label"
 import ComponentCard from "@/components/common/ComponentCard"
-import GhnAddressPicker from "@/components/GhnAddressPicker"
 
 export default function AccountView({ user, logout, checkSession, busy: authBusy, error: authError, notice: authNotice }) {
   const c = useAccountController(user)
@@ -58,6 +59,7 @@ export default function AccountView({ user, logout, checkSession, busy: authBusy
           {c.profile && (
             <ComponentCard title="Hồ sơ cá nhân">
               <div className="space-y-6">
+                <AvatarUpload profile={c.profile} busy={busy} upload={c.uploadAvatar} />
                 <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
                   <span className="font-medium text-gray-900 dark:text-white">{c.profile.email}</span>
                   {c.profile.emailVerified && (
@@ -88,6 +90,7 @@ export default function AccountView({ user, logout, checkSession, busy: authBusy
                         onChange={e => c.setForm({ ...c.form, phone: e.target.value })} 
                       />
                       <p className="text-xs text-gray-500 mt-1">Có thể để trống; nếu nhập cần 10 chữ số, bắt đầu bằng 0.</p>
+                      {c.phoneError && <p role="alert" className="mt-1 text-sm text-error-500">{c.phoneError}</p>}
                     </div>
                     <Button type="submit" variant="primary" className="w-full">Lưu hồ sơ</Button>
                   </fieldset>
@@ -99,7 +102,7 @@ export default function AccountView({ user, logout, checkSession, busy: authBusy
         </div>
 
         <div className="lg:col-span-2 space-y-8">
-          {c.profile && (
+          {c.profile && user.role === 'CUSTOMER' && (
             <ComponentCard title="Địa chỉ cá nhân">
               <div className="space-y-6">
 
@@ -126,13 +129,15 @@ export default function AccountView({ user, logout, checkSession, busy: authBusy
                         {c.addresses.map(item => (
                           <TableRow key={item.id}>
                             <TableCell>
-                              <span className="font-medium text-gray-900 dark:text-white">{item.addressLine}</span>
+                              <span className="font-medium text-gray-900 dark:text-white">{item.addressLine}</span><p className="text-xs text-gray-500">{item.recipientName} · {item.recipientPhone}</p>
                             </TableCell>
                             <TableCell>
                               {[item.ward, item.city].filter(Boolean).join(', ')}
                             </TableCell>
                             <TableCell>
                               {item.isDefault ? <Badge color="primary">Mặc định</Badge> : null}
+                              {item.isPickup ? <Badge color="success">Lấy hàng</Badge> : null}
+                              {item.isReturn ? <Badge color="warning">Trả hàng</Badge> : null}
                             </TableCell>
                             <TableCell className="text-right">
                               <div className="flex justify-end gap-2">
@@ -169,55 +174,14 @@ export default function AccountView({ user, logout, checkSession, busy: authBusy
                   </div>
                 )}
 
-                <div className="pt-6 border-t border-gray-100 dark:border-white/5">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                    {c.editing ? 'Sửa địa chỉ' : 'Thêm địa chỉ'}
-                  </h3>
-                  <form onSubmit={c.saveAddress}>
-                    <fieldset disabled={busy} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <LocationFields address={c.address} setAddress={c.setAddress} />
-                      <div className="md:col-span-2">
-                        <GhnAddressPicker value={c.address} onChange={c.setAddress} />
-                      </div>
-                      <div className="md:col-span-2">
-                        <Label>Số nhà, đường, tòa nhà</Label>
-                        <Input 
-                          required 
-                          maxLength={255} 
-                          autoComplete="street-address" 
-                          value={c.address.addressLine}
-                          onChange={e => c.setAddress({ ...c.address, addressLine: e.target.value })} 
-                        />
-                      </div>
-                      <div className="md:col-span-2 flex items-center mt-2">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input 
-                            type="checkbox" 
-                            className="w-4 h-4 text-brand-500 border-gray-300 rounded focus:ring-brand-500"
-                            checked={c.address.isDefault}
-                            onChange={e => c.setAddress({ ...c.address, isDefault: e.target.checked })} 
-                          />
-                          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Đặt làm địa chỉ mặc định</span>
-                        </label>
-                      </div>
-                      <div className="md:col-span-2 flex gap-3 mt-4">
-                        <Button type="submit" variant="primary">
-                          {c.editing ? 'Lưu thay đổi' : 'Thêm địa chỉ'}
-                        </Button>
-                        {c.editing && (
-                          <Button type="button" variant="outline" onClick={c.cancel}>
-                            Hủy chỉnh sửa
-                          </Button>
-                        )}
-                      </div>
-                    </fieldset>
-                  </form>
-                </div>
+                {!c.editing && <PersonalAddressForm controller={c} busy={busy} />}
               </div>
             </ComponentCard>
           )}
         </div>
       </div>
+
+      {c.editing && <AddressEditDialog key={c.editing} controller={c} busy={busy} />}
 
       <div className="flex justify-center pt-8 border-t border-gray-200 dark:border-white/5">
         <button 

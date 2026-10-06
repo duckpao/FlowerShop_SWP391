@@ -45,6 +45,11 @@ public class CloudinaryService {
         return upload(bytes, filename, contentType, "video", VIDEO_FOLDER, "Upload video lên Cloudinary thất bại.", "Cloudinary không trả về URL video.");
     }
 
+    public String uploadAvatar(byte[] bytes) {
+        return upload(bytes, "avatar.png", "image/png", "image", "flowershop/avatars",
+                "Không thể tải ảnh đại diện lên.", "Không nhận được URL ảnh đại diện.");
+    }
+
     private String upload(byte[] bytes, String filename, String contentType, String resourceType, String folder, String uploadErrorMessage, String missingUrlMessage) {
         if (cloudName.isBlank() || apiKey.isBlank() || apiSecret.isBlank())
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Chưa cấu hình Cloudinary trên server.");

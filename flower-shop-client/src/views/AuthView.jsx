@@ -141,7 +141,7 @@ export default function AuthView({
                     required
                     maxLength={page === "register" ? 50 : 255}
                     {...field('email')} value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => { setEmail(e.target.value); setTouched(x => ({...x, email: true})) }}
                   />
                   {feedback('email')}
                 </div>
@@ -258,7 +258,7 @@ export default function AuthView({
                   {seconds > 0 ? `Gửi lại mã sau ${seconds}s` : "Gửi lại mã OTP"}
                 </button>
                 <p className="text-xs text-gray-500 text-center">
-                  Kiểm tra cả thư mục Spam. Tối đa 3 mã trong 15 phút.
+                  Kiểm tra cả thư mục Spam. Mỗi lần gửi lại sẽ tạo mã mới; mã cũ không còn hiệu lực.
                 </p>
                 <button
                   className="text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors"

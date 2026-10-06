@@ -36,12 +36,6 @@ public class ManagerProductService {
     public record Result(String id,String shopId,String categoryId,String categoryName,String name,String description,BigDecimal price,Integer stock,ProductStatus status,ProductType type,boolean adminHidden,List<String> images) {}
     public record Results(List<Result> content,int page,int totalPages,long totalElements) {}
     public record CategoryOption(String id,String name) {}
-    public record ImageItem(String id,String imageUrl,boolean primary,int displayOrder) {}
-    public record VideoItem(String id,String videoUrl,String title,String description,int displayOrder) {}
-    private static final long MAX_IMAGE_BYTES = 5L*1024*1024;
-    private static final long MAX_VIDEO_BYTES = 50L*1024*1024;
-    private static final Set<String> ALLOWED_IMAGE_TYPES = Set.of("image/jpeg","image/png","image/webp");
-    private static final Set<String> ALLOWED_VIDEO_TYPES = Set.of("video/mp4","video/webm","video/quicktime");
     private final ShopRepository shops;private final ProductRepository products;private final CategoryRepository categories;
     private final ProductImageRepository images;
     private final ProductVideoRepository videos;
@@ -50,8 +44,6 @@ public class ManagerProductService {
                                  ProductVideoRepository v,CloudinaryService cloud) {
         shops=s;products=p;categories=c;images=i;videos=v;cloudinary=cloud;
     }
-    private final ProductImageRepository images;private final ProductVideoRepository videos;private final CloudinaryService cloudinary;
-    public ManagerProductService(ShopRepository s,ProductRepository p,CategoryRepository c,ProductImageRepository i,ProductVideoRepository v,CloudinaryService cl) {shops=s;products=p;categories=c;images=i;videos=v;cloudinary=cl;}
     private static ResponseStatusException missing() {return new ResponseStatusException(HttpStatus.NOT_FOUND,"Không tìm thấy shop hoặc sản phẩm.");}
     private Shop owned(String id,String actor,boolean write) {
         var shop=(write?shops.findForUpdate(id):shops.findById(id)).orElseThrow(ManagerProductService::missing);

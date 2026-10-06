@@ -3,7 +3,7 @@ import { adminCustomerService as api } from '../services/adminCustomerService'
 
 export function useAdminCustomersController() {
   const [query, setQuery] = useState('')
-  const [status, setStatus] = useState('')
+  const [status, updateStatus] = useState('')
   const [params, setParams] = useState({ q: '', status: '', page: 0, size: 10 })
   const [data, setData] = useState(null)
   const [selected, setSelected] = useState(null)
@@ -36,6 +36,11 @@ export function useAdminCustomersController() {
   function search(e) {
     e.preventDefault(); setSelected(null); setNotice('')
     setParams({ ...params, q: query.trim(), status, page: 0 })
+  }
+  function setStatus(value) {
+    updateStatus(value)
+    setSelected(null); setNotice('')
+    setParams(current => ({ ...current, q: query.trim(), status: value, page: 0 }))
   }
   return { query, setQuery, status, setStatus, data, selected, setSelected, busy, error, notice, detail, toggle, search,
     next: delta => setParams(p => ({ ...p, page: p.page + delta })), retry: () => setRevision(x => x + 1) }

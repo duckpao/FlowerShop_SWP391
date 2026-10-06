@@ -48,7 +48,9 @@ public class AuthService {
             fresh.setWindowStart(Instant.now());
             return fresh;
         });
-        if (!canIssue(registration)) return;
+        if (!canIssue(registration)) throw new org.springframework.web.server.ResponseStatusException(
+                org.springframework.http.HttpStatus.TOO_MANY_REQUESTS,
+                "Bạn đã yêu cầu quá nhiều mã OTP. Vui lòng chờ 60 giây giữa các lần đăng ký, tối đa 3 mã trong 15 phút.");
         // Replace submitted details only when issuing a new code: old codes cannot
         // activate a different password/name from a subsequent registration request.
         registration.setFullName(request.fullName().strip());
