@@ -6,15 +6,11 @@ import { managerShopService } from "../services/managerShopService";
 import { managerOrderService } from "../services/managerOrderService";
 import {
   BoxCubeIcon,
-  CalenderIcon,
-  CartIcon,
   ChevronDownIcon,
   GridIcon,
   HorizontaLDots,
   ListIcon,
   PageIcon,
-  PieChartIcon,
-  PlugInIcon,
   TableIcon,
   UserCircleIcon,
 } from "../icons";
