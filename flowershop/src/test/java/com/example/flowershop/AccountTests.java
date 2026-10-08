@@ -98,7 +98,8 @@ class AccountTests {
         mvc.perform(get("/api/account/delivery-areas").header("Authorization",bearer))
                 .andExpect(status().isOk()).andExpect(jsonPath("$[0]").value("Hà Nội"));
         mvc.perform(post("/api/account/addresses").header("Authorization",bearer).session(httpSession).header("X-CSRF-TOKEN",csrf)
-                .contentType("application/json").content("{\"addressLine\":\"12 Test\",\"city\":\"Đà Nẵng\",\"district\":\"Test\",\"ward\":\"Test\",\"isDefault\":false}"))
+                .contentType("application/json").content("{\"addressLine\":\"12 Test\",\"city\":\"Đà Nẵng\",\"district\":\"Test\",\"ward\":\"Test\",\"isDefault\":false}"));
+    }
     @Test void anyCityIsAcceptedNationwide() throws Exception {
         mvc.perform(post("/api/account/addresses").header("Authorization",bearer).session(httpSession).header("X-CSRF-TOKEN",csrf)
                 .contentType("application/json").content("{\"addressLine\":\"12 Test\",\"city\":\"Đà Nẵng\",\"district\":\"Test\",\"ward\":\"Test\",\"ghnWardCode\":\"20308\",\"ghnDistrictId\":1490}"))

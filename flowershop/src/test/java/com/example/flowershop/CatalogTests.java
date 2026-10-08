@@ -14,6 +14,14 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 class CatalogTests extends ManagerShopTests {
+    @Test void reviewsArePublicButCustomerReviewWritesRequireAuthentication() throws Exception {
+        var item = product("Review product", "100000", ProductStatus.ACTIVE);
+        mvc.perform(get("/api/public/products/" + item.getId() + "/reviews"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(0));
+        mvc.perform(get("/api/customer/products/" + item.getId() + "/reviews"))
+                .andExpect(status().isUnauthorized());
+    }
     @Autowired ProductRepository products;
     @Autowired CategoryRepository categories;
     @Autowired ProductImageRepository images;
