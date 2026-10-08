@@ -16,8 +16,11 @@ import org.springframework.web.bind.annotation.*;
 public class ProductReviewController {
     private final ProductReviewService reviews;
 
-    public ProductReviewController(ProductReviewService reviews) { this.reviews = reviews; }
+    public ProductReviewController(ProductReviewService reviews) {
+        this.reviews = reviews;
+    }
 
+    // Customer - lấy đánh giá của chính mình
     @GetMapping("/api/customer/products/{id}/reviews")
     @PreAuthorize("hasRole('CUSTOMER')")
     public ProductReviewService.ReviewResult mine(@PathVariable String id,
@@ -26,7 +29,8 @@ public class ProductReviewController {
     }
 
     @PostMapping("/api/customer/products/{id}/reviews")
-    @PreAuthorize("hasRole('CUSTOMER')") @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasRole('CUSTOMER')")
+    @ResponseStatus(HttpStatus.CREATED)
     @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
     public ProductReviewService.ReviewResult write(@PathVariable String id,
             @AuthenticationPrincipal CurrentUser user,
@@ -44,7 +48,8 @@ public class ProductReviewController {
     }
 
     @DeleteMapping("/api/customer/products/{id}/reviews")
-    @PreAuthorize("hasRole('CUSTOMER')") @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasRole('CUSTOMER')")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
     @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
     public void delete(@PathVariable String id, @AuthenticationPrincipal CurrentUser user) {
         reviews.delete(id, user.id());

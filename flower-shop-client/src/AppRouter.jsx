@@ -21,6 +21,7 @@ import CustomerOrderDetailView from "./views/CustomerOrderDetailView";
 import { useAuthController } from "./controllers/useAuthController";
 import { AuthProvider } from "./context/AuthContext";
 import { CartProvider, useCartContext } from "./context/CartContext";
+import FavoriteShopsView from './views/FavoriteShopsView'
 
 export default function AppRouter() {
   return (
@@ -48,8 +49,22 @@ function AppRouterContent() {
             <Route path="/account" element={<AccountViewRoute auth={controller} />} />
             <Route path="/products" element={<ProductCatalogView auth={controller} />} />
             <Route path="/products/:id" element={<ProductDetailViewWrapper auth={controller} />} />
-            <Route path="/shops/:id" element={<PublicShopView />} />
-            <Route path="/favorites" element={<FavoritesView auth={controller} />} />
+
+            <Route
+              path="/shops/:id"
+              element={<PublicShopView auth={controller} />}
+            />
+
+            <Route
+              path="/favorites"
+              element={<FavoritesView auth={controller} />}
+            />
+
+            <Route
+              path="/favorite-shops"
+              element={<FavoriteShopsView auth={controller} />}
+            />
+
             <Route path="/cart" element={<CartPageWrapper />} />
             <Route path="/checkout" element={<CheckoutView />} />
             <Route path="/orders" element={<CustomerOrdersView />} />

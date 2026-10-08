@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'react-router'
 import { staffApplicationService } from '../services/staffApplicationService'
 import ProductsView from './ProductsView'
+import FollowShopButton from '../components/FollowShopButton'
 import '../styles/catalog.css'
 
-export default function PublicShopView() {
+export default function PublicShopView({ auth }) {
   const { id } = useParams()
   const [shop, setShop] = useState(null)
   const [busy, setBusy] = useState(true)
@@ -39,6 +40,12 @@ export default function PublicShopView() {
     {shop && <>
       <section className="catalog-panel">
         <h1>{shop.name}</h1>
+
+        <FollowShopButton
+          auth={auth}
+          shopId={shop.id}
+        />
+
         <p>{shop.description || 'Cửa hàng chưa thêm mô tả.'}</p>
       </section>
       <ProductsView key={shop.id} shop={shop} />
