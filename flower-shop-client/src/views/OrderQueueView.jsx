@@ -36,6 +36,13 @@ const statusLabels = {
     CANCELLED: 'Đã hủy',
     REFUNDED: 'Đã hoàn tiền'
 }
+const deliveryStatusLabels = {
+    PENDING: 'GHN chưa lấy hàng',
+    PICKED_UP: 'GHN đã lấy hàng',
+    ON_THE_WAY: 'Đang vận chuyển',
+    DELIVERED: 'Giao thành công',
+    FAILED: 'Giao thất bại',
+}
 
 /**
  * Hàm định dạng thời gian tương đối (ví dụ: "5 phút trước", "2 giờ trước")
@@ -67,10 +74,11 @@ export default function OrderQueueView({ shop: initialShop }) {
     const [shop, setShop] = useState(initialShop)
     const [data, setData] = useState(null)
     const [page, setPage] = useState(0)
-    const [statusFilter, setStatusFilter] = useState('') // Bộ lọc trạng thái tab
+    const [statusFilter, setStatusFilter] = useState('PENDING') // Mở màn hình ở các đơn cần Manager xác nhận
     const [busy, setBusy] = useState(false)
     const [error, setError] = useState('')
     const [notice, setNotice] = useState('')
+    const [refreshingOrderId, setRefreshingOrderId] = useState(null)
     
     // State quản lý Modal xem chi tiết và Modal hủy đơn
     const [detailModalOpen, setDetailModalOpen] = useState(false)
@@ -96,13 +104,19 @@ export default function OrderQueueView({ shop: initialShop }) {
     /**
      * Tải danh sách đơn hàng từ backend theo trang và bộ lọc trạng thái
      */
-    const load = pg => {
+    const load = async (pg, preserveNotice = false) => {
         if (!shop) return
-        setBusy(true); setError(''); setNotice('')
-        managerOrderService.list(shop.id, pg, statusFilter || null)
-            .then(d => { setData(d); setPage(pg) })
-            .catch(e => setError(e.message))
-            .finally(() => setBusy(false))
+        setBusy(true); setError('')
+        if (!preserveNotice) setNotice('')
+        try {
+            const result = await managerOrderService.list(shop.id, pg, statusFilter || null)
+            setData(result)
+            setPage(pg)
+        } catch (e) {
+            setError(e.message)
+        } finally {
+            setBusy(false)
+        }
     }
     useEffect(() => { if (shop) load(0) }, [shop?.id, statusFilter])
 
@@ -113,8 +127,8 @@ export default function OrderQueueView({ shop: initialShop }) {
         setBusy(true); setError(''); setNotice('')
         try {
             await managerOrderService.confirm(shop.id, orderId)
-            setNotice(`Đã xác nhận đơn hàng, bắt đầu chuẩn bị hoa.`)
-            load(page)
+            await load(page, true)
+            setNotice('Đã xác nhận đơn hàng, bắt đầu chuẩn bị hoa.')
         } catch (e) { setError(e.message) } finally { setBusy(false) }
     }
 
@@ -126,8 +140,8 @@ export default function OrderQueueView({ shop: initialShop }) {
         setBusy(true); setError(''); setNotice('')
         try {
             const r = await managerOrderService.ship(shop.id, orderId)
+            await load(page, true)
             setNotice(`Đã tạo vận đơn GHN thành công: ${r.trackingCode}`)
-            load(page)
         } catch (e) { setError(e.message) } finally { setBusy(false) }
     }
 
@@ -142,10 +156,10 @@ export default function OrderQueueView({ shop: initialShop }) {
         setBusy(true); setError(''); setNotice('')
         try {
             await managerOrderService.cancelOrder(shop.id, selectedOrder.id, cancelReason)
-            setNotice(`Đã hủy đơn hàng ${selectedOrder.id.substring(0,8)} thành công.`)
             setCancelModalOpen(false)
             setCancelReason('')
-            load(page)
+            await load(page, true)
+            setNotice(`Đã hủy đơn hàng ${selectedOrder.id.substring(0,8)} thành công.`)
         } catch (e) { setError(e.message) } finally { setBusy(false) }
     }
 
@@ -169,11 +183,12 @@ export default function OrderQueueView({ shop: initialShop }) {
      */
     const refreshShippingStatus = async orderSummary => {
         setBusy(true); setError(''); setNotice('')
+        setRefreshingOrderId(orderSummary.id)
         try {
             const status = await managerOrderService.refreshStatus(shop.id, orderSummary.id)
-            setNotice(`Cập nhật trạng thái GHN thành công. Trạng thái hiện tại: ${status}`)
-            load(page)
-        } catch (e) { setError(e.message) } finally { setBusy(false) }
+            await load(page, true)
+            setNotice(`GHN trả trạng thái: ${deliveryStatusLabels[status] || status} (đơn #${orderSummary.id.substring(0, 8)}).`)
+        } catch (e) { setError(e.message) } finally { setBusy(false); setRefreshingOrderId(null) }
     }
 
     /**
@@ -184,8 +199,8 @@ export default function OrderQueueView({ shop: initialShop }) {
         setBusy(true); setError(''); setNotice('')
         try {
             await managerOrderService.simulateDelivered(shop.id, orderSummary.id)
+            await load(page, true)
             setNotice(`Đã giả lập giao thành công đơn hàng ${orderSummary.id.substring(0,8)} trên GHN. Đơn chuyển sang Hoàn thành!`)
-            load(page)
         } catch (e) { setError(e.message) } finally { setBusy(false) }
     }
 
@@ -227,10 +242,10 @@ export default function OrderQueueView({ shop: initialShop }) {
                 weight: parseInt(updatePayload.weight) || 2000,
                 required_note: updatePayload.note
             })
-            setNotice(`Cập nhật thông tin vận đơn GHN thành công!`)
             setUpdateGhnModalOpen(false)
             setDetailModalOpen(false)
-            load(page)
+            await load(page, true)
+            setNotice('Cập nhật thông tin vận đơn GHN thành công!')
         } catch (e) { setError(e.message) } finally { setBusy(false) }
     }
 
@@ -240,7 +255,7 @@ export default function OrderQueueView({ shop: initialShop }) {
         <div className="space-y-6">
             <ComponentCard title={
                 <div className="flex items-center gap-3">
-                    Quản lý đơn hàng
+                    {statusFilter === 'PENDING' ? 'Đơn hàng chờ xác nhận' : 'Quản lý đơn hàng'}
                     {data?.totalElements > 0 && (
                         <span className="flex items-center justify-center rounded-full bg-brand-500 px-2 py-0.5 text-xs font-medium text-white">
                             {data.totalElements}
@@ -345,7 +360,7 @@ export default function OrderQueueView({ shop: initialShop }) {
                                                     {o.status === 'DELIVERING' && (
                                                         <>
                                                             <Button size="sm" variant="outline" className="text-brand-600 border-brand-200 hover:bg-brand-50" onClick={() => refreshShippingStatus(o)} disabled={busy}>
-                                                                Kiểm tra GHN
+                                                                {refreshingOrderId === o.id ? 'Đang kiểm tra…' : 'Kiểm tra GHN'}
                                                             </Button>
                                                             <Button size="sm" className="bg-success-600 hover:bg-success-700 text-white" onClick={() => simulateDelivered(o)} disabled={busy}>
                                                                 Giả lập Giao xong

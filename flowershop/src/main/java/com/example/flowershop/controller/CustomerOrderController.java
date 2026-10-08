@@ -44,4 +44,17 @@ public class CustomerOrderController {
                                                            @PathVariable String id) {
         return service.detail(user.id(), id);
     }
+
+    @GetMapping("/{id}/shipping-fee")
+    public CustomerOrderService.ShippingFeeResponse shippingFee(@AuthenticationPrincipal CurrentUser user,
+                                                                @PathVariable String id) {
+        return new CustomerOrderService.ShippingFeeResponse(service.calculateShippingFeeForOrder(user.id(), id));
+    }
+
+    @PostMapping("/{id}/refresh-tracking")
+    @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
+    public CustomerOrderService.DeliveryInfo refreshTracking(@AuthenticationPrincipal CurrentUser user,
+                                                              @PathVariable String id) {
+        return service.refreshTracking(user.id(), id);
+    }
 }
