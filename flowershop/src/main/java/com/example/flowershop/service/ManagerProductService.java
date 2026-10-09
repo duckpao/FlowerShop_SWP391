@@ -68,31 +68,33 @@ public class ManagerProductService {
             List<String> images
     ) {}
 
+    public record Results(List<Result> content, int page, int totalPages, long totalElements) {}
+
     public record CategoryOption(String id, String name) {}
 
     public record ImageItem(String id, String imageUrl, boolean isPrimary, Integer displayOrder) {}
 
     public record VideoInfo(String videoUrl, String title, String description) {}
+
     public record Detail(String id, String shopId, String shopName, String categoryId, String categoryName,
                          String name, String description, BigDecimal price, Integer stock,
                          List<String> images, List<VideoInfo> videos) {}
-    public record ImageInput(@NotBlank @Size(max=500)
-        @Pattern(regexp="https://[^\\s]+",message="Ảnh phải là URL HTTPS") String url, boolean primary) {}
-    /** images = null giữ nguyên ảnh cũ; khác null thì thay toàn bộ danh sách. */
-    public record Input(@NotBlank @Size(max=255) String name,@NotNull @Size(max=5000) String description,
-        @NotBlank @Size(max=36) String categoryId,@NotNull @DecimalMin("0.01") @Digits(integer=10,fraction=2) BigDecimal price,
-        @NotNull @Min(0) @Max(1000000) Integer stock,@NotNull ProductStatus status, ProductType type,
-        @jakarta.validation.Valid @Size(max=10) List<ImageInput> images) {}
-    public record Result(String id,String shopId,String categoryId,String categoryName,String name,String description,BigDecimal price,Integer stock,ProductStatus status,ProductType type,boolean adminHidden,List<String> images) {}
-    public record Results(List<Result> content,int page,int totalPages,long totalElements) {}
-    public record CategoryOption(String id,String name) {}
-    private final ShopRepository shops;private final ProductRepository products;private final CategoryRepository categories;
+
+    private final ShopRepository shops;
+    private final ProductRepository products;
+    private final CategoryRepository categories;
     private final ProductImageRepository images;
     private final ProductVideoRepository videos;
     private final CloudinaryService cloudinary;
-    public ManagerProductService(ShopRepository s,ProductRepository p,CategoryRepository c,ProductImageRepository i,
-                                 ProductVideoRepository v,CloudinaryService cloud) {
-        shops=s;products=p;categories=c;images=i;videos=v;cloudinary=cloud;
+
+    public ManagerProductService(ShopRepository s, ProductRepository p, CategoryRepository c,
+                                 ProductImageRepository i, ProductVideoRepository v, CloudinaryService cloud) {
+        shops = s;
+        products = p;
+        categories = c;
+        images = i;
+        videos = v;
+        cloudinary = cloud;
     }
     private static ResponseStatusException missing() {return new ResponseStatusException(HttpStatus.NOT_FOUND,"Không tìm thấy shop hoặc sản phẩm.");}
     private Shop owned(String id,String actor,boolean write) {

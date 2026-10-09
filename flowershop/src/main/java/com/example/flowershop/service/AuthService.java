@@ -23,6 +23,7 @@ public class AuthService {
     private final PasswordEncoder encoder;
     private final ApplicationEventPublisher events;
     private final ShopRepository shops;
+    private final CloudinaryService cloudinary;
     private final com.example.flowershop.security.CaptchaService captcha;
 
     @Transactional
@@ -41,7 +42,10 @@ public class AuthService {
         String email = normalize(request.email());
         if (request.password().getBytes(StandardCharsets.UTF_8).length > 72)
             throw new IllegalArgumentException("Mật khẩu không được vượt quá 72 byte UTF-8.");
-        if (users.existsByEmail(email)) return;
+        if (users.existsByEmail(email)) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.CONFLICT, "Email đã được đăng ký.");
+        }
         PendingRegistration registration = pending.findLocked(email).orElseGet(() -> {
             PendingRegistration fresh = new PendingRegistration();
             fresh.setEmail(email);
@@ -111,7 +115,10 @@ public class AuthService {
             throw new InvalidOtpException();
         }
         String id = UUID.randomUUID().toString();
-        User user = User.builder().id(id).email(p.getEmail()).fullName(p.getFullName())
+        String fullName = p.getFullName() == null ? "" : p.getFullName().strip();
+        String avatarUrl = cloudinary.uploadDefaultAvatar(fullName);
+        User user = User.builder().id(id).email(p.getEmail()).fullName(fullName)
+                .avatarUrl(avatarUrl)
                 .passwordHash(p.getPasswordHash()).role(p.getShopName()==null ? UserRole.CUSTOMER : UserRole.SHOP)
                 .status(UserStatus.ACTIVE).isEmailVerified(true).createdBy(id).build();
         users.saveAndFlush(user);

@@ -7,6 +7,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+import javax.imageio.ImageIO;
+import java.awt.*;
+import java.awt.geom.RoundRectangle2D;
+import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.URI;
@@ -48,6 +52,50 @@ public class CloudinaryService {
     public String uploadAvatar(byte[] bytes) {
         return upload(bytes, "avatar.png", "image/png", "image", "flowershop/avatars",
                 "Không thể tải ảnh đại diện lên.", "Không nhận được URL ảnh đại diện.");
+    }
+
+    public String uploadDefaultAvatar(String fullName) {
+        String initial = initialFromName(fullName);
+        int size = 512;
+        BufferedImage image = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g2 = image.createGraphics();
+        try {
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+
+            RoundRectangle2D rounded = new RoundRectangle2D.Float(0, 0, size, size, 90, 90);
+            g2.setColor(new Color(179, 34, 34));
+            g2.fill(rounded);
+
+            g2.setColor(new Color(255, 255, 255));
+            g2.setFont(new Font("SansSerif", Font.BOLD, 260));
+            FontMetrics metrics = g2.getFontMetrics();
+            int textWidth = metrics.stringWidth(initial);
+            int x = (size - textWidth) / 2;
+            int y = (size - metrics.getHeight()) / 2 + metrics.getAscent();
+            g2.drawString(initial, x, y);
+        } finally {
+            g2.dispose();
+        }
+
+        try (ByteArrayOutputStream buffer = new ByteArrayOutputStream()) {
+            ImageIO.write(image, "png", buffer);
+            return uploadAvatar(buffer.toByteArray());
+        } catch (IOException e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Không thể tạo ảnh avatar mặc định.", e);
+        }
+    }
+
+    private String initialFromName(String fullName) {
+        String normalized = fullName == null ? "" : fullName.strip();
+        if (normalized.isEmpty()) return "U";
+        for (int i = 0; i < normalized.length(); i++) {
+            char ch = normalized.charAt(i);
+            if (Character.isLetterOrDigit(ch)) {
+                return String.valueOf(Character.toUpperCase(ch));
+            }
+        }
+        return "U";
     }
 
     private String upload(byte[] bytes, String filename, String contentType, String resourceType, String folder, String uploadErrorMessage, String missingUrlMessage) {
