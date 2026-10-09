@@ -10,5 +10,10 @@ export function validateEmail(value, maxLength = 255) {
       || domain.split('.').some(label => !/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/.test(label))) {
     return 'Email không đúng định dạng, ví dụ: ten@example.com.'
   }
+  if (!tlds.has(domain.split('.').at(-1).toLowerCase())) {
+    return 'Đuôi tên miền email không hợp lệ. Vui lòng kiểm tra lại, ví dụ: ten@gmail.com.'
+  }
   return ''
 }
+import emailTlds from './emailTlds.json' with { type: 'json' }
+const tlds = new Set(emailTlds)

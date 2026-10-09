@@ -7,6 +7,15 @@ const post = authService.post
 export function useAuthController() {
   const routerNavigate = useNavigate();
   const [user, setUser] = useState(null)
+  useEffect(() => {
+    const updated = event => {
+      const profile = event.detail
+      setUser(current => current?.id === profile?.id
+        ? { ...current, fullName: profile.fullName, avatarUrl: profile.avatarUrl } : current)
+    }
+    window.addEventListener('flowershop-profile-updated', updated)
+    return () => window.removeEventListener('flowershop-profile-updated', updated)
+  }, [])
   const [initializing, setInitializing] = useState(true)
   useEffect(() => {
     let active = true
@@ -44,10 +53,7 @@ export function useAuthController() {
   }
   async function failed(failure) {
     setError(failure.message)
-    setFieldErrors(Object.fromEntries(Object.entries(failure.fieldErrors || {}).map(([key, value]) => [
-      key.replace(/^account\./, '').replace(/^newPassword$/, 'password').replace(/^confirmPassword$/, 'confirmation'),
-      value
-    ])))
+    setFieldErrors(Object.fromEntries(Object.entries(failure.fieldErrors || {}).map(([key,value]) => [key.replace(/^account\./, '').replace(/^newPassword$/, 'password').replace(/^confirmPassword$/, 'confirmation'),value])))
     if (failure.captchaRequired || captchaRequired) { setCaptchaRequired(true); await reloadCaptcha() }
   }
 
@@ -55,6 +61,7 @@ export function useAuthController() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [seconds, setSeconds] = useState(0)
+
   useEffect(() => {
     if (seconds <= 0) return
     const timer = setTimeout(() => setSeconds(seconds - 1), 1000)
@@ -117,10 +124,13 @@ export function useAuthController() {
     finally { setBusy(false) }
   }
   async function resend() {
+    if (busy) return
     setBusy(true); setError(''); setNotice('')
     try {
       const data = await post(page === 'reset' ? 'forgot-password' : 'resend-verification', { email, ...captchaBody() })
-      setCaptchaRequired(false); setCaptcha(null); setCaptchaAnswer('')
+      setOtp(''); setFieldErrors(current => { const next = {...current}; delete next.otp; return next })
+      if (page === 'reset' && captchaRequired) await reloadCaptcha()
+      else { setCaptchaRequired(false); setCaptcha(null); setCaptchaAnswer('') }
       setSeconds(0); setNotice(data.message)
     } catch (failure) { await failed(failure) }
     finally { setBusy(false) }

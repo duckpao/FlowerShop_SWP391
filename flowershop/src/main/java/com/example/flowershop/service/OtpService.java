@@ -19,6 +19,7 @@ import static com.example.flowershop.service.AuthMailEvent.Kind.*;
 
 @Service @RequiredArgsConstructor
 public class OtpService {
+    private static final int CAPTCHA_THRESHOLD = 6;
     private static final SecureRandom RANDOM = new SecureRandom();
     private final UserRepository users;
     private final OtpChallengeRepository challenges;
@@ -46,15 +47,14 @@ public class OtpService {
             fresh.setWindowStart(now);
             return fresh;
         });
-        if(challenge.getFailedAttempts()>=5){
+        if(challenge.getUsedAt() != null) challenge.setFailedAttempts(0);
+        if(challenge.getFailedAttempts()>=CAPTCHA_THRESHOLD){
             captcha.verify(user.getEmail(),"reset",captchaId,captchaAnswer);
-            challenge.setFailedAttempts(0);challenge.setSendCount(0);challenge.setIssuedAt(null);challenge.setWindowStart(now);
         }
         
         // Resends must not reset failed guesses. Counters persist across restarts.
         if (!now.isBefore(challenge.getWindowStart().plusSeconds(900))) {
             challenge.setWindowStart(now);
-            challenge.setFailedAttempts(0);
             challenge.setSendCount(0);
         }
         
@@ -94,12 +94,12 @@ public class OtpService {
     private void consume(User user, OtpChallenge.Purpose purpose, String code, String captchaId, String captchaAnswer) {
         if (!eligible(user, purpose)) throw new InvalidOtpException();
         OtpChallenge challenge = challenges.findLocked(user.getId(), purpose).orElseThrow(InvalidOtpException::new);
-        if(challenge.getFailedAttempts() >= 5) captcha.verify(user.getEmail(),"reset",captchaId,captchaAnswer);
+        if(challenge.getFailedAttempts() >= CAPTCHA_THRESHOLD) captcha.verify(user.getEmail(),"reset",captchaId,captchaAnswer);
         if (challenge.getUsedAt() != null || !Instant.now().isBefore(challenge.getExpiresAt())
                 ) throw new InvalidOtpException();
         if (!encoder.matches(boundCode(challenge, code), challenge.getCodeHash())) {
-            challenge.setFailedAttempts(Math.min(5, challenge.getFailedAttempts() + 1));
-            if(challenge.getFailedAttempts() >= 5) throw new com.example.flowershop.exception.CaptchaRequiredException();
+            challenge.setFailedAttempts(Math.min(CAPTCHA_THRESHOLD, challenge.getFailedAttempts() + 1));
+            if(challenge.getFailedAttempts() >= CAPTCHA_THRESHOLD) throw new com.example.flowershop.exception.CaptchaRequiredException();
             throw new InvalidOtpException();
         }
         challenge.setUsedAt(Instant.now());

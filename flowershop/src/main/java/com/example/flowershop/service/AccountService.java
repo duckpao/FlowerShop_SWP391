@@ -15,11 +15,14 @@ public class AccountService {
     private final UserRepository users;
     private final AddressRepository addresses;
     private final OrderRepository orders;
+    private final CloudinaryService cloudinary;
 
-    public AccountService(UserRepository users, AddressRepository addresses, OrderRepository orders) {
+    public AccountService(UserRepository users, AddressRepository addresses, OrderRepository orders,
+            CloudinaryService cloudinary) {
         this.users = users;
         this.addresses = addresses;
         this.orders = orders;
+        this.cloudinary = cloudinary;
     }
 
     @Transactional(readOnly = true)
@@ -33,6 +36,35 @@ public class AccountService {
         user.setPhone(request.phone().strip());
         user.setLastModifyBy(userId);
         return ProfileResponse.from(user);
+    }
+
+    public ProfileResponse uploadAvatar(String userId, org.springframework.web.multipart.MultipartFile file) {
+        User user = lock(userId);
+        if (file.isEmpty() || file.getSize() > 5 * 1024 * 1024)
+            throw new IllegalArgumentException("Ảnh đại diện phải có dung lượng từ 1 byte đến 5 MB.");
+        if (!Set.of("image/jpeg", "image/png").contains(file.getContentType() == null ? "" : file.getContentType()))
+            throw new IllegalArgumentException("Chỉ hỗ trợ ảnh JPG hoặc PNG.");
+        try (var input = javax.imageio.ImageIO.createImageInputStream(file.getInputStream())) {
+            var readers = javax.imageio.ImageIO.getImageReaders(input);
+            if (!readers.hasNext()) throw new IllegalArgumentException("Tệp tải lên không phải ảnh hợp lệ.");
+            var reader = readers.next();
+            try {
+                reader.setInput(input);
+                if (!Set.of("JPEG", "PNG").contains(reader.getFormatName().toUpperCase(Locale.ROOT)))
+                    throw new IllegalArgumentException("Chỉ hỗ trợ ảnh JPG hoặc PNG.");
+                int width = reader.getWidth(0), height = reader.getHeight(0);
+                if (width < 1 || height < 1 || width > 4096 || height > 4096)
+                    throw new IllegalArgumentException("Kích thước ảnh tối đa 4096 × 4096 pixel.");
+                var image = reader.read(0);
+                var normalized = new java.io.ByteArrayOutputStream();
+                javax.imageio.ImageIO.write(image, "png", normalized);
+                user.setAvatarUrl(cloudinary.uploadAvatar(normalized.toByteArray()));
+                user.setLastModifyBy(userId);
+                return ProfileResponse.from(user);
+            } finally { reader.dispose(); }
+        } catch (java.io.IOException e) {
+            throw new IllegalArgumentException("Không thể đọc ảnh. Vui lòng chọn ảnh JPG hoặc PNG hợp lệ.");
+        }
     }
 
     @Transactional(readOnly = true)
@@ -55,9 +87,17 @@ public class AccountService {
         }
         address.setAddressLine(request.addressLine().strip());
         address.setCity(request.city().strip());
-        address.setDistrict(request.district().strip());
+        address.setDistrict(request.district() == null ? "" : request.district().strip());
         address.setWard(request.ward().strip());
-        address.setGhnWardCode(request.ghnWardCode().strip()); address.setGhnDistrictId(request.ghnDistrictId());
+        address.setGhnWardCode(request.ghnWardCode());
+        address.setGhnDistrictId(request.ghnDistrictId());
+        address.setRecipientName(request.recipientName().strip());
+        address.setRecipientPhone(request.recipientPhone().strip());
+        address.setAddressType(request.addressType());
+        if (Boolean.TRUE.equals(request.isPickup())) list.forEach(a -> a.setIsPickup(false));
+        if (Boolean.TRUE.equals(request.isReturn())) list.forEach(a -> a.setIsReturn(false));
+        address.setIsPickup(Boolean.TRUE.equals(request.isPickup()));
+        address.setIsReturn(Boolean.TRUE.equals(request.isReturn()));
         address.setLastModifyBy(userId);
         boolean makeDefault = request.isDefault() || list.isEmpty() || Boolean.TRUE.equals(address.getIsDefault())
                 || list.stream().noneMatch(a -> Boolean.TRUE.equals(a.getIsDefault()));

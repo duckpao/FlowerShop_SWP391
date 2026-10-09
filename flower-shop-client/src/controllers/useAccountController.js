@@ -6,6 +6,7 @@ export function useAccountController(user) {
   const [profile, setProfile] = useState(null)
   const [form, setForm] = useState({ fullName: '', phone: '' })
   const [addresses, setAddresses] = useState([])
+  const [cities, setCities] = useState([])
   const [address, setAddress] = useState(emptyAddress())
   const [editing, setEditing] = useState(null)
   const [busy, setBusy] = useState(true)
@@ -19,21 +20,23 @@ export function useAccountController(user) {
     let active = true
     setBusy(true); setError('')
     Promise.all([accountService.profile(), ...(user.role === 'CUSTOMER' ? [accountService.addresses()] : [])])
-      .then(([p, list = []]) => {
+      .then(([p, list = [], allowed = []]) => {
         if (!active) return
-        setProfile(p); setForm(profileInput(p)); setAddresses(list); setAddress(emptyAddress()); setEditing(null)
+        setProfile(p); setForm(profileInput(p)); setAddresses(list); setCities(allowed)
+        setAddress(emptyAddress(allowed[0] || '')); setEditing(null)
       }).catch(e => { if (active) setError(e.message) })
       .finally(() => { if (active) setBusy(false) })
     return () => { active = false }
   }, [user.id, user.role, reload])
   async function run(action) {
     setBusy(true); setError(''); setNotice('')
-    try { await action() } catch (e) {
+    try { await action(); return true } catch (e) {
       if (e.fieldErrors?.phone) setServerPhoneError(e.fieldErrors.phone)
       else setError(e.message)
+      return false
     } finally { setBusy(false) }
   }
-  const cancel = () => { setEditing(null); setAddress(emptyAddress()) }
+  const cancel = () => { setEditing(null); setAddress(emptyAddress(cities[0] || '')) }
   const saveProfile = e => {
     e.preventDefault()
     if (phoneError) return
@@ -45,19 +48,15 @@ export function useAccountController(user) {
   const saveAddress = e => {
     e.preventDefault()
     return run(async () => {
-      await accountService.saveAddress(editing, {
-        ...address,
-        addressLine: address.addressLine?.trim() || '',
-        city: address.city?.trim() || '',
-        district: address.district?.trim() || '',
-        ward: address.ward?.trim() || '',
-        ghnDistrictId: address.ghnDistrictId,
-        ghnWardCode: address.ghnWardCode,
-        isDefault: !!address.isDefault
-      })
+      await accountService.saveAddress(editing, { ...address, recipientName: address.recipientName.trim(), recipientPhone: address.recipientPhone.trim(), addressLine: address.addressLine.trim(), ward: address.ward.trim(), district: address.district.trim(), city: address.city.trim() })
       setAddresses(await accountService.addresses()); cancel(); setNotice('Đã lưu địa chỉ.')
     })
   }
+  const uploadAvatar = file => run(async () => {
+    const updated = await accountService.uploadAvatar(file)
+    setProfile(updated)
+    setNotice('Đã cập nhật ảnh đại diện.')
+  })
   const remove = item => {
     if (!window.confirm(`Xóa địa chỉ ${item.addressLine}?`)) return
     return run(async () => {
@@ -71,19 +70,11 @@ export function useAccountController(user) {
   })
   const edit = item => {
     setEditing(item.id)
-    setAddress({
-      addressLine: item.addressLine || '',
-      city: item.city || '',
-      district: item.district || '',
-      ward: item.ward || '',
-      ghnDistrictId: item.ghnDistrictId || null,
-      ghnWardCode: item.ghnWardCode || '',
-      isDefault: !!item.isDefault
-    })
+    setAddress({ ...emptyAddress(), ...item, recipientName: item.recipientName || profile.fullName || '', recipientPhone: item.recipientPhone || profile.phone || '', addressType: item.addressType || 'HOME' })
     setError(''); setNotice('')
   }
   return {
-    profile, form, setForm: next => { setServerPhoneError(''); setForm(next) }, phoneError, addresses, address, setAddress, editing, busy, error, notice,
-    saveProfile, saveAddress, remove, makeDefault, edit, cancel, retry: () => setReload(x => x + 1)
+    profile, form, setForm: next => { setServerPhoneError(''); setForm(next) }, phoneError, addresses, cities, address, setAddress, editing, busy, error, notice,
+    saveProfile, saveAddress, uploadAvatar, remove, makeDefault, edit, cancel, retry: () => setReload(x => x + 1)
   }
 }

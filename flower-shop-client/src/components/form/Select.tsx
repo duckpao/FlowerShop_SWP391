@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect, useId, useState } from "react";
 
 interface Option {
   value: string;
@@ -11,6 +11,9 @@ interface SelectProps {
   onChange: (value: string) => void;
   className?: string;
   defaultValue?: string;
+  value?: string;
+  disabled?: boolean;
+  label?: string;
 }
 
 const Select: React.FC<SelectProps> = ({
@@ -19,9 +22,15 @@ const Select: React.FC<SelectProps> = ({
   onChange,
   className = "",
   defaultValue = "",
+  value,
+  disabled = false,
+  label,
 }) => {
   // Manage the selected value
   const [selectedValue, setSelectedValue] = useState<string>(defaultValue);
+  const currentValue = value ?? selectedValue;
+  const id = useId();
+  const hasEmptyOption = options.some(option => option.value === "");
 
   useEffect(() => {
     setSelectedValue(defaultValue || "");
@@ -35,23 +44,26 @@ const Select: React.FC<SelectProps> = ({
 
   return (
     <div className="relative">
+      {label && <label htmlFor={id} className="sr-only">{label}</label>}
       <select
+        id={id}
+        disabled={disabled}
         className={`h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 pe-11 text-sm shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:ring-3 focus:ring-brand-500/10 focus:outline-hidden dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800 ${
-          selectedValue
+          currentValue || hasEmptyOption
             ? "text-gray-800 dark:text-white/90"
             : "text-gray-400 dark:text-gray-400"
         } ${className}`}
-        value={selectedValue}
+        value={currentValue}
         onChange={handleChange}
       >
         {/* Placeholder option */}
-        <option
+        {!hasEmptyOption && <option
           value=""
           disabled
           className="text-gray-700 dark:bg-gray-900 dark:text-gray-400"
         >
           {placeholder}
-        </option>
+        </option>}
         {/* Map over options */}
         {options.map((option) => (
           <option

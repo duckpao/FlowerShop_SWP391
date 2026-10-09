@@ -26,6 +26,12 @@ public class AccountController {
     public ProfileResponse update(@AuthenticationPrincipal CurrentUser user, @Valid @RequestBody ProfileRequest request) {
         return accounts.updateProfile(user.id(),request);
     }
+    @PostMapping(value="/profile/avatar", consumes="multipart/form-data")
+    @Parameter(name="X-CSRF-TOKEN",in=ParameterIn.HEADER,required=true)
+    public ProfileResponse avatar(@AuthenticationPrincipal CurrentUser user,
+            @RequestParam("file") org.springframework.web.multipart.MultipartFile file) {
+        return accounts.uploadAvatar(user.id(), file);
+    }
     @GetMapping("/addresses") @PreAuthorize("hasRole('CUSTOMER')")
     public List<AddressResponse> addresses(@AuthenticationPrincipal CurrentUser user) { return accounts.list(user.id()); }
     @PostMapping("/addresses") @ResponseStatus(org.springframework.http.HttpStatus.CREATED)

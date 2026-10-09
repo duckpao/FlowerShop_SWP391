@@ -6,6 +6,7 @@ SET NAMES utf8mb4;
 -- M01: AUTHENTICATION & USER MANAGEMENT
 -- ==========================================
 CREATE TABLE Users (
+    avatar_url VARCHAR(1024),
     id VARCHAR(36) PRIMARY KEY,
     email VARCHAR(255) UNIQUE NOT NULL,
     password_hash VARCHAR(255),
@@ -36,6 +37,11 @@ CREATE TABLE Shops (
 );
 
 CREATE TABLE Addresses (
+    recipient_name VARCHAR(100),
+    recipient_phone VARCHAR(10),
+    is_pickup BOOLEAN DEFAULT FALSE,
+    is_return BOOLEAN DEFAULT FALSE,
+    address_type VARCHAR(10) DEFAULT 'HOME',
     id VARCHAR(36) PRIMARY KEY,
     user_id VARCHAR(36), -- NULL nếu là địa chỉ của Shop
     shop_id VARCHAR(36), -- NULL nếu là địa chỉ của User
