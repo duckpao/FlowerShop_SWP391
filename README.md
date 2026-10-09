@@ -39,6 +39,10 @@ script có điều kiện bảo vệ nên chạy lại nhiều lần vẫn an to
 
 Với database đã chạy các migration này, không chạy lại toàn bộ: một số migration thêm cột hoặc ràng buộc chỉ được chạy một lần. Không chạy lại script khởi tạo trên database có dữ liệu cần giữ. Cập nhật code không tự động chạy migration.
 
+Nếu database đã có bảng `Manager_Applications` được tạo từ DDL cũ, chạy một lần
+`flowershop/sql/014_manager_application_metadata.sql` để bổ sung `review_note`, `reviewed_at`,
+`reviewed_by` và `shop_id`. Migration chỉ thêm cột nullable, không xóa hoặc ghi đè dữ liệu hiện có.
+
 ## 🛠️ Yêu cầu hệ thống (Prerequisites)
 
 Để chạy được dự án trên máy cá nhân, team cần cài đặt sẵn các công cụ sau:

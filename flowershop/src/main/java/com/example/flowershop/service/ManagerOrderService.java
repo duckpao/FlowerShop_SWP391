@@ -208,6 +208,12 @@ public class ManagerOrderService {
                 (shopAddr.getDistrict() != null ? shopAddr.getDistrict() : "") + ", " +
                 (shopAddr.getCity() != null ? shopAddr.getCity() : "");
 
+        BigDecimal paidAmount = payments.findByOrderId(orderId).stream()
+            .filter(payment -> payment.getStatus() == PaymentStatus.SUCCESS)
+            .map(Payment::getAmount)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal codAmount = o.getTotalAmount().subtract(paidAmount).max(BigDecimal.ZERO);
+
         var result = ghn.createOrder(
                 toName, toPhone,
                 toFullAddress,
@@ -215,7 +221,7 @@ public class ManagerOrderService {
                 fromName, fromPhone,
                 fromFullAddress,
                 shopAddr.getGhnDistrictId(), shopAddr.getGhnWardCode(),
-                o.getTotalAmount().intValue(), productName, quantity, price
+            codAmount.intValue(), productName, quantity, price
         );
 
         Delivery d = Delivery.builder().id(UUID.randomUUID().toString()).order(o)
@@ -306,13 +312,16 @@ public class ManagerOrderService {
     public DeliveryStatus simulateDelivered(String shopId, String actor, String orderId) {
         owned(shopId, actor);
         Order o = orders.findByIdAndShopId(orderId, shopId).orElseThrow(ManagerOrderService::notFound);
+        if (o.getStatus() != OrderStatus.DELIVERING)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Chỉ đơn đang giao mới có thể giả lập GHN giao thành công.");
         Delivery d = deliveries.findByOrderId(orderId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Đơn hàng chưa có vận đơn GHN."));
 
         try {
             ghn.switchStatus(d.getTrackingCode(), "delivered");
         } catch (Exception e) {
-            // Ghi log nếu cần; tiếp tục cập nhật cơ sở dữ liệu nội bộ
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                    "GHN không thể cập nhật trạng thái giao hàng trong môi trường test.", e);
         }
 
         d.setStatus(DeliveryStatus.DELIVERED);

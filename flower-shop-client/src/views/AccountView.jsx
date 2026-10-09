@@ -178,6 +178,19 @@ export default function AccountView({ user, logout, checkSession, busy: authBusy
               </div>
             </ComponentCard>
           )}
+          {c.profile && user.role === 'SHOP' && (
+            <ComponentCard title="Địa chỉ cửa hàng">
+              <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
+                Địa chỉ lấy hàng của cửa hàng được quản lý trong phần cài đặt shop.
+              </p>
+              <a
+                href="/shop-admin/shop"
+                className="inline-flex items-center rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600"
+              >
+                Quản lý địa chỉ cửa hàng
+              </a>
+            </ComponentCard>
+          )}
         </div>
       </div>
 

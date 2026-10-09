@@ -2,19 +2,16 @@ import { useSidebar } from "../context/SidebarContext";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useLocation } from "react-router";
+import { useAuth } from "../context/AuthContext";
 import { managerShopService } from "../services/managerShopService";
 import { managerOrderService } from "../services/managerOrderService";
 import {
   BoxCubeIcon,
-  CalenderIcon,
-  CartIcon,
   ChevronDownIcon,
   GridIcon,
   HorizontaLDots,
   ListIcon,
   PageIcon,
-  PieChartIcon,
-  PlugInIcon,
   TableIcon,
   UserCircleIcon,
 } from "../icons";
@@ -61,11 +58,17 @@ const publicNavItems: NavItem[] = [
   { name: 'Sản phẩm', path: '/#products', icon: <BoxCubeIcon fontSize={24} /> },
 ];
 
+const customerNavItems: NavItem[] = [
+  ...publicNavItems,
+  { name: 'Theo dõi đơn hàng', path: '/orders', icon: <TableIcon fontSize={24} /> },
+];
+
 const AppSidebar: React.FC = () => {
   const { isExpanded, isMobileOpen, isHovered, setIsHovered, setIsMobileOpen } =
     useSidebar();
   const { t } = useTranslation();
   const location = useLocation();
+  const { user } = useAuth();
   const [openSubmenu, setOpenSubmenu] = useState<{
     type: "main" | "others";
     index: number;
@@ -75,6 +78,15 @@ const AppSidebar: React.FC = () => {
   );
   const subMenuRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [queueCount, setQueueCount] = useState<number>(0);
+  const isAdmin = location.pathname.startsWith('/admin') && !location.pathname.startsWith('/shop-admin');
+  const isManager = location.pathname.startsWith('/shop-admin');
+  const navItems = isAdmin
+    ? adminNavItems
+    : isManager
+      ? managerNavItems.map(item => item.path === '/shop-admin/order-queue' ? { ...item, badge: queueCount } : item)
+      : user?.role === 'CUSTOMER'
+        ? customerNavItems
+        : publicNavItems;
 
   useEffect(() => {
     if (location.pathname.startsWith('/shop-admin')) {
@@ -103,6 +115,7 @@ const AppSidebar: React.FC = () => {
         const [pathname, hash] = path.split('#');
         return location.pathname === (pathname || '/') && location.hash === `#${hash}`;
       }
+      if (path === '/orders') return location.pathname === path || location.pathname.startsWith(`${path}/`);
       if (path === '/') return location.pathname === '/' && !location.hash;
       return location.pathname === path;
     },
@@ -111,12 +124,6 @@ const AppSidebar: React.FC = () => {
 
   useEffect(() => {
     let submenuToOpen: { type: "main" | "others"; index: number } | null = null;
-    
-    const navItems = location.pathname.startsWith('/admin') && !location.pathname.startsWith('/shop-admin') 
-      ? adminNavItems 
-      : location.pathname.startsWith('/shop-admin') 
-        ? managerNavItems 
-        : publicNavItems;
 
     navItems.forEach((nav, index) => {
       if (nav.subItems) {
@@ -131,7 +138,7 @@ const AppSidebar: React.FC = () => {
     if (submenuToOpen) {
       setOpenSubmenu(submenuToOpen);
     }
-  }, [location, isActive]);
+  }, [location, isActive, navItems]);
 
   useEffect(() => {
     if (openSubmenu !== null) {
@@ -307,13 +314,10 @@ const AppSidebar: React.FC = () => {
     </ul>
   );
 
-  const isPublic = !location.pathname.startsWith('/admin') && !location.pathname.startsWith('/shop-admin');
-  const sectionTitle = isPublic ? "CHUNG" : "QUẢN LÝ";
-  const navItems = location.pathname.startsWith('/admin') && !location.pathname.startsWith('/shop-admin') 
-    ? adminNavItems 
-    : location.pathname.startsWith('/shop-admin') 
-      ? managerNavItems.map(item => item.path === '/shop-admin/order-queue' ? { ...item, badge: queueCount } : item)
-      : publicNavItems;
+  const isPublic = !isAdmin && !isManager;
+  const sectionTitle = isPublic
+    ? user?.role === 'CUSTOMER' ? 'KHÁCH HÀNG' : 'CHUNG'
+    : 'QUẢN LÝ';
 
   return (
     <aside

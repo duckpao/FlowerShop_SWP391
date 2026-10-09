@@ -32,23 +32,38 @@ export default function ManagerOrdersView({ shop: initialShop, onBack }) {
         return () => { active = false }
     }, [initialShop])
 
-    const load = pg => {
+    const load = async (pg, preserveNotice = false) => {
         if (!shop) return
         setBusy(true); setError('')
-        managerOrderService.list(shop.id, pg, statusFilter || null)
-            .then(d => { setData(d); setPage(pg) })
-            .catch(e => setError(e.message))
-            .finally(() => setBusy(false))
+        if (!preserveNotice) setNotice('')
+        try {
+            const result = await managerOrderService.list(shop.id, pg, statusFilter || null)
+            setData(result)
+            setPage(pg)
+        } catch (e) {
+            setError(e.message)
+        } finally {
+            setBusy(false)
+        }
     }
     useEffect(() => { if (shop) load(0) }, [shop?.id, statusFilter])
+
+    const confirmOrder = async orderId => {
+        setBusy(true); setError(''); setNotice('')
+        try {
+            await managerOrderService.confirm(shop.id, orderId)
+            await load(page, true)
+            setNotice('Đã xác nhận đơn hàng, cửa hàng bắt đầu chuẩn bị.')
+        } catch (e) { setError(e.message) } finally { setBusy(false) }
+    }
 
     const ship = async orderId => {
         if (!confirm('Xác nhận & tạo vận đơn GHN?')) return
         setBusy(true); setError(''); setNotice('')
         try {
             const r = await managerOrderService.ship(shop.id, orderId)
+            await load(page, true)
             setNotice(`Đã tạo vận đơn: ${r.trackingCode}`)
-            load(page)
         } catch (e) { setError(e.message) } finally { setBusy(false) }
     }
 
@@ -56,8 +71,8 @@ export default function ManagerOrdersView({ shop: initialShop, onBack }) {
         setBusy(true); setError(''); setNotice('')
         try {
             const status = await managerOrderService.refreshStatus(shop.id, orderId)
-            setNotice(`Trạng thái đơn: ${status}`)
-            load(page)
+            await load(page, true)
+            setNotice(`Trạng thái GHN hiện tại: ${status}`)
         } catch (e) { setError(e.message) } finally { setBusy(false) }
     }
 if (!shop) return <div className="p-8"><p className="text-gray-500">Đang tải thông tin shop…</p></div>
@@ -93,8 +108,9 @@ if (!shop) return <div className="p-8"><p className="text-gray-500">Đang tải 
                         <TableCell><Badge color={statusColors[o.status]||'primary'}>{statusLabels[o.status]||o.status}</Badge></TableCell>
                         <TableCell className="text-sm text-gray-500">{new Date(o.createdDate).toLocaleDateString('vi-VN')}</TableCell>
                         <TableCell className="text-right space-x-2">
-                            {o.status==='PENDING' && <Button size="sm" onClick={()=>ship(o.id)} disabled={busy}>Xác nhận & Giao GHN</Button>}
-                            {(o.status==='PROCESSING'||o.status==='DELIVERING') && <Button size="sm" variant="outline" onClick={()=>refresh(o.id)} disabled={busy}>Kiểm tra trạng thái</Button>}
+                            {o.status==='PENDING' && <Button size="sm" onClick={()=>confirmOrder(o.id)} disabled={busy}>Xác nhận đơn hàng</Button>}
+                            {o.status==='PROCESSING' && <Button size="sm" onClick={()=>ship(o.id)} disabled={busy}>Tạo vận đơn GHN</Button>}
+                            {o.status==='DELIVERING' && <Button size="sm" variant="outline" onClick={()=>refresh(o.id)} disabled={busy}>Kiểm tra trạng thái</Button>}
                         </TableCell>
                     </TableRow>)}</TableBody></Table>
                 </div>

@@ -25,17 +25,19 @@ export default function CustomerOrdersView() {
     const [page, setPage] = useState(0)
     const [busy, setBusy] = useState(true)
     const [error, setError] = useState('')
+    const [reloadKey, setReloadKey] = useState(0)
 
     useEffect(() => {
         if (!user) return
         let active = true
         setBusy(true)
+        setError('')
         customerOrderService.list(page)
             .then(data => { if (active) { setOrders(data); setError('') } })
             .catch(e => { if (active) setError(e.message) })
             .finally(() => { if (active) setBusy(false) })
         return () => { active = false }
-    }, [user, page])
+    }, [user, page, reloadKey])
 
     if (!user) return <div className="max-w-4xl mx-auto p-8"><h1 className="text-xl font-bold">Đơn hàng của tôi</h1><p className="text-gray-500">Vui lòng đăng nhập.</p></div>
 
@@ -43,6 +45,11 @@ export default function CustomerOrdersView() {
         <PageMeta title="Đơn hàng của tôi | FlowerShop" />
         <PageBreadCrumb pageTitle="Đơn hàng của tôi" />
         <ComponentCard title="Danh sách đơn hàng">
+            <div className="mb-4 flex justify-end">
+                <Button size="sm" variant="outline" disabled={busy} onClick={() => setReloadKey(key => key + 1)}>
+                    {busy ? 'Đang tải…' : 'Tải lại đơn hàng'}
+                </Button>
+            </div>
             {error && <div className="mb-4 rounded-lg bg-error-50 p-4 text-sm text-error-500">{error}</div>}
             {busy && <p className="text-gray-500">Đang tải…</p>}
             {orders && orders.content.length === 0 && <p className="text-gray-500">Chưa có đơn hàng nào.</p>}

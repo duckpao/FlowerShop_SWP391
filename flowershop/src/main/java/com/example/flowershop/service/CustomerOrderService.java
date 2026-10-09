@@ -39,6 +39,8 @@ public class CustomerOrderService {
                                       java.time.LocalDateTime createdDate, String note,
                                       List<OrderItemResponse> items, DeliveryInfo delivery) {}
 
+        public record ShippingFeeResponse(BigDecimal shippingFee) {}
+
     public record OrderItemResponse(String productId, String productName, BigDecimal price, Integer quantity) {}
 
     public record DeliveryInfo(String trackingCode, String deliveryPartnerId, String status) {}
@@ -199,4 +201,54 @@ private static ResponseStatusException notFound() {
                 order.getStatus().name(), order.getSubTotal(), order.getShippingFee(), order.getTotalAmount(),
                 order.getCreatedDate(), null, items, delivery);
     }
+
+        public BigDecimal calculateShippingFeeForOrder(String customerId, String orderId) {
+                Order order = orders.findById(orderId)
+                                .filter(o -> o.getCustomer().getId().equals(customerId))
+                                .orElseThrow(CustomerOrderService::notFound);
+                List<Address> shopAddresses = addresses.findByShopIdAndUserIsNullOrderByCreatedDateAscIdAsc(order.getShop().getId());
+                Address shopAddress = shopAddresses.stream()
+                                .filter(address -> Boolean.TRUE.equals(address.getIsDefault()))
+                                .findFirst()
+                                .orElse(shopAddresses.isEmpty() ? null : shopAddresses.get(0));
+                Address destination = order.getDeliveryAddress();
+
+                if (shopAddress == null || shopAddress.getGhnDistrictId() == null) {
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Shop chưa có địa chỉ GHN hợp lệ.");
+                }
+                if (destination == null || destination.getGhnDistrictId() == null
+                                || destination.getGhnWardCode() == null || destination.getGhnWardCode().isBlank()) {
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Địa chỉ nhận hàng chưa có thông tin GHN hợp lệ.");
+                }
+
+                return ghn.calculateFee(shopAddress.getGhnDistrictId(), destination.getGhnDistrictId(),
+                                destination.getGhnWardCode(), GhnService.DEFAULT_WEIGHT_GRAM);
+        }
+
+        @Transactional
+        public DeliveryInfo refreshTracking(String customerId, String orderId) {
+                Order order = orders.findById(orderId)
+                                .filter(o -> o.getCustomer().getId().equals(customerId))
+                                .orElseThrow(CustomerOrderService::notFound);
+                if (order.getStatus() != OrderStatus.DELIVERING && order.getStatus() != OrderStatus.COMPLETED) {
+                        throw new ResponseStatusException(HttpStatus.CONFLICT, "Đơn hàng chưa được bàn giao cho đơn vị vận chuyển.");
+                }
+
+                Delivery delivery = deliveries.findByOrderId(orderId)
+                                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Đơn hàng chưa có vận đơn."));
+                DeliveryStatus status = ghn.checkStatus(delivery.getTrackingCode());
+                delivery.setStatus(status);
+                delivery.setLastModifyBy(customerId);
+
+                if (status == DeliveryStatus.DELIVERED) {
+                        order.setStatus(OrderStatus.COMPLETED);
+                        order.setLastModifyBy(customerId);
+                        payments.findByOrderId(orderId).forEach(payment -> {
+                                payment.setStatus(PaymentStatus.SUCCESS);
+                                payment.setLastModifyBy(customerId);
+                        });
+                }
+
+                return new DeliveryInfo(delivery.getTrackingCode(), delivery.getDeliveryPartnerId(), status.name());
+        }
 }

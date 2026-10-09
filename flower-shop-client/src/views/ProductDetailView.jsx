@@ -225,6 +225,15 @@ export default function ProductDetailView({ auth, productId, id }) {
                 </p>
               </div>
 
+              {p.videos && p.videos.length > 0 && (
+                <div className="mb-6 space-y-3">
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Video sản phẩm</h3>
+                  {p.videos.map(video => (
+                    <video key={video.videoUrl} src={video.videoUrl} controls className="w-full rounded-xl bg-black" />
+                  ))}
+                </div>
+              )}
+
               {/* Actions Section */}
               {p.stock > 0 ? (
                 <div className="mt-auto pt-6 border-t border-gray-100 dark:border-white/5 space-y-4">

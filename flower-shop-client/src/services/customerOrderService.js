@@ -7,4 +7,6 @@ export const customerOrderService = {
     checkout: data => req('/checkout', { method: 'POST', body: data }),
     list: page => req(`?page=${page}`),
     detail: id => req(`/${encodeURIComponent(id)}`),
+    shippingFee: id => req(`/${encodeURIComponent(id)}/shipping-fee`),
+    refreshTracking: id => req(`/${encodeURIComponent(id)}/refresh-tracking`, { method: 'POST' }),
 }

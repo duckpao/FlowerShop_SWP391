@@ -70,7 +70,6 @@ export function useAuthController() {
 
   function navigate(next) {
     setFieldErrors({}); setCaptchaRequired(false); setCaptcha(null); setCaptchaAnswer('')
-    setFieldErrors({})
     setPage(next); setError(''); setNotice(''); setPassword(''); setConfirmation(''); setOtp('')
   }
   async function submit(event) {
