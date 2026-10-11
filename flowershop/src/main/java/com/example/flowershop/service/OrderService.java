@@ -9,6 +9,7 @@ import com.example.flowershop.entity.enums.PaymentMethod;
 import com.example.flowershop.entity.enums.PaymentStatus;
 import com.example.flowershop.entity.enums.PaymentType;
 import com.example.flowershop.entity.enums.ProductStatus;
+import com.example.flowershop.entity.enums.ProductType;
 import com.example.flowershop.entity.enums.ShopStatus;
 import com.example.flowershop.entity.enums.CouponStatus;
 import com.example.flowershop.entity.enums.DiscountType;
@@ -135,7 +136,7 @@ public class OrderService {
             if (product.getStatus() != ProductStatus.ACTIVE || product.getShop().getStatus() != ShopStatus.ACTIVE) {
                 throw ApiException.badRequest("Sản phẩm hoặc cửa hàng không còn hoạt động.");
             }
-            if (product.getStock() < cartItem.getQuantity()) {
+            if (product.getType() != ProductType.CUSTOM && product.getStock() < cartItem.getQuantity()) {
                 throw ApiException.badRequest(
                         "Sản phẩm '" + product.getName() + "' không đủ tồn kho. " +
                         "Tồn kho: " + product.getStock() + ", Số lượng đặt: " + cartItem.getQuantity()
@@ -218,10 +219,12 @@ public class OrderService {
 
             orderDetailRepository.save(orderDetail);
 
-            // Giảm stock
-            product.setStock(product.getStock() - cartItem.getQuantity());
-            product.setLastModifyBy(userId);
-            productRepository.save(product);
+            // Giảm stock (chỉ áp dụng với hoa có sẵn)
+            if (product.getType() != ProductType.CUSTOM) {
+                product.setStock(product.getStock() - cartItem.getQuantity());
+                product.setLastModifyBy(userId);
+                productRepository.save(product);
+            }
 
             orderItemResponses.add(OrderResponse.OrderItemResponse.builder()
                     .id(orderDetail.getId())
@@ -337,7 +340,7 @@ public class OrderService {
         for (OrderDetail item : details) {
             if (item.getProduct() != null) {
                 Product product = productRepository.findByIdForUpdate(item.getProduct().getId()).orElse(null);
-                if (product != null) {
+                if (product != null && product.getType() != ProductType.CUSTOM) {
                     product.setStock(product.getStock() + item.getQuantity());
                     product.setLastModifyBy("SYSTEM_AUTO_CANCEL");
                     productRepository.save(product);

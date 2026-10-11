@@ -9,6 +9,7 @@ import com.example.flowershop.entity.Product;
 import com.example.flowershop.entity.User;
 import com.example.flowershop.exception.ApiException;
 import com.example.flowershop.entity.enums.ProductStatus;
+import com.example.flowershop.entity.enums.ProductType;
 import com.example.flowershop.entity.ProductImage;
 import com.example.flowershop.repository.CartItemRepository;
 import com.example.flowershop.repository.ProductImageRepository;
@@ -51,8 +52,8 @@ public class CartService {
             throw ApiException.badRequest("Sản phẩm này hiện không còn bán.");
         }
 
-        // 3. Kiểm tra stock
-        if (product.getStock() < request.getQuantity()) {
+        // 3. Kiểm tra stock (chỉ áp dụng với hoa có sẵn)
+        if (product.getType() != ProductType.CUSTOM && product.getStock() < request.getQuantity()) {
             throw ApiException.badRequest(
                     "Số lượng yêu cầu vượt quá tồn kho. Tồn kho hiện tại: " + product.getStock()
             );
@@ -65,8 +66,8 @@ public class CartService {
         if (existingItem.isPresent()) {
             cartItem = existingItem.get();
             int newQuantity = cartItem.getQuantity() + request.getQuantity();
-            // Kiểm tra lại stock sau khi cộng dồn
-            if (product.getStock() < newQuantity) {
+            // Kiểm tra lại stock sau khi cộng dồn (chỉ áp dụng với hoa có sẵn)
+            if (product.getType() != ProductType.CUSTOM && product.getStock() < newQuantity) {
                 throw ApiException.badRequest(
                         "Tổng số lượng trong giỏ vượt quá tồn kho. Tồn kho: " + product.getStock()
                         + ", Hiện trong giỏ: " + cartItem.getQuantity()
@@ -127,9 +128,9 @@ public class CartService {
     public CartItemResponse updateCartItem(String userId, String cartItemId, UpdateCartItemRequest request) {
         CartItem cartItem = getCartItemOrThrow(cartItemId, userId);
 
-        // Kiểm tra stock
+        // Kiểm tra stock (chỉ áp dụng với hoa có sẵn)
         Product product = cartItem.getProduct();
-        if (product.getStock() < request.getQuantity()) {
+        if (product.getType() != ProductType.CUSTOM && product.getStock() < request.getQuantity()) {
             throw ApiException.badRequest(
                     "Số lượng yêu cầu vượt quá tồn kho. Tồn kho hiện tại: " + product.getStock()
             );

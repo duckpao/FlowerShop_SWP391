@@ -106,7 +106,7 @@ private static ResponseStatusException notFound() {
         Shop shop = product.getShop();
         if (shop.getStatus() != ShopStatus.ACTIVE)
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cửa hàng hiện không hoạt động.");
-        if (product.getStock() < req.quantity())
+        if (product.getType() != ProductType.CUSTOM && product.getStock() < req.quantity())
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Sản phẩm không đủ số lượng. Hiện còn " + product.getStock() + " sản phẩm.");
 
         // Load customer address + validate GHN codes
@@ -138,11 +138,13 @@ private static ResponseStatusException notFound() {
                 customerAddr.getGhnWardCode(), GhnService.DEFAULT_WEIGHT_GRAM);
         BigDecimal totalAmount = subTotal.add(shippingFee);
 
-        // Lock product and decrement stock
+        // Lock product and decrement stock (chỉ áp dụng với hoa có sẵn)
         Product locked = products.findByIdForUpdate(product.getId()).orElseThrow(CustomerOrderService::notFound);
-        if (locked.getStock() < req.quantity())
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Sản phẩm vừa hết hàng. Vui lòng thử lại.");
-        locked.setStock(locked.getStock() - req.quantity());
+        if (locked.getType() != ProductType.CUSTOM) {
+            if (locked.getStock() < req.quantity())
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Sản phẩm vừa hết hàng. Vui lòng thử lại.");
+            locked.setStock(locked.getStock() - req.quantity());
+        }
 
         // Build entities
         String orderId = UUID.randomUUID().toString();
