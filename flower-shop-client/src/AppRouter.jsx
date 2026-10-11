@@ -1,12 +1,15 @@
 import { Toaster } from 'react-hot-toast';
-import { Navigate, Route, BrowserRouter as Router, Routes, useLocation } from "react-router";
 import AccountView from './views/AccountView';
+import { Navigate, Route, BrowserRouter as Router, Routes, useLocation, useParams } from "react-router";
 import AppLayout from "./layout/AppLayout";
 import AuthView from "./views/AuthView";
 import HomeView from "./views/HomeView";
 import AdminDashboardView from "./views/AdminDashboardView";
 import ManagerDashboardView from "./views/ManagerDashboardView";
 import ProductDetailView from "./views/ProductDetailView";
+import ProductCatalogView from "./views/ProductCatalogView";
+import PublicShopView from "./views/PublicShopView";
+import FavoritesView from "./views/FavoritesView";
 import AcceptInvitationView from "./views/AcceptInvitationView";
 import CartPage from "./pages/CartPage";
 import CheckoutPage from "./pages/CheckoutPage";
@@ -14,9 +17,12 @@ import PaymentSuccessPage from "./pages/PaymentSuccessPage";
 import PaymentErrorPage from "./pages/PaymentErrorPage";
 import PaymentCancelPage from "./pages/PaymentCancelPage";
 import DevDepositTestPage from "./pages/DevDepositTestPage";
+import CustomerOrdersView from "./views/CustomerOrdersView";
+import CustomerOrderDetailView from "./views/CustomerOrderDetailView";
 import { useAuthController } from "./controllers/useAuthController";
 import { AuthProvider } from "./context/AuthContext";
 import { CartProvider, useCartContext } from "./context/CartContext";
+import FavoriteShopsView from './views/FavoriteShopsView'
 
 export default function AppRouter() {
   return (
@@ -41,10 +47,29 @@ function AppRouterContent() {
           {/* All routes wrapped in AppLayout which handles public/admin/shop nav items dynamically */}
           <Route element={<AppLayout />}>
             <Route path="/" element={<HomeView auth={controller} />} />
-            <Route path="/account" element={controller.busy ? <p>Đang tải hồ sơ…</p> : controller.user ? <AccountView {...controller} /> : <Navigate to="/login" replace />} />
-            <Route path="/products/:id" element={<ProductDetailViewWrapper />} />
+            <Route path="/account" element={<AccountViewRoute auth={controller} />} />
+            <Route path="/products" element={<ProductCatalogView auth={controller} />} />
+            <Route path="/products/:id" element={<ProductDetailViewWrapper auth={controller} />} />
+
+            <Route
+              path="/shops/:id"
+              element={<PublicShopView auth={controller} />}
+            />
+
+            <Route
+              path="/favorites"
+              element={<FavoritesView auth={controller} />}
+            />
+
+            <Route
+              path="/favorite-shops"
+              element={<FavoriteShopsView auth={controller} />}
+            />
+
             <Route path="/cart" element={<CartPageWrapper />} />
             <Route path="/checkout" element={controller.busy ? <p role="status">Đang kiểm tra đăng nhập…</p> : <CheckoutPage />} />
+            <Route path="/orders" element={<CustomerOrdersView />} />
+            <Route path="/orders/:id" element={<CustomerOrderDetailView />} />
             <Route path="/payment/success" element={<PaymentSuccessPage />} />
             <Route path="/payment/error" element={<PaymentErrorPage />} />
             <Route path="/payment/cancel" element={<PaymentCancelPage />} />
@@ -56,15 +81,35 @@ function AppRouterContent() {
           </Route>
         </Routes>
       </CartProvider>
-
     </AuthProvider>
   );
 }
 
-function ProductDetailViewWrapper() {
+function AccountViewRoute({ auth }) {
+  if (auth.busy && !auth.user) {
+    return <p role="status">Đang kiểm tra đăng nhập…</p>;
+  }
+
+  if (!auth.user) {
+    return <Navigate to="/login?next=%2Faccount" replace />;
+  }
+
+  return (
+    <AccountView
+      user={auth.user}
+      logout={auth.logout}
+      checkSession={auth.checkSession}
+      busy={auth.busy}
+      error={auth.error}
+      notice={auth.notice}
+    />
+  );
+}
+
+function ProductDetailViewWrapper({ auth }) {
   const location = useLocation();
   const match = location.pathname.match(/^\/products\/([^/]+)$/);
-  return <ProductDetailView id={match ? decodeURIComponent(match[1]) : ""} />;
+  return <ProductDetailView auth={auth} productId={match ? decodeURIComponent(match[1]) : ""} />;
 }
 
 function CartPageWrapper() {

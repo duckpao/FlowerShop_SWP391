@@ -6,8 +6,8 @@ const CartContext = createContext(null);
 
 export function CartProvider({ children }) {
   const auth = useAuth();
-  // Nếu đã đăng nhập: dùng ID của user. Nếu chưa: null (chế độ Guest)
-  const currentUserId = auth?.user?.id || null;
+  // Server-backed carts are customer-only; other roles use the in-memory guest cart.
+  const currentUserId = auth?.user?.role === 'CUSTOMER' ? auth.user.id : null;
   const cartHook = useCart(currentUserId);
 
   const cartCount = useMemo(() => {

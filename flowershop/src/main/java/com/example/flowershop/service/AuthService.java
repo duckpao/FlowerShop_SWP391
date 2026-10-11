@@ -23,6 +23,7 @@ public class AuthService {
     private final PasswordEncoder encoder;
     private final ApplicationEventPublisher events;
     private final ShopRepository shops;
+    private final CloudinaryService cloudinary;
     private final com.example.flowershop.security.CaptchaService captcha;
 
     @Transactional
@@ -41,14 +42,19 @@ public class AuthService {
         String email = normalize(request.email());
         if (request.password().getBytes(StandardCharsets.UTF_8).length > 72)
             throw new IllegalArgumentException("Mật khẩu không được vượt quá 72 byte UTF-8.");
-        if (users.existsByEmail(email)) return;
+        if (users.existsByEmail(email)) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.CONFLICT, "Email đã được đăng ký.");
+        }
         PendingRegistration registration = pending.findLocked(email).orElseGet(() -> {
             PendingRegistration fresh = new PendingRegistration();
             fresh.setEmail(email);
             fresh.setWindowStart(Instant.now());
             return fresh;
         });
-        if (!canIssue(registration)) return;
+        if (!canIssue(registration)) throw new org.springframework.web.server.ResponseStatusException(
+                org.springframework.http.HttpStatus.TOO_MANY_REQUESTS,
+                "Bạn đã yêu cầu quá nhiều mã OTP. Vui lòng chờ 60 giây giữa các lần đăng ký, tối đa 3 mã trong 15 phút.");
         // Replace submitted details only when issuing a new code: old codes cannot
         // activate a different password/name from a subsequent registration request.
         registration.setFullName(request.fullName().strip());
@@ -109,7 +115,10 @@ public class AuthService {
             throw new InvalidOtpException();
         }
         String id = UUID.randomUUID().toString();
-        User user = User.builder().id(id).email(p.getEmail()).fullName(p.getFullName())
+        String fullName = p.getFullName() == null ? "" : p.getFullName().strip();
+        String avatarUrl = cloudinary.uploadDefaultAvatar(fullName);
+        User user = User.builder().id(id).email(p.getEmail()).fullName(fullName)
+                .avatarUrl(avatarUrl)
                 .passwordHash(p.getPasswordHash()).role(p.getShopName()==null ? UserRole.CUSTOMER : UserRole.SHOP)
                 .status(UserStatus.ACTIVE).isEmailVerified(true).createdBy(id).build();
         users.saveAndFlush(user);

@@ -9,7 +9,6 @@ import java.util.Collection;
 import java.util.List;
 
 public interface OrderDetailRepository extends JpaRepository<OrderDetail, String> {
-
     List<OrderDetail> findByOrderId(String orderId);
 
     /** Số lượng sản phẩm mà chính khách này đang giữ trong các đơn PENDING (kho đã bị trừ nhưng giỏ vẫn còn). */
@@ -21,4 +20,5 @@ public interface OrderDetailRepository extends JpaRepository<OrderDetail, String
     @Query("SELECT DISTINCT d.order.id FROM OrderDetail d WHERE d.order.customer.id = :userId "
             + "AND d.order.status = com.example.flowershop.entity.enums.OrderStatus.PENDING AND d.product.id IN :productIds")
     List<String> findPendingOrderIds(@Param("userId") String userId, @Param("productIds") Collection<String> productIds);
+    List<OrderDetail> findByOrderIdIn(Collection<String> orderIds);
 }

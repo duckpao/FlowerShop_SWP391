@@ -34,8 +34,13 @@ public class SessionController {
     }
     @PostMapping("/refresh")
     @Parameter(name="X-CSRF-TOKEN",in=ParameterIn.HEADER,required=true)
-    public LoginResponse refresh(@CookieValue(name="refresh_token",required=false) String refresh,HttpServletResponse response) {
-        return respond(auth.refresh(refresh),response);
+    public ResponseEntity<LoginResponse> refresh(@CookieValue(name="refresh_token",required=false) String refresh,HttpServletResponse response) {
+        if (refresh == null || refresh.isBlank()) return noSession(response);
+        try {
+            return ResponseEntity.ok(respond(auth.refresh(refresh),response));
+        } catch (AuthenticationException | JwtException invalidSession) {
+            return noSession(response);
+        }
     }
     @GetMapping("/me")
     @io.swagger.v3.oas.annotations.security.SecurityRequirement(name="bearerAuth")
@@ -51,6 +56,11 @@ public class SessionController {
         cookie(response,tokens.refreshToken(),604800);
         response.setHeader("Cache-Control","no-store");
         return new LoginResponse(tokens.accessToken(),"Bearer",tokens.expiresIn(),tokens.user());
+    }
+    private ResponseEntity<LoginResponse> noSession(HttpServletResponse response) {
+        cookie(response,"",0);
+        response.setHeader("Cache-Control","no-store");
+        return ResponseEntity.noContent().build();
     }
     private void cookie(HttpServletResponse response,String value,long seconds) {
         response.addHeader(HttpHeaders.SET_COOKIE,ResponseCookie.from("refresh_token",value)

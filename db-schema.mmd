@@ -1,0 +1,381 @@
+erDiagram
+    Users {
+        nvarchar id PK "36"
+        nvarchar email UK "255"
+        nvarchar password_hash "255"
+        nvarchar google_id UK "255"
+        nvarchar full_name "100"
+        nvarchar phone "20"
+        enum role "ADMIN, SHOP, CUSTOMER, SHOP_STAFF, DELIVERY"
+        boolean is_email_verified
+        enum status "ACTIVE, INACTIVE, BANNED"
+        timestamp created_date
+        nvarchar created_by "36"
+        timestamp last_modify_date
+        nvarchar last_modify_by "36"
+    }
+
+    Shops {
+        nvarchar id PK "36"
+        nvarchar owner_id FK "36"
+        nvarchar name "255"
+        text description
+        nvarchar logo_url "255"
+        enum status "PENDING, ACTIVE, INACTIVE, BANNED"
+        timestamp created_date
+        nvarchar created_by "36"
+        timestamp last_modify_date
+        nvarchar last_modify_by "36"
+    }
+
+    Addresses {
+        nvarchar id PK "36"
+        nvarchar user_id FK "36 nullable"
+        nvarchar shop_id FK "36 nullable"
+        nvarchar address_line "255"
+        nvarchar ward "100"
+        nvarchar district "100"
+        nvarchar city "100"
+        nvarchar ghn_ward_code "20"
+        int ghn_district_id
+        boolean is_default
+        timestamp created_date
+        nvarchar created_by "36"
+        timestamp last_modify_date
+        nvarchar last_modify_by "36"
+    }
+
+    Categories {
+        nvarchar id PK "36"
+        nvarchar name "100"
+        text description
+        enum status "ACTIVE, INACTIVE"
+        timestamp created_date
+        nvarchar created_by "36"
+        timestamp last_modify_date
+        nvarchar last_modify_by "36"
+    }
+
+    Products {
+        nvarchar id PK "36"
+        nvarchar shop_id FK "36"
+        nvarchar category_id FK "36"
+        nvarchar name "255"
+        text description
+        json components
+        int shelf_life_days
+        decimal price "12,2"
+        int stock
+        enum product_type "READY_MADE, CUSTOM"
+        enum status "ACTIVE, INACTIVE, OUT_OF_STOCK"
+        boolean admin_hidden
+        timestamp created_date
+        nvarchar created_by "36"
+        timestamp last_modify_date
+        nvarchar last_modify_by "36"
+    }
+
+    Product_Images {
+        nvarchar id PK "36"
+        nvarchar product_id FK "36"
+        nvarchar image_url "500"
+        boolean is_primary
+        int display_order
+        timestamp created_date
+        nvarchar created_by "36"
+        timestamp last_modify_date
+        nvarchar last_modify_by "36"
+    }
+
+    Product_Videos {
+        nvarchar id PK "36"
+        nvarchar product_id FK "36"
+        nvarchar video_url "500"
+        nvarchar title "255"
+        text description
+        int display_order
+        timestamp created_date
+        nvarchar created_by "36"
+        timestamp last_modify_date
+        nvarchar last_modify_by "36"
+    }
+
+    Coupons {
+        nvarchar id PK "36"
+        nvarchar shop_id FK "36 nullable"
+        nvarchar code UK "50"
+        enum discount_type "PERCENTAGE, FIXED_AMOUNT"
+        decimal discount_value "12,2"
+        decimal min_order_value "12,2"
+        decimal max_discount_value "12,2"
+        timestamp start_date
+        timestamp end_date
+        int usage_limit
+        int used_count
+        enum status "ACTIVE, EXPIRED, DISABLED"
+        timestamp created_date
+        nvarchar created_by "36"
+        timestamp last_modify_date
+        nvarchar last_modify_by "36"
+    }
+
+    Cart_Items {
+        nvarchar id PK "36"
+        nvarchar user_id FK "36"
+        nvarchar product_id FK "36"
+        int quantity
+        timestamp created_date
+        nvarchar created_by "36"
+        timestamp last_modify_date
+        nvarchar last_modify_by "36"
+    }
+
+    Orders {
+        nvarchar id PK "36"
+        nvarchar customer_id FK "36"
+        nvarchar shop_id FK "36"
+        nvarchar delivery_address_id FK "36"
+        nvarchar recipient_name "255"
+        nvarchar recipient_phone "20"
+        nvarchar coupon_id FK "36 nullable"
+        enum order_type "STANDARD, CUSTOM"
+        decimal sub_total "12,2"
+        decimal discount_amount "12,2"
+        decimal shipping_fee "12,2"
+        decimal total_amount "12,2"
+        decimal deposit_amount "12,2"
+        text customer_note
+        text cancel_reason
+        text shop_note
+        enum status "PENDING, AWAITING_DEPOSIT, DEPOSIT_PAID, PROCESSING, DELIVERING, COMPLETED, CANCELLED, REFUNDED"
+        timestamp created_date
+        nvarchar created_by "36"
+        timestamp last_modify_date
+        nvarchar last_modify_by "36"
+    }
+
+    Order_Details {
+        nvarchar id PK "36"
+        nvarchar order_id FK "36"
+        nvarchar product_id FK "36 nullable"
+        json custom_materials
+        int quantity
+        timestamp created_date
+        nvarchar created_by "36"
+        timestamp last_modify_date
+        nvarchar last_modify_by "36"
+    }
+
+    Deliveries {
+        nvarchar id PK "36"
+        nvarchar order_id FK "36"
+        nvarchar delivery_partner_id "36"
+        nvarchar tracking_code "100"
+        enum status "PENDING, PICKED_UP, ON_THE_WAY, DELIVERED, FAILED"
+        text tracking_notes
+        timestamp created_date
+        nvarchar created_by "36"
+        timestamp last_modify_date
+        nvarchar last_modify_by "36"
+    }
+
+    Chat_Sessions {
+        nvarchar id PK "36"
+        nvarchar customer_id FK "36"
+        nvarchar shop_id FK "36"
+        timestamp created_date
+        nvarchar created_by "36"
+        timestamp last_modify_date
+        nvarchar last_modify_by "36"
+    }
+
+    Chat_Messages {
+        nvarchar id PK "36"
+        nvarchar session_id FK "36"
+        nvarchar sender_id FK "36"
+        enum sender_type "CUSTOMER, SHOP"
+        text message
+        json media
+        boolean is_read
+        timestamp created_date
+        nvarchar created_by "36"
+        timestamp last_modify_date
+        nvarchar last_modify_by "36"
+    }
+
+    Custom_Order_Requests {
+        nvarchar id PK "36"
+        nvarchar customer_id FK "36"
+        nvarchar shop_id FK "36"
+        decimal budget "12,2"
+        json desired_components
+        text description
+        enum status "REQUESTED, NEGOTIATING, ACCEPTED, REJECTED"
+        timestamp created_date
+        nvarchar created_by "36"
+        timestamp last_modify_date
+        nvarchar last_modify_by "36"
+    }
+
+    Payments {
+        nvarchar id PK "36"
+        nvarchar order_id FK "36"
+        enum payment_type "DEPOSIT, FINAL, FULL"
+        enum payment_method "ONLINE, COD"
+        decimal amount "12,2"
+        nvarchar gateway_transaction_no "100"
+        nvarchar invoice_number UK "100"
+        json gateway_response
+        enum status "PENDING, SUCCESS, FAILED"
+        timestamp created_date
+        nvarchar created_by "36"
+        timestamp last_modify_date
+        nvarchar last_modify_by "36"
+    }
+
+    Refunds {
+        nvarchar id PK "36"
+        nvarchar order_id FK "36"
+        decimal amount "12,2"
+        text reason
+        nvarchar gateway_refund_id "100"
+        json gateway_response
+        enum status "REQUESTED, APPROVED, PROCESSED, REJECTED"
+        timestamp created_date
+        nvarchar created_by "36"
+        timestamp last_modify_date
+        nvarchar last_modify_by "36"
+    }
+
+    Product_Reviews {
+        nvarchar id PK "36"
+        nvarchar product_id FK "36"
+        nvarchar user_id FK "36"
+        nvarchar order_id FK "36 nullable"
+        int rating "CHECK 1 to 5"
+        text comment
+        json media
+        text shop_reply
+        timestamp created_date
+        nvarchar created_by "36"
+        timestamp last_modify_date
+        nvarchar last_modify_by "36"
+    }
+
+    Favorite_Products {
+        nvarchar user_id PK, FK "36"
+        nvarchar product_id PK, FK "36"
+        timestamp created_date
+        nvarchar created_by "36"
+        timestamp last_modify_date
+        nvarchar last_modify_by "36"
+    }
+
+    Favorite_Shops {
+        nvarchar user_id PK, FK "36"
+        nvarchar shop_id PK, FK "36"
+        timestamp created_date
+        nvarchar created_by "36"
+        timestamp last_modify_date
+        nvarchar last_modify_by "36"
+    }
+
+    Blogs {
+        nvarchar id PK "36"
+        nvarchar shop_id FK "36"
+        nvarchar title "255"
+        longtext content
+        nvarchar thumbnail_url "500"
+        enum status "DRAFT, PUBLISHED, HIDDEN"
+        timestamp created_date
+        nvarchar created_by "36"
+        timestamp last_modify_date
+        nvarchar last_modify_by "36"
+    }
+
+    Blog_Images {
+        nvarchar id PK "36"
+        nvarchar blog_id FK "36"
+        nvarchar image_url "500"
+        int display_order
+        timestamp created_date
+        nvarchar created_by "36"
+        timestamp last_modify_date
+        nvarchar last_modify_by "36"
+    }
+
+    Blog_Interactions {
+        nvarchar user_id PK, FK "36"
+        nvarchar blog_id PK, FK "36"
+        enum interaction_type PK "LIKE, SAVE"
+        timestamp created_date
+        nvarchar created_by "36"
+        timestamp last_modify_date
+        nvarchar last_modify_by "36"
+    }
+
+    Blog_Comments {
+        nvarchar id PK "36"
+        nvarchar blog_id FK "36"
+        nvarchar user_id FK "36"
+        nvarchar parent_comment_id FK "36 nullable"
+        text content
+        timestamp created_date
+        nvarchar created_by "36"
+        timestamp last_modify_date
+        nvarchar last_modify_by "36"
+    }
+
+    Customer_Occasions {
+        nvarchar id PK "36"
+        nvarchar customer_id FK "36"
+        nvarchar title "255"
+        date occasion_date
+        boolean reminder_sent
+        timestamp created_date
+        nvarchar created_by "36"
+        timestamp last_modify_date
+        nvarchar last_modify_by "36"
+    }
+
+    Users ||--o{ Shops : owns
+    Users o|--o{ Addresses : user
+    Shops o|--o{ Addresses : shop
+    Shops ||--o{ Products : sells
+    Categories ||--o{ Products : categorizes
+    Products ||--o{ Product_Images : has
+    Products ||--o{ Product_Videos : has
+    Shops o|--o{ Coupons : offers
+    Users ||--o{ Cart_Items : owns
+    Products ||--o{ Cart_Items : contains
+    Users ||--o{ Orders : places
+    Shops ||--o{ Orders : receives
+    Addresses ||--o{ Orders : delivers_to
+    Coupons o|--o{ Orders : applied_to
+    Orders ||--o{ Order_Details : contains
+    Products o|--o{ Order_Details : references
+    Orders ||--o{ Deliveries : ships
+    Users ||--o{ Chat_Sessions : starts
+    Shops ||--o{ Chat_Sessions : hosts
+    Chat_Sessions ||--o{ Chat_Messages : contains
+    Users ||--o{ Chat_Messages : sends
+    Users ||--o{ Custom_Order_Requests : submits
+    Shops ||--o{ Custom_Order_Requests : receives
+    Orders ||--o{ Payments : paid_by
+    Orders ||--o{ Refunds : refunded_by
+    Products ||--o{ Product_Reviews : receives
+    Users ||--o{ Product_Reviews : writes
+    Orders o|--o{ Product_Reviews : referenced_by
+    %% Product_Reviews has composite UNIQUE KEY (user_id, product_id).
+    Users ||--o{ Favorite_Products : favorites
+    Products ||--o{ Favorite_Products : favorited
+    Users ||--o{ Favorite_Shops : favorites
+    Shops ||--o{ Favorite_Shops : favorited
+    Shops ||--o{ Blogs : publishes
+    Blogs ||--o{ Blog_Images : contains
+    Users ||--o{ Blog_Interactions : interacts
+    Blogs ||--o{ Blog_Interactions : receives
+    Users ||--o{ Blog_Comments : writes
+    Blogs ||--o{ Blog_Comments : contains
+    Blog_Comments o|--o{ Blog_Comments : replies_to
+    Users ||--o{ Customer_Occasions : owns

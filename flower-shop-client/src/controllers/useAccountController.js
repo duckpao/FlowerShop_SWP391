@@ -13,10 +13,13 @@ export function useAccountController(user) {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [reload, setReload] = useState(0)
+  const [serverPhoneError, setServerPhoneError] = useState('')
+  const phoneError = form.phone && !/^0[0-9]{9}$/.test(form.phone)
+    ? 'Số điện thoại phải bắt đầu bằng 0 và có đúng 10 chữ số' : serverPhoneError
   useEffect(() => {
     let active = true
     setBusy(true); setError(''); setAddressesLoaded(false)
-    Promise.allSettled([accountService.profile(), accountService.addresses()])
+    Promise.allSettled([accountService.profile(), user.role === 'CUSTOMER' ? accountService.addresses() : Promise.resolve([])])
       .then(([profileResult, addressesResult]) => {
         if (!active) return
         if (profileResult.status === 'fulfilled' && profileResult.value) {
@@ -43,11 +46,16 @@ export function useAccountController(user) {
   }, [user.id, user.role, reload])
   async function run(action) {
     setBusy(true); setError(''); setNotice('')
-    try { await action() } catch (e) { setError(e.message) } finally { setBusy(false) }
+    try { await action(); return true } catch (e) {
+      if (e.fieldErrors?.phone) setServerPhoneError(e.fieldErrors.phone)
+      else setError(e.message)
+      return false
+    } finally { setBusy(false) }
   }
   const cancel = () => { setEditing(null); setAddress(emptyAddress()) }
   const saveProfile = e => {
     e.preventDefault()
+    if (phoneError) return
     return run(async () => {
       const p = await accountService.updateProfile({ fullName: form.fullName.trim(), phone: form.phone.trim() })
       setProfile(p); setForm(profileInput(p)); setNotice('Đã cập nhật hồ sơ.')
@@ -56,10 +64,15 @@ export function useAccountController(user) {
   const saveAddress = e => {
     e.preventDefault()
     return run(async () => {
-      await accountService.saveAddress(editing, { ...address, addressLine: address.addressLine.trim(), ward: address.ward.trim(), district: '', city: address.city.trim() })
+      await accountService.saveAddress(editing, { ...address, recipientName: address.recipientName.trim(), recipientPhone: address.recipientPhone.trim(), addressLine: address.addressLine.trim(), ward: address.ward.trim(), district: address.district.trim(), city: address.city.trim() })
       setAddresses(await accountService.addresses()); cancel(); setNotice('Đã lưu địa chỉ.')
     })
   }
+  const uploadAvatar = file => run(async () => {
+    const updated = await accountService.uploadAvatar(file)
+    setProfile(updated)
+    setNotice('Đã cập nhật ảnh đại diện.')
+  })
   const remove = item => {
     if (!window.confirm(`Xóa địa chỉ ${item.addressLine}?`)) return
     return run(async () => {
@@ -73,11 +86,11 @@ export function useAccountController(user) {
   })
   const edit = item => {
     setEditing(item.id)
-    setAddress({ addressLine: item.addressLine || '', city: item.city || '', district: item.district || '', ward: item.ward || '', isDefault: item.isDefault })
+    setAddress({ ...emptyAddress(), ...item, recipientName: item.recipientName || profile.fullName || '', recipientPhone: item.recipientPhone || profile.phone || '', addressType: item.addressType || 'HOME' })
     setError(''); setNotice('')
   }
   return {
-    profile, form, setForm, addresses, addressesLoaded, address, setAddress, editing, busy, error, notice,
-    saveProfile, saveAddress, remove, makeDefault, edit, cancel, retry: () => setReload(x => x + 1)
+    profile, form, setForm: next => { setServerPhoneError(''); setForm(next) }, phoneError, addresses, addressesLoaded, address, setAddress, editing, busy, error, notice,
+    saveProfile, saveAddress, uploadAvatar, remove, makeDefault, edit, cancel, retry: () => setReload(x => x + 1)
   }
 }

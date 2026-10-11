@@ -44,7 +44,7 @@ export default function ApplicationDetailDialog({
   
   return createPortal(
     <div 
-      className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 p-4 backdrop-blur-sm transition-opacity"
+      className="fixed inset-0 z-[100000] flex items-center justify-center bg-gray-900/50 p-4 backdrop-blur-sm transition-opacity"
       role="dialog"
       aria-labelledby="application-dialog-title"
       aria-modal="true"

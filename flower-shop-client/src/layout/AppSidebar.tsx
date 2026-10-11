@@ -1,18 +1,17 @@
-import { useSidebar } from "@/context/SidebarContext";
+import { useSidebar } from "../context/SidebarContext";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useLocation } from "react-router";
+import { useAuth } from "../context/AuthContext";
+import { managerShopService } from "../services/managerShopService";
+import { managerOrderService } from "../services/managerOrderService";
 import {
   BoxCubeIcon,
-  CalenderIcon,
-  CartIcon,
   ChevronDownIcon,
   GridIcon,
   HorizontaLDots,
   ListIcon,
   PageIcon,
-  PieChartIcon,
-  PlugInIcon,
   TableIcon,
   UserCircleIcon,
 } from "../icons";
@@ -25,6 +24,7 @@ type NavItem = {
   path?: string;
   new?: boolean;
   target?: string;
+  badge?: number | string;
   subItems?: {
     name: string;
     key?: string;
@@ -46,6 +46,8 @@ const managerNavItems: NavItem[] = [
   { name: 'Tổng quan', path: '/shop-admin', icon: <GridIcon fontSize={24} /> },
   { name: 'Quản lý shop', path: '/shop-admin/shop', icon: <PageIcon fontSize={24} /> },
   { name: 'Quản lý mặt hàng', path: '/shop-admin/products', icon: <BoxCubeIcon fontSize={24} /> },
+  { name: 'Hàng chờ xử lý', path: '/shop-admin/order-queue', icon: <ListIcon fontSize={24} /> },
+  { name: 'Quản lý đơn hàng', path: '/shop-admin/orders', icon: <TableIcon fontSize={24} /> },
   { name: 'Quản lý nhân sự', path: '/shop-admin/staff', icon: <UserCircleIcon fontSize={24} /> },
   { name: 'Nhắn tin nhanh', path: '#', icon: <ListIcon fontSize={24} /> }
 ];
@@ -56,11 +58,17 @@ const publicNavItems: NavItem[] = [
   { name: 'Sản phẩm', path: '/#products', icon: <BoxCubeIcon fontSize={24} /> },
 ];
 
+const customerNavItems: NavItem[] = [
+  ...publicNavItems,
+  { name: 'Theo dõi đơn hàng', path: '/orders', icon: <TableIcon fontSize={24} /> },
+];
+
 const AppSidebar: React.FC = () => {
   const { isExpanded, isMobileOpen, isHovered, setIsHovered, setIsMobileOpen } =
     useSidebar();
   const { t } = useTranslation();
   const location = useLocation();
+  const { user } = useAuth();
   const [openSubmenu, setOpenSubmenu] = useState<{
     type: "main" | "others";
     index: number;
@@ -69,6 +77,30 @@ const AppSidebar: React.FC = () => {
     {},
   );
   const subMenuRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const [queueCount, setQueueCount] = useState<number>(0);
+  const isAdmin = location.pathname.startsWith('/admin') && !location.pathname.startsWith('/shop-admin');
+  const isManager = location.pathname.startsWith('/shop-admin');
+  const navItems = isAdmin
+    ? adminNavItems
+    : isManager
+      ? managerNavItems.map(item => item.path === '/shop-admin/order-queue' ? { ...item, badge: queueCount } : item)
+      : user?.role === 'CUSTOMER'
+        ? customerNavItems
+        : publicNavItems;
+
+  useEffect(() => {
+    if (location.pathname.startsWith('/shop-admin')) {
+      let active = true;
+      managerShopService.list("SHOP").then(shops => {
+        if (active && shops.length > 0) {
+          managerOrderService.getQueueCount(shops[0].id).then(res => {
+            if (active) setQueueCount(res.pendingCount);
+          }).catch(() => {});
+        }
+      }).catch(() => {});
+      return () => { active = false; };
+    }
+  }, [location.pathname]);
 
   // Auto-close sidebar on mobile after route change
   useEffect(() => {
@@ -79,8 +111,12 @@ const AppSidebar: React.FC = () => {
 
   const isActive = useCallback(
     (path: string) => {
-      // Cho public routes có hash link
-      if (path.includes('#')) return location.hash === path.substring(path.indexOf('#')) || (path === '/' && location.pathname === '/' && !location.hash);
+      if (path.includes('#')) {
+        const [pathname, hash] = path.split('#');
+        return location.pathname === (pathname || '/') && location.hash === `#${hash}`;
+      }
+      if (path === '/orders') return location.pathname === path || location.pathname.startsWith(`${path}/`);
+      if (path === '/') return location.pathname === '/' && !location.hash;
       return location.pathname === path;
     },
     [location],
@@ -88,12 +124,6 @@ const AppSidebar: React.FC = () => {
 
   useEffect(() => {
     let submenuToOpen: { type: "main" | "others"; index: number } | null = null;
-    
-    const navItems = location.pathname.startsWith('/admin') && !location.pathname.startsWith('/shop-admin') 
-      ? adminNavItems 
-      : location.pathname.startsWith('/shop-admin') 
-        ? managerNavItems 
-        : publicNavItems;
 
     navItems.forEach((nav, index) => {
       if (nav.subItems) {
@@ -108,7 +138,7 @@ const AppSidebar: React.FC = () => {
     if (submenuToOpen) {
       setOpenSubmenu(submenuToOpen);
     }
-  }, [location, isActive]);
+  }, [location, isActive, navItems]);
 
   useEffect(() => {
     if (openSubmenu !== null) {
@@ -213,6 +243,11 @@ const AppSidebar: React.FC = () => {
                     {nav.key ? t(`sidebar.items.${nav.key}`) : nav.name}
                   </span>
                 )}
+                {nav.badge !== undefined && nav.badge > 0 && (isExpanded || isHovered || isMobileOpen) && (
+                  <span className="absolute inset-e-6 ms-auto flex items-center justify-center rounded-full bg-error-500 px-2 py-0.5 text-xs font-medium text-white">
+                    {nav.badge}
+                  </span>
+                )}
               </a>
             )
           )}
@@ -279,13 +314,10 @@ const AppSidebar: React.FC = () => {
     </ul>
   );
 
-  const isPublic = !location.pathname.startsWith('/admin') && !location.pathname.startsWith('/shop-admin');
-  const sectionTitle = isPublic ? "CHUNG" : "QUẢN LÝ";
-  const navItems = location.pathname.startsWith('/admin') && !location.pathname.startsWith('/shop-admin') 
-    ? adminNavItems 
-    : location.pathname.startsWith('/shop-admin') 
-      ? managerNavItems 
-      : publicNavItems;
+  const isPublic = !isAdmin && !isManager;
+  const sectionTitle = isPublic
+    ? user?.role === 'CUSTOMER' ? 'KHÁCH HÀNG' : 'CHUNG'
+    : 'QUẢN LÝ';
 
   return (
     <aside

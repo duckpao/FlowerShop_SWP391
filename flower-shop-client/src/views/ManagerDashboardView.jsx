@@ -1,5 +1,7 @@
 import { Link } from "react-router";
 import ManagerShopsView from "./ManagerShopsView";
+import ManagerOrdersView from "./ManagerOrdersView";
+import OrderQueueView from "./OrderQueueView";
 import AdminProfileView from "./AdminProfileView";
 import ComponentCard from "../components/common/ComponentCard";
 import PageMeta from "../components/common/PageMeta";
@@ -43,16 +45,28 @@ const quickActions = [
     description: "Đăng, cập nhật, xóa và ẩn các sản phẩm của cửa hàng.",
   },
   {
-    href: "#",
-    title: "Nhắn tin nhanh",
-    section: "chat",
-    color: "bg-brand-50 text-brand-600 dark:bg-brand-500/10 dark:text-brand-400",
+    href: "/shop-admin/order-queue",
+    title: "Hàng chờ xử lý",
+    section: "order-queue",
+    color: "bg-error-50 text-error-600 dark:bg-error-500/10 dark:text-error-400",
     icon: (
       <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
       </svg>
     ),
-    description: "Phản hồi tin nhắn và hỗ trợ khách hàng trực tuyến.",
+    description: "Xử lý nhanh các đơn hàng mới, đang chờ gửi đơn vị vận chuyển.",
+  },
+  {
+    href: "/shop-admin/orders",
+    title: "Quản lý đơn hàng",
+    section: "orders",
+    color: "bg-orange-50 text-orange-600 dark:bg-orange-500/10 dark:text-orange-400",
+    icon: (
+      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+      </svg>
+    ),
+    description: "Xem danh sách toàn bộ đơn hàng và kiểm tra trạng thái.",
   },
 ];
 
@@ -72,6 +86,7 @@ export default function ManagerDashboardView({
 }) {
   const current = quickActions.find((item) => item.href === path && item.section !== "chat");
   const profile = path === "/shop-admin/profile";
+  const orderQueue = path === "/shop-admin/order-queue";
   
   return (
     <div className="w-full">
@@ -81,7 +96,7 @@ export default function ManagerDashboardView({
         </div>
       )}
       
-      {!current && !profile && (
+      {!current && !profile && !orderQueue && (
         <>
           <PageMeta title="Tổng quan Quản lý | Hệ thống" description="Bảng điều khiển dành cho Shop Manager" />
           <PageBreadCrumb pageTitle="Tổng quan cửa hàng" />
@@ -135,13 +150,17 @@ export default function ManagerDashboardView({
         </>
       )}
       
-      {current && (
+      {orderQueue ? (
+        <OrderQueueView shop={null} />
+      ) : current && current.section === "orders" ? (
+        <ManagerOrdersView shop={null} onBack={() => {}} />
+      ) : current ? (
         <ManagerShopsView
           key={current.section}
           role="SHOP"
           section={current.section}
         />
-      )}
+      ) : null}
       
       {profile && <AdminProfileView user={user} roleLabel="Shop Manager" />}
     </div>

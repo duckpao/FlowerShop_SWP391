@@ -34,4 +34,3 @@ public interface PaymentRepository extends JpaRepository<Payment, String> {
             + "WHERE p.order.id = :orderId AND p.status = com.example.flowershop.entity.enums.PaymentStatus.PENDING")
     int failPendingByOrderId(@Param("orderId") String orderId, @Param("actor") String actor);
 }
-

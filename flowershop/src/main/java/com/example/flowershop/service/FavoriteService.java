@@ -25,7 +25,7 @@ public class FavoriteService {
     private final ProductCardAssembler assembler;
 
     public FavoriteService(FavoriteProductRepository favorites, ProductRepository products,
-                           UserRepository users, ProductCardAssembler assembler) {
+            UserRepository users, ProductCardAssembler assembler) {
         this.favorites = favorites;
         this.products = products;
         this.users = users;
@@ -41,7 +41,8 @@ public class FavoriteService {
         Product product = products.findById(productId).filter(ProductCardAssembler::visible)
                 .orElseThrow(FavoriteService::missing);
         FavoriteProductId key = new FavoriteProductId(userId, productId);
-        if (favorites.existsById(key)) return; // Lưu lại thứ đã lưu vẫn thành công.
+        if (favorites.existsById(key))
+            return; // Lưu lại thứ đã lưu vẫn thành công.
         FavoriteProduct favorite = new FavoriteProduct();
         favorite.setId(key);
         favorite.setUser(users.findById(userId).orElseThrow(FavoriteService::missing));
@@ -50,14 +51,18 @@ public class FavoriteService {
         favorites.saveAndFlush(favorite);
     }
 
-    /** Bỏ thứ chưa lưu vẫn thành công: deleteById không ném lỗi khi bản ghi không tồn tại. */
+    /**
+     * Bỏ thứ chưa lưu vẫn thành công: deleteById không ném lỗi khi bản ghi không
+     * tồn tại.
+     */
     @Transactional
     public void remove(String userId, String productId) {
         favorites.deleteById(new FavoriteProductId(userId, productId));
     }
 
     public CatalogService.Results mine(String userId, int page) {
-        if (page < 0 || page > 100000) throw new IllegalArgumentException("Trang không hợp lệ.");
+        if (page < 0 || page > 100000)
+            throw new IllegalArgumentException("Trang không hợp lệ.");
         Page<FavoriteProduct> result = favorites.findOwned(userId, PageRequest.of(page, 12,
                 Sort.by(Sort.Order.desc("createdDate"), Sort.Order.asc("id.productId"))));
         List<Product> items = result.getContent().stream().map(FavoriteProduct::getProduct).toList();

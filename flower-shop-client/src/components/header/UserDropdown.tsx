@@ -5,9 +5,11 @@ import { Link } from "react-router";
 import { Dropdown } from "../ui/dropdown/Dropdown";
 import { DropdownItem } from "../ui/dropdown/DropdownItem";
 import { useAuth } from "@/context/AuthContext";
+import AvatarEditDialog from "../UserProfile/AvatarEditDialog";
 
 export default function UserDropdown() {
   const [isOpen, setIsOpen] = useState(false);
+  const [avatarOpen, setAvatarOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const auth = useAuth();
 
@@ -49,14 +51,16 @@ export default function UserDropdown() {
   const initial = displayName.charAt(0).toUpperCase();
 
   return (
-    <div className="relative" ref={dropdownRef}>
+    <div className="relative flex items-center gap-2" ref={dropdownRef}>
+      <button type="button" onClick={() => { closeDropdown(); setAvatarOpen(true); }}
+        aria-label="Cập nhật ảnh đại diện" title="Cập nhật ảnh đại diện"
+        className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-100 font-bold text-brand-600 dark:bg-brand-500/20 dark:text-brand-400">
+        {auth.user.avatarUrl ? <img src={auth.user.avatarUrl} alt="Ảnh đại diện" className="h-full w-full object-cover" /> : initial}
+      </button>
       <button
         onClick={toggleDropdown}
         className="dropdown-toggle flex items-center gap-2 text-gray-700 dark:text-gray-400"
       >
-        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-100 text-brand-600 font-bold dark:bg-brand-500/20 dark:text-brand-400">
-          {initial}
-        </span>
 
         <span className="hidden md:block text-theme-sm font-medium">{displayName}</span>
         <svg
@@ -142,6 +146,7 @@ export default function UserDropdown() {
           Đăng xuất
         </button>
       </Dropdown>
+      {avatarOpen && <AvatarEditDialog user={auth.user} onClose={() => setAvatarOpen(false)} />}
     </div>
   );
 }

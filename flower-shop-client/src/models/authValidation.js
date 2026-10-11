@@ -5,6 +5,10 @@ export function validateAuth(page, values) {
   if (page !== 'otp' && page !== 'reset') {
     const message = validateEmail(values.email, page === 'register' || page === 'forgot' ? 50 : 255)
     if (message) errors.email = message
+    const email = values.email.trim()
+    if (!email) errors.email = 'Vui lòng nhập email.'
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.email = 'Email không đúng định dạng, ví dụ: ten@gmail.com.'
+    else if (email.length > (page === 'register' ? 50 : 255)) errors.email = 'Email vượt quá độ dài cho phép.'
   }
   if (page === 'register' && !values.fullName.trim()) errors.fullName = 'Vui lòng nhập họ tên.'
   if (['register', 'reset', 'signin'].includes(page)) {

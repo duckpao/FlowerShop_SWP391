@@ -6,8 +6,8 @@ import { CartIcon } from '../icons';
 import { useCartContext } from '../context/CartContext';
 import { toast } from 'react-hot-toast';
 
-export default function ProductCatalogView({ auth, isEmbedded = false }) {
-  const c = useCatalogController();
+export default function ProductCatalogView({ auth, shops, isEmbedded = false }) {
+  const c = useCatalogController(shops);
   const favorites = useFavoriteToggle(auth?.user);
   const cartContext = useCartContext();
 

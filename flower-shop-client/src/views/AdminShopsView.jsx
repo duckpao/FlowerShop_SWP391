@@ -44,7 +44,7 @@ export default function AdminShopsView() {
                 ...Object.entries(labels).map(([value, label]) => ({ value, label }))
               ]}
               value={c.status}
-              onChange={(e) => c.setStatus(e.target.value)}
+              onChange={c.setStatus}
               disabled={c.busy}
             />
           </div>

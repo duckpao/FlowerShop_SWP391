@@ -10,7 +10,6 @@ import com.example.flowershop.entity.enums.OrderStatus;
 import com.example.flowershop.entity.enums.PaymentMethod;
 import com.example.flowershop.entity.enums.PaymentStatus;
 import com.example.flowershop.repository.*;
-import com.example.flowershop.service.DeliveryAreaService;
 import com.example.flowershop.service.OrderService;
 import com.example.flowershop.service.SePayGatewayService;
 import org.junit.jupiter.api.Test;
@@ -31,7 +30,7 @@ class PaymentCartLifecycleTests {
     private final PaymentRepository payments = mock(PaymentRepository.class);
     private final OrderService orderService = spy(new OrderService(orders, details, cartItems,
             mock(UserRepository.class), mock(AddressRepository.class), mock(ProductRepository.class),
-            payments, mock(CouponRepository.class), mock(DeliveryAreaService.class)));
+            payments, mock(CouponRepository.class)));
 
     private SePayGatewayService newGateway() {
         return PaymentBusinessTests.newGateway(orders, payments, mock(RefundRepository.class), orderService);

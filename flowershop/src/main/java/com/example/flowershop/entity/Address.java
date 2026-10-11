@@ -40,9 +40,21 @@ public class Address {
     @Column(name = "city", length = 100)
     private String city;
 
+    @Column(name = "ghn_ward_code", length = 20)
+    private String ghnWardCode;
+
+    @Column(name = "ghn_district_id")
+    private Integer ghnDistrictId;
+
     @Builder.Default
     @Column(name = "is_default")
     private Boolean isDefault = false;
+
+    @Column(name = "recipient_name", length = 100) private String recipientName;
+    @Column(name = "recipient_phone", length = 10) private String recipientPhone;
+    @Builder.Default @Column(name = "is_pickup") private Boolean isPickup = false;
+    @Builder.Default @Column(name = "is_return") private Boolean isReturn = false;
+    @Builder.Default @Column(name = "address_type", length = 10) private String addressType = "HOME";
 
     @CreationTimestamp
     @Column(name = "created_date", updatable = false)

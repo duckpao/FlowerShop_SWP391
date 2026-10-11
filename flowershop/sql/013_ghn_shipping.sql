@@ -1,0 +1,3 @@
+ALTER TABLE Addresses ADD COLUMN ghn_ward_code NVARCHAR(20) NULL;
+ALTER TABLE Addresses ADD COLUMN ghn_district_id INT NULL;
+ALTER TABLE Orders ADD COLUMN shipping_fee DECIMAL(12, 2) NOT NULL DEFAULT 0.00;

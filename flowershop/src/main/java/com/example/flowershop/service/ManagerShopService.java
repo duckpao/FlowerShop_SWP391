@@ -22,20 +22,20 @@ public class ManagerShopService {
     private final ShopRepository shops;
     private final ShopStaffRepository staff;
     private final AddressRepository addresses;
-    private final DeliveryAreaService areas;
-    public ManagerShopService(ShopRepository shops,ShopStaffRepository staff,AddressRepository addresses,DeliveryAreaService areas) {
-        this.shops=shops; this.staff=staff; this.addresses=addresses; this.areas=areas;
+    public ManagerShopService(ShopRepository shops,ShopStaffRepository staff,AddressRepository addresses) {
+        this.shops=shops; this.staff=staff; this.addresses=addresses;
     }
     public List<com.example.flowershop.dto.account.AddressResponse> address(String id,String actor) {
         owned(id,actor,false); return addresses.findByShopIdAndUserIsNullOrderByCreatedDateAscIdAsc(id).stream().map(com.example.flowershop.dto.account.AddressResponse::from).toList();
     }
     @Transactional public com.example.flowershop.dto.account.AddressResponse saveAddress(String id,String actor,com.example.flowershop.dto.account.AddressRequest input) {
-        var shop=owned(id,actor,true); areas.requireAllowed(input.city(),input.district(),input.ward());
+        var shop=owned(id,actor,true);
         var list=addresses.findByShopIdAndUserIsNullOrderByCreatedDateAscIdAsc(id);
         var a=list.stream().filter(x->Boolean.TRUE.equals(x.getIsDefault())).findFirst().orElseGet(()->list.isEmpty()?new Address():list.get(0));
         if(a.getId()==null) { a.setId(UUID.randomUUID().toString()); a.setShop(shop); a.setCreatedBy(actor); }
         list.forEach(x->x.setIsDefault(false));
         a.setAddressLine(input.addressLine().strip()); a.setCity(input.city().strip()); a.setDistrict(input.district().strip()); a.setWard(input.ward().strip());
+        a.setGhnWardCode(input.ghnWardCode().strip()); a.setGhnDistrictId(input.ghnDistrictId());
         a.setIsDefault(true); a.setLastModifyBy(actor);
         return com.example.flowershop.dto.account.AddressResponse.from(addresses.save(a));
     }

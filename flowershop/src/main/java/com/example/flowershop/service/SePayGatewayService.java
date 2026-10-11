@@ -321,6 +321,10 @@ public class SePayGatewayService {
      * Không @Transactional vì có gọi HTTP.
      */
     public void expireUnpaidOrder(String orderId) {
+        // Đơn COD (kể cả đơn "mua ngay" của CustomerOrderService) không có bước thanh toán online → không hết hạn sau 10 phút.
+        if (paymentRepository.findByOrderId(orderId).stream().anyMatch(p -> p.getPaymentMethod() == PaymentMethod.COD)) {
+            return;
+        }
         List<String> invoices = paymentRepository.findByOrderId(orderId).stream()
                 .filter(p -> p.getPaymentMethod() == PaymentMethod.ONLINE && p.getInvoiceNumber() != null
                         && p.getStatus() != PaymentStatus.SUCCESS)

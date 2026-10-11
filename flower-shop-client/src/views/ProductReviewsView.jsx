@@ -7,7 +7,7 @@ export default function ProductReviewsView({ product, auth }) {
   const isCustomer = user?.role === 'CUSTOMER'
   const ownsShop = user?.role === 'SHOP'
 
-  return <section className="account-card">
+  return <section className="catalog-panel">
     <h3>Đánh giá sản phẩm</h3>
     {c.error && <p role="alert" className="message error">{c.error}</p>}
     {c.notice && <p role="status" className="message success">{c.notice}</p>}
@@ -37,7 +37,7 @@ export default function ProductReviewsView({ product, auth }) {
     {c.data && <>
       <p>{c.data.totalElements} đánh giá</p>
       {!c.data.content.length && <p>Sản phẩm chưa có đánh giá nào.</p>}
-      <ul className="address-list">{c.data.content.map(r => <li key={r.id}>
+      <ul className="catalog-list">{c.data.content.map(r => <li key={r.id}>
         <strong>{'★'.repeat(r.rating)} · {r.reviewerName}</strong>
         <p className="muted">{new Date(r.createdAt).toLocaleString('vi-VN')}</p>
         {r.comment && <p>{r.comment}</p>}

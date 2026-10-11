@@ -95,7 +95,7 @@ của cờ được giữ nguyên tự động. Có test riêng chứng minh đi
 
 ### 3.3 Migration
 
-**`flowershop/sql/011_product_catalog.sql`** — 3 lệnh, thứ tự có chủ đích:
+**`flowershop/sql/016_product_catalog.sql`** — 3 lệnh, thứ tự có chủ đích:
 
 ```sql
 ALTER TABLE Products ADD COLUMN admin_hidden BOOLEAN NOT NULL DEFAULT FALSE;  -- 1. bắt buộc
@@ -108,7 +108,7 @@ ALTER TABLE Product_Reviews ADD CONSTRAINT uq_review_user_product UNIQUE (user_i
 `admin_hidden`, và **mọi truy vấn sản phẩm lại trả 500** — đúng lỗi mà module này sinh ra để sửa.
 Vì vậy lệnh bắt buộc luôn đứng trước lệnh có rủi ro.
 
-**`flowershop/sql/012_fix_utf8_mojibake.sql`** — sửa dữ liệu tiếng Việt bị lỗi font, xem mục 8.
+**`flowershop/sql/017_fix_utf8_mojibake.sql`** — sửa dữ liệu tiếng Việt bị lỗi font, xem mục 8.
 
 ---
 
@@ -416,7 +416,7 @@ khai báo `latin1`, cho ra byte trùng khít.
 
 **Đã sửa hai tầng**:
 1. Thêm `SET NAMES utf8mb4` vào `database.sql` và `db.sql` → database tạo mới không còn lỗi.
-2. `012_fix_utf8_mojibake.sql` chữa database đang chạy tại chỗ, 30 cột gồm cả cột JSON.
+2. `017_fix_utf8_mojibake.sql` chữa database đang chạy tại chỗ, 30 cột gồm cả cột JSON.
 
 **Ba điều kiện bảo vệ** trong script, để không phá dữ liệu vốn đã đúng:
 

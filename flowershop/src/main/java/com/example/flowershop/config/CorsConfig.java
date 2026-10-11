@@ -13,11 +13,11 @@ public class CorsConfig {
         return new WebMvcConfigurer() {
             @Override
             public void addCorsMappings(CorsRegistry registry) {
-                registry.addMapping("/api/**") // Chỉ áp dụng cho các route bắt đầu bằng /api
-                        .allowedOrigins("http://localhost:8080", "http://localhost:5173") // 8080: build production nhúng chung; 5173: Vite dev server gọi trực tiếp
-                        .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
+                registry.addMapping("/api/**")
+                        .allowedOriginPatterns("http://localhost:*", "http://127.0.0.1:*")
+                        .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH")
                         .allowedHeaders("*")
-                        .allowCredentials(true); // Cho phép gửi cookie/token nếu có
+                        .allowCredentials(true);
             }
         };
     }

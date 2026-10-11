@@ -25,7 +25,15 @@ export function useManagerShopController(role) {
         const a = list.find(x => x.isDefault) || list[0]
         setSelected(shop); setMembers(staff)
         setForm({ name: shop.name, description: shop.description || '', logoUrl: shop.logoUrl || '' })
-        setAddress({ addressLine: a?.addressLine || '', city: a?.city || 'Hà Nội', district: a?.district || '', ward: a?.ward || '', isDefault: true })
+        setAddress({
+          addressLine: a?.addressLine || '',
+          city: a?.city || 'Hà Nội',
+          district: a?.district || '',
+          ward: a?.ward || '',
+          ghnDistrictId: a?.ghnDistrictId || null,
+          ghnWardCode: a?.ghnWardCode || '',
+          isDefault: true
+        })
       }
     }).catch(e => { if (active) setError(e.message) })
       .finally(() => { if (active) setBusy(false) })
@@ -40,7 +48,15 @@ export function useManagerShopController(role) {
     const staff = role === 'SHOP' ? await api.staff(shop.id) : []
     const list = role === 'SHOP' ? await api.address(shop.id) : []
     const a = list.find(x => x.isDefault) || list[0]
-    setAddress(a ? { addressLine: a.addressLine || '', city: a.city || 'Hà Nội', district: a.district || '', ward: a.ward || '', isDefault: true } : { addressLine: '', city: 'Hà Nội', district: '', ward: '', isDefault: true })
+    setAddress({
+      addressLine: a?.addressLine || '',
+      city: a?.city || 'Hà Nội',
+      district: a?.district || '',
+      ward: a?.ward || '',
+      ghnDistrictId: a?.ghnDistrictId || null,
+      ghnWardCode: a?.ghnWardCode || '',
+      isDefault: true
+    })
     setSelected(shop); setMembers(staff)
     setForm({ name: shop.name, description: shop.description || '', logoUrl: shop.logoUrl || '' })
   })

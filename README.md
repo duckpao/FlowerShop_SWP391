@@ -17,7 +17,7 @@ Dự án được chia thành hai phần độc lập:
 ## Sản phẩm, đánh giá và yêu thích
 
 Danh sách sản phẩm toàn sàn, chi tiết kèm đánh giá, quản lý ảnh của Manager, sản phẩm yêu thích
-và quản lý danh mục của Admin. Cần chạy migration `flowershop/sql/011_product_catalog.sql` trước khi dùng.
+và quản lý danh mục của Admin. Cần chạy migration `flowershop/sql/016_product_catalog.sql` trước khi dùng.
 
 * [PRODUCT_CATALOG_GUIDE.md](PRODUCT_CATALOG_GUIDE.md) — cách dùng và các bước test thủ công.
 * [PRODUCT_CATALOG_IMPLEMENTATION.md](PRODUCT_CATALOG_IMPLEMENTATION.md) — danh sách file, nghiệp vụ
@@ -25,7 +25,7 @@ và quản lý danh mục của Admin. Cần chạy migration `flowershop/sql/01
 
 ## Database cho các chức năng trên nhánh Quangdv
 
-Sau khi khởi tạo database mới, cần chạy các migration trong `flowershop/sql/` theo thứ tự `001` đến `012` trên database `flower_shop_db`. Migration `011_online_cod_payment_methods.sql` quy chuẩn dữ liệu cũ về hai phương thức `ONLINE` và `COD`. Migration `012_order_recipient.sql` bổ sung thông tin người nhận đơn hàng.
+Sau khi khởi tạo database mới, cần chạy các migration trong `flowershop/sql/` theo thứ tự `001` đến `021` (mỗi số một file duy nhất) trên database `flower_shop_db`. Migration `011_online_cod_payment_methods.sql` quy chuẩn dữ liệu cũ về hai phương thức `ONLINE` và `COD`. Migration `012_order_recipient.sql` bổ sung thông tin người nhận đơn hàng.
 
 ### Lỗi font tiếng Việt trong dữ liệu mẫu
 
@@ -34,36 +34,38 @@ Sau khi khởi tạo database mới, cần chạy các migration trong `flowersh
 Lỗi này còn làm địa chỉ mẫu lưu thành "HÃ  Ná»™i", không khớp danh sách khu vực giao hàng.
 
 Hai file đã được vá nên **database tạo mới không còn dính lỗi**. Với database đang chạy, chạy
-`flowershop/sql/012_fix_utf8_mojibake.sql` để sửa dữ liệu tại chỗ mà không phải tạo lại;
+`flowershop/sql/017_fix_utf8_mojibake.sql` để sửa dữ liệu tại chỗ mà không phải tạo lại;
 script có điều kiện bảo vệ nên chạy lại nhiều lần vẫn an toàn và không đụng vào dữ liệu vốn đã đúng.
 
 Với database đã chạy các migration này, không chạy lại toàn bộ: một số migration thêm cột hoặc ràng buộc chỉ được chạy một lần. Không chạy lại script khởi tạo trên database có dữ liệu cần giữ. Cập nhật code không tự động chạy migration.
+
+Nếu database đã có bảng `Manager_Applications` được tạo từ DDL cũ, chạy một lần
+`flowershop/sql/014_manager_application_metadata.sql` để bổ sung `review_note`, `reviewed_at`,
+`reviewed_by` và `shop_id`. Migration chỉ thêm cột nullable, không xóa hoặc ghi đè dữ liệu hiện có.
 
 ## 🛠️ Yêu cầu hệ thống (Prerequisites)
 
 Để chạy được dự án trên máy cá nhân, team cần cài đặt sẵn các công cụ sau:
 
 * **Java 17:** Dùng cho môi trường Backend.
-* **MySQL 8.0:** Hệ quản trị cơ sở dữ liệu chạy trên máy (mặc định cổng 3306).
+* **Node.js:** Khuyến nghị sử dụng phiên bản LTS để chạy Frontend.
+* **MySQL 8.0:** Cài đặt và khởi động MySQL trên máy, lắng nghe tại cổng `3306`.
 
 ---
 
-## 🗄️ Hướng dẫn cài đặt Database (MySQL)
- 
-Dự án sử dụng **MySQL 8.0** chạy trực tiếp trên máy (cổng mặc định `3306`).
- 
-Tạo database và nạp dữ liệu mẫu thông qua file `database.sql`:
- 
-```bash
-mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS flower_shop_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-mysql -u root -p flower_shop_db < database.sql
-```
- 
+## 🛢️ Cấu hình Database (MySQL)
+
+Backend kết nối tới MySQL tại `localhost:3306`, database `flower_shop_db`.
+
+Đảm bảo MySQL đã chạy và database `flower_shop_db` đã được tạo trước khi khởi động backend. Cấu hình kết nối nằm trong `flowershop/src/main/resources/application.properties`.
+
 ---
  
 ## 🚀 Hướng dẫn chạy Backend (Spring Boot)
- 
-Backend cung cấp các **RESTful API** và tự động kết nối tới Database MySQL cục bộ (cổng mặc định `3306`).
+
+Backend cung cấp các **RESTful API** và kết nối tới MySQL local.
+
+Database chạy tại **port `3306`**.
 
 ### 1. Di chuyển vào thư mục Backend
 
@@ -243,13 +245,13 @@ Hãy đảm bảo `.gitignore` của project được cấu hình đúng và t�
 
 ---
 
-# 📌 Quick Start
+## 📌 Quick Start
 
 Nếu đã cài đầy đủ **Java 17 + Node.js + MySQL 8.0**, có thể chạy project theo thứ tự:
 
-### 1. Khởi động MySQL và import database (nếu chưa có)
+### 1. Khởi động MySQL
 
-Đảm bảo dịch vụ MySQL đang chạy (cổng mặc định `3306`) và đã import file `database.sql`.
+Đảm bảo dịch vụ MySQL đang chạy tại cổng `3306` và database `flower_shop_db` đã tồn tại.
 
 ### 2. Chạy Backend
 

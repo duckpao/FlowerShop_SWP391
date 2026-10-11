@@ -3,7 +3,10 @@ package com.example.flowershop.service;
 import com.example.flowershop.entity.Product;
 import com.example.flowershop.entity.ProductReview;
 import com.example.flowershop.entity.Shop;
+import com.example.flowershop.entity.enums.OrderStatus;
 import com.example.flowershop.entity.enums.ShopStatus;
+import com.example.flowershop.repository.OrderDetailRepository;
+import com.example.flowershop.repository.OrderRepository;
 import com.example.flowershop.repository.ProductRepository;
 import com.example.flowershop.repository.ProductReviewRepository;
 import com.example.flowershop.repository.ShopRepository;
@@ -20,6 +23,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.example.flowershop.entity.Order;
+import com.example.flowershop.entity.OrderDetail;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -28,31 +33,71 @@ import java.util.UUID;
 @Transactional(readOnly = true)
 public class ProductReviewService {
 
+    private final OrderRepository orders;
+
+    private final OrderDetailRepository orderDetails;
+
     public record ReviewInput(@NotNull @Min(1) @Max(5) Integer rating,
-                              @Size(max = 2000) String comment) {}
+            @Size(max = 2000) String comment) {
+    }
 
     public record ReviewResult(String id, String productId, String reviewerName, int rating,
-                               String comment, String shopReply, LocalDateTime createdAt) {}
+            String comment, String shopReply, LocalDateTime createdAt) {
+    }
 
-    public record Results(List<ReviewResult> content, int page, long totalElements, int totalPages) {}
+    public record Results(List<ReviewResult> content, int page, long totalElements, int totalPages) {
+    }
 
-    public record ReplyInput(@NotNull @Size(max = 2000) String reply) {}
+    public record ReplyInput(@NotNull @Size(max = 2000) String reply) {
+    }
 
     private final ProductReviewRepository reviews;
     private final ProductRepository products;
     private final UserRepository users;
     private final ShopRepository shops;
 
-    public ProductReviewService(ProductReviewRepository reviews, ProductRepository products,
-                                UserRepository users, ShopRepository shops) {
+    public ProductReviewService(
+            ProductReviewRepository reviews,
+            ProductRepository products,
+            UserRepository users,
+            ShopRepository shops,
+            OrderRepository orders,
+            OrderDetailRepository orderDetails) {
+
         this.reviews = reviews;
         this.products = products;
         this.users = users;
         this.shops = shops;
+        this.orders = orders;
+        this.orderDetails = orderDetails;
     }
 
     private static ResponseStatusException missing() {
         return new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy dữ liệu.");
+    }
+
+    private Order findCompletedOrderContainingProduct(
+            String customerId,
+            String productId) {
+
+        List<Order> completedOrders = orders.findByCustomerIdAndStatusOrderByCreatedDateDesc(
+                customerId,
+                OrderStatus.COMPLETED);
+
+        for (Order order : completedOrders) {
+            boolean containsProduct = orderDetails.findByOrderId(order.getId())
+                    .stream()
+                    .anyMatch(detail -> detail.getProduct() != null
+                            && productId.equals(detail.getProduct().getId()));
+
+            if (containsProduct) {
+                return order;
+            }
+        }
+
+        throw new ResponseStatusException(
+                HttpStatus.FORBIDDEN,
+                "Bạn chỉ có thể đánh giá sản phẩm đã mua trong đơn hàng hoàn thành.");
     }
 
     /** Chỉ trả tên hiển thị; email không bao giờ rời khỏi service này. */
@@ -69,9 +114,12 @@ public class ProductReviewService {
     }
 
     public Results list(String productId, int page) {
-        if (page < 0 || page > 100000) throw new IllegalArgumentException("Trang không hợp lệ.");
-        // Endpoint này công khai: phải áp dụng đúng quy tắc hiển thị, nếu không đánh giá của
-        // sản phẩm bị ẩn vẫn lộ ra kèm tên người đánh giá, và id không tồn tại thành kênh dò dữ liệu.
+        if (page < 0 || page > 100000)
+            throw new IllegalArgumentException("Trang không hợp lệ.");
+        // Endpoint này công khai: phải áp dụng đúng quy tắc hiển thị, nếu không đánh
+        // giá của
+        // sản phẩm bị ẩn vẫn lộ ra kèm tên người đánh giá, và id không tồn tại thành
+        // kênh dò dữ liệu.
         visibleProduct(productId);
         Page<ProductReview> result = reviews.findByProductId(productId, PageRequest.of(page, 10,
                 Sort.by(Sort.Order.desc("createdDate"), Sort.Order.asc("id"))));
@@ -79,21 +127,46 @@ public class ProductReviewService {
                 page, result.getTotalElements(), result.getTotalPages());
     }
 
-    /** Đánh giá của chính người đang đăng nhập, để giao diện mở sẵn chế độ sửa. 404 nếu chưa có. */
+    /**
+     * Đánh giá của chính người đang đăng nhập, để giao diện mở sẵn chế độ sửa. 404
+     * nếu chưa có.
+     */
     public ReviewResult mine(String productId, String actor) {
         return result(reviews.findByProductIdAndUserId(productId, actor)
                 .orElseThrow(ProductReviewService::missing));
     }
 
     @Transactional
-    public ReviewResult write(String productId, String actor, ReviewInput input) {
+    public ReviewResult write(
+            String productId,
+            String actor,
+            ReviewInput input) {
+
         Product product = visibleProduct(productId);
-        if (reviews.findByProductIdAndUserId(productId, actor).isPresent())
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Bạn đã đánh giá sản phẩm này.");
-        ProductReview review = ProductReview.builder().id(UUID.randomUUID().toString())
-                .product(product).user(users.findById(actor).orElseThrow(ProductReviewService::missing))
-                .rating(input.rating()).comment(input.comment() == null ? null : input.comment().strip())
-                .createdBy(actor).build();
+
+        if (reviews.findByProductIdAndUserId(productId, actor).isPresent()) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Bạn đã đánh giá sản phẩm này.");
+        }
+
+        Order order = findCompletedOrderContainingProduct(actor, productId);
+
+        ProductReview review = ProductReview.builder()
+                .id(UUID.randomUUID().toString())
+                .product(product)
+                .user(
+                        users.findById(actor)
+                                .orElseThrow(ProductReviewService::missing))
+                .order(order) // QUAN TRỌNG
+                .rating(input.rating())
+                .comment(
+                        input.comment() == null
+                                ? null
+                                : input.comment().strip())
+                .createdBy(actor)
+                .build();
+
         return result(reviews.saveAndFlush(review));
     }
 
@@ -116,11 +189,13 @@ public class ProductReviewService {
     @Transactional
     public ReviewResult reply(String shopId, String reviewId, String actor, String reply) {
         Shop shop = shops.findForUpdate(shopId).orElseThrow(ProductReviewService::missing);
-        if (!shop.getOwner().getId().equals(actor)) throw missing();
+        if (!shop.getOwner().getId().equals(actor))
+            throw missing();
         if (shop.getStatus() != ShopStatus.ACTIVE)
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Shop phải đang hoạt động.");
         ProductReview review = reviews.findById(reviewId).orElseThrow(ProductReviewService::missing);
-        if (!review.getProduct().getShop().getId().equals(shopId)) throw missing();
+        if (!review.getProduct().getShop().getId().equals(shopId))
+            throw missing();
         review.setShopReply(reply == null || reply.isBlank() ? null : reply.strip());
         review.setLastModifyBy(actor);
         return result(reviews.saveAndFlush(review));

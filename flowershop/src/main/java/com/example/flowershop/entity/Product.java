@@ -7,6 +7,7 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import com.example.flowershop.entity.enums.ProductStatus;
+import com.example.flowershop.entity.enums.ProductType;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -62,6 +63,11 @@ public class Product {
     @Column(name = "stock", nullable = false)
     @Builder.Default
     private Integer stock = 0;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "product_type", nullable = false, length = 20)
+    @Builder.Default
+    private ProductType type = ProductType.READY_MADE;
 
     @Builder.Default
     @Column(name = "admin_hidden", nullable = false)
