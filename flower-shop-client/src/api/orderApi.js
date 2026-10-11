@@ -20,6 +20,8 @@ const orderApi = {
   shippingFee: (userId, shopId, addressId) =>
     axiosClient.get(`/orders/${userId}/shipping-fee`, { params: { shopId, addressId } }),
 
+  makeOrders: (userId, data) => axiosClient.post(`/orders/${userId}/batch`, data),
+
   getOrderHistory: (userId) => axiosClient.get(`/orders/${userId}`),
 };
 

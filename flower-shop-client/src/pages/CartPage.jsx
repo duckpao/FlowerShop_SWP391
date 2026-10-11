@@ -34,18 +34,30 @@ export default function CartPage({ cart, loading, error, fetchCart, updateItem, 
   const selectedItems = items.filter(item => selectedItemIds?.includes(item.id));
   const selectedQuantity = selectedItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
   const selectedTotal = selectedItems.reduce((sum, item) => sum + Number(item.itemTotal || 0), 0);
-  const shopIds = [...new Set(selectedItems.map(item => item.product?.shopId))];
-  const hasMultipleShopsSelected = shopIds.length > 1;
+  // Kiểu Shopee: nhóm sản phẩm theo shop, mỗi shop sẽ thành một đơn riêng khi thanh toán.
+  const shopGroups = [...new Map(items.map(item => [item.product?.shopId, item.product?.shopName])).entries()]
+    .map(([shopId, shopName]) => ({
+      shopId,
+      shopName: shopName || 'Cửa hàng',
+      items: items.filter(item => item.product?.shopId === shopId),
+    }));
   const hasOverStockItem = selectedItems.some(item => item.product?.stock != null && item.quantity > item.product.stock);
 
   const handleToggleItem = itemId => {
     setSelectedItemIds(previous => (previous || []).includes(itemId) ? previous.filter(id => id !== itemId) : [...(previous || []), itemId]);
   };
+  const handleToggleShop = group => {
+    const ids = group.items.map(item => item.id);
+    const allSelected = ids.every(id => selectedItemIds?.includes(id));
+    setSelectedItemIds(previous => allSelected
+      ? (previous || []).filter(id => !ids.includes(id))
+      : [...new Set([...(previous || []), ...ids])]);
+  };
   const handleToggleSelectAll = () => {
     setSelectedItemIds(selectedItemIds?.length === items.length ? [] : items.map(item => item.id));
   };
   const continueToCheckout = () => {
-    if (!selectedItems.length || hasMultipleShopsSelected || hasOverStockItem) return;
+    if (!selectedItems.length || hasOverStockItem) return;
     if (!userId || !user) {
       navigate('/login?next=/cart');
       return;
@@ -77,18 +89,6 @@ export default function CartPage({ cart, loading, error, fetchCart, updateItem, 
           {/* Danh sách sản phẩm trong giỏ */}
 
           <div className="lg:col-span-8 space-y-4">
-            {hasMultipleShopsSelected && (
-              <div className="rounded-xl border border-warning-200 bg-warning-50 p-4 dark:border-warning-500/20 dark:bg-warning-500/10 text-warning-800 dark:text-warning-300 text-sm flex items-start gap-3">
-                <span className="text-xl">⚠️</span>
-                <div>
-                  <strong>Lưu ý đặt hàng đa cửa hàng:</strong>
-                  <p className="mt-0.5">
-                    Bạn đang chọn sản phẩm của {shopIds.length} shop khác nhau. Mỗi đơn hàng chỉ áp dụng cho 1 shop. Vui lòng bỏ chọn sản phẩm của các shop khác trước khi tiến hành thanh toán.
-                  </p>
-                </div>
-              </div>
-            )}
-
             {/* Thanh thao tác chọn tất cả */}
             <div className="rounded-xl border border-gray-200 bg-white px-5 py-4 shadow-sm dark:border-white/5 dark:bg-white/3 flex items-center justify-between">
               <label className="flex items-center gap-3 cursor-pointer text-sm font-semibold text-gray-800 dark:text-white">
@@ -107,8 +107,21 @@ export default function CartPage({ cart, loading, error, fetchCart, updateItem, 
             </div>
 
             {/* Danh sách từng sản phẩm */}
-            <div className="space-y-3">
-              {items.map((item) => {
+            <div className="space-y-4">
+              {shopGroups.map(group => (
+                <div key={group.shopId} className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-white/5 dark:bg-white/3">
+                  <div className="flex items-center gap-3 border-b border-gray-100 bg-gray-50 px-5 py-3 dark:border-white/5 dark:bg-white/5">
+                    <input
+                      type="checkbox"
+                      checked={group.items.every(item => selectedItemIds?.includes(item.id))}
+                      onChange={() => handleToggleShop(group)}
+                      aria-label={'Chọn tất cả sản phẩm của ' + group.shopName}
+                      className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500 dark:border-white/10 dark:bg-gray-800"
+                    />
+                    <span className="text-sm font-bold text-gray-900 dark:text-white">🏪 {group.shopName}</span>
+                  </div>
+                  <div className="divide-y divide-gray-100 dark:divide-white/5">
+              {group.items.map((item) => {
                 const isSelected = selectedItemIds?.includes(item.id);
                 const product = item.product || {};
                 const imageUrl = product.images?.[0] || product.image;
@@ -116,11 +129,7 @@ export default function CartPage({ cart, loading, error, fetchCart, updateItem, 
                 return (
                   <div
                     key={item.id}
-                    className={`rounded-xl border bg-white p-4 sm:p-5 shadow-sm transition-all dark:bg-white/3 ${
-                      isSelected
-                        ? 'border-brand-300 ring-1 ring-brand-300/30 dark:border-brand-500/40'
-                        : 'border-gray-200 dark:border-white/5'
-                    }`}
+                    className={`p-4 sm:p-5 transition-colors ${isSelected ? 'bg-brand-50/40 dark:bg-brand-500/5' : ''}`}
                   >
                     <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
                       {/* Checkbox */}
@@ -152,11 +161,6 @@ export default function CartPage({ cart, loading, error, fetchCart, updateItem, 
                           {product.name || 'Sản phẩm'}
                         </Link>
                         <div className="flex flex-wrap items-center gap-2 mt-1">
-                          {product.shopName && (
-                            <span className="text-xs font-medium text-brand-600 bg-brand-50 dark:bg-brand-500/10 dark:text-brand-300 px-2 py-0.5 rounded">
-                              🏪 {product.shopName}
-                            </span>
-                          )}
                           {product.stock != null && (
                             <span className={`text-xs px-2 py-0.5 rounded font-medium ${
                               item.quantity > product.stock
@@ -226,6 +230,9 @@ export default function CartPage({ cart, loading, error, fetchCart, updateItem, 
                   </div>
                 );
               })}
+                  </div>
+                </div>
+              ))}
             </div>
 
             <div className="pt-2">
@@ -247,7 +254,7 @@ export default function CartPage({ cart, loading, error, fetchCart, updateItem, 
                 <div className="flex justify-between border-t border-gray-100 pt-3 text-base font-bold text-gray-900 dark:border-white/5 dark:text-white"><span>Tạm tính</span><span className="text-brand-600 dark:text-brand-400">{formatPrice(selectedTotal)}</span></div>
               </div>
               {hasOverStockItem && <p role="alert" className="rounded-lg bg-error-50 p-3 text-sm text-error-600">Có sản phẩm vượt tồn kho. Vui lòng giảm số lượng.</p>}
-              <Button type="button" onClick={continueToCheckout} disabled={loading || !selectedItems.length || hasMultipleShopsSelected || hasOverStockItem || Boolean(user && user.role !== 'CUSTOMER')} className="w-full justify-center py-3.5 text-base font-bold">
+              <Button type="button" onClick={continueToCheckout} disabled={loading || !selectedItems.length || hasOverStockItem || Boolean(user && user.role !== 'CUSTOMER')} className="w-full justify-center py-3.5 text-base font-bold">
                 {!userId ? 'Đăng nhập để tiếp tục →' : 'Xác nhận thanh toán →'}
               </Button>
               <p className="text-center text-xs text-gray-400 dark:text-gray-500">{user && user.role !== 'CUSTOMER' ? 'Chỉ tài khoản khách hàng có thể đặt hàng.' : 'Thông tin giao hàng và phương thức thanh toán ở bước tiếp theo.'}</p>

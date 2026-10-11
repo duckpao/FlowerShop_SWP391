@@ -74,6 +74,49 @@ class PaymentBusinessTests {
         verify(payments, times(2)).save(any());
     }
 
+    private Order pendingOrder(String id, String total) {
+        return Order.builder().id(id).customer(User.builder().id("customer-1").build())
+                .orderType(OrderType.STANDARD).status(OrderStatus.PENDING).totalAmount(new BigDecimal(total))
+                .createdDate(LocalDateTime.now()).build();
+    }
+
+    @Test
+    void groupPaymentSendsOneInvoiceWithSummedAmountAndOnePaymentPerOrder() {
+        SePayGatewayService service = gatewayWithCheckoutConfig();
+        Order a = pendingOrder("aaaaaaaa-0000-0000-0000-000000000000", "100000");
+        Order b = pendingOrder("bbbbbbbb-0000-0000-0000-000000000000", "250000");
+        when(orders.findByIdForUpdate(a.getId())).thenReturn(Optional.of(a));
+        when(orders.findByIdForUpdate(b.getId())).thenReturn(Optional.of(b));
+        when(payments.findByOrderId(any())).thenReturn(List.of());
+        var request = new com.example.flowershop.dto.payment.CreateGroupPaymentRequest();
+        request.setOrderIds(List.of(b.getId(), a.getId()));
+
+        var result = service.createGroupPayment(request, "customer-1");
+
+        assertThat(result.getInvoiceNumber()).startsWith("GRP-");
+        assertThat(result.getAmount()).isEqualByComparingTo("350000");
+        assertThat(result.getFields().get("order_amount")).isEqualTo("350000");
+        assertThat(result.getFields().get("order_invoice_number")).isEqualTo(result.getInvoiceNumber());
+        var saved = org.mockito.ArgumentCaptor.forClass(Payment.class);
+        verify(payments, times(2)).save(saved.capture());
+        assertThat(saved.getAllValues()).allSatisfy(p -> assertThat(p.getGroupInvoice()).isEqualTo(result.getInvoiceNumber()));
+        assertThat(saved.getAllValues()).extracting(Payment::getAmount)
+                .usingComparatorForType(BigDecimal::compareTo, BigDecimal.class)
+                .containsExactlyInAnyOrder(new BigDecimal("100000"), new BigDecimal("250000"));
+    }
+
+    @Test
+    void groupPaymentRejectsAnotherCustomersOrder() {
+        SePayGatewayService service = gatewayWithCheckoutConfig();
+        Order a = pendingOrder("aaaaaaaa-0000-0000-0000-000000000000", "100000");
+        when(orders.findByIdForUpdate(a.getId())).thenReturn(Optional.of(a));
+        var request = new com.example.flowershop.dto.payment.CreateGroupPaymentRequest();
+        request.setOrderIds(List.of(a.getId()));
+
+        assertThatThrownBy(() -> service.createGroupPayment(request, "someone-else")).isInstanceOf(ApiException.class);
+        verify(payments, never()).save(any());
+    }
+
     @Test
     void checkoutFieldsArePostedInSigningOrder() {
         SePayGatewayService service = gatewayWithCheckoutConfig();

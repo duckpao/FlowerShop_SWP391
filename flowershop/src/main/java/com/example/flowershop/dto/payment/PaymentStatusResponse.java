@@ -18,6 +18,8 @@ public class PaymentStatusResponse {
     private String invoiceNumber;
     private String orderStatus;
     private String paymentStatus;
+    // Lombok sinh getter isPaid() nên Jackson mặc định xuất "paid"; frontend đọc "isPaid".
+    @com.fasterxml.jackson.annotation.JsonProperty("isPaid")
     private boolean isPaid;
     private BigDecimal amount;
     private BigDecimal paidAmount;
@@ -33,4 +35,6 @@ public class PaymentStatusResponse {
     private BigDecimal remainingAmount;
     /** "DEPOSIT" | "FINAL" | null: lần thanh toán tiếp theo frontend cần gọi. */
     private String nextPaymentType;
+    /** Thanh toán gộp: mọi đơn thuộc giao dịch (orderId là đơn đầu tiên). */
+    private java.util.List<String> orderIds;
 }

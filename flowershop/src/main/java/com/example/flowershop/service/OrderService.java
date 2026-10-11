@@ -1,6 +1,7 @@
 package com.example.flowershop.service;
 
 import com.example.flowershop.dto.order.MakeOrderRequest;
+import com.example.flowershop.dto.order.MakeOrdersRequest;
 import com.example.flowershop.dto.order.OrderResponse;
 import com.example.flowershop.entity.*;
 import com.example.flowershop.entity.enums.OrderStatus;
@@ -66,6 +67,32 @@ public class OrderService {
                 .filter(a -> a.getShop() == null && a.getUser() != null && a.getUser().getId().equals(userId))
                 .orElseThrow(() -> ApiException.badRequest("Địa chỉ nhận hoa không tồn tại trong tài khoản của bạn."));
         return shippingFee(shopId, address);
+    }
+
+    /**
+     * Đặt nhiều đơn một lúc (mỗi shop một đơn). Cùng một transaction: một shop lỗi thì cả nhóm rollback.
+     * Sắp xếp theo shopId để thứ tự khóa kho ổn định giữa các request đồng thời.
+     */
+    @Transactional
+    public List<OrderResponse> makeOrders(String userId, MakeOrdersRequest request) {
+        var parts = request.getShops().stream()
+                .sorted(Comparator.comparing(MakeOrdersRequest.ShopOrder::getShopId)).toList();
+        if (parts.stream().map(MakeOrdersRequest.ShopOrder::getShopId).distinct().count() != parts.size()) {
+            throw ApiException.badRequest("Mỗi shop chỉ được xuất hiện một lần trong yêu cầu đặt hàng.");
+        }
+        List<OrderResponse> orders = new ArrayList<>();
+        for (var part : parts) {
+            MakeOrderRequest single = new MakeOrderRequest();
+            single.setShopId(part.getShopId());
+            single.setCartItemIds(part.getCartItemIds());
+            single.setCouponId(part.getCouponId());
+            single.setDeliveryAddressId(request.getDeliveryAddressId());
+            single.setPaymentMethod(request.getPaymentMethod());
+            single.setRecipientName(request.getRecipientName());
+            single.setPhone(request.getPhone());
+            orders.add(makeOrder(userId, single));
+        }
+        return orders;
     }
 
     /**

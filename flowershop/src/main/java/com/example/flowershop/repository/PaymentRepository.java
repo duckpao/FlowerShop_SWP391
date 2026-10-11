@@ -26,6 +26,8 @@ public interface PaymentRepository extends JpaRepository<Payment, String> {
 
     Optional<Payment> findByInvoiceNumber(String invoiceNumber);
 
+    List<Payment> findByGroupInvoice(String groupInvoice);
+
     boolean existsByInvoiceNumber(String invoiceNumber);
 
     /** Cập nhật thẳng trong DB để không ghi đè SUCCESS mà IPN vừa commit. */

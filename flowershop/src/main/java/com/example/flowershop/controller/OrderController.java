@@ -40,6 +40,19 @@ public class OrderController {
     }
 
     /**
+     * Đặt nhiều đơn một lúc (mỗi shop một đơn, kiểu giỏ hàng nhiều shop).
+     * POST /api/orders/{userId}/batch
+     */
+    @PostMapping("/{userId}/batch")
+    public ResponseEntity<List<OrderResponse>> makeOrders(
+            @PathVariable String userId,
+            @Valid @RequestBody com.example.flowershop.dto.order.MakeOrdersRequest request,
+            @AuthenticationPrincipal CurrentUser currentUser) {
+        requireOwner(userId, currentUser);
+        return ResponseEntity.status(HttpStatus.CREATED).body(orderService.makeOrders(userId, request));
+    }
+
+    /**
      * Ước tính phí giao hàng GHN cho checkout.
      * GET /api/orders/{userId}/shipping-fee?shopId=...&addressId=...
      */

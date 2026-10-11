@@ -73,6 +73,21 @@ const paymentApi = {
    */
   startSePayCheckout: async (orderId, paymentType = 'FULL', paymentMethod) => {
     const payment = await paymentApi.createPayment({ orderId, paymentType, paymentMethod });
+    paymentApi.redirectToSePay(payment);
+  },
+
+  /**
+   * Thanh toán gộp nhiều đơn (mỗi shop một đơn) trong một giao dịch SePay.
+   * @param {string[]} orderIds
+   */
+  startSePayGroupCheckout: async (orderIds, paymentMethod) => {
+    const payment = await paymentApi.createGroupPayment({ orderIds, paymentMethod });
+    paymentApi.redirectToSePay(payment);
+  },
+
+  createGroupPayment: (data) => axiosClient.post('/payments/sepay/create-group', data),
+
+  redirectToSePay: (payment) => {
     const checkoutUrl = payment?.checkoutUrl || payment?.data?.checkoutUrl;
     const fields = payment?.fields || payment?.data?.fields;
     if (!checkoutUrl || !fields) throw new Error('Không nhận được thông tin cổng thanh toán từ máy chủ.');

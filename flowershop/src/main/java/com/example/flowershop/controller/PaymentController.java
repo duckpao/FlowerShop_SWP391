@@ -33,6 +33,18 @@ public class PaymentController {
         return ResponseEntity.ok(response);
     }
 
+    /**
+     * Thanh toán gộp nhiều đơn (mỗi shop một đơn) trong một giao dịch SePay
+     * POST /api/payments/sepay/create-group
+     */
+    @PostMapping("/payments/sepay/create-group")
+    public ResponseEntity<CreatePaymentResponse> createGroupPayment(
+            @Valid @RequestBody com.example.flowershop.dto.payment.CreateGroupPaymentRequest request,
+            @AuthenticationPrincipal CurrentUser currentUser
+    ) {
+        return ResponseEntity.ok(sePayGatewayService.createGroupPayment(request, currentUser.id()));
+    }
+
     @PostMapping("/payments/sepay/cancel/{invoiceNumber}")
     public Map<String, Boolean> cancelCheckout(@PathVariable String invoiceNumber,
                                                @AuthenticationPrincipal CurrentUser currentUser) {
