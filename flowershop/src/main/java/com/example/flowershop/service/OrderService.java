@@ -42,7 +42,31 @@ public class OrderService {
     private final ProductRepository productRepository;
     private final PaymentRepository paymentRepository;
     private final CouponRepository couponRepository;
+    private final GhnService ghn;
     @jakarta.persistence.PersistenceContext private jakarta.persistence.EntityManager entityManager;
+
+    /** Phí giao hàng GHN từ địa chỉ mặc định của shop tới địa chỉ nhận (cả hai phải có mã quận/phường GHN). */
+    private BigDecimal shippingFee(String shopId, Address deliveryAddress) {
+        var shopAddrs = addressRepository.findByShopIdAndUserIsNullOrderByCreatedDateAscIdAsc(shopId);
+        Address from = shopAddrs.stream().filter(a -> Boolean.TRUE.equals(a.getIsDefault())).findFirst()
+                .orElse(shopAddrs.isEmpty() ? null : shopAddrs.get(0));
+        if (from == null || from.getGhnDistrictId() == null)
+            throw ApiException.badRequest("Cửa hàng chưa thiết lập địa chỉ lấy hàng GHN.");
+        if (deliveryAddress.getGhnDistrictId() == null || deliveryAddress.getGhnWardCode() == null
+                || deliveryAddress.getGhnWardCode().isBlank())
+            throw ApiException.badRequest("Địa chỉ nhận hoa chưa có mã GHN. Vui lòng sửa địa chỉ trong tài khoản và chọn lại Tỉnh/Huyện/Xã.");
+        return ghn.calculateFee(from.getGhnDistrictId(), deliveryAddress.getGhnDistrictId(),
+                deliveryAddress.getGhnWardCode(), GhnService.DEFAULT_WEIGHT_GRAM);
+    }
+
+    /** Ước tính phí giao hàng cho trang checkout. */
+    @Transactional(readOnly = true)
+    public BigDecimal estimateShippingFee(String userId, String shopId, String deliveryAddressId) {
+        Address address = addressRepository.findById(deliveryAddressId.trim())
+                .filter(a -> a.getShop() == null && a.getUser() != null && a.getUser().getId().equals(userId))
+                .orElseThrow(() -> ApiException.badRequest("Địa chỉ nhận hoa không tồn tại trong tài khoản của bạn."));
+        return shippingFee(shopId, address);
+    }
 
     /**
      * Tạo đơn hàng từ các cart items đã chọn.
@@ -74,6 +98,7 @@ public class OrderService {
                 .filter(addr -> addr.getShop() == null && addr.getUser() != null
                         && addr.getUser().getId().equals(userId))
                 .orElseThrow(() -> ApiException.badRequest("Địa chỉ nhận hoa không tồn tại trong tài khoản của bạn."));
+        BigDecimal shippingFee = shippingFee(request.getShopId(), deliveryAddress);
 
         // 3. Validate shop
         // Lấy danh sách cart items được chọn
@@ -152,7 +177,7 @@ public class OrderService {
             couponRepository.save(coupon);
             couponId = coupon.getId();
         }
-        BigDecimal totalAmount = subTotal.subtract(discountAmount);
+        BigDecimal totalAmount = subTotal.subtract(discountAmount).add(shippingFee);
         if (totalAmount.signum() <= 0) throw ApiException.badRequest("Tổng thanh toán phải lớn hơn 0.");
 
         // 5. Tạo Order
@@ -168,6 +193,7 @@ public class OrderService {
                 .orderType(OrderType.STANDARD)
                 .subTotal(subTotal)
                 .discountAmount(discountAmount)
+                .shippingFee(shippingFee)
                 .totalAmount(totalAmount)
                 .depositAmount(BigDecimal.ZERO)
                 .status(OrderStatus.PENDING)
@@ -244,6 +270,7 @@ public class OrderService {
                 .orderType(order.getOrderType().name())
                 .subTotal(subTotal)
                 .discountAmount(discountAmount)
+                .shippingFee(shippingFee)
                 .totalAmount(totalAmount)
                 .deliveryAddressId(deliveryAddress.getId())
                 .recipientName(order.getRecipientName())
@@ -328,6 +355,7 @@ public class OrderService {
                     .orderType(order.getOrderType().name())
                     .subTotal(order.getSubTotal())
                     .discountAmount(order.getDiscountAmount())
+                    .shippingFee(order.getShippingFee())
                     .totalAmount(order.getTotalAmount())
                     .deliveryAddressId(order.getDeliveryAddress().getId())
                     .recipientName(order.getRecipientName())

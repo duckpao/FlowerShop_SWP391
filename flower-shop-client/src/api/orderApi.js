@@ -17,6 +17,9 @@ const orderApi = {
    * Lấy lịch sử đơn hàng của user
    * @param {string} userId
    */
+  shippingFee: (userId, shopId, addressId) =>
+    axiosClient.get(`/orders/${userId}/shipping-fee`, { params: { shopId, addressId } }),
+
   getOrderHistory: (userId) => axiosClient.get(`/orders/${userId}`),
 };
 

@@ -77,8 +77,26 @@ export default function CheckoutPage() {
     return () => { active = false; };
   }, [userId, user?.role, addressRefreshKey]);
 
+  const [shippingFee, setShippingFee] = useState(null);
+  const [feeLoading, setFeeLoading] = useState(false);
+  const [feeError, setFeeError] = useState('');
+  const feeShopId = shopIds.length === 1 ? shopIds[0] : '';
+
+  useEffect(() => {
+    let active = true;
+    setShippingFee(null);
+    setFeeError('');
+    if (!userId || !feeShopId || !selectedAddressId) return undefined;
+    setFeeLoading(true);
+    orderApi.shippingFee(userId, feeShopId, selectedAddressId)
+      .then(res => { if (active) setShippingFee(Number(res.shippingFee)); })
+      .catch(err => { if (active) setFeeError(err.message || 'Không tính được phí giao hàng.'); })
+      .finally(() => { if (active) setFeeLoading(false); });
+    return () => { active = false; };
+  }, [userId, feeShopId, selectedAddressId]);
+
   const handlePlaceOrder = async () => {
-    if (orderLoading || loading || !userId || requestedIds.length === 0 || missingItems || selectedItems.length === 0) return;
+    if (orderLoading || loading || feeLoading || shippingFee == null || !userId || requestedIds.length === 0 || missingItems || selectedItems.length === 0) return;
     if (shopIds.length !== 1 || !shopIds[0] || hasOverStockItem) return;
     if (!recipientName.trim() || !phone.trim()) {
       setOrderError('Vui lòng nhập tên và số điện thoại người nhận.');
@@ -223,13 +241,14 @@ export default function CheckoutPage() {
             <div className="space-y-2 border-t border-gray-100 pt-4 text-sm dark:border-white/5">
               <div className="flex justify-between text-gray-600 dark:text-gray-400"><span>Số lượng</span><span>{selectedQuantity} sản phẩm</span></div>
               <div className="flex justify-between text-gray-600 dark:text-gray-400"><span>Tạm tính</span><span>{formatPrice(selectedTotal)}</span></div>
-              <div className="flex justify-between text-gray-600 dark:text-gray-400"><span>Phí vận chuyển</span><span>Miễn phí</span></div>
-              <div className="flex justify-between border-t border-gray-100 pt-3 text-base font-bold text-gray-900 dark:border-white/5 dark:text-white"><span>Tổng tạm tính</span><span className="text-brand-600 dark:text-brand-400">{formatPrice(selectedTotal)}</span></div>
+              <div className="flex justify-between text-gray-600 dark:text-gray-400"><span>Phí vận chuyển (GHN)</span><span>{feeLoading ? "Đang tính…" : shippingFee != null ? formatPrice(shippingFee) : "—"}</span></div>
+              <div className="flex justify-between border-t border-gray-100 pt-3 text-base font-bold text-gray-900 dark:border-white/5 dark:text-white"><span>Tổng tạm tính</span><span className="text-brand-600 dark:text-brand-400">{formatPrice(selectedTotal + (shippingFee || 0))}</span></div>
               <p className="text-xs text-gray-500 dark:text-gray-400">Số tiền cuối cùng được tính trên máy chủ sau khi áp dụng mã giảm giá.</p>
             </div>
+            {feeError && <p role="alert" className="rounded-lg bg-error-50 p-3 text-sm text-error-600">{feeError}</p>}
             {hasOverStockItem && <p role="alert" className="rounded-lg bg-error-50 p-3 text-sm text-error-600">Có sản phẩm vượt quá tồn kho. Vui lòng điều chỉnh trong giỏ.</p>}
             {orderError && <p role="alert" className="rounded-lg bg-error-50 p-3 text-sm text-error-600">{orderError}</p>}
-            <Button type="button" onClick={handlePlaceOrder} disabled={orderLoading || loading || addressesLoading || !selectedAddressId || shopIds.length !== 1 || hasOverStockItem} className="w-full justify-center py-3.5 text-base font-bold">
+            <Button type="button" onClick={handlePlaceOrder} disabled={orderLoading || loading || addressesLoading || feeLoading || shippingFee == null || !selectedAddressId || shopIds.length !== 1 || hasOverStockItem} className="w-full justify-center py-3.5 text-base font-bold">
               {orderLoading ? 'Đang xử lý…' : pendingOnlineOrderId ? 'Thử lại thanh toán online' : paymentMethod === 'ONLINE' ? 'Thanh toán online →' : 'Xác nhận đặt hàng COD'}
             </Button>
             <p className="text-center text-xs text-gray-400 dark:text-gray-500">Thông tin thanh toán được bảo vệ an toàn</p>

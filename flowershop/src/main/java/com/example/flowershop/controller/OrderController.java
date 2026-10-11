@@ -40,6 +40,18 @@ public class OrderController {
     }
 
     /**
+     * Ước tính phí giao hàng GHN cho checkout.
+     * GET /api/orders/{userId}/shipping-fee?shopId=...&addressId=...
+     */
+    @GetMapping("/{userId}/shipping-fee")
+    public ResponseEntity<java.util.Map<String, java.math.BigDecimal>> shippingFee(
+            @PathVariable String userId, @RequestParam String shopId, @RequestParam String addressId,
+            @AuthenticationPrincipal CurrentUser currentUser) {
+        requireOwner(userId, currentUser);
+        return ResponseEntity.ok(java.util.Map.of("shippingFee", orderService.estimateShippingFee(userId, shopId, addressId)));
+    }
+
+    /**
      * Lịch sử đơn hàng của user.
      * GET /api/orders/{userId}
      */
