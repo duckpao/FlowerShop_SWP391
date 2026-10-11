@@ -31,6 +31,10 @@ public class Shop {
     @Column(name = "description", columnDefinition = "TEXT")
     private String description;
 
+    /** Mã cửa hàng (điểm lấy hàng) của shop trên GHN; null nếu chưa đăng ký. */
+    @Column(name = "ghn_shop_id")
+    private Integer ghnShopId;
+
     @Column(name = "logo_url", length = 255)
     private String logoUrl;
 

@@ -56,7 +56,7 @@ public class OrderService {
         if (deliveryAddress.getGhnDistrictId() == null || deliveryAddress.getGhnWardCode() == null
                 || deliveryAddress.getGhnWardCode().isBlank())
             throw ApiException.badRequest("Địa chỉ nhận hoa chưa có mã GHN. Vui lòng sửa địa chỉ trong tài khoản và chọn lại Tỉnh/Huyện/Xã.");
-        return ghn.calculateFee(from.getGhnDistrictId(), deliveryAddress.getGhnDistrictId(),
+        return ghn.calculateFee(from.getShop().getGhnShopId(), from.getGhnDistrictId(), deliveryAddress.getGhnDistrictId(),
                 deliveryAddress.getGhnWardCode(), GhnService.DEFAULT_WEIGHT_GRAM);
     }
 

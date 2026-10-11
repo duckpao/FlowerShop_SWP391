@@ -94,7 +94,7 @@ private static ResponseStatusException notFound() {
         if (toDistrict == 0 || toWard == null || toWard.isBlank())
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Vui lòng chọn địa chỉ GHN.");
             
-        return ghn.calculateFee(shopAddr.getGhnDistrictId(), toDistrict, toWard, GhnService.DEFAULT_WEIGHT_GRAM);
+        return ghn.calculateFee(shop.getGhnShopId(), shopAddr.getGhnDistrictId(), toDistrict, toWard, GhnService.DEFAULT_WEIGHT_GRAM);
     }
 
     @Transactional
@@ -134,7 +134,7 @@ private static ResponseStatusException notFound() {
 
         // Calculate fees
         BigDecimal subTotal = product.getPrice().multiply(BigDecimal.valueOf(req.quantity()));
-        BigDecimal shippingFee = ghn.calculateFee(shopAddr.getGhnDistrictId(), customerAddr.getGhnDistrictId(),
+        BigDecimal shippingFee = ghn.calculateFee(shop.getGhnShopId(), shopAddr.getGhnDistrictId(), customerAddr.getGhnDistrictId(),
                 customerAddr.getGhnWardCode(), GhnService.DEFAULT_WEIGHT_GRAM);
         BigDecimal totalAmount = subTotal.add(shippingFee);
 
@@ -221,7 +221,7 @@ private static ResponseStatusException notFound() {
                         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Địa chỉ nhận hàng chưa có thông tin GHN hợp lệ.");
                 }
 
-                return ghn.calculateFee(shopAddress.getGhnDistrictId(), destination.getGhnDistrictId(),
+                return ghn.calculateFee(order.getShop().getGhnShopId(), shopAddress.getGhnDistrictId(), destination.getGhnDistrictId(),
                                 destination.getGhnWardCode(), GhnService.DEFAULT_WEIGHT_GRAM);
         }
 
@@ -236,7 +236,7 @@ private static ResponseStatusException notFound() {
 
                 Delivery delivery = deliveries.findByOrderId(orderId)
                                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Đơn hàng chưa có vận đơn."));
-                DeliveryStatus status = ghn.checkStatus(delivery.getTrackingCode());
+                DeliveryStatus status = ghn.checkStatus(order.getShop().getGhnShopId(), delivery.getTrackingCode());
                 delivery.setStatus(status);
                 delivery.setLastModifyBy(customerId);
 

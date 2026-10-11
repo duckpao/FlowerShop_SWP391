@@ -10,7 +10,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
 import java.util.*;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 @Service @Transactional(readOnly=true)
 public class ManagerShopService {
     public record Profile(@NotBlank @Size(max=255) String name,@NotNull @Size(max=5000) String description,
@@ -22,8 +24,9 @@ public class ManagerShopService {
     private final ShopRepository shops;
     private final ShopStaffRepository staff;
     private final AddressRepository addresses;
-    public ManagerShopService(ShopRepository shops,ShopStaffRepository staff,AddressRepository addresses) {
-        this.shops=shops; this.staff=staff; this.addresses=addresses;
+    private final ShopGhnStoreService ghnStores;
+    public ManagerShopService(ShopRepository shops,ShopStaffRepository staff,AddressRepository addresses,ShopGhnStoreService ghnStores) {
+        this.shops=shops; this.staff=staff; this.addresses=addresses; this.ghnStores=ghnStores;
     }
     public List<com.example.flowershop.dto.account.AddressResponse> address(String id,String actor) {
         owned(id,actor,false); return addresses.findByShopIdAndUserIsNullOrderByCreatedDateAscIdAsc(id).stream().map(com.example.flowershop.dto.account.AddressResponse::from).toList();
@@ -34,10 +37,14 @@ public class ManagerShopService {
         var a=list.stream().filter(x->Boolean.TRUE.equals(x.getIsDefault())).findFirst().orElseGet(()->list.isEmpty()?new Address():list.get(0));
         if(a.getId()==null) { a.setId(UUID.randomUUID().toString()); a.setShop(shop); a.setCreatedBy(actor); }
         list.forEach(x->x.setIsDefault(false));
+        boolean moved=shop.getGhnShopId()==null||!java.util.Objects.equals(a.getGhnDistrictId(),input.ghnDistrictId())||!java.util.Objects.equals(a.getGhnWardCode(),input.ghnWardCode().strip());
         a.setAddressLine(input.addressLine().strip()); a.setCity(input.city().strip()); a.setDistrict(input.district().strip()); a.setWard(input.ward().strip());
         a.setGhnWardCode(input.ghnWardCode().strip()); a.setGhnDistrictId(input.ghnDistrictId());
         a.setIsDefault(true); a.setLastModifyBy(actor);
-        return com.example.flowershop.dto.account.AddressResponse.from(addresses.save(a));
+        var saved=addresses.save(a);
+        // Địa chỉ lấy hàng đổi thì đăng ký lại cửa hàng GHN; lỗi GHN không chặn việc lưu địa chỉ, ship sẽ thử đăng ký lại.
+        if(moved) { try { ghnStores.registerStore(shop,saved); } catch(RuntimeException e) { log.warn("Không đăng ký được cửa hàng GHN cho shop {}: {}",id,e.getMessage()); } }
+        return com.example.flowershop.dto.account.AddressResponse.from(saved);
     }
     public List<ShopResponse> mine(String actor) { return shops.findByOwnerIdOrderByNameAsc(actor).stream().map(ShopResponse::from).toList(); }
     private Shop owned(String id,String actor,boolean write) {
