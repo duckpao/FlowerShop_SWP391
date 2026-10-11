@@ -5,7 +5,7 @@ const req = (path, options) => authService.authenticatedRequest(`/api/customer/o
 export const customerOrderService = {
     fee: data => req('/fee', { method: 'POST', body: data }),
     checkout: data => req('/checkout', { method: 'POST', body: data }),
-    list: page => req(`?page=${page}`),
+    list: (page, status) => req(`?page=${page}${status ? `&status=${encodeURIComponent(status)}` : ''}`),
     detail: id => req(`/${encodeURIComponent(id)}`),
     shippingFee: id => req(`/${encodeURIComponent(id)}/shipping-fee`),
     refreshTracking: id => req(`/${encodeURIComponent(id)}/refresh-tracking`, { method: 'POST' }),

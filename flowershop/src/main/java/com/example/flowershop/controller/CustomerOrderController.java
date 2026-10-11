@@ -35,8 +35,9 @@ public class CustomerOrderController {
 
     @GetMapping
     public CustomerOrderService.Results list(@AuthenticationPrincipal CurrentUser user,
-                                             @RequestParam(defaultValue = "0") int page) {
-        return service.list(user.id(), page);
+                                             @RequestParam(defaultValue = "0") int page,
+                                             @RequestParam(required = false) String status) {
+        return service.list(user.id(), page, status);
     }
 
     @GetMapping("/{id}")

@@ -31,8 +31,13 @@ public class CustomerOrderService {
     public record CheckoutResponse(String orderId, BigDecimal subTotal, BigDecimal shippingFee,
                                    BigDecimal totalAmount, String status) {}
 
+    public record OrderLine(String productId, String productName, String imageUrl, BigDecimal price, Integer quantity) {}
+
+    /** paymentMethod: COD | ONLINE | null; paymentStatus: SUCCESS nếu đã trả, ngược lại trạng thái giao dịch gần nhất. */
     public record OrderSummary(String id, String shopName, BigDecimal totalAmount, String status,
-                               java.time.LocalDateTime createdDate, Long itemCount) {}
+                               java.time.LocalDateTime createdDate, Long itemCount,
+                               String shopId, BigDecimal subTotal, BigDecimal shippingFee,
+                               String paymentMethod, String paymentStatus, List<OrderLine> items) {}
 
     public record OrderDetailResponse(String id, String shopId, String shopName, String status,
                                       BigDecimal subTotal, BigDecimal shippingFee, BigDecimal totalAmount,
@@ -55,11 +60,13 @@ public class CustomerOrderService {
     private final DeliveryRepository deliveries;
     private final UserRepository users;
     private final GhnService ghn;
+    private final ProductImageRepository productImages;
 
     public CustomerOrderService(ProductRepository products, AddressRepository addresses,
                                 OrderRepository orders, OrderDetailRepository orderDetails,
                                 PaymentRepository payments, DeliveryRepository deliveries,
-                                UserRepository users, GhnService ghn) {
+                                UserRepository users, GhnService ghn,
+                                ProductImageRepository productImages) {
         this.products = products;
         this.addresses = addresses;
         this.orders = orders;
@@ -68,6 +75,7 @@ public class CustomerOrderService {
         this.deliveries = deliveries;
         this.users = users;
         this.ghn = ghn;
+        this.productImages = productImages;
     }
 private static ResponseStatusException notFound() {
         return new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy dữ liệu.");
@@ -173,15 +181,47 @@ private static ResponseStatusException notFound() {
         return new CheckoutResponse(orderId, subTotal, shippingFee, totalAmount, OrderStatus.PENDING.name());
     }
 
-    public Results list(String customerId, int page) {
+    /** @param status lọc theo trạng thái đơn (null hoặc rỗng = tất cả). */
+    public Results list(String customerId, int page, String status) {
         Pageable pageable = PageRequest.of(page, 20, Sort.by(Sort.Order.desc("createdDate"), Sort.Order.asc("id")));
-        Page<Order> result = orders.findByCustomerIdOrderByCreatedDateDesc(customerId, pageable);
-        var content = result.getContent().stream().map(o -> {
-            long itemCount = orderDetails.findByOrderId(o.getId()).size();
-            return new OrderSummary(o.getId(), o.getShop().getName(), o.getTotalAmount(),
-                    o.getStatus().name(), o.getCreatedDate(), itemCount);
-        }).toList();
+        Page<Order> result;
+        if (status == null || status.isBlank()) {
+            result = orders.findByCustomerIdOrderByCreatedDateDesc(customerId, pageable);
+        } else {
+            OrderStatus st;
+            try {
+                st = OrderStatus.valueOf(status.trim().toUpperCase());
+            } catch (IllegalArgumentException e) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Trạng thái không hợp lệ: " + status);
+            }
+            result = orders.findByCustomerIdAndStatusOrderByCreatedDateDesc(customerId, st, pageable);
+        }
+        var content = result.getContent().stream().map(this::summary).toList();
         return new Results(content, page, result.getTotalPages(), result.getTotalElements());
+    }
+
+    private OrderSummary summary(Order o) {
+        var details = orderDetails.findByOrderId(o.getId());
+        var productIds = details.stream().filter(d -> d.getProduct() != null).map(d -> d.getProduct().getId()).distinct().toList();
+        Map<String, String> imageByProduct = new HashMap<>();
+        if (!productIds.isEmpty()) {
+            productImages.findByProductIdInOrderByDisplayOrderAscIdAsc(productIds)
+                    .forEach(img -> imageByProduct.putIfAbsent(img.getProduct().getId(), img.getImageUrl()));
+        }
+        var lines = details.stream().map(d -> new OrderLine(
+                d.getProduct() != null ? d.getProduct().getId() : null,
+                d.getProduct() != null ? d.getProduct().getName() : null,
+                d.getProduct() != null ? imageByProduct.get(d.getProduct().getId()) : null,
+                d.getPrice(), d.getQuantity())).toList();
+        var orderPayments = payments.findByOrderId(o.getId());
+        String method = orderPayments.stream().anyMatch(p -> p.getPaymentMethod() == PaymentMethod.COD) ? "COD"
+                : orderPayments.stream().anyMatch(p -> p.getPaymentMethod() == PaymentMethod.ONLINE) ? "ONLINE" : null;
+        String paymentStatus = orderPayments.stream().anyMatch(p -> p.getStatus() == PaymentStatus.SUCCESS) ? "SUCCESS"
+                : orderPayments.stream().max(Comparator.comparing(Payment::getCreatedDate, Comparator.nullsFirst(Comparator.naturalOrder())))
+                        .map(p -> p.getStatus().name()).orElse(null);
+        return new OrderSummary(o.getId(), o.getShop().getName(), o.getTotalAmount(), o.getStatus().name(),
+                o.getCreatedDate(), (long) lines.size(), o.getShop().getId(), o.getSubTotal(), o.getShippingFee(),
+                method, paymentStatus, lines);
     }
 
     public OrderDetailResponse detail(String customerId, String orderId) {
