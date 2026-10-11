@@ -94,7 +94,7 @@ public class GhnService {
         return list;
     }
 
-    public BigDecimal calculateFee(Integer store, int fromDistrictId, int toDistrictId, String toWardCode, int weightGram) {
+    public BigDecimal calculateFee(int fromDistrictId, int toDistrictId, String toWardCode, int weightGram) {
         ensureConfigured();
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("from_district_id", fromDistrictId);
@@ -105,11 +105,11 @@ public class GhnService {
         body.put("length", DEFAULT_LENGTH_CM);
         body.put("width", DEFAULT_WIDTH_CM);
         body.put("height", DEFAULT_HEIGHT_CM);
-        JsonNode data = post("/shiip/public-api/v2/shipping-order/fee", body, store);
+        JsonNode data = post("/shiip/public-api/v2/shipping-order/fee", body);
         return BigDecimal.valueOf(data.get("total").asInt());
     }
 
-    public CreateOrderResult createOrder(Integer store, String toName, String toPhone, String toAddress,
+    public CreateOrderResult createOrder(String toName, String toPhone, String toAddress,
                                           int toDistrictId, String toWardCode,
                                           String fromName, String fromPhone, String fromAddress,
                                           int fromDistrictId, String fromWardCode,
@@ -142,7 +142,7 @@ public class GhnService {
                 "price", price,
                 "weight", DEFAULT_WEIGHT_GRAM
         )));
-        JsonNode data = post("/shiip/public-api/v2/shipping-order/create", body, store);
+        JsonNode data = post("/shiip/public-api/v2/shipping-order/create", body);
         String orderCode = data.get("order_code").asText();
         int totalFee = data.get("total_fee").asInt();
         return new CreateOrderResult(orderCode, totalFee);
@@ -150,16 +150,12 @@ public class GhnService {
 // --- HTTP helpers ---
 
     private JsonNode get(String path) {
-        return get(path, null);
-    }
-
-    private JsonNode get(String path, Integer store) {
         try {
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(apiUrl + path))
                     .timeout(Duration.ofSeconds(30))
                     .header("Token", token)
-                    .header("ShopId", store != null ? String.valueOf(store) : shopId)
+                    .header("ShopId", shopId)
                     .GET()
                     .build();
             HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
@@ -177,10 +173,6 @@ public class GhnService {
     }
 
     private JsonNode post(String path, Map<String, Object> body) {
-        return post(path, body, null);
-    }
-
-    private JsonNode post(String path, Map<String, Object> body, Integer store) {
         try {
             String jsonBody = mapper.writeValueAsString(body);
             HttpRequest request = HttpRequest.newBuilder()
@@ -188,7 +180,7 @@ public class GhnService {
                     .timeout(Duration.ofSeconds(30))
                     .header("Content-Type", "application/json")
                     .header("Token", token)
-                    .header("ShopId", store != null ? String.valueOf(store) : shopId)
+                    .header("ShopId", shopId)
                     .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
                     .build();
             HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
@@ -209,28 +201,16 @@ public class GhnService {
         }
     }
 
-    /** Đăng ký cửa hàng (điểm lấy hàng) mới trên GHN, trả về mã cửa hàng dùng làm header ShopId. */
-    public int registerStore(String name, String phone, String address, int districtId, String wardCode) {
+    public DeliveryStatus checkStatus(String orderCode) {
         ensureConfigured();
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("name", name);
-        body.put("phone", phone);
-        body.put("address", address);
-        body.put("ward_code", wardCode);
-        body.put("district_id", districtId);
-        return post("/shiip/public-api/v2/shop/register", body).path("shop_id").asInt();
-    }
-
-    public DeliveryStatus checkStatus(Integer store, String orderCode) {
-        ensureConfigured();
-        JsonNode data = get("/shiip/public-api/v2/shipping-order/detail?order_code=" + orderCode, store);
+        JsonNode data = get("/shiip/public-api/v2/shipping-order/detail?order_code=" + orderCode);
         String status = data.path("status").asText();
         return STATUS_MAP.getOrDefault(status, DeliveryStatus.FAILED);
     }
 
-    public void switchStatus(Integer store, String orderCode, String targetStatus) {
+    public void switchStatus(String orderCode, String targetStatus) {
         ensureConfigured();
-        post("/shiip/public-api/v2/switch-status/" + targetStatus, Map.of("order_code", orderCode), store);
+        post("/shiip/public-api/v2/switch-status/" + targetStatus, Map.of("order_code", orderCode));
     }
 
     /**
@@ -238,11 +218,11 @@ public class GhnService {
      * @param orderCode Mã vận đơn GHN
      * @param updateFields Các trường cần cập nhật (weight, note, to_name, to_phone, to_address, to_ward_code, to_district_id, v.v.)
      */
-    public void updateOrder(Integer store, String orderCode, Map<String, Object> updateFields) {
+    public void updateOrder(String orderCode, Map<String, Object> updateFields) {
         ensureConfigured();
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("order_code", orderCode);
         body.putAll(updateFields);
-        post("/shiip/public-api/v2/shipping-order/update", body, store);
+        post("/shiip/public-api/v2/shipping-order/update", body);
     }
 }

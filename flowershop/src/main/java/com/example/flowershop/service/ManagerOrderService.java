@@ -61,12 +61,10 @@ public class ManagerOrderService {
     private final ShopRepository shops;
     private final AddressRepository addresses;
     private final GhnService ghn;
-    private final ShopGhnStoreService stores;
 
     public ManagerOrderService(OrderRepository orders, OrderDetailRepository orderDetails,
                                DeliveryRepository deliveries, PaymentRepository payments,
-                               ShopRepository shops, AddressRepository addresses, GhnService ghn,
-                               ShopGhnStoreService stores) {
+                               ShopRepository shops, AddressRepository addresses, GhnService ghn) {
         this.orders = orders;
         this.orderDetails = orderDetails;
         this.deliveries = deliveries;
@@ -74,7 +72,6 @@ public class ManagerOrderService {
         this.shops = shops;
         this.addresses = addresses;
         this.ghn = ghn;
-        this.stores = stores;
     }
 
     /** Tạo ngoại lệ 404 khi không tìm thấy đơn hàng */
@@ -218,7 +215,6 @@ public class ManagerOrderService {
         BigDecimal codAmount = o.getTotalAmount().subtract(paidAmount).max(BigDecimal.ZERO);
 
         var result = ghn.createOrder(
-                stores.ensureStore(o.getShop(), shopAddr),
                 toName, toPhone,
                 toFullAddress,
                 toAddr.getGhnDistrictId(), toAddr.getGhnWardCode(),
@@ -299,7 +295,7 @@ public class ManagerOrderService {
         Order o = orders.findByIdAndShopId(orderId, shopId).orElseThrow(ManagerOrderService::notFound);
         Delivery d = deliveries.findByOrderId(orderId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Đơn hàng chưa có vận đơn GHN."));
-        DeliveryStatus status = ghn.checkStatus(o.getShop().getGhnShopId(), d.getTrackingCode());
+        DeliveryStatus status = ghn.checkStatus(d.getTrackingCode());
         d.setStatus(status); d.setLastModifyBy(actor);
         if (status == DeliveryStatus.DELIVERED) {
             o.setStatus(OrderStatus.COMPLETED); o.setLastModifyBy(actor);
@@ -322,7 +318,7 @@ public class ManagerOrderService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Đơn hàng chưa có vận đơn GHN."));
 
         try {
-            ghn.switchStatus(o.getShop().getGhnShopId(), d.getTrackingCode(), "delivered");
+            ghn.switchStatus(d.getTrackingCode(), "delivered");
         } catch (Exception e) {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
                     "GHN không thể cập nhật trạng thái giao hàng trong môi trường test.", e);
@@ -416,7 +412,7 @@ public class ManagerOrderService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Đơn hàng chưa có vận đơn GHN để cập nhật."));
         
         try {
-            ghn.updateOrder(o.getShop().getGhnShopId(), d.getTrackingCode(), body);
+            ghn.updateOrder(d.getTrackingCode(), body);
         } catch (Exception e) {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Lỗi khi cập nhật vận đơn GHN: " + e.getMessage(), e);
         }
