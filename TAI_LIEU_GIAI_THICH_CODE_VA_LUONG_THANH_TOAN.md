@@ -11,7 +11,7 @@
 3. [Phân tích chi tiết từng file code (Chức năng & Từng dòng lệnh quan trọng)](#3-phân-tích-chi-tiết-từng-file-code)
    - [A. Backend: Spring Boot (Java 17)](#a-backend-spring-boot-java-17)
    - [B. Frontend: React 19 (Vite)](#b-frontend-react-19-vite)
-   - [C. Cơ sở dữ liệu: MySQL 8 (Docker)](#c-cơ-sở-dữ-liệu-mysql-8-docker)
+   - [C. Cơ sở dữ liệu: MySQL 8](#c-cơ-sở-dữ-liệu-mysql-8)
 4. [Các vấn đề kỹ thuật thực tế đã xử lý & Giải pháp](#4-các-vấn-đề-kỹ-thuật-thực-tế-đã-xử-lý)
 5. [Bộ câu hỏi vấn đáp bảo vệ đồ án (Kèm câu trả lời chuẩn điểm tối đa)](#5-bộ-câu-hỏi-vấn-đáp-bảo-vệ-đồ-án)
 
@@ -22,7 +22,7 @@
 Dự án FlowerShop được xây dựng theo kiến trúc hiện đại phân tách hoàn toàn giữa Frontend và Backend:
 - **Frontend:** React 19 (giao diện người dùng, Single Page Application), Vite (công cụ build), Axios (kết nối HTTP API), React Router DOM (điều hướng trang).
 - **Backend:** Spring Boot 4.x / Java 17, Spring Data JPA (truy vấn cơ sở dữ liệu), Lombok, Jakarta Validation.
-- **Database:** MySQL 8.0 chạy trong Docker container (`flowershop_db`) tại cổng `3307`.
+- **Database:** MySQL 8.0 (cổng mặc định `3306`).
 - **Hệ thống thanh toán:** Tích hợp trực tiếp với **Cổng thanh toán SePay (pay.sepay.vn)** và ngân hàng **MBBank** (Virtual Account Prefix `TKPNXT`).
 
 ---
@@ -73,7 +73,7 @@ Quy trình từ lúc khách hàng duyệt hoa đến khi hoàn tất đơn hàng
    ├── Backend tự động cập nhật:
    │     • `Payment.status` = SUCCESS
    │     • `Order.status` = PROCESSING
-   │     • `depositAmount` = 350.000 đ
+   │     • (`depositAmount` không bị ghi đè: field này chỉ là "tiền cọc yêu cầu" của đơn đặt cọc)
    └── Trả về cho Frontend: `{ isPaid: true, status: "SUCCESS" }`
               │
               ▼ (9) Kết thúc
@@ -148,7 +148,7 @@ Quy trình từ lúc khách hàng duyệt hoa đến khi hoàn tất đơn hàng
 
 - `POST /api/payments/sepay/create`: Tiếp nhận yêu cầu từ React để tạo phiên thanh toán SePay.
 - `GET /api/payments/status-by-invoice/{invoiceNumber}`: Cung cấp endpoint cho React Polling đối soát kết quả.
-- `POST /api/payments/sepay/ipn` & `POST /api/sepay/ipn`: Tiếp nhận Webhook ngầm từ SePay Gateway khi triển khai máy chủ thực tế (có kiểm tra tính hợp lệ của chữ ký và chống trùng lặp Idempotency).
+- (Đã bỏ endpoint IPN `/api/sepay/ipn`: thanh toán được xác nhận hoàn toàn bằng đối soát chủ động với API SePay.)
 - `POST /api/payments/create-qr/{orderId}`: Sinh mã VietQR cho modal quét mã trực tiếp.
 
 ---
@@ -262,7 +262,7 @@ Quy trình từ lúc khách hàng duyệt hoa đến khi hoàn tất đơn hàng
 > **Trả lời:**  
 > *"Dạ thưa thầy/cô, nhóm em đã thiết kế kiến trúc **Dual Reconcile Architecture (Bảo vệ kép)**:  
 > - Do môi trường `localhost` không thể nhận Webhook trực tiếp từ Internet, hệ thống áp dụng cơ chế **Đối soát chủ động (Active Real-Time Reconciliation)**: Khi khách hàng chuyển tiền xong và quay về trang `PaymentSuccessPage`, Backend Spring Boot sẽ chủ động gọi REST API của SePay (`https://pgapi.sepay.vn/v1/order/detail/{invoiceNumber}`) với Basic Auth để kiểm tra. Ngay khi SePay xác nhận `CAPTURED`, hệ thống cập nhật đơn hàng thành công trong MySQL.  
-> - Đồng thời, nhóm vẫn giữ nguyên endpoint `POST /api/payments/sepay/ipn` để khi dự án được triển khai lên máy chủ thật có tên miền công khai, SePay có thể gửi Webhook ngầm song song."*
+> - Nếu khách đóng trình duyệt sau khi trả tiền, scheduler (chạy mỗi 30 giây) sẽ đối soát lại với SePay trước khi hủy đơn quá hạn 10 phút, nên đơn đã trả tiền không bị hủy nhầm."*
 
 ---
 

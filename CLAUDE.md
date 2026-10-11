@@ -11,7 +11,7 @@
 Monorepo 2 phần: `flowershop/` (backend Spring Boot) + `flower-shop-client/` (frontend React). Backend build ra bundle luôn nhúng frontend (qua Gradle `buildFrontend`→`processResources`) để chạy chung port 8080 khi build production; khi dev thì chạy 2 server riêng (xem "Dev workflow" bên dưới).
 
 ## Tech stack
-- Backend: Java 17, Spring Boot 4.1.1, Spring Security (JWT tự viết, không dùng OAuth2 resource-server auto-config), Spring Data JPA, MySQL (`flower_shop_db`, port 3307), Log4j2 (đã thay Logback), springdoc-openapi (Swagger UI), Lombok.
+- Backend: Java 17, Spring Boot 4.1.1, Spring Security (JWT tự viết, không dùng OAuth2 resource-server auto-config), Spring Data JPA, MySQL (`flower_shop_db`, port 3306), Log4j2 (đã thay Logback), springdoc-openapi (Swagger UI), Lombok.
 - Frontend: React 19 + Vite 8, không dùng router library (tự parse `window.location.pathname` trong `App.jsx`), không dùng UI framework (CSS thuần trong `src/styles/`), không có state management library (React state + custom hooks).
 - Media upload: Cloudinary, gọi trực tiếp qua `java.net.http.HttpClient` (ký SHA-1 tay), không dùng Cloudinary SDK — theo nguyên tắc stdlib-first.
 

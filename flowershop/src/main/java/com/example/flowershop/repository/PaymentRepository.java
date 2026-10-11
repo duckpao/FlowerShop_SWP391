@@ -3,6 +3,7 @@ package com.example.flowershop.repository;
 import com.example.flowershop.entity.Payment;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import jakarta.persistence.LockModeType;
@@ -26,5 +27,11 @@ public interface PaymentRepository extends JpaRepository<Payment, String> {
     Optional<Payment> findByInvoiceNumber(String invoiceNumber);
 
     boolean existsByInvoiceNumber(String invoiceNumber);
+
+    /** Cập nhật thẳng trong DB để không ghi đè SUCCESS mà IPN vừa commit. */
+    @Modifying
+    @Query("UPDATE Payment p SET p.status = com.example.flowershop.entity.enums.PaymentStatus.FAILED, p.lastModifyBy = :actor "
+            + "WHERE p.order.id = :orderId AND p.status = com.example.flowershop.entity.enums.PaymentStatus.PENDING")
+    int failPendingByOrderId(@Param("orderId") String orderId, @Param("actor") String actor);
 }
 

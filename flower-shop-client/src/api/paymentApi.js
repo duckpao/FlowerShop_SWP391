@@ -9,6 +9,9 @@ const paymentApi = {
     return axiosClient.post('/payments/sepay/create', data);
   },
 
+  cancelCheckout: (invoiceNumber) =>
+    axiosClient.post(`/payments/sepay/cancel/${encodeURIComponent(invoiceNumber)}`),
+
   /**
    * PHASE 11: Kiểm tra trạng thái thanh toán theo mã hóa đơn invoiceNumber (cho Polling kết quả)
    */
@@ -60,6 +63,21 @@ const paymentApi = {
 
     document.body.appendChild(form);
     form.submit();
+  },
+
+  /**
+   * Tạo phiên thanh toán rồi chuyển khách sang cổng SePay.
+   * @param {string} orderId
+   * @param {'FULL'|'DEPOSIT'|'FINAL'} paymentType - đơn thường dùng FULL; đơn đặt cọc dùng DEPOSIT rồi FINAL
+   * @param {string} [paymentMethod] - CARD | BANK_TRANSFER | NAPAS_BANK_TRANSFER (bỏ trống để khách chọn trên cổng)
+   */
+  startSePayCheckout: async (orderId, paymentType = 'FULL', paymentMethod) => {
+    const payment = await paymentApi.createPayment({ orderId, paymentType, paymentMethod });
+    const checkoutUrl = payment?.checkoutUrl || payment?.data?.checkoutUrl;
+    const fields = payment?.fields || payment?.data?.fields;
+    if (!checkoutUrl || !fields) throw new Error('Không nhận được thông tin cổng thanh toán từ máy chủ.');
+    if (payment?.invoiceNumber) sessionStorage.setItem('flower_pending_invoice', payment.invoiceNumber);
+    paymentApi.submitSePayCheckoutForm(checkoutUrl, fields);
   },
 };
 

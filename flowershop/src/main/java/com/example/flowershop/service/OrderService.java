@@ -26,7 +26,6 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.time.LocalDateTime;
 import java.math.RoundingMode;
-import java.util.Optional;
 import lombok.extern.slf4j.Slf4j;
 import java.util.stream.Collectors;
 
@@ -44,6 +43,7 @@ public class OrderService {
     private final PaymentRepository paymentRepository;
     private final CouponRepository couponRepository;
     private final DeliveryAreaService deliveryAreaService;
+    @jakarta.persistence.PersistenceContext private jakarta.persistence.EntityManager entityManager;
 
     /**
      * Tạo đơn hàng từ các cart items đã chọn.
@@ -53,7 +53,7 @@ public class OrderService {
      *  3. Tạo Order
      *  4. Tạo OrderDetail cho mỗi sản phẩm
      *  5. Giảm stock sản phẩm
-     *  6. Xóa các cart items đã chọn
+     *  6. Giữ cart items của đơn ONLINE cho tới khi thanh toán được xác nhận
      */
     @Transactional
     public OrderResponse makeOrder(String userId, MakeOrderRequest request) {
@@ -70,38 +70,11 @@ public class OrderService {
             throw ApiException.badRequest("Cần nhập tên và số điện thoại người nhận.");
         }
 
-        // 2. Validate delivery address (tạm thời bỏ qua check nghiêm ngặt theo yêu cầu)
-        String rawAddressInput = (request.getDeliveryAddressId() != null && !request.getDeliveryAddressId().isBlank())
-                ? request.getDeliveryAddressId().trim()
-                : "Hà Nội";
-        final String addressValue = rawAddressInput;
-
-        Address deliveryAddress = addressRepository.findById(addressValue)
-                .filter(addr -> addr.getUser() != null && addr.getUser().getId().equals(userId))
-                .orElseGet(() -> {
-                    // Ưu tiên địa chỉ mặc định của user nếu có
-                    Optional<Address> defaultAddress = addressRepository.findByUserIdAndIsDefaultTrue(userId);
-                    if (defaultAddress.isPresent()) {
-                        return defaultAddress.get();
-                    }
-                    List<Address> userAddresses = addressRepository.findByUserId(userId);
-                    if (!userAddresses.isEmpty()) {
-                        return userAddresses.get(0);
-                    }
-                    // Tạo mới address linh hoạt chấp nhận mọi địa chỉ người dùng nhập
-                    Address newAddress = Address.builder()
-                            .id("addr-" + UUID.randomUUID().toString().substring(0, 8))
-                            .user(user)
-           
-           
-           
-                          .addressLine(addressValue.length() > 255 ? addressValue.substring(0, 255) : addressValue)
-                            .city("Hà Nội")
-                            .isDefault(false)
-                            .createdBy(userId)
-                            .build();
-                    return addressRepository.save(newAddress);
-                });
+        // Đơn hàng phải dùng đúng địa chỉ đã lưu mà khách hàng chọn.
+        Address deliveryAddress = addressRepository.findById(request.getDeliveryAddressId().trim())
+                .filter(addr -> addr.getShop() == null && addr.getUser() != null
+                        && addr.getUser().getId().equals(userId))
+                .orElseThrow(() -> ApiException.badRequest("Địa chỉ nhận hoa không tồn tại trong tài khoản của bạn."));
 
         // 3. Validate shop
         // Lấy danh sách cart items được chọn
@@ -127,6 +100,12 @@ public class OrderService {
             }
 
             selectedCartItems.add(cartItem);
+        }
+        // Đặt lại món đang nằm trong đơn PENDING cũ của chính khách: hủy đơn cũ (trả kho) thay vì tạo đơn trùng trừ kho lần nữa.
+        // Không khôi phục giỏ ở đây, vì giỏ hiện tại (số lượng khách vừa chỉnh) mới là thứ khách muốn đặt.
+        for (String pendingId : orderDetailRepository.findPendingOrderIds(userId,
+                selectedCartItems.stream().map(item -> item.getProduct().getId()).toList())) {
+            cancelPending(pendingId, "Khách đặt lại đơn mới cho cùng sản phẩm", userId, false);
         }
         selectedCartItems.sort(Comparator.comparing(item -> item.getProduct().getId()));
         for (CartItem cartItem : selectedCartItems) {
@@ -234,12 +213,11 @@ public class OrderService {
                     .build());
         }
 
-        // 7. Xóa cart items đã đặt hàng
-        cartItemRepository.deleteAll(selectedCartItems);
-
-        // 8. Xử lý phương thức thanh toán
+        // 7. Xử lý phương thức thanh toán
         boolean isCod = "COD".equalsIgnoreCase(request.getPaymentMethod());
         if (isCod) {
+            // COD được xác nhận ngay khi tạo đơn; đơn ONLINE chỉ xóa giỏ khi ngân hàng xác nhận.
+            cartItemRepository.deleteAll(selectedCartItems);
             // COD: tạo bản ghi thanh toán ngay, trạng thái PENDING (sẽ thu tiền khi giao hàng)
             Payment codPayment = Payment.builder()
                     .id(UUID.randomUUID().toString())
@@ -260,6 +238,7 @@ public class OrderService {
             order = orderRepository.save(order);
         }
 
+        entityManager.flush(); // @CreationTimestamp chỉ được gán khi flush; thiếu dòng này response trả createdDate=null
         return OrderResponse.builder()
                 .id(order.getId())
                 .status(order.getStatus().name())
@@ -273,6 +252,51 @@ public class OrderService {
                 .items(orderItemResponses)
                 .createdDate(order.getCreatedDate())
                 .build();
+    }
+
+    /** Xóa đúng số lượng của đơn đã thanh toán, giữ lại món khác hoặc số lượng khách thêm sau đó. */
+    @Transactional
+    public void clearPaidOrderItems(Order order) {
+        if (order == null || order.getCustomer() == null) return;
+        String userId = order.getCustomer().getId();
+        for (OrderDetail detail : orderDetailRepository.findByOrderId(order.getId())) {
+            if (detail.getProduct() == null) continue;
+            cartItemRepository.findByUserIdAndProductIdForUpdate(userId, detail.getProduct().getId())
+                    .ifPresent(cartItem -> {
+                        int remaining = cartItem.getQuantity() - detail.getQuantity();
+                        if (remaining <= 0) cartItemRepository.delete(cartItem);
+                        else {
+                            cartItem.setQuantity(remaining);
+                            cartItemRepository.save(cartItem);
+                        }
+                    });
+        }
+    }
+
+    /** Khôi phục giỏ từ chi tiết đơn bị hủy, kể cả đơn cũ đã xóa giỏ lúc tạo đơn. */
+    @Transactional
+    public void restoreCancelledOrderItems(Order order) {
+        if (order == null || order.getStatus() != OrderStatus.CANCELLED || order.getCustomer() == null) return;
+        String userId = order.getCustomer().getId();
+        for (OrderDetail detail : orderDetailRepository.findByOrderId(order.getId())) {
+            if (detail.getProduct() == null) continue;
+            String productId = detail.getProduct().getId();
+            CartItem current = cartItemRepository.findByUserIdAndProductIdForUpdate(userId, productId).orElse(null);
+            if (current == null) {
+                cartItemRepository.save(CartItem.builder()
+                        .id(UUID.randomUUID().toString())
+                        .user(order.getCustomer())
+                        .product(detail.getProduct())
+                        .quantity(detail.getQuantity())
+                        .createdBy(userId)
+                        .lastModifyBy(userId)
+                        .build());
+            } else if (current.getQuantity() < detail.getQuantity()) {
+                current.setQuantity(detail.getQuantity());
+                current.setLastModifyBy(userId);
+                cartItemRepository.save(current);
+            }
+        }
     }
 
     /**
@@ -316,21 +340,34 @@ public class OrderService {
     }
 
     /**
-     * Tự động hủy đơn hàng quá 10 phút chưa thanh toán.
+     * Tự động hủy đơn hàng quá hạn chưa thanh toán (PENDING 10 phút, AWAITING_DEPOSIT 24 giờ).
      * Hoàn lại tồn kho cho từng sản phẩm, hoàn lại coupon (nếu có), và hủy các payment pending.
      */
     @Transactional
     public void cancelExpiredOrder(String orderId, String reason) {
-        Order order = orderRepository.findByIdForUpdate(orderId).orElse(null);
-        if (order == null || order.getStatus() != OrderStatus.PENDING) {
-            return;
+        cancelPendingOrder(orderId, reason, "SYSTEM_AUTO_CANCEL");
+    }
+
+    /** @return true nếu đơn thực sự bị hủy (false nếu đơn đã được thanh toán/xử lý trước đó). */
+    @Transactional
+    public boolean cancelPendingOrder(String orderId, String reason, String actor) {
+        return cancelPending(orderId, reason, actor, true);
+    }
+
+    private boolean cancelPending(String orderId, String reason, String actor, boolean restoreCart) {
+        Order order = orderRepository.findById(orderId).orElse(null);
+        if (order == null) return false;
+        // Khóa và đọc lại từ DB: entity trong persistence context có thể đã cũ so với IPN vừa commit.
+        entityManager.refresh(order, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
+        if (order.getStatus() != OrderStatus.PENDING && order.getStatus() != OrderStatus.AWAITING_DEPOSIT) {
+            return false;
         }
 
-        log.info("Tự động hủy đơn hàng quá 10 phút chưa thanh toán: #{} (Lý do: {})", order.getId(), reason);
+        log.info("Hủy đơn hàng chờ thanh toán: #{} (Lý do: {})", order.getId(), reason);
 
         // 1. Cập nhật trạng thái Order sang CANCELLED
         order.setStatus(OrderStatus.CANCELLED);
-        order.setLastModifyBy("SYSTEM_AUTO_CANCEL");
+        order.setLastModifyBy(actor);
         orderRepository.save(order);
 
         // 2. Hoàn lại stock cho các sản phẩm trong đơn
@@ -340,7 +377,7 @@ public class OrderService {
                 Product product = productRepository.findByIdForUpdate(item.getProduct().getId()).orElse(null);
                 if (product != null) {
                     product.setStock(product.getStock() + item.getQuantity());
-                    product.setLastModifyBy("SYSTEM_AUTO_CANCEL");
+                    product.setLastModifyBy(actor);
                     productRepository.save(product);
                     log.info("Hoàn lại stock sản phẩm {}: +{}", product.getId(), item.getQuantity());
                 }
@@ -357,14 +394,9 @@ public class OrderService {
         }
 
         // 4. Hủy các payment PENDING của đơn hàng
-        List<Payment> payments = paymentRepository.findByOrderId(order.getId());
-        for (Payment payment : payments) {
-            if (payment.getStatus() == PaymentStatus.PENDING) {
-                payment.setStatus(PaymentStatus.FAILED);
-                payment.setLastModifyBy("SYSTEM_AUTO_CANCEL");
-                paymentRepository.save(payment);
-            }
-        }
+        paymentRepository.failPendingByOrderId(order.getId(), actor);
+        if (restoreCart) restoreCancelledOrderItems(order);
+        return true;
     }
 }
 

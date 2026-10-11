@@ -11,6 +11,7 @@ import com.example.flowershop.exception.ApiException;
 import com.example.flowershop.entity.enums.ProductStatus;
 import com.example.flowershop.entity.ProductImage;
 import com.example.flowershop.repository.CartItemRepository;
+import com.example.flowershop.repository.OrderDetailRepository;
 import com.example.flowershop.repository.ProductImageRepository;
 import com.example.flowershop.repository.ProductRepository;
 import com.example.flowershop.repository.UserRepository;
@@ -32,6 +33,12 @@ public class CartService {
     private final ProductRepository productRepository;
     private final ProductImageRepository productImageRepository;
     private final UserRepository userRepository;
+    private final OrderDetailRepository orderDetailRepository;
+
+    /** Kho khách này có thể đặt: kho còn lại cộng phần chính họ đang giữ trong đơn PENDING chưa thanh toán. */
+    private int availableStock(String userId, Product product) {
+        return product.getStock() + orderDetailRepository.sumPendingQuantity(userId, product.getId());
+    }
 
     /**
      * Thêm sản phẩm vào giỏ hàng.
@@ -52,9 +59,10 @@ public class CartService {
         }
 
         // 3. Kiểm tra stock
-        if (product.getStock() < request.getQuantity()) {
+        int available = availableStock(userId, product);
+        if (available < request.getQuantity()) {
             throw ApiException.badRequest(
-                    "Số lượng yêu cầu vượt quá tồn kho. Tồn kho hiện tại: " + product.getStock()
+                    "Số lượng yêu cầu vượt quá tồn kho. Tồn kho hiện tại: " + available
             );
         }
 
@@ -66,9 +74,9 @@ public class CartService {
             cartItem = existingItem.get();
             int newQuantity = cartItem.getQuantity() + request.getQuantity();
             // Kiểm tra lại stock sau khi cộng dồn
-            if (product.getStock() < newQuantity) {
+            if (available < newQuantity) {
                 throw ApiException.badRequest(
-                        "Tổng số lượng trong giỏ vượt quá tồn kho. Tồn kho: " + product.getStock()
+                        "Tổng số lượng trong giỏ vượt quá tồn kho. Tồn kho: " + available
                         + ", Hiện trong giỏ: " + cartItem.getQuantity()
                 );
             }
@@ -129,9 +137,10 @@ public class CartService {
 
         // Kiểm tra stock
         Product product = cartItem.getProduct();
-        if (product.getStock() < request.getQuantity()) {
+        int available = availableStock(userId, product);
+        if (available < request.getQuantity()) {
             throw ApiException.badRequest(
-                    "Số lượng yêu cầu vượt quá tồn kho. Tồn kho hiện tại: " + product.getStock()
+                    "Số lượng yêu cầu vượt quá tồn kho. Tồn kho hiện tại: " + available
             );
         }
 
@@ -190,7 +199,7 @@ public class CartService {
                 .price(product.getPrice())
                 .images(imageUrls)
                 .image(imageUrls.isEmpty() ? null : imageUrls.get(0))
-                .stock(product.getStock())
+                .stock(availableStock(cartItem.getUser().getId(), product))
                 .shopId(product.getShop().getId())
                 .shopName(product.getShop().getName())
                 .build();

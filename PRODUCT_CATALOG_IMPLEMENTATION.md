@@ -412,8 +412,7 @@ Phát hiện trong quá trình làm: toàn bộ dữ liệu mẫu bị lỗi fon
 thành một ký tự Latin-1 rồi mã hoá lại. Tái hiện được bằng cách nạp cùng chuỗi qua client
 khai báo `latin1`, cho ra byte trùng khít.
 
-**Nguyên nhân gốc**: `database.sql` lưu UTF-8 nhưng thiếu `SET NAMES utf8mb4`, nên client mysql
-trong container Docker đọc file như latin1.
+**Nguyên nhân gốc**: `database.sql` lưu UTF-8 nhưng thiếu `SET NAMES utf8mb4`, nên client mysql đọc file như latin1.
 
 **Đã sửa hai tầng**:
 1. Thêm `SET NAMES utf8mb4` vào `database.sql` và `db.sql` → database tạo mới không còn lỗi.

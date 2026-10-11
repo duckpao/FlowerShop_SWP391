@@ -33,6 +33,12 @@ public class PaymentController {
         return ResponseEntity.ok(response);
     }
 
+    @PostMapping("/payments/sepay/cancel/{invoiceNumber}")
+    public Map<String, Boolean> cancelCheckout(@PathVariable String invoiceNumber,
+                                               @AuthenticationPrincipal CurrentUser currentUser) {
+        return Map.of("paid", sePayGatewayService.cancelCheckout(invoiceNumber, currentUser.id()));
+    }
+
     /**
      * Khởi tạo form thanh toán theo orderId (endpoint tương thích)
      * POST /api/sepay/checkout/{orderId}
@@ -40,19 +46,6 @@ public class PaymentController {
     @PostMapping("/sepay/checkout/{orderId}")
     public ResponseEntity<SePayCheckoutFormResponse> initiateCheckout(@PathVariable String orderId, @AuthenticationPrincipal CurrentUser currentUser) {
         return ResponseEntity.ok(sePayGatewayService.initiateCheckout(orderId, currentUser.id()));
-    }
-
-    /**
-     * PHASE 8 & 9: Endpoint IPN webhook nhận callback từ SePay Gateway
-     * POST /api/payments/sepay/ipn và POST /api/sepay/ipn
-     */
-    @PostMapping({"/payments/sepay/ipn", "/sepay/ipn"})
-    public ResponseEntity<Map<String, Object>> handleIpn(
-            @RequestBody SePayIpnPayload payload,
-            @RequestHeader(value = "X-Secret-Key", required = false) String xSecretKey
-    ) {
-        Map<String, Object> result = sePayGatewayService.handleIpn(payload, xSecretKey);
-        return ResponseEntity.ok(result);
     }
 
     /**

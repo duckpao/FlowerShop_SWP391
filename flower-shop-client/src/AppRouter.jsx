@@ -9,9 +9,11 @@ import ManagerDashboardView from "./views/ManagerDashboardView";
 import ProductDetailView from "./views/ProductDetailView";
 import AcceptInvitationView from "./views/AcceptInvitationView";
 import CartPage from "./pages/CartPage";
+import CheckoutPage from "./pages/CheckoutPage";
 import PaymentSuccessPage from "./pages/PaymentSuccessPage";
 import PaymentErrorPage from "./pages/PaymentErrorPage";
 import PaymentCancelPage from "./pages/PaymentCancelPage";
+import DevDepositTestPage from "./pages/DevDepositTestPage";
 import { useAuthController } from "./controllers/useAuthController";
 import { AuthProvider } from "./context/AuthContext";
 import { CartProvider, useCartContext } from "./context/CartContext";
@@ -42,9 +44,11 @@ function AppRouterContent() {
             <Route path="/account" element={controller.busy ? <p>Đang tải hồ sơ…</p> : controller.user ? <AccountView {...controller} /> : <Navigate to="/login" replace />} />
             <Route path="/products/:id" element={<ProductDetailViewWrapper />} />
             <Route path="/cart" element={<CartPageWrapper />} />
+            <Route path="/checkout" element={controller.busy ? <p role="status">Đang kiểm tra đăng nhập…</p> : <CheckoutPage />} />
             <Route path="/payment/success" element={<PaymentSuccessPage />} />
             <Route path="/payment/error" element={<PaymentErrorPage />} />
             <Route path="/payment/cancel" element={<PaymentCancelPage />} />
+            {import.meta.env.DEV && <Route path="/dev-deposit" element={<DevDepositTestPage />} />}
             <Route path="/admin/profile" element={<Navigate to="/account" replace />} />
             <Route path="/shop-admin/profile" element={<Navigate to="/account" replace />} />
             <Route path="/admin/*" element={<AdminDashboardView user={controller.user} logout={controller.logout} busy={controller.busy} error={controller.error} path={location.pathname} />} />
@@ -75,7 +79,6 @@ function CartPageWrapper() {
       removeItem={cartHook.removeItem}
       userId={cartHook.userId}
       user={cartHook.user}
-      isGuest={cartHook.isGuest}
     />
   );
 }

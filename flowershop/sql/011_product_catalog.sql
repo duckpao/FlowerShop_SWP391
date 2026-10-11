@@ -7,7 +7,7 @@ USE flower_shop_db;
 ALTER TABLE Products ADD COLUMN admin_hidden BOOLEAN NOT NULL DEFAULT FALSE;
 
 -- 2. Cho phép đánh giá không gắn đơn hàng. Giá trị order_id hiện có được giữ nguyên.
---    NVARCHAR khớp lineage của database.sql (file mà docker-compose nạp). Nếu database của bạn
+--    NVARCHAR khớp lineage của database.sql. Nếu database của bạn
 --    được tạo từ db.sql (VARCHAR + utf8mb4), hãy đổi thành VARCHAR(36) để không lệch charset với Orders.id.
 ALTER TABLE Product_Reviews MODIFY order_id NVARCHAR(36) NULL;
 

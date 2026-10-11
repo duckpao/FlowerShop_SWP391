@@ -19,5 +19,7 @@ public interface OrderRepository extends JpaRepository<Order, String> {
 
     List<Order> findByStatusAndCreatedDateBefore(com.example.flowershop.entity.enums.OrderStatus status, LocalDateTime threshold);
 
+    List<Order> findByStatusAndIdStartingWith(com.example.flowershop.entity.enums.OrderStatus status, String idPrefix);
+
     boolean existsByDeliveryAddressId(String addressId);
 }

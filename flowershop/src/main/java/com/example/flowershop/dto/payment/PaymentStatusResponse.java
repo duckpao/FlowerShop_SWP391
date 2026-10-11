@@ -25,4 +25,12 @@ public class PaymentStatusResponse {
     private String transactionNo;
     private String message;
     private LocalDateTime paidAt;
+    private String orderType;
+    private BigDecimal totalAmount;
+    /** Tiền cọc yêu cầu (đã quy đổi: depositAmount > 0 hoặc 50% tổng). */
+    private BigDecimal depositAmount;
+    private BigDecimal totalPaid;
+    private BigDecimal remainingAmount;
+    /** "DEPOSIT" | "FINAL" | null: lần thanh toán tiếp theo frontend cần gọi. */
+    private String nextPaymentType;
 }

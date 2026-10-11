@@ -3,8 +3,10 @@ import { useSearchParams, Link } from 'react-router';
 import paymentApi from '../api/paymentApi';
 import PageMeta from '../components/common/PageMeta';
 import Button from '../components/ui/button/Button';
+import { useCartContext } from '../context/CartContext';
 
 export default function PaymentSuccessPage() {
+  const { fetchCart } = useCartContext();
   const [searchParams] = useSearchParams();
   const invoiceNumber = searchParams.get('invoice_number') || searchParams.get('order_invoice_number');
   const orderId = searchParams.get('orderId');
@@ -12,7 +14,6 @@ export default function PaymentSuccessPage() {
   const [loading, setLoading] = useState(true);
   const [paymentData, setPaymentData] = useState(null);
   const [pollCount, setPollCount] = useState(0);
-  const [isTimedOut, setIsTimedOut] = useState(false);
 
   const maxAttempts = 10;
   const pollIntervalMs = 2500;
@@ -35,7 +36,7 @@ export default function PaymentSuccessPage() {
           setPaymentData(data);
 
           // Nếu đã xác nhận thanh toán thành công
-          if (data.isPaid || data.paymentStatus === 'SUCCESS' || data.orderStatus === 'PROCESSING') {
+          if (data.isPaid === true || data.orderStatus === 'CANCELLED') {
             setLoading(false);
             return;
           }
@@ -51,7 +52,6 @@ export default function PaymentSuccessPage() {
         timerRef.current = setTimeout(checkStatus, pollIntervalMs);
       } else {
         setLoading(false);
-        setIsTimedOut(true);
       }
     };
 
@@ -66,7 +66,26 @@ export default function PaymentSuccessPage() {
     };
   }, [invoiceNumber, orderId]);
 
-  const isConfirmed = paymentData?.isPaid || paymentData?.paymentStatus === 'SUCCESS';
+  const isConfirmed = paymentData?.isPaid === true;
+  useEffect(() => {
+    if (isConfirmed) {
+      sessionStorage.removeItem('flower_pending_invoice');
+      fetchCart();
+    }
+  }, [isConfirmed, fetchCart]);
+  const isDeposit = paymentData?.paymentType === 'DEPOSIT';
+  const [payingFinal, setPayingFinal] = useState(false);
+  const [finalError, setFinalError] = useState('');
+  const payRemaining = async () => {
+    setPayingFinal(true);
+    setFinalError('');
+    try {
+      await paymentApi.startSePayCheckout(paymentData.orderId, 'FINAL');
+    } catch (err) {
+      setFinalError(err.message || 'Không thể tạo thanh toán. Vui lòng thử lại.');
+      setPayingFinal(false);
+    }
+  };
   const formatPrice = (amount) =>
     new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount || 0);
 
@@ -93,13 +112,15 @@ export default function PaymentSuccessPage() {
             
             <div>
               <span className="inline-block px-3 py-1 text-xs font-semibold rounded-full bg-success-100 text-success-800 dark:bg-success-500/20 dark:text-success-400 mb-2">
-                Thanh toán thành công
+                {isDeposit ? 'Đã đặt cọc' : 'Thanh toán thành công'}
               </span>
               <h1 className="text-3xl font-extrabold text-gray-900 dark:text-white">
-                Cảm ơn bạn đã mua hoa!
+                {isDeposit ? 'Cảm ơn bạn đã đặt cọc!' : 'Cảm ơn bạn đã mua hoa!'}
               </h1>
               <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                Đơn hàng của bạn đã được ghi nhận và thanh toán thành công. Cửa hàng sẽ chuẩn bị hoa tươi và giao sớm nhất!
+                {isDeposit
+                  ? 'Cửa hàng đã nhận tiền cọc của bạn. Phần còn lại cần được thanh toán trước khi giao hoa.'
+                  : 'Đơn hàng của bạn đã được ghi nhận và thanh toán thành công. Cửa hàng sẽ chuẩn bị hoa tươi và giao sớm nhất!'}
               </p>
             </div>
 
@@ -119,15 +140,30 @@ export default function PaymentSuccessPage() {
               )}
               {paymentData?.amount && (
                 <div className="flex justify-between items-baseline pt-2 border-t border-gray-200 dark:border-white/10">
-                  <span className="font-semibold text-gray-900 dark:text-white">Số tiền đã thanh toán:</span>
+                  <span className="font-semibold text-gray-900 dark:text-white">{isDeposit ? 'Tiền cọc đã thanh toán:' : 'Số tiền đã thanh toán:'}</span>
                   <span className="text-lg font-bold text-brand-600 dark:text-brand-400">
                     {formatPrice(paymentData.amount)}
                   </span>
                 </div>
               )}
+              {isDeposit && (
+                <div className="flex justify-between items-baseline">
+                  <span className="text-gray-500 dark:text-gray-400">Còn lại cần thanh toán:</span>
+                  <span className="font-semibold text-gray-900 dark:text-white">
+                    {formatPrice(paymentData.remainingAmount)}
+                  </span>
+                </div>
+              )}
             </div>
 
+            {finalError && <p className="text-sm text-error-600">{finalError}</p>}
+
             <div className="flex flex-col sm:flex-row justify-center gap-3 pt-2">
+              {paymentData?.nextPaymentType === 'FINAL' && (
+                <Button onClick={payRemaining} disabled={payingFinal} className="w-full sm:w-auto px-8 py-3">
+                  {payingFinal ? 'Đang chuyển đến cổng thanh toán...' : 'Thanh toán phần còn lại'}
+                </Button>
+              )}
               <Link to="/" className="w-full sm:w-auto">
                 <Button className="w-full sm:w-auto px-8 py-3">
                   Tiếp tục mua sắm
@@ -151,7 +187,9 @@ export default function PaymentSuccessPage() {
                 Giao dịch đang được xác nhận
               </h1>
               <p className="mt-2 text-sm text-gray-600 dark:text-gray-400 max-w-md mx-auto">
-                Nếu bạn đã chuyển khoản hoặc thanh toán thành công, vui lòng đợi ít phút để hệ thống ngân hàng đồng bộ.
+                {paymentData?.orderStatus === 'CANCELLED' && paymentData?.message
+                  ? paymentData.message
+                  : 'Nếu bạn đã chuyển khoản hoặc thanh toán thành công, vui lòng đợi ít phút để hệ thống ngân hàng đồng bộ.'}
               </p>
             </div>
 
