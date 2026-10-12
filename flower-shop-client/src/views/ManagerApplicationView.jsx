@@ -101,7 +101,6 @@ export default function ManagerApplicationView({ user }) {
                     ["phone", "Số điện thoại", 16],
                     ["shopName", "Tên shop", 255],
                     ["addressLine", "Địa chỉ cửa hàng", 255],
-                    ["district", "Quận / Huyện", 100],
                     ["ward", "Phường / Xã", 100],
                   ].map(([key, label, max]) => (
                     <div key={key} className={key === "shopName" || key === "addressLine" ? "md:col-span-2" : ""}>

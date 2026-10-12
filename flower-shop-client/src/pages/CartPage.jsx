@@ -14,8 +14,11 @@ export default function CartPage({ cart, loading, error, fetchCart, updateItem, 
   const [selectedItemIds, setSelectedItemIds] = useState([]);
   const [recipientName, setRecipientName] = useState('');
   const [phone, setPhone] = useState('');
-  const [deliveryAddress, setDeliveryAddress] = useState('');
+  const [addressId, setAddressId] = useState('');
   const [savedAddresses, setSavedAddresses] = useState([]);
+  const [shippingFee, setShippingFee] = useState(null);
+  const [feeBusy, setFeeBusy] = useState(false);
+  const [feeError, setFeeError] = useState('');
   const [couponCode, setCouponCode] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('ONLINE'); // 'ONLINE' | 'COD'
 
@@ -45,10 +48,8 @@ export default function CartPage({ cart, loading, error, fetchCart, updateItem, 
           if (list && list.length > 0) {
             setSavedAddresses(list);
             const def = list.find(a => a.isDefault) || list[0];
-            const fullAddr = [def.addressLine, def.ward, def.district, def.city].filter(Boolean).join(', ');
-            if (fullAddr) {
-              setDeliveryAddress(prev => prev || fullAddr);
-            }
+            setAddressId(prev => prev || def.id);
+            if (def.recipientPhone) setPhone(prev => prev || def.recipientPhone);
           }
         }).catch(() => {});
       }
@@ -63,9 +64,6 @@ export default function CartPage({ cart, loading, error, fetchCart, updateItem, 
     setPhone(val);
   };
 
-  const handleDeliveryAddressChange = (val) => {
-    setDeliveryAddress(val);
-  };
 
   // Khi cart load xong, đồng bộ selectedItemIds
   useEffect(() => {
@@ -133,6 +131,28 @@ export default function CartPage({ cart, loading, error, fetchCart, updateItem, 
 
   const shopIds = Object.keys(selectedByShop);
   const hasMultipleShopsSelected = shopIds.length > 1;
+  const selectedAddress = savedAddresses.find(a => a.id === addressId);
+  const needsGhnArea = Boolean(selectedAddress && !selectedAddress.ghnWardId);
+  const targetShop = shopIds.length === 1 ? shopIds[0] : '';
+
+  // The fee is asked from GHN whenever shop or destination changes; null means not known yet.
+  useEffect(() => {
+    setShippingFee(null);
+    setFeeError('');
+    if (!isUserLoggedIn || !targetShop || !addressId || needsGhnArea) return;
+    let active = true;
+    setFeeBusy(true);
+    orderApi.getShippingFee(userId || user.id, {
+      shopId: targetShop,
+      deliveryAddressId: addressId,
+    })
+      .then(res => { if (active) setShippingFee(Number(res.shippingFee)); })
+      .catch(err => { if (active) setFeeError(err.message || 'Không tính được phí vận chuyển từ GHN.'); })
+      .finally(() => { if (active) setFeeBusy(false); });
+    return () => { active = false; };
+  }, [isUserLoggedIn, userId, user?.id, targetShop, addressId, needsGhnArea]);
+
+  const orderTotal = shippingFee !== null ? selectedTotal + shippingFee : null;
 
   // Kiểm tra xem có sản phẩm nào được chọn mà số lượng vượt quá tồn kho không
   const hasOverStockItem = selectedItems.some(
@@ -157,11 +177,19 @@ export default function CartPage({ cart, loading, error, fetchCart, updateItem, 
     }
 
     if (!phone.trim()) {
-      setOrderError('Vui lòng nhập số điện thoại nhận hoa.');
+      setOrderError('Tài khoản chưa có số điện thoại. Hãy cập nhật trong trang tài khoản hoặc nhập số người nhận.');
       return;
     }
 
-    const finalAddress = deliveryAddress.trim() || 'Hà Nội';
+    if (!addressId) {
+      setOrderError('Vui lòng chọn địa chỉ nhận hoa đã lưu trong tài khoản.');
+      return;
+    }
+
+    if (shippingFee === null) {
+      setOrderError('Chưa có phí vận chuyển từ GHN cho địa chỉ này.');
+      return;
+    }
 
     if (hasMultipleShopsSelected) {
       setOrderError('Mỗi đơn hàng chỉ được chứa sản phẩm từ 1 cửa hàng. Vui lòng chỉ chọn sản phẩm thuộc cùng 1 shop.');
@@ -183,7 +211,7 @@ export default function CartPage({ cart, loading, error, fetchCart, updateItem, 
       const order = await orderApi.makeOrder(userId, {
         shopId: targetShopId,
         cartItemIds: targetItemIds,
-        deliveryAddressId: finalAddress,
+        deliveryAddressId: addressId,
         recipientName: recipientName.trim(),
         phone: phone.trim(),
         couponId: couponCode.trim() || undefined,
@@ -451,56 +479,58 @@ export default function CartPage({ cart, loading, error, fetchCart, updateItem, 
               {/* Số điện thoại nhận hàng */}
               <div>
                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
-                  Số điện thoại nhận hàng <span className="text-error-500">*</span>
+                  Số điện thoại nhận hàng
                 </label>
                 <input
                   type="tel"
                   value={phone}
                   onChange={(e) => handlePhoneChange(e.target.value)}
-                  placeholder="Ví dụ: 0912345678"
+                  placeholder="Số điện thoại tài khoản"
                   maxLength={15}
                   className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-white/10 dark:bg-gray-800 dark:text-white"
                 />
+                {isUserLoggedIn && (
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    {phone ? 'Lấy từ tài khoản của bạn; chỉ sửa khi người nhận khác.' : 'Tài khoản chưa có số điện thoại; hãy cập nhật trong trang tài khoản.'}
+                  </p>
+                )}
               </div>
 
               {/* Địa chỉ nhận hoa */}
               <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
-                    Địa chỉ nhận hoa <span className="text-error-500">*</span>
-                  </label>
-                  {savedAddresses.length > 0 && (
+                <label htmlFor="cart-address" className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                  Địa chỉ nhận hoa <span className="text-error-500">*</span>
+                </label>
+                {!isUserLoggedIn ? (
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Đăng nhập để chọn địa chỉ và xem phí vận chuyển.</p>
+                ) : savedAddresses.length === 0 ? (
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Chưa có địa chỉ nào. <Link to="/account" className="text-brand-600 dark:text-brand-400 underline">Thêm địa chỉ</Link> để đặt hàng.
+                  </p>
+                ) : (
+                  <>
                     <select
-                      onChange={(e) => {
-                        if (e.target.value) handleDeliveryAddressChange(e.target.value);
-                      }}
-                      className="text-xs text-brand-600 dark:text-brand-400 bg-transparent border-none cursor-pointer focus:ring-0 p-0 font-medium"
-                      defaultValue=""
+                      id="cart-address"
+                      value={addressId}
+                      onChange={(e) => setAddressId(e.target.value)}
+                      className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-white/10 dark:bg-gray-800 dark:text-white"
                     >
-                      <option value="" disabled>Chọn địa chỉ đã lưu</option>
-                      {savedAddresses.map(addr => {
-                        const str = [addr.addressLine, addr.ward, addr.district, addr.city].filter(Boolean).join(', ');
-                        return (
-                          <option key={addr.id} value={str}>
-                            {addr.isDefault ? `★ [Mặc định] ${addr.addressLine}` : addr.addressLine}
-                          </option>
-                        );
-                      })}
+                      {savedAddresses.map(addr => (
+                        <option key={addr.id} value={addr.id}>
+                          {[addr.addressLine, addr.ward, addr.city].filter(Boolean).join(', ')}{addr.isDefault ? ' (Mặc định)' : ''}
+                        </option>
+                      ))}
                     </select>
-                  )}
-                </div>
-                <input
-                  type="text"
-                  value={deliveryAddress}
-                  onChange={(e) => handleDeliveryAddressChange(e.target.value)}
-                  placeholder="Nhập số nhà, tên đường, phường/xã, quận/huyện..."
-                  className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-white/10 dark:bg-gray-800 dark:text-white"
-                />
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  {isUserLoggedIn
-                    ? '💡 Đã tự động điền từ thông tin tài khoản của bạn. Có thể chỉnh sửa nếu giao nơi khác.'
-                    : '💡 Bạn có thể nhập trước thông tin nhận hàng, sau đó đăng nhập để xác nhận đặt hàng.'}
-                </p>
+                    {needsGhnArea && (
+                      <div className="mt-3 rounded-lg border border-warning-200 bg-warning-50 p-3 dark:border-warning-500/20 dark:bg-warning-500/10">
+                        <p className="text-sm font-medium text-warning-800 dark:text-warning-300">
+                          Địa chỉ này chưa có mã Tỉnh/Phường của GHN nên chưa tính được phí vận chuyển.{' '}
+                          <Link to="/account" className="underline">Cập nhật địa chỉ trong hồ sơ</Link>.
+                        </p>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
 
               {/* Phương thức thanh toán */}
@@ -571,14 +601,17 @@ export default function CartPage({ cart, loading, error, fetchCart, updateItem, 
                   <span>Tạm tính:</span>
                   <span className="font-semibold text-gray-900 dark:text-white">{formatPrice(selectedTotal)}</span>
                 </div>
-                <div className="flex justify-between text-gray-600 dark:text-gray-400">
-                  <span>Phí vận chuyển:</span>
-                  <span className="font-semibold text-success-600 dark:text-success-400">Miễn phí</span>
+                <div className="flex justify-between text-gray-600 dark:text-gray-400" aria-live="polite">
+                  <span>Phí vận chuyển (GHN):</span>
+                  <span className="font-semibold text-gray-900 dark:text-white">
+                    {feeBusy ? 'Đang tính…' : shippingFee !== null ? formatPrice(shippingFee) : 'Chưa có'}
+                  </span>
                 </div>
+                {feeError && <p className="text-xs text-error-600 dark:text-error-400" role="alert">{feeError}</p>}
                 <div className="flex justify-between items-baseline pt-3 border-t border-gray-100 dark:border-white/5">
                   <span className="text-base font-bold text-gray-900 dark:text-white">Tổng thanh toán:</span>
                   <span className="text-2xl font-extrabold text-brand-600 dark:text-brand-400">
-                    {formatPrice(selectedTotal)}
+                    {orderTotal !== null ? formatPrice(orderTotal) : '---'}
                   </span>
                 </div>
               </div>
@@ -603,7 +636,7 @@ export default function CartPage({ cart, loading, error, fetchCart, updateItem, 
                 <Button
                   type="button"
                   onClick={handlePlaceOrder}
-                  disabled={orderLoading || selectedItems.length === 0 || hasMultipleShopsSelected || hasOverStockItem}
+                  disabled={orderLoading || feeBusy || shippingFee === null || selectedItems.length === 0 || hasMultipleShopsSelected || hasOverStockItem}
                   className="w-full py-3.5 text-base font-bold shadow-md"
                 >
                   {orderLoading

@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { productService as api } from '../services/productService'
+import { useConfirm } from '../components/ui/confirm/ConfirmProvider'
 
 const empty = () => ({ name: '', description: '', categoryId: '', price: '', stock: 0, status: 'ACTIVE', type: 'READY_MADE', imageFiles: [], primaryImageIndex: 0, primaryImageId: null })
 
 export function useProductsController(shopId, manage) {
+  const { confirm } = useConfirm()
   const [data, setData] = useState(null)
   const [categories, setCategories] = useState([])
   const [form, setForm] = useState(empty)
@@ -95,8 +97,8 @@ export function useProductsController(shopId, manage) {
     })
   }
 
-  const hide = id => {
-    if (window.confirm('Ẩn sản phẩm khỏi cửa hàng?')) {
+  const hide = async id => {
+    if (await confirm({ title: 'Ẩn sản phẩm', message: 'Ẩn sản phẩm khỏi cửa hàng?', confirmLabel: 'Ẩn' })) {
       return run(async () => { await api.hide(shopId, id); setNotice('Đã ẩn sản phẩm.') })
     }
   }

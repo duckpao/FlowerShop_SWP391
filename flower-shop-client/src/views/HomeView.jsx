@@ -4,6 +4,7 @@ import ManagerNotificationsView from "./ManagerNotificationsView";
 import ManagerApplicationView from "./ManagerApplicationView";
 import ProductsView from "./ProductsView";
 import ProductCatalogView from "./ProductCatalogView";
+import HomeIntro from "../components/home/HomeIntro";
 
 const statuses = {
   PENDING: "Chờ duyệt",
@@ -44,26 +45,21 @@ export default function HomeView({ auth }) {
         {/* Hero Section */}
         <section className="relative overflow-hidden rounded-3xl bg-brand-50 dark:bg-brand-500/10 px-6 py-16 sm:px-12 sm:py-24 text-center border border-brand-100 dark:border-brand-500/20">
           <div className="mx-auto max-w-3xl relative z-10">
-            <span className="text-brand-500 font-semibold tracking-wider uppercase text-sm mb-4 block">Hoa tươi giao tận nơi</span>
             <h1 className="text-4xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-6xl mb-6">
               Mỗi đóa hoa, <br className="hidden sm:block"/> một lời gửi yêu thương
             </h1>
             <p className="text-lg leading-8 text-gray-600 dark:text-gray-300 mb-8">
-              Khám phá hàng ngàn mẫu hoa đẹp từ các cửa hàng uy tín. Đặt hoa dễ dàng, giao hàng nhanh chóng, mang lại niềm vui cho những người thân yêu.
+              Hoa tươi từ các cửa hàng đã được duyệt, giao tận nơi bằng Giao Hàng Nhanh. Xem phí ship trước khi đặt và theo dõi vận đơn đến khi hoa tới tay người nhận.
             </p>
             <div className="flex items-center justify-center gap-x-6">
               <a href="#shops" className="rounded-xl bg-brand-500 px-6 py-3.5 text-sm font-semibold text-white shadow-xs hover:bg-brand-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 transition-colors">
                 Tìm cửa hàng
               </a>
               <a href="#products" className="text-sm font-semibold leading-6 text-gray-900 dark:text-white hover:text-brand-500 dark:hover:text-brand-400 transition-colors">
-                Khám phá sản phẩm <span aria-hidden="true">→</span>
+                Khám phá sản phẩm
               </a>
             </div>
           </div>
-          
-          {/* Decorative elements */}
-          <div className="absolute top-0 left-0 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-brand-200 dark:bg-brand-500/20 rounded-full blur-3xl opacity-50"></div>
-          <div className="absolute bottom-0 right-0 translate-x-1/3 translate-y-1/3 w-96 h-96 bg-pink-200 dark:bg-pink-500/20 rounded-full blur-3xl opacity-50"></div>
         </section>
 
         {auth.error && (
@@ -88,6 +84,8 @@ export default function HomeView({ auth }) {
             </p>
           </div>
         )}
+
+        {!c.selected && <HomeIntro />}
 
         {!c.selected && (
           <section id="discover" className="space-y-6">

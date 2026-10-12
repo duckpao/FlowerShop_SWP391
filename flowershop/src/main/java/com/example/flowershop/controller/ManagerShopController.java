@@ -18,7 +18,7 @@ public class ManagerShopController {
     @GetMapping public List<ShopResponse> mine(@AuthenticationPrincipal CurrentUser u) { return service.mine(u.id()); }
     @GetMapping("/{id}/address") public List<com.example.flowershop.dto.account.AddressResponse> address(@PathVariable String id,@AuthenticationPrincipal CurrentUser u) { return service.address(id,u.id()); }
     @PutMapping("/{id}/address") @Parameter(name="X-CSRF-TOKEN",in=ParameterIn.HEADER,required=true)
-    public com.example.flowershop.dto.account.AddressResponse saveAddress(@PathVariable String id,@AuthenticationPrincipal CurrentUser u,@Valid @RequestBody com.example.flowershop.dto.account.AddressRequest body) { return service.saveAddress(id,u.id(),body); }
+    public com.example.flowershop.dto.account.AddressResponse saveAddress(@PathVariable String id,@AuthenticationPrincipal CurrentUser u,@Valid @RequestBody com.example.flowershop.dto.account.ShopAddressRequest body) { return service.saveAddress(id,u.id(),body); }
     @PutMapping("/{id}") @Parameter(name="X-CSRF-TOKEN",in=ParameterIn.HEADER,required=true)
     public ShopResponse update(@PathVariable String id,@AuthenticationPrincipal CurrentUser u,@Valid @RequestBody ManagerShopService.Profile body) { return service.update(id,u.id(),body); }
     @GetMapping("/{id}/staff") public List<ManagerShopService.StaffResponse> staff(@PathVariable String id,@AuthenticationPrincipal CurrentUser u) { return service.staff(id,u.id()); }

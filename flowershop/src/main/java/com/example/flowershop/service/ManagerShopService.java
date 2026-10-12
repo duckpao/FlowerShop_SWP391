@@ -28,14 +28,14 @@ public class ManagerShopService {
     public List<com.example.flowershop.dto.account.AddressResponse> address(String id,String actor) {
         owned(id,actor,false); return addresses.findByShopIdAndUserIsNullOrderByCreatedDateAscIdAsc(id).stream().map(com.example.flowershop.dto.account.AddressResponse::from).toList();
     }
-    @Transactional public com.example.flowershop.dto.account.AddressResponse saveAddress(String id,String actor,com.example.flowershop.dto.account.AddressRequest input) {
+    @Transactional public com.example.flowershop.dto.account.AddressResponse saveAddress(String id,String actor,com.example.flowershop.dto.account.ShopAddressRequest input) {
         var shop=owned(id,actor,true);
         var list=addresses.findByShopIdAndUserIsNullOrderByCreatedDateAscIdAsc(id);
         var a=list.stream().filter(x->Boolean.TRUE.equals(x.getIsDefault())).findFirst().orElseGet(()->list.isEmpty()?new Address():list.get(0));
         if(a.getId()==null) { a.setId(UUID.randomUUID().toString()); a.setShop(shop); a.setCreatedBy(actor); }
         list.forEach(x->x.setIsDefault(false));
-        a.setAddressLine(input.addressLine().strip()); a.setCity(input.city().strip()); a.setDistrict(input.district().strip()); a.setWard(input.ward().strip());
-        a.setGhnWardCode(input.ghnWardCode().strip()); a.setGhnDistrictId(input.ghnDistrictId());
+        a.setAddressLine(input.addressLine().strip()); a.setCity(input.city().strip()); a.setWard(input.ward().strip());
+        a.setGhnProvinceId(input.ghnProvinceId()); a.setGhnWardId(input.ghnWardId());
         a.setIsDefault(true); a.setLastModifyBy(actor);
         return com.example.flowershop.dto.account.AddressResponse.from(addresses.save(a));
     }

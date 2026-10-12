@@ -67,6 +67,9 @@ export function useCatalogController(initialShops) {
     setShop: shopId => setFilter(current => ({ ...current, shopId, page: 0 })),
     setType: type => setFilter(current => ({ ...current, type, page: 0 })),
     setSort: sort => setFilter(current => ({ ...current, sort, page: 0 })),
+    // Applies category and sort from the URL; keeps the same filter object when nothing changed.
+    applyUrl: (categoryId, sort) => setFilter(current =>
+      current.categoryId === categoryId && current.sort === sort ? current : { ...current, categoryId, sort, page: 0 }),
     changePage: delta => setFilter(current => ({ ...current, page: current.page + delta })),
     retry: () => setFilter(current => ({ ...current })),
   }

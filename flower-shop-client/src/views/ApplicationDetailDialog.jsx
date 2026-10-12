@@ -129,7 +129,7 @@ export default function ApplicationDetailDialog({
             </div>
             <div>
               <span className="text-gray-500 dark:text-gray-400 text-sm block mb-1">Địa chỉ:</span>
-              <p className="text-gray-900 dark:text-white text-sm">{[a.addressLine, a.ward, a.district, a.city].join(", ")}</p>
+              <p className="text-gray-900 dark:text-white text-sm">{[a.addressLine, a.ward, a.city].join(", ")}</p>
             </div>
           </div>
 

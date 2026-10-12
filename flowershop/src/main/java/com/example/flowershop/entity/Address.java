@@ -34,17 +34,15 @@ public class Address {
     @Column(name = "ward", length = 100)
     private String ward;
 
-    @Column(name = "district", length = 100)
-    private String district;
-
     @Column(name = "city", length = 100)
     private String city;
 
-    @Column(name = "ghn_ward_code", length = 20)
-    private String ghnWardCode;
+    /** GHN ids from the two-level model (province, ward) the address was picked from. */
+    @Column(name = "ghn_province_id")
+    private Integer ghnProvinceId;
 
-    @Column(name = "ghn_district_id")
-    private Integer ghnDistrictId;
+    @Column(name = "ghn_ward_id")
+    private Integer ghnWardId;
 
     @Builder.Default
     @Column(name = "is_default")

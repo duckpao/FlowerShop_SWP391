@@ -72,26 +72,21 @@ public class ManagerOrderController {
         return service.ship(shopId, u.id(), id);
     }
 
-    /**
-     * Đồng bộ / Cập nhật trạng thái giao hàng thực tế từ GHN về hệ thống.
-     * Gọi API tra cứu của GHN theo tracking code; nếu GHN báo 'delivered', đơn tự chuyển sang COMPLETED.
-     */
+    /** Pulls the live shipment status from GHN. */
     @PostMapping("/{id}/refresh-status")
     @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
-    public String refreshStatus(@PathVariable String shopId, @PathVariable String id,
-                                 @AuthenticationPrincipal CurrentUser u) {
-        return service.refreshStatus(shopId, u.id(), id).name();
+    public ManagerOrderService.DeliveryInfo refreshStatus(@PathVariable String shopId, @PathVariable String id,
+                                                          @AuthenticationPrincipal CurrentUser u) {
+        return service.refreshStatus(shopId, u.id(), id);
     }
 
-    /**
-     * Giả lập GHN giao hàng thành công (dành cho môi trường test/sandbox).
-     * Chuyển trạng thái vận đơn sang DELIVERED, đơn hàng sang COMPLETED, và thanh toán sang SUCCESS.
-     */
-    @PostMapping("/{id}/simulate-delivered")
+    /** Sends a status change to GHN staging and returns the status GHN reports back. */
+    @PostMapping("/{id}/ghn-status")
     @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
-    public String simulateDelivered(@PathVariable String shopId, @PathVariable String id,
-                                    @AuthenticationPrincipal CurrentUser u) {
-        return service.simulateDelivered(shopId, u.id(), id).name();
+    public ManagerOrderService.DeliveryInfo pushGhnStatus(@PathVariable String shopId, @PathVariable String id,
+                                                          @RequestBody java.util.Map<String, String> body,
+                                                          @AuthenticationPrincipal CurrentUser u) {
+        return service.pushGhnStatus(shopId, u.id(), id, body.get("status"));
     }
 
     /**

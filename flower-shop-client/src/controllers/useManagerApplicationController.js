@@ -3,7 +3,7 @@ import { managerApplicationService as api } from '../services/managerApplication
 export function useManagerApplicationController(user) {
   const [open, setOpen] = useState(false)
   const [items, setItems] = useState([])
-  const [form, setForm] = useState({ fullName: user.fullName || '', phone: '', shopName: '', description: '', addressLine: '', city: 'Hà Nội', district: '', ward: '' })
+  const [form, setForm] = useState({ fullName: user.fullName || '', phone: '', shopName: '', description: '', addressLine: '', city: 'Hà Nội', ward: '' })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')

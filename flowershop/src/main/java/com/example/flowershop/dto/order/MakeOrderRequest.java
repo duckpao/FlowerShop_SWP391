@@ -29,5 +29,6 @@ public class MakeOrderRequest {
     private String recipientName;
     @Size(max = 20)
     private String phone;
+
 }
 

@@ -7,7 +7,7 @@ const get = async path => {
 }
 
 export const ghnService = {
+    // Two-level model since 01/07/2025: province -> ward, no district.
     provinces: () => get('/api/public/ghn/provinces'),
-    districts: id => get(`/api/public/ghn/provinces/${encodeURIComponent(id)}/districts`),
-    wards: id => get(`/api/public/ghn/districts/${encodeURIComponent(id)}/wards`),
+    wards: id => get(`/api/public/ghn/provinces/${encodeURIComponent(id)}/wards`),
 }

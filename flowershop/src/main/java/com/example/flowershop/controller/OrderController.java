@@ -2,6 +2,7 @@ package com.example.flowershop.controller;
 
 import com.example.flowershop.dto.order.MakeOrderRequest;
 import com.example.flowershop.dto.order.OrderResponse;
+import com.example.flowershop.dto.order.ShippingFeeRequest;
 import com.example.flowershop.service.OrderService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -37,6 +38,19 @@ public class OrderController {
         requireOwner(userId, currentUser);
         OrderResponse response = orderService.makeOrder(userId, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    /**
+     * Phí vận chuyển GHN cho đơn từ shop tới một địa chỉ đã lưu.
+     * POST /api/orders/{userId}/shipping-fee
+     */
+    @PostMapping("/{userId}/shipping-fee")
+    public java.util.Map<String, Object> shippingFee(
+            @PathVariable String userId,
+            @Valid @RequestBody ShippingFeeRequest request, @AuthenticationPrincipal CurrentUser currentUser
+    ) {
+        requireOwner(userId, currentUser);
+        return java.util.Map.of("shippingFee", orderService.quoteShippingFee(userId, request));
     }
 
     /**

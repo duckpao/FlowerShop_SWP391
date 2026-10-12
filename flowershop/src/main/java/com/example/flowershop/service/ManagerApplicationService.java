@@ -17,10 +17,10 @@ public class ManagerApplicationService {
         @NotBlank @Pattern(regexp="[+]?[0-9]{9,15}") String phone,
         @NotBlank @Size(max=255) String shopName,@NotBlank @Size(max=5000) String description,
         @NotBlank @Size(max=255) String addressLine,@NotBlank @Size(max=100) String city,
-        @NotBlank @Size(max=100) String district,@NotBlank @Size(max=100) String ward) {}
+        @NotBlank @Size(max=100) String ward) {}
     public record Decision(@NotNull Boolean approve,@NotNull @Size(max=1000) String note) {}
     public record Result(String id,String email,String fullName,String phone,String shopName,String description,
-        String addressLine,String city,String district,String ward,String status,String reviewNote,Instant submittedAt,String shopId) {}
+        String addressLine,String city,String ward,String status,String reviewNote,Instant submittedAt,String shopId) {}
     public record Results(List<Result> content,int page,int totalPages,long totalElements) {}
     private final ManagerApplicationRepository applications; private final UserRepository users;
     private final ShopRepository shops; private final AddressRepository addresses;
@@ -28,7 +28,7 @@ public class ManagerApplicationService {
     public ManagerApplicationService(ManagerApplicationRepository a,UserRepository u,ShopRepository s,AddressRepository ad,AuthSessionRepository se) {
         applications=a;users=u;shops=s;addresses=ad;sessions=se;
     }
-    private Result response(ManagerApplication a) { return new Result(a.getId(),a.getUser().getEmail(),a.getFullName(),a.getPhone(),a.getShopName(),a.getDescription(),a.getAddressLine(),a.getCity(),a.getDistrict(),a.getWard(),a.getStatus(),a.getReviewNote(),a.getSubmittedAt(),a.getShopId()); }
+    private Result response(ManagerApplication a) { return new Result(a.getId(),a.getUser().getEmail(),a.getFullName(),a.getPhone(),a.getShopName(),a.getDescription(),a.getAddressLine(),a.getCity(),a.getWard(),a.getStatus(),a.getReviewNote(),a.getSubmittedAt(),a.getShopId()); }
     private static ResponseStatusException conflict(String message) {return new ResponseStatusException(HttpStatus.CONFLICT,message);}
     private static ResponseStatusException missing() {return new ResponseStatusException(HttpStatus.NOT_FOUND,"Không tìm thấy đơn.");}
     private void eligible(User user) {
@@ -47,7 +47,7 @@ public class ManagerApplicationService {
         if(a.getId()!=null && !"REJECTED".equals(a.getStatus())) throw conflict("Bạn đã có đơn đang chờ hoặc đã được duyệt.");
         if(a.getId()==null) a.setId(UUID.randomUUID().toString());
         a.setUser(user);a.setFullName(input.fullName().strip());a.setPhone(input.phone().strip());a.setShopName(input.shopName().strip());a.setDescription(input.description().strip());
-        a.setAddressLine(input.addressLine().strip());a.setCity(input.city().strip());a.setDistrict(input.district().strip());a.setWard(input.ward().strip());
+        a.setAddressLine(input.addressLine().strip());a.setCity(input.city().strip());a.setWard(input.ward().strip());
         a.setStatus("PENDING");a.setSubmittedAt(Instant.now());a.setReviewedAt(null);a.setReviewedBy(null);a.setReviewNote(null);
         return response(applications.saveAndFlush(a));
     }
@@ -60,7 +60,7 @@ public class ManagerApplicationService {
             eligible(user);
             var shop=Shop.builder().id(UUID.randomUUID().toString()).owner(user).name(a.getShopName()).description(a.getDescription()).status(ShopStatus.ACTIVE).createdBy(admin).build();
             shops.saveAndFlush(shop);
-            addresses.save(Address.builder().id(UUID.randomUUID().toString()).shop(shop).addressLine(a.getAddressLine()).city(a.getCity()).district(a.getDistrict()).ward(a.getWard()).isDefault(true).createdBy(admin).build());
+            addresses.save(Address.builder().id(UUID.randomUUID().toString()).shop(shop).addressLine(a.getAddressLine()).city(a.getCity()).ward(a.getWard()).isDefault(true).createdBy(admin).build());
             user.setRole(UserRole.SHOP);user.setLastModifyBy(admin);sessions.revokeAll(applicant);a.setShopId(shop.getId());
         }
         a.setStatus(decision.approve()?"APPROVED":"REJECTED");a.setReviewNote(decision.note().strip());a.setReviewedBy(admin);a.setReviewedAt(Instant.now());return response(a);
