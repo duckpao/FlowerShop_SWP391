@@ -51,18 +51,26 @@ export function useCatalogController(initialShops) {
   }, [filter])
 
   const search = event => {
-    event.preventDefault()
-    const minPrice = priceDraft.minPrice.trim()
-    const maxPrice = priceDraft.maxPrice.trim()
+    if (event) event.preventDefault()
+    const minPrice = priceDraft.minPrice != null ? priceDraft.minPrice.toString().trim() : ''
+    const maxPrice = priceDraft.maxPrice != null ? priceDraft.maxPrice.toString().trim() : ''
     if (minPrice && maxPrice && Number(minPrice) > Number(maxPrice)) {
       setError('Giá tối thiểu không được lớn hơn giá tối đa.')
       return
     }
+    setError('')
     setFilter(current => ({ ...current, q: draft.trim(), minPrice, maxPrice, page: 0 }))
   }
 
+  const resetFilters = () => {
+    setDraft('')
+    setPriceDraft({ minPrice: '', maxPrice: '' })
+    setError('')
+    setFilter(emptyProductFilter())
+  }
+
   return {
-    filter, draft, setDraft, priceDraft, setPriceDraft, data, categories, shops, busy, error, search,
+    filter, draft, setDraft, priceDraft, setPriceDraft, data, categories, shops, busy, error, search, resetFilters,
     setCategory: categoryId => setFilter(current => ({ ...current, categoryId, page: 0 })),
     setShop: shopId => setFilter(current => ({ ...current, shopId, page: 0 })),
     setType: type => setFilter(current => ({ ...current, type, page: 0 })),

@@ -6,6 +6,7 @@ export const productService = {
   categories: shop => authService.authenticatedRequest(`${base(shop)}/categories`),
   save: (shop, id, formData) => authService.authenticatedRequest(`${base(shop)}${id ? `/${encodeURIComponent(id)}` : ''}`, { method: id ? 'PUT' : 'POST', body: formData }),
   hide: (shop, id) => authService.authenticatedRequest(`${base(shop)}/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  unhide: (shop, id) => authService.authenticatedRequest(`${base(shop)}/${encodeURIComponent(id)}/unhide`, { method: 'PUT' }),
   images: (shop, productId) => authService.authenticatedRequest(`${base(shop)}/${encodeURIComponent(productId)}/images`),
   deleteImage: (shop, productId, imageId) => authService.authenticatedRequest(`${base(shop)}/${encodeURIComponent(productId)}/images/${encodeURIComponent(imageId)}`, { method: 'DELETE' }),
   videos: (shop, productId) => authService.authenticatedRequest(`${base(shop)}/${encodeURIComponent(productId)}/videos`),
