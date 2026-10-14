@@ -30,7 +30,7 @@ class PaymentCartLifecycleTests {
     private final PaymentRepository payments = mock(PaymentRepository.class);
     private final OrderService orderService = spy(new OrderService(orders, details, cartItems,
             mock(UserRepository.class), mock(AddressRepository.class), mock(ProductRepository.class),
-            payments, mock(CouponRepository.class), mock(com.example.flowershop.service.GhnService.class)));
+            payments, mock(CouponRepository.class), mock(com.example.flowershop.repository.ShopRepository.class), mock(com.example.flowershop.service.GhnService.class)));
 
     private SePayGatewayService newGateway() {
         return PaymentBusinessTests.newGateway(orders, payments, mock(RefundRepository.class), orderService);
