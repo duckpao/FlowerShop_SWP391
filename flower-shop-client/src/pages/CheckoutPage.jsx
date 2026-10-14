@@ -41,7 +41,6 @@ export default function CheckoutPage() {
   const [addressesLoading, setAddressesLoading] = useState(Boolean(userId));
   const [addressError, setAddressError] = useState('');
   const [addressRefreshKey, setAddressRefreshKey] = useState(0);
-  const [coupons, setCoupons] = useState({});
   const [paymentMethod, setPaymentMethod] = useState('ONLINE');
   const [orderLoading, setOrderLoading] = useState(false);
   const [orderError, setOrderError] = useState('');
@@ -143,7 +142,6 @@ export default function CheckoutPage() {
         shops: shopGroups.map(group => ({
           shopId: group.shopId,
           cartItemIds: group.items.map(item => item.id),
-          couponId: coupons[group.shopId]?.trim() || undefined,
         })),
       });
       const query = created.map(order => 'order=' + encodeURIComponent(order.id)).join('&');
@@ -249,7 +247,6 @@ export default function CheckoutPage() {
                     </div>
                   ))}
                 </div>
-                <input value={coupons[group.shopId] || ''} onChange={e => setCoupons(prev => ({ ...prev, [group.shopId]: e.target.value }))} placeholder="Mã giảm giá của shop (nếu có)" aria-label={'Mã giảm giá ' + group.shopName} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 dark:border-white/10 dark:bg-gray-800 dark:text-white" />
                 <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
                   <span>Phí vận chuyển (GHN)</span>
                   <span>{feeLoading ? 'Đang tính…' : shippingFees[group.shopId] != null ? formatPrice(shippingFees[group.shopId]) : '—'}</span>
@@ -263,7 +260,7 @@ export default function CheckoutPage() {
               <div className="flex justify-between text-gray-600 dark:text-gray-400"><span>Số đơn hàng</span><span>{shopGroups.length} đơn (tách theo shop)</span></div>
               <div className="flex justify-between text-gray-600 dark:text-gray-400"><span>Tổng phí vận chuyển</span><span>{feesReady ? formatPrice(totalShipping) : '—'}</span></div>
               <div className="flex justify-between border-t border-gray-100 pt-3 text-base font-bold text-gray-900 dark:border-white/5 dark:text-white"><span>Tổng tạm tính</span><span className="text-brand-600 dark:text-brand-400">{formatPrice(selectedTotal + totalShipping)}</span></div>
-              <p className="text-xs text-gray-500 dark:text-gray-400">Số tiền cuối cùng được tính trên máy chủ sau khi áp dụng mã giảm giá.</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Số tiền cuối cùng được tính lại trên máy chủ khi đặt hàng.</p>
             </div>
             {hasOverStockItem && <p role="alert" className="rounded-lg bg-error-50 p-3 text-sm text-error-600">Có sản phẩm vượt quá tồn kho. Vui lòng điều chỉnh trong giỏ.</p>}
             {orderError && <p role="alert" className="rounded-lg bg-error-50 p-3 text-sm text-error-600">{orderError}</p>}
