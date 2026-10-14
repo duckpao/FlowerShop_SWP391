@@ -68,6 +68,8 @@ public class OrderService {
         if (parts.stream().map(MakeOrdersRequest.ShopOrder::getShopId).distinct().count() != parts.size()) {
             throw ApiException.badRequest("Mỗi shop chỉ được xuất hiện một lần trong yêu cầu đặt hàng.");
         }
+        // Nhiều shop: gắn chung một mã nhóm để màn đơn hàng hiển thị và thanh toán như một đơn.
+        String group = parts.size() > 1 ? UUID.randomUUID().toString() : null;
         List<OrderResponse> orders = new ArrayList<>();
         for (var part : parts) {
             MakeOrderRequest single = new MakeOrderRequest();
@@ -78,7 +80,13 @@ public class OrderService {
             single.setPaymentMethod(request.getPaymentMethod());
             single.setRecipientName(request.getRecipientName());
             single.setPhone(request.getPhone());
-            orders.add(makeOrder(userId, single));
+            OrderResponse created = makeOrder(userId, single);
+            if (group != null) {
+                Order saved = orderRepository.findById(created.getId()).orElseThrow();
+                saved.setCheckoutGroup(group);
+                orderRepository.save(saved);
+            }
+            orders.add(created);
         }
         return orders;
     }

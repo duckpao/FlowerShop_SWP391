@@ -34,7 +34,7 @@ public class CustomerOrderService {
                                java.time.LocalDateTime createdDate, Long itemCount,
                                String shopId, BigDecimal subTotal, BigDecimal shippingFee,
                                String paymentMethod, String paymentStatus, List<OrderLine> items,
-                               Long paymentSecondsLeft) {}
+                               Long paymentSecondsLeft, String checkoutGroup) {}
 
     public record OrderDetailResponse(String id, String shopId, String shopName, String status,
                                       BigDecimal subTotal, BigDecimal shippingFee, BigDecimal totalAmount,
@@ -226,7 +226,7 @@ private static ResponseStatusException notFound() {
         }
         return new OrderSummary(o.getId(), o.getShop().getName(), o.getTotalAmount(), o.getStatus().name(),
                 o.getCreatedDate(), (long) lines.size(), o.getShop().getId(), o.getSubTotal(), o.getShippingFee(),
-                method, paymentStatus, lines, secondsLeft);
+                method, paymentStatus, lines, secondsLeft, o.getCheckoutGroup());
     }
 
     public OrderDetailResponse detail(String customerId, String orderId) {

@@ -74,16 +74,28 @@ export default function CustomerOrdersView() {
     // Đơn hết hạn được scheduler hủy trong ~30 giây; tải lại sau đó để thấy trạng thái "Đã hủy".
     const refreshSoon = () => { setTimeout(() => setReloadKey(key => key + 1), 35000) }
     const changeTab = value => { setStatus(value); setPage(0) }
-    const payAgain = async order => {
-        setPayingId(order.id)
+    // Một lần thanh toán cho mọi đơn đang chờ của cùng lần đặt hàng (nhiều shop = một giao dịch SePay).
+    const payGroup = async group => {
+        setPayingId(group.id)
         setError('')
         try {
-            await paymentApi.startSePayCheckout(order.id, 'FULL')
+            if (group.ids.length === 1) await paymentApi.startSePayCheckout(group.ids[0], 'FULL')
+            else await paymentApi.startSePayGroupCheckout(group.ids)
         } catch (e) {
             setError(e.message || 'Không thể tạo thanh toán. Vui lòng thử lại.')
             setPayingId('')
         }
     }
+
+    // Các đơn cùng checkoutGroup hiển thị như một đơn hàng gồm nhiều cửa hàng.
+    const groups = []
+    const byKey = new Map()
+    for (const o of orders?.content || []) {
+        const key = o.checkoutGroup || o.id
+        if (!byKey.has(key)) { const g = { key, orders: [] }; byKey.set(key, g); groups.push(g) }
+        byKey.get(key).orders.push(o)
+    }
+    const sum = (list, field) => list.reduce((total, o) => total + Number(o[field] || 0), 0)
 
     if (!user) return <div className="max-w-4xl mx-auto p-8"><h1 className="text-xl font-bold">Đơn hàng của tôi</h1><p className="text-gray-500">Vui lòng đăng nhập.</p></div>
 
@@ -106,46 +118,62 @@ export default function CustomerOrdersView() {
                 <div className="rounded-xl border border-gray-200 bg-white p-10 text-center text-gray-500 dark:border-white/5 dark:bg-white/3">Chưa có đơn hàng nào.</div>
             )}
 
-            {orders && orders.content.map(o => (
-                <article key={o.id} className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-white/5 dark:bg-white/3">
-                    <header className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 bg-gray-50 px-5 py-3 dark:border-white/5 dark:bg-white/5">
-                        <span className="text-sm font-bold text-gray-900 dark:text-white">🏪 {o.shopName}</span>
-                        <span className="flex items-center gap-3">
-                            <span className="font-mono text-xs text-gray-500">#{o.id.substring(0, 8).toUpperCase()}</span>
-                            <Badge color={statusColors[o.status] || 'primary'}>{statusLabel(o)}</Badge>
-                        </span>
-                    </header>
-                    <Link to={`/orders/${o.id}`} className="block divide-y divide-gray-100 dark:divide-white/5">
-                        {(o.items || []).map((item, index) => (
-                            <div key={`${item.productId}-${index}`} className="flex items-center gap-4 px-5 py-3">
-                                <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-gray-100 bg-gray-50 dark:border-white/5 dark:bg-gray-800">
-                                    {item.imageUrl ? <img src={item.imageUrl} alt={item.productName} className="h-full w-full object-cover" /> : <span className="text-2xl">💐</span>}
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                    <p className="line-clamp-1 text-sm font-semibold text-gray-900 dark:text-white">{item.productName || 'Sản phẩm'}</p>
-                                    <p className="text-xs text-gray-500">x{item.quantity}</p>
-                                </div>
-                                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{formatPrice(item.price)}</span>
+            {groups.map(g => {
+                const multi = g.orders.length > 1
+                const payable = g.orders.filter(o => o.paymentSecondsLeft > 0)
+                const secondsLeft = payable.length ? Math.min(...payable.map(o => o.paymentSecondsLeft)) : null
+                const first = g.orders[0]
+                return <article key={g.key} className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-white/5 dark:bg-white/3">
+                    {multi && (
+                        <header className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 bg-gray-50 px-5 py-3 dark:border-white/5 dark:bg-white/5">
+                            <span className="text-sm font-bold text-gray-900 dark:text-white">Đơn hàng gồm {g.orders.length} cửa hàng</span>
+                            <span className="font-mono text-xs text-gray-500">#{g.key.substring(0, 8).toUpperCase()}</span>
+                        </header>
+                    )}
+                    {g.orders.map(o => (
+                        <section key={o.id} className={multi ? 'border-b border-gray-100 last:border-b-0 dark:border-white/5' : ''}>
+                            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-5 py-3 dark:border-white/5">
+                                <span className="text-sm font-bold text-gray-900 dark:text-white">🏪 {o.shopName}</span>
+                                <span className="flex items-center gap-3">
+                                    <span className="font-mono text-xs text-gray-500">#{o.id.substring(0, 8).toUpperCase()}</span>
+                                    <Badge color={statusColors[o.status] || 'primary'}>{statusLabel(o)}</Badge>
+                                    <Link to={`/orders/${o.id}`} className="text-xs font-medium text-brand-600 hover:underline">Chi tiết</Link>
+                                </span>
                             </div>
-                        ))}
-                    </Link>
+                            <Link to={`/orders/${o.id}`} className="block divide-y divide-gray-100 dark:divide-white/5">
+                                {(o.items || []).map((item, index) => (
+                                    <div key={`${item.productId}-${index}`} className="flex items-center gap-4 px-5 py-3">
+                                        <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-gray-100 bg-gray-50 dark:border-white/5 dark:bg-gray-800">
+                                            {item.imageUrl ? <img src={item.imageUrl} alt={item.productName} className="h-full w-full object-cover" /> : <span className="text-2xl">💐</span>}
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <p className="line-clamp-1 text-sm font-semibold text-gray-900 dark:text-white">{item.productName || 'Sản phẩm'}</p>
+                                            <p className="text-xs text-gray-500">x{item.quantity}</p>
+                                        </div>
+                                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{formatPrice(item.price)}</span>
+                                    </div>
+                                ))}
+                            </Link>
+                            {multi && <p className="px-5 pb-3 text-right text-xs text-gray-500">Phí ship {formatPrice(o.shippingFee)} · Thành tiền {formatPrice(o.totalAmount)}</p>}
+                        </section>
+                    ))}
                     <footer className="space-y-3 border-t border-gray-100 px-5 py-4 dark:border-white/5">
                         <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-gray-500">
-                            <span>{new Date(o.createdDate).toLocaleString('vi-VN')} · {paymentLabel(o)}</span>
-                            <span>Tiền hàng {formatPrice(o.subTotal)} + Phí ship {formatPrice(o.shippingFee)}</span>
+                            <span>{new Date(first.createdDate).toLocaleString('vi-VN')} · {paymentLabel(first)}</span>
+                            <span>Tiền hàng {formatPrice(sum(g.orders, 'subTotal'))} + Phí ship {formatPrice(sum(g.orders, 'shippingFee'))}</span>
                         </div>
                         <div className="flex flex-wrap items-center justify-between gap-3">
-                            <span className="text-sm text-gray-700 dark:text-gray-300">Thành tiền: <strong className="text-lg text-brand-600 dark:text-brand-400">{formatPrice(o.totalAmount)}</strong></span>
+                            <span className="text-sm text-gray-700 dark:text-gray-300">Thành tiền: <strong className="text-lg text-brand-600 dark:text-brand-400">{formatPrice(sum(g.orders, 'totalAmount'))}</strong></span>
                             <span className="flex flex-wrap items-center justify-end gap-2">
-                                {o.paymentSecondsLeft != null && (
-                                    <PayAction order={o} paying={payingId === o.id} onPay={payAgain} onExpire={refreshSoon} />
+                                {secondsLeft != null && (
+                                    <PayAction order={{ id: g.key, paymentSecondsLeft: secondsLeft, ids: payable.map(o => o.id) }}
+                                        paying={payingId === g.key} onPay={payGroup} onExpire={refreshSoon} />
                                 )}
-                                <Link to={`/orders/${o.id}`}><Button size="sm" variant="outline">Xem chi tiết</Button></Link>
                             </span>
                         </div>
                     </footer>
                 </article>
-            ))}
+            })}
 
             {orders && orders.totalPages > 1 && (
                 <div className="flex items-center justify-between">
