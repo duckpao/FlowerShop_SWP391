@@ -39,15 +39,22 @@ export default function PaymentCancelPage() {
         }
         // Thanh toán cọc/phần còn lại: hủy ở cổng không hủy đơn, chỉ bỏ lần thanh toán này.
         let deposit = false;
+        let orderIds = [];
         try {
-          const res = await paymentApi.getPaymentStatusByInvoice(invoiceNumber);
-          const type = (res?.data || res)?.paymentType;
-          deposit = type === 'DEPOSIT' || type === 'FINAL';
+          const res = (await paymentApi.getPaymentStatusByInvoice(invoiceNumber));
+          const status = res?.data || res;
+          deposit = status?.paymentType === 'DEPOSIT' || status?.paymentType === 'FINAL';
+          orderIds = status?.orderIds || (status?.orderId ? [status.orderId] : []);
         } catch { /* không lấy được trạng thái thì coi như đơn thường */ }
         await fetchCart();
         if (!active) return;
         sessionStorage.removeItem('flower_pending_invoice');
-        navigate(`/payment/error?cancelled=1${deposit ? '&deposit=1' : ''}&invoice_number=${encodeURIComponent(invoiceNumber)}`, { replace: true });
+        if (!deposit && orderIds.length) {
+          // Kiểu Shopee: đơn vẫn được giữ, quay về màn chờ thanh toán để trả lại hoặc để hết hạn.
+          navigate(`/payment/pending?cancelled=1&${orderIds.map(id => 'order=' + encodeURIComponent(id)).join('&')}`, { replace: true });
+          return;
+        }
+        navigate(`/payment/error?cancelled=1${deposit ? '&deposit=1' : '&held=1'}&invoice_number=${encodeURIComponent(invoiceNumber)}`, { replace: true });
       } catch {
         if (!active) return;
         setWaiting(true);

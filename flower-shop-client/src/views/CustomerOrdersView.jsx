@@ -29,6 +29,26 @@ const paymentLabel = o => {
     return 'Chưa chọn phương thức'
 }
 
+// Đếm ngược thời hạn thanh toán (giây còn lại do server tính). Hết hạn thì ẩn nút; server tự hủy đơn trong ít giây.
+function PayAction({ order, paying, onPay, onExpire }) {
+    const [left, setLeft] = useState(order.paymentSecondsLeft)
+    useEffect(() => { setLeft(order.paymentSecondsLeft) }, [order.paymentSecondsLeft])
+    useEffect(() => {
+        if (left > 0) {
+            const timer = setTimeout(() => setLeft(value => value - 1), 1000)
+            return () => clearTimeout(timer)
+        }
+        onExpire()
+    }, [left])
+    if (left <= 0) return <span className="text-sm text-error-500">Đã hết hạn thanh toán, đơn sẽ tự hủy</span>
+    const mm = String(Math.floor(left / 60)).padStart(2, '0')
+    const ss = String(left % 60).padStart(2, '0')
+    return <>
+        <span className="text-sm text-warning-600">Còn <strong className="font-mono">{mm}:{ss}</strong> để thanh toán</span>
+        <Button size="sm" disabled={paying} onClick={() => onPay(order)}>{paying ? 'Đang chuyển…' : 'Thanh toán'}</Button>
+    </>
+}
+
 export default function CustomerOrdersView() {
     const { user } = useAuth()
     const [orders, setOrders] = useState(null)
@@ -51,6 +71,8 @@ export default function CustomerOrdersView() {
         return () => { active = false }
     }, [user, page, status, reloadKey])
 
+    // Đơn hết hạn được scheduler hủy trong ~30 giây; tải lại sau đó để thấy trạng thái "Đã hủy".
+    const refreshSoon = () => { setTimeout(() => setReloadKey(key => key + 1), 35000) }
     const changeTab = value => { setStatus(value); setPage(0) }
     const payAgain = async order => {
         setPayingId(order.id)
@@ -114,9 +136,9 @@ export default function CustomerOrdersView() {
                         </div>
                         <div className="flex flex-wrap items-center justify-between gap-3">
                             <span className="text-sm text-gray-700 dark:text-gray-300">Thành tiền: <strong className="text-lg text-brand-600 dark:text-brand-400">{formatPrice(o.totalAmount)}</strong></span>
-                            <span className="flex gap-2">
-                                {o.status === 'PENDING' && o.paymentMethod === 'ONLINE' && o.paymentStatus !== 'SUCCESS' && (
-                                    <Button size="sm" disabled={Boolean(payingId)} onClick={() => payAgain(o)}>{payingId === o.id ? 'Đang chuyển…' : 'Thanh toán'}</Button>
+                            <span className="flex flex-wrap items-center justify-end gap-2">
+                                {o.paymentSecondsLeft != null && (
+                                    <PayAction order={o} paying={payingId === o.id} onPay={payAgain} onExpire={refreshSoon} />
                                 )}
                                 <Link to={`/orders/${o.id}`}><Button size="sm" variant="outline">Xem chi tiết</Button></Link>
                             </span>

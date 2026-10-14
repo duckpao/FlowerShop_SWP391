@@ -8,6 +8,7 @@ export default function PaymentErrorPage() {
   const orderId = searchParams.get('orderId');
   const cancelled = searchParams.get('cancelled') === '1';
   const deposit = searchParams.get('deposit') === '1'; // thanh toán cọc/phần còn lại: đơn không bị hủy
+  const held = searchParams.get('held') === '1'; // hủy giao dịch: đơn vẫn được giữ tới hết hạn (10 phút)
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 w-full max-w-xl mx-auto my-12">
@@ -20,13 +21,15 @@ export default function PaymentErrorPage() {
 
         <div>
           <span className="inline-block px-3 py-1 text-xs font-semibold rounded-full bg-error-100 text-error-800 dark:bg-error-500/20 dark:text-error-400 mb-2">
-            {cancelled ? 'Giao dịch đã hủy' : 'Giao dịch không thành công'}
+            {held ? 'Đơn hàng đang được giữ' : cancelled ? 'Giao dịch đã hủy' : 'Giao dịch không thành công'}
           </span>
           <h1 className="text-3xl font-extrabold text-gray-900 dark:text-white">
-            Giao dịch thất bại
+            {held ? 'Chưa thanh toán' : 'Giao dịch thất bại'}
           </h1>
           <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-            {deposit
+            {held
+              ? 'Bạn đã hủy giao dịch. Đơn hàng vẫn được giữ trong 10 phút kể từ lúc đặt, bạn có thể thanh toán lại trong mục Đơn hàng của tôi. Quá thời hạn đơn sẽ tự động hủy.'
+              : deposit
               ? 'Lần thanh toán này chưa hoàn tất. Đơn hàng của bạn không bị hủy, bạn có thể thanh toán lại trong thời hạn quy định.'
               : cancelled
               ? 'Thanh toán chưa hoàn tất. Sản phẩm đã chọn vẫn nằm trong giỏ hàng của bạn.'
@@ -42,7 +45,14 @@ export default function PaymentErrorPage() {
         )}
 
         <div className="flex flex-col sm:flex-row justify-center gap-3 pt-2">
-          {!deposit && (
+          {held && (
+            <Link to="/orders" className="w-full sm:w-auto">
+              <Button className="w-full sm:w-auto px-6 py-2.5">
+                Xem đơn hàng của tôi
+              </Button>
+            </Link>
+          )}
+          {!deposit && !held && (
             <Link to="/cart" className="w-full sm:w-auto">
               <Button className="w-full sm:w-auto px-6 py-2.5">
                 Quay lại giỏ hàng
