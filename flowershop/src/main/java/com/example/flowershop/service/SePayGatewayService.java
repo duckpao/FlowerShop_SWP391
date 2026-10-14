@@ -50,7 +50,7 @@ public class SePayGatewayService {
     private static final String DEPOSIT_EXPIRED_REASON = "Quá hạn 24 giờ không thanh toán tiền cọc";
     /** Thời hạn thanh toán tiền cọc kể từ lúc tạo đơn AWAITING_DEPOSIT. */
     public static final long DEPOSIT_DEADLINE_HOURS = 24;
-    /** Thời hạn thanh toán đơn thường kể từ lúc tạo đơn. */
+    /** Thời hạn thanh toán đơn thường kể từ lúc tạo đơn (kiểu Shopee: hủy giao dịch vẫn giữ đơn tới hết hạn). */
     public static final long PAYMENT_WINDOW_MINUTES = 10;
 
     private final OrderRepository orderRepository;
@@ -395,12 +395,12 @@ public class SePayGatewayService {
         if (order.getStatus() != OrderStatus.PENDING) return false;
 
         // Đóng giao dịch phía SePay trước, rồi kiểm tra lại phòng trường hợp khách vừa trả xong.
+        // Kiểu Shopee: hủy giao dịch KHÔNG hủy đơn; đơn được giữ tới hết hạn, khách thanh toán lại được, scheduler tự hủy khi quá hạn.
         cancelAtSePay(invoiceNumber);
-        if (reconcileWithSePayGateway(invoiceNumber)) return true;
-        return !orderService.cancelPendingOrder(order.getId(), "Khách hàng hủy giao dịch tại cổng SePay", authenticatedUserId);
+        return reconcileWithSePayGateway(invoiceNumber);
     }
 
-    /** Khách bấm hủy ở cổng SePay cho giao dịch gộp: đóng giao dịch, đối soát, rồi hủy mọi đơn còn chờ. */
+    /** Khách bấm hủy ở cổng SePay cho giao dịch gộp: đóng giao dịch và đối soát; các đơn vẫn được giữ tới hết hạn. */
     private boolean cancelGroupCheckout(String groupInvoice, List<Payment> members, String userId) {
         for (Payment member : members) {
             Order order = member.getOrder();
@@ -410,12 +410,7 @@ public class SePayGatewayService {
             }
         }
         cancelAtSePay(groupInvoice);
-        if (reconcileWithSePayGateway(groupInvoice)) return true;
-        for (Payment member : members) {
-            orderService.cancelPendingOrder(member.getOrder().getId(),
-                    "Khách hàng hủy giao dịch tại cổng SePay", userId);
-        }
-        return false;
+        return reconcileWithSePayGateway(groupInvoice);
     }
 
     /**

@@ -92,7 +92,7 @@ class PaymentCartLifecycleTests {
     }
 
     @Test
-    void cancelledCheckoutKeepsCartAndReleasesReservation() {
+    void cancelledCheckoutKeepsOrderUntilItExpires() {
         Order order = Order.builder().id("order-1").customer(User.builder().id("customer-1").build())
                 .status(OrderStatus.PENDING).build();
         Payment payment = Payment.builder().order(order).invoiceNumber("invoice-1")
@@ -100,12 +100,29 @@ class PaymentCartLifecycleTests {
         SePayGatewayService gateway = spy(newGateway());
         when(payments.findByInvoiceNumber("invoice-1")).thenReturn(Optional.of(payment));
         doReturn(false).when(gateway).reconcileWithSePayGateway("invoice-1");
-        doReturn(true).when(orderService).cancelPendingOrder(anyString(), anyString(), anyString());
 
         assertThat(gateway.cancelCheckout("invoice-1", "customer-1")).isFalse();
 
-        verify(orderService).cancelPendingOrder(eq("order-1"), anyString(), eq("customer-1"));
+        // Kiểu Shopee: hủy giao dịch không hủy đơn, scheduler hủy khi quá 10 phút.
+        verify(orderService, never()).cancelPendingOrder(anyString(), anyString(), anyString());
         verifyNoInteractions(cartItems);
+    }
+
+    @Test
+    void cancelledGroupCheckoutKeepsAllOrders() {
+        User customer = User.builder().id("customer-1").build();
+        Order a = Order.builder().id("order-a").customer(customer).status(OrderStatus.PENDING).build();
+        Order b = Order.builder().id("order-b").customer(customer).status(OrderStatus.PENDING).build();
+        var members = List.of(
+                Payment.builder().order(a).invoiceNumber("inv-a").groupInvoice("GRP-1").status(PaymentStatus.PENDING).build(),
+                Payment.builder().order(b).invoiceNumber("inv-b").groupInvoice("GRP-1").status(PaymentStatus.PENDING).build());
+        SePayGatewayService gateway = spy(newGateway());
+        when(payments.findByGroupInvoice("GRP-1")).thenReturn(members);
+        doReturn(false).when(gateway).reconcileWithSePayGateway("GRP-1");
+
+        assertThat(gateway.cancelCheckout("GRP-1", "customer-1")).isFalse();
+
+        verify(orderService, never()).cancelPendingOrder(anyString(), anyString(), anyString());
     }
 
     @Test

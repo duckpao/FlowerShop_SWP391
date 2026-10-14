@@ -28,11 +28,13 @@ public class CustomerOrderService {
 
     public record OrderLine(String productId, String productName, String imageUrl, BigDecimal price, Integer quantity) {}
 
-    /** paymentMethod: COD | ONLINE | null; paymentStatus: SUCCESS nếu đã trả, ngược lại trạng thái giao dịch gần nhất. */
+    /** paymentMethod: COD | ONLINE | null; paymentStatus: SUCCESS nếu đã trả, ngược lại trạng thái giao dịch gần nhất.
+     *  paymentSecondsLeft: số giây còn lại để thanh toán đơn online chưa trả (null nếu không áp dụng); tính ở server để khỏi lệch múi giờ. */
     public record OrderSummary(String id, String shopName, BigDecimal totalAmount, String status,
                                java.time.LocalDateTime createdDate, Long itemCount,
                                String shopId, BigDecimal subTotal, BigDecimal shippingFee,
-                               String paymentMethod, String paymentStatus, List<OrderLine> items) {}
+                               String paymentMethod, String paymentStatus, List<OrderLine> items,
+                               Long paymentSecondsLeft) {}
 
     public record OrderDetailResponse(String id, String shopId, String shopName, String status,
                                       BigDecimal subTotal, BigDecimal shippingFee, BigDecimal totalAmount,
@@ -188,6 +190,13 @@ private static ResponseStatusException notFound() {
         return new Results(content, page, result.getTotalPages(), result.getTotalElements());
     }
 
+    /** Các đơn của khách theo danh sách id (bỏ qua id không tồn tại hoặc không thuộc khách), theo thứ tự id truyền vào. */
+    public List<OrderSummary> byIds(String customerId, List<String> ids) {
+        return ids.stream().distinct().limit(20)
+                .map(id -> orders.findById(id).filter(o -> o.getCustomer().getId().equals(customerId)))
+                .flatMap(Optional::stream).map(this::summary).toList();
+    }
+
     private OrderSummary summary(Order o) {
         var details = orderDetails.findByOrderId(o.getId());
         var productIds = details.stream().filter(d -> d.getProduct() != null).map(d -> d.getProduct().getId()).distinct().toList();
@@ -203,13 +212,21 @@ private static ResponseStatusException notFound() {
                 d.getPrice(), d.getQuantity())).toList();
         var orderPayments = payments.findByOrderId(o.getId());
         String method = orderPayments.stream().anyMatch(p -> p.getPaymentMethod() == PaymentMethod.COD) ? "COD"
-                : orderPayments.stream().anyMatch(p -> p.getPaymentMethod() == PaymentMethod.ONLINE) ? "ONLINE" : null;
+                : orderPayments.stream().anyMatch(p -> p.getPaymentMethod() == PaymentMethod.ONLINE) ? "ONLINE"
+                // Đơn online vừa tạo chưa có bản ghi thanh toán nào (chỉ đơn COD luôn có sẵn); coi là online đang chờ trả.
+                : o.getStatus() == OrderStatus.PENDING ? "ONLINE" : null;
         String paymentStatus = orderPayments.stream().anyMatch(p -> p.getStatus() == PaymentStatus.SUCCESS) ? "SUCCESS"
                 : orderPayments.stream().max(Comparator.comparing(Payment::getCreatedDate, Comparator.nullsFirst(Comparator.naturalOrder())))
                         .map(p -> p.getStatus().name()).orElse(null);
+        Long secondsLeft = null;
+        if (o.getStatus() == OrderStatus.PENDING && "ONLINE".equals(method) && !"SUCCESS".equals(paymentStatus)
+                && o.getCreatedDate() != null) {
+            long elapsed = java.time.Duration.between(o.getCreatedDate(), java.time.LocalDateTime.now()).getSeconds();
+            secondsLeft = Math.max(0, SePayGatewayService.PAYMENT_WINDOW_MINUTES * 60 - elapsed);
+        }
         return new OrderSummary(o.getId(), o.getShop().getName(), o.getTotalAmount(), o.getStatus().name(),
                 o.getCreatedDate(), (long) lines.size(), o.getShop().getId(), o.getSubTotal(), o.getShippingFee(),
-                method, paymentStatus, lines);
+                method, paymentStatus, lines, secondsLeft);
     }
 
     public OrderDetailResponse detail(String customerId, String orderId) {
