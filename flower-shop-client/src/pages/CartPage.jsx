@@ -132,7 +132,7 @@ export default function CartPage({ cart, loading, error, fetchCart, updateItem, 
   const shopIds = Object.keys(selectedByShop);
   const hasMultipleShopsSelected = shopIds.length > 1;
   const selectedAddress = savedAddresses.find(a => a.id === addressId);
-  const needsGhnArea = Boolean(selectedAddress && !selectedAddress.ghnWardId);
+  const needsGhnArea = Boolean(selectedAddress && (!selectedAddress.ghnDistrictId || !selectedAddress.ghnWardCode));
   const targetShop = shopIds.length === 1 ? shopIds[0] : '';
 
   // The fee is asked from GHN whenever shop or destination changes; null means not known yet.
@@ -517,14 +517,14 @@ export default function CartPage({ cart, loading, error, fetchCart, updateItem, 
                     >
                       {savedAddresses.map(addr => (
                         <option key={addr.id} value={addr.id}>
-                          {[addr.addressLine, addr.ward, addr.city].filter(Boolean).join(', ')}{addr.isDefault ? ' (Mặc định)' : ''}
+                          {[addr.addressLine, addr.ward, addr.district, addr.city].filter(Boolean).join(', ')}{addr.isDefault ? ' (Mặc định)' : ''}
                         </option>
                       ))}
                     </select>
                     {needsGhnArea && (
                       <div className="mt-3 rounded-lg border border-warning-200 bg-warning-50 p-3 dark:border-warning-500/20 dark:bg-warning-500/10">
                         <p className="text-sm font-medium text-warning-800 dark:text-warning-300">
-                          Địa chỉ này chưa có mã Tỉnh/Phường của GHN nên chưa tính được phí vận chuyển.{' '}
+                          Địa chỉ này chưa có mã Quận/Huyện và Phường/Xã của GHN nên chưa tính được phí vận chuyển.{' '}
                           <Link to="/account" className="underline">Cập nhật địa chỉ trong hồ sơ</Link>.
                         </p>
                       </div>

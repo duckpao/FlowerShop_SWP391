@@ -199,9 +199,9 @@ public class ManagerOrderService {
 
         // GHN takes ward and province by name; the street line goes in "address"
         var toPlace = new GhnService.Place(blankToEmpty(toAddr.getAddressLine()), blankToEmpty(toAddr.getWard()),
-                blankToEmpty(toAddr.getCity()));
+                blankToEmpty(toAddr.getDistrict()), blankToEmpty(toAddr.getCity()));
         var fromPlace = new GhnService.Place(blankToEmpty(shopAddr.getAddressLine()), blankToEmpty(shopAddr.getWard()),
-                blankToEmpty(shopAddr.getCity()));
+                blankToEmpty(shopAddr.getDistrict()), blankToEmpty(shopAddr.getCity()));
 
         BigDecimal paidAmount = payments.findByOrderId(orderId).stream()
             .filter(payment -> payment.getStatus() == PaymentStatus.SUCCESS)
@@ -348,7 +348,7 @@ public class ManagerOrderService {
         var a = o.getDeliveryAddress();
         String toAddr = a != null ? (a.getAddressLine() != null ? a.getAddressLine() : "") + ", " + 
                                     (a.getWard() != null ? a.getWard() : "") + ", " + 
-                                    (a.getCity() != null ? a.getCity() : "") : "";
+                                    (a.getDistrict() != null ? a.getDistrict() : "") + ", " + (a.getCity() != null ? a.getCity() : "") : "";
         toAddr = toAddr.replaceAll("null, ", "").replaceAll("^, ", "").replaceAll(", $", "");
 
         // Định dạng địa chỉ gửi hàng của Shop
@@ -360,7 +360,7 @@ public class ManagerOrderService {
             if (shopAddr != null) {
                 fromAddr = (shopAddr.getAddressLine() != null ? shopAddr.getAddressLine() : "") + ", " + 
                            (shopAddr.getWard() != null ? shopAddr.getWard() : "") + ", " + 
-                           (shopAddr.getCity() != null ? shopAddr.getCity() : "");
+                           (shopAddr.getDistrict() != null ? shopAddr.getDistrict() : "") + ", " + (shopAddr.getCity() != null ? shopAddr.getCity() : "");
                 fromAddr = fromAddr.replaceAll("null, ", "").replaceAll("^, ", "").replaceAll(", $", "");
             }
         }

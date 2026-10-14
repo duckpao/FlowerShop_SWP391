@@ -12,6 +12,7 @@ public class ManagerApplication {
     @Column(nullable=false,length=5000) private String description;
     @Column(name="address_line",nullable=false,length=255) private String addressLine;
     @Column(nullable=false,length=100) private String city;
+    @Column(nullable=false,length=100) private String district;
     @Column(nullable=false,length=100) private String ward;
     @Column(nullable=false,length=16) private String status;
     @Column(name="review_note",length=1000) private String reviewNote;

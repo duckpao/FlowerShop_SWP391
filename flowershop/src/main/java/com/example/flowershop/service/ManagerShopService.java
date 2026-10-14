@@ -34,8 +34,8 @@ public class ManagerShopService {
         var a=list.stream().filter(x->Boolean.TRUE.equals(x.getIsDefault())).findFirst().orElseGet(()->list.isEmpty()?new Address():list.get(0));
         if(a.getId()==null) { a.setId(UUID.randomUUID().toString()); a.setShop(shop); a.setCreatedBy(actor); }
         list.forEach(x->x.setIsDefault(false));
-        a.setAddressLine(input.addressLine().strip()); a.setCity(input.city().strip()); a.setWard(input.ward().strip());
-        a.setGhnProvinceId(input.ghnProvinceId()); a.setGhnWardId(input.ghnWardId());
+        a.setAddressLine(input.addressLine().strip()); a.setCity(input.city().strip()); a.setDistrict(input.district().strip()); a.setWard(input.ward().strip());
+        a.setGhnDistrictId(input.ghnDistrictId()); a.setGhnWardCode(input.ghnWardCode().strip());
         a.setIsDefault(true); a.setLastModifyBy(actor);
         return com.example.flowershop.dto.account.AddressResponse.from(addresses.save(a));
     }

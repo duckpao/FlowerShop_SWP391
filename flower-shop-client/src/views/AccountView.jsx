@@ -132,7 +132,7 @@ export default function AccountView({ user, logout, checkSession, busy: authBusy
                               <span className="font-medium text-gray-900 dark:text-white">{item.addressLine}</span><p className="text-xs text-gray-500">{item.recipientName} · {item.recipientPhone}</p>
                             </TableCell>
                             <TableCell>
-                              {[item.ward, item.city].filter(Boolean).join(', ')}
+                              {[item.ward, item.district, item.city].filter(Boolean).join(', ')}
                             </TableCell>
                             <TableCell>
                               {item.isDefault ? <Badge color="primary">Mặc định</Badge> : null}

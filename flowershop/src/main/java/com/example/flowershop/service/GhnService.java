@@ -10,9 +10,11 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.*;
 
@@ -24,9 +26,9 @@ import java.util.*;
  * {@code app.ghn.api-url}. A call succeeded only when both the HTTP status and the body's
  * {@code code} are 200.
  *
- * Addresses use the two-level model GHN introduced on 01/07/2025: province -> ward, no district.
- * Master data returns GHN ids, and order creation takes the matching names with
- * {@code is_new_*_address=true}.
+ * Addresses use the three-level model: province -> district -> ward. Master data returns
+ * ProvinceID, DistrictID and WardCode; fee quotes take DistrictID plus WardCode, while order
+ * creation takes the matching names with {@code is_new_*_address=false}.
  */
 @Service
 public class GhnService {
@@ -34,8 +36,8 @@ public class GhnService {
     /** One entry of a master-data list: the id (or ward code) to send back to GHN, and its name. */
     public record Option(String id, String name) {}
 
-    /** A postal address as GHN names it: street line, ward and province (there is no district). */
-    public record Place(String address, String ward, String province) {}
+    /** A postal address as GHN names it: street line, ward, district and province. */
+    public record Place(String address, String ward, String district, String province) {}
 
     public record CreateOrderResult(String orderCode, int totalFee) {}
 
@@ -114,50 +116,55 @@ public class GhnService {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Chưa cấu hình GHN trên server.");
     }
 
-    // ---- Master data: two-level model (province -> ward) ----
+    // ---- Master data: province -> district -> ward ----
 
-    /**
-     * GET /v3/master-data/province/all. The 34 provinces after the 01/07/2025 merger. The id is
-     * the key for {@link #wards}; the name is sent verbatim as to_province_name.
-     */
+    /** GET /master-data/province. ProvinceID and ProvinceName of every province. */
     public List<Option> provinces() {
         ensureConfigured();
         List<Option> list = new ArrayList<>();
-        for (JsonNode n : get("/shiip/public-api/v3/master-data/province/all"))
-            list.add(new Option(String.valueOf(n.get("_id").asInt()), n.get("name").asText()));
+        for (JsonNode n : get("/shiip/public-api/master-data/province"))
+            list.add(new Option(String.valueOf(n.get("ProvinceID").asInt()), n.get("ProvinceName").asText()));
         return list;
     }
 
     /**
-     * GET /v3/master-data/ward/all-by-province-id. There is no district tier. GHN caps a page at
-     * 200 and returns data: null for an unknown province, so this pages until a short page.
+     * GET /master-data/district?province_id=. DistrictID feeds the ward lookup, fee quotes and
+     * the pickup address. SupportType 0 means GHN neither picks up nor delivers there.
      */
-    public List<Option> wards(int provinceId) {
+    public List<Option> districts(int provinceId) {
         ensureConfigured();
         List<Option> list = new ArrayList<>();
-        for (int offset = 0; ; offset += WARD_PAGE_SIZE) {
-            JsonNode page = get("/shiip/public-api/v3/master-data/ward/all-by-province-id?province_id="
-                    + provinceId + "&offset=" + offset + "&limit=" + WARD_PAGE_SIZE);
-            for (JsonNode n : page) list.add(new Option(String.valueOf(n.get("_id").asInt()), n.get("name").asText()));
-            if (page.size() < WARD_PAGE_SIZE) return list;
-        }
+        for (JsonNode n : get("/shiip/public-api/master-data/district?province_id=" + provinceId))
+            list.add(new Option(String.valueOf(n.get("DistrictID").asInt()), n.get("DistrictName").asText()));
+        return list;
+    }
+
+    /**
+     * GET /master-data/ward?district_id=. WardCode is a string and can have leading zeros, so it
+     * is never parsed to a number.
+     */
+    public List<Option> wards(int districtId) {
+        ensureConfigured();
+        List<Option> list = new ArrayList<>();
+        for (JsonNode n : get("/shiip/public-api/master-data/ward?district_id=" + districtId))
+            list.add(new Option(n.get("WardCode").asText(), n.get("WardName").asText()));
+        return list;
     }
 
     // ---- Orders ----
 
     /**
      * POST /v2/shipping-order/fee. Quotes the shipping fee before the customer orders; the quote
-     * is the "total" field. Only weight is mandatory. from_* is left out, so GHN prices from the
-     * pickup address registered on the shop's GHN account.
-     *
-     * UNVERIFIED: GHN documents this endpoint only with old-model ids (to_district_id plus
-     * to_ward_code) and has no two-level variant. The ward id from the two-level master data is
-     * sent as to_ward_code with no district; if GHN rejects it, this is the one place to change.
+     * is the "total" field. Only weight is mandatory. The pickup side is the shop's own district
+     * and ward, so the quote does not depend on the pickup address registered on GHN.
      */
-    public BigDecimal calculateFee(int toWardId, int weightGram) {
+    public BigDecimal calculateFee(int fromDistrictId, String fromWardCode, int toDistrictId, String toWardCode, int weightGram) {
         ensureConfigured();
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("to_ward_code", String.valueOf(toWardId));
+        body.put("from_district_id", fromDistrictId);
+        body.put("from_ward_code", fromWardCode);
+        body.put("to_district_id", toDistrictId);
+        body.put("to_ward_code", toWardCode);
         body.put("service_type_id", SERVICE_TYPE_ID);
         body.put("weight", weightGram);
         body.put("length", DEFAULT_LENGTH_CM);
@@ -170,9 +177,9 @@ public class GhnService {
      * POST /v2/shipping-order/create. Creates the waybill and returns order_code, the key for
      * every later call.
      *
-     * Addresses go by name, not id. is_new_*_address=true selects the two-level model, so no
-     * district is sent. cod_amount is what the courier
-     * collects (0 for orders already paid online). payment_type_id 1 makes the shop pay GHN,
+     * Addresses go by name, not id. is_new_*_address=false selects the three-level model, which
+     * requires the district name. cod_amount is what the courier collects (0 for orders already
+     * paid online). payment_type_id 1 makes the shop pay GHN,
      * because the customer's shipping fee is already part of the order total. required_note
      * CHOXEMHANGKHONGTHU lets the recipient look but not try.
      */
@@ -185,14 +192,16 @@ public class GhnService {
         body.put("to_phone", toPhone);
         body.put("to_address", to.address());
         body.put("to_ward_name", to.ward());
+        body.put("to_district_name", to.district());
         body.put("to_province_name", to.province());
-        body.put("is_new_to_address", true);
+        body.put("is_new_to_address", false);
         body.put("from_name", fromName);
         body.put("from_phone", fromPhone);
         body.put("from_address", from.address());
         body.put("from_ward_name", from.ward());
+        body.put("from_district_name", from.district());
         body.put("from_province_name", from.province());
-        body.put("is_new_from_address", true);
+        body.put("is_new_from_address", false);
         body.put("weight", DEFAULT_WEIGHT_GRAM);
         body.put("length", DEFAULT_LENGTH_CM);
         body.put("width", DEFAULT_WIDTH_CM);
@@ -214,13 +223,14 @@ public class GhnService {
     }
 
     /**
-     * POST /v2/shipping-order/detail. Reads the live status of one waybill from GHN. The
-     * documentation page for this endpoint was not reachable when this was written, so the
-     * POST body shape is from memory and should be checked against a live response.
+     * GET /v2/shipping-order/detail?order_code=. Reads the live status of one waybill; the
+     * order must belong to a shop of the token's account. {@code data.status} is one of the
+     * order status codes.
      */
     public Tracking track(String orderCode) {
         ensureConfigured();
-        JsonNode data = post("/shiip/public-api/v2/shipping-order/detail", Map.of("order_code", orderCode));
+        JsonNode data = get("/shiip/public-api/v2/shipping-order/detail?order_code="
+                + URLEncoder.encode(orderCode, StandardCharsets.UTF_8));
         String status = data.path("status").asText();
         return new Tracking(status, toDeliveryStatus(status));
     }

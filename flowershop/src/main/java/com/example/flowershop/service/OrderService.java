@@ -10,6 +10,7 @@ import com.example.flowershop.entity.enums.PaymentMethod;
 import com.example.flowershop.entity.enums.PaymentStatus;
 import com.example.flowershop.entity.enums.PaymentType;
 import com.example.flowershop.entity.enums.ProductStatus;
+import com.example.flowershop.entity.enums.ProductType;
 import com.example.flowershop.entity.enums.ShopStatus;
 import com.example.flowershop.entity.enums.CouponStatus;
 import com.example.flowershop.entity.enums.DiscountType;
@@ -109,7 +110,7 @@ public class OrderService {
             if (product.getStatus() != ProductStatus.ACTIVE || product.getShop().getStatus() != ShopStatus.ACTIVE) {
                 throw ApiException.badRequest("Sản phẩm hoặc cửa hàng không còn hoạt động.");
             }
-            if (product.getStock() < cartItem.getQuantity()) {
+            if (product.getType() != ProductType.CUSTOM && product.getStock() < cartItem.getQuantity()) {
                 throw ApiException.badRequest(
                         "Sản phẩm '" + product.getName() + "' không đủ tồn kho. " +
                         "Tồn kho: " + product.getStock() + ", Số lượng đặt: " + cartItem.getQuantity()
@@ -151,7 +152,7 @@ public class OrderService {
 
         // Phí vận chuyển do GHN tính; khách trả tiền hàng + phí này
         Shop shop = selectedCartItems.get(0).getProduct().getShop();
-        BigDecimal shippingFee = quoteFee(deliveryAddress);
+        BigDecimal shippingFee = quoteFee(shop, deliveryAddress);
         BigDecimal totalAmount = subTotal.subtract(discountAmount).add(shippingFee);
 
         // 5. Tạo Order
@@ -196,10 +197,12 @@ public class OrderService {
 
             orderDetailRepository.save(orderDetail);
 
-            // Giảm stock
-            product.setStock(product.getStock() - cartItem.getQuantity());
-            product.setLastModifyBy(userId);
-            productRepository.save(product);
+            // Giảm stock (chỉ áp dụng với hoa có sẵn)
+            if (product.getType() != ProductType.CUSTOM) {
+                product.setStock(product.getStock() - cartItem.getQuantity());
+                product.setLastModifyBy(userId);
+                productRepository.save(product);
+            }
 
             orderItemResponses.add(OrderResponse.OrderItemResponse.builder()
                     .id(orderDetail.getId())
@@ -256,23 +259,29 @@ public class OrderService {
     /** Phí GHN cho một đơn giao tới địa chỉ đã lưu của khách, để hiển thị trước khi đặt. */
     @Transactional
     public BigDecimal quoteShippingFee(String userId, ShippingFeeRequest request) {
-        shopRepository.findById(request.getShopId())
+        Shop shop = shopRepository.findById(request.getShopId())
                 .orElseThrow(() -> ApiException.notFound("Không tìm thấy cửa hàng."));
-        return quoteFee(resolveDestination(userId, request.getDeliveryAddressId()));
+        return quoteFee(shop, resolveDestination(userId, request.getDeliveryAddressId()));
     }
 
-    /** GHN prices from the pickup address registered on the shop's GHN account. */
-    private BigDecimal quoteFee(Address destination) {
-        return ghn.calculateFee(destination.getGhnWardId(), GhnService.DEFAULT_WEIGHT_GRAM);
+    /** Fee from the shop's pickup address (default or first, with GHN codes) to the customer's address. */
+    private BigDecimal quoteFee(Shop shop, Address destination) {
+        List<Address> list = addressRepository.findByShopIdAndUserIsNullOrderByCreatedDateAscIdAsc(shop.getId());
+        Address from = list.stream().filter(a -> Boolean.TRUE.equals(a.getIsDefault())).findFirst()
+                .orElse(list.isEmpty() ? null : list.get(0));
+        if (from == null || from.getGhnDistrictId() == null || from.getGhnWardCode() == null)
+            throw ApiException.badRequest("Cửa hàng chưa có địa chỉ lấy hàng theo danh mục GHN nên chưa tính được phí vận chuyển.");
+        return ghn.calculateFee(from.getGhnDistrictId(), from.getGhnWardCode(),
+                destination.getGhnDistrictId(), destination.getGhnWardCode(), GhnService.DEFAULT_WEIGHT_GRAM);
     }
 
-    /** The customer's saved address; it must carry the GHN ward id a fee quote needs. */
+    /** The customer's saved address; it must carry the GHN district id and ward code a fee quote needs. */
     private Address resolveDestination(String userId, String addressId) {
         Address address = addressRepository.findById(addressId == null ? "" : addressId.trim())
                 .filter(a -> a.getUser() != null && a.getUser().getId().equals(userId))
                 .orElseThrow(() -> ApiException.badRequest("Vui lòng chọn một địa chỉ đã lưu trong tài khoản."));
-        if (address.getGhnWardId() == null)
-            throw ApiException.badRequest("Địa chỉ chưa có mã phường/xã GHN. Hãy lưu lại địa chỉ trong hồ sơ.");
+        if (address.getGhnDistrictId() == null || address.getGhnWardCode() == null)
+            throw ApiException.badRequest("Địa chỉ chưa có mã quận/huyện và phường/xã GHN. Hãy lưu lại địa chỉ trong hồ sơ.");
         return address;
     }
 
@@ -345,7 +354,7 @@ public class OrderService {
         for (OrderDetail item : details) {
             if (item.getProduct() != null) {
                 Product product = productRepository.findByIdForUpdate(item.getProduct().getId()).orElse(null);
-                if (product != null) {
+                if (product != null && product.getType() != ProductType.CUSTOM) {
                     product.setStock(product.getStock() + item.getQuantity());
                     product.setLastModifyBy("SYSTEM_AUTO_CANCEL");
                     productRepository.save(product);

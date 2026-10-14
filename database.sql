@@ -47,9 +47,10 @@ CREATE TABLE Addresses (
     shop_id VARCHAR(36), -- NULL nếu là địa chỉ của User
     address_line VARCHAR(255) NOT NULL,
     ward VARCHAR(100),
+    district VARCHAR(100),
     city VARCHAR(100),
-    ghn_province_id INT, -- mô hình hành chính 2 cấp (từ 1/7/2025): id tỉnh và id phường/xã của GHN
-    ghn_ward_id INT,
+    ghn_district_id INT, -- mã quận/huyện và mã phường/xã của GHN, dùng để tính phí và tạo vận đơn
+    ghn_ward_code VARCHAR(20),
     is_default BOOLEAN DEFAULT FALSE,
     created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_by VARCHAR(36),
@@ -115,6 +116,7 @@ CREATE TABLE Manager_Applications (
     description VARCHAR(5000) NOT NULL,
     address_line VARCHAR(255) NOT NULL,
     city VARCHAR(100) NOT NULL,
+    district VARCHAR(100) NOT NULL,
     ward VARCHAR(100) NOT NULL,
     status VARCHAR(16) NOT NULL,
     review_note VARCHAR(1000),
@@ -560,9 +562,11 @@ INSERT INTO Shops (id, owner_id, name, description, logo_url, status, created_by
 ('shop-01', 'user-shop-01', 'FPTU Smart Floral', 'Tiệm hoa sinh viên giá rẻ, thiết kế theo yêu cầu.', 'https://link-to-logo.com/logo1.png', 'ACTIVE', 'user-admin-01');
 
 -- 3. ADDRESSES
-INSERT INTO Addresses (id, user_id, shop_id, address_line, ward, city, is_default, created_by) VALUES
-('addr-shop-01', NULL, 'shop-01', 'Khu Công Nghệ Cao Hòa Lạc', 'Thạch Hòa', 'Hà Nội', TRUE, 'user-shop-01'),
-('addr-customer-01', 'user-customer-01', NULL, 'Số 10, Ngõ 20, Đường Cầu Giấy', 'Dịch Vọng', 'Hà Nội', TRUE, 'user-customer-01');
+-- Mô hình 3 cấp: tỉnh (city) > quận/huyện (district) > phường/xã (ward). ghn_district_id / ghn_ward_code để NULL vì chưa lấy
+-- được mã từ API GHN; mở hồ sơ và chọn lại Tỉnh, Quận/Huyện, Phường/Xã để có mã thì mới tính được phí vận chuyển.
+INSERT INTO Addresses (id, user_id, shop_id, address_line, ward, district, city, recipient_name, recipient_phone, address_type, is_pickup, is_default, created_by) VALUES
+('addr-shop-01', NULL, 'shop-01', 'Khu Công Nghệ Cao Hòa Lạc', 'Thạch Hòa', 'Thạch Thất', 'Hà Nội', 'Nguyễn Đức Bảo', '0912345678', 'OFFICE', TRUE, TRUE, 'user-shop-01'),
+('addr-customer-01', 'user-customer-01', NULL, 'Số 10, Ngõ 20, Đường Cầu Giấy', 'Dịch Vọng', 'Cầu Giấy', 'Hà Nội', 'Trần Thị B', '0987654321', 'HOME', FALSE, TRUE, 'user-customer-01');
 
 -- 4. CATEGORIES
 INSERT INTO Categories (id, name, description, status, created_by) VALUES
@@ -697,5 +701,5 @@ INSERT INTO Staff_Applications (id, shop_id, user_id, full_name, phone, introduc
 INSERT INTO Staff_Invitations (id, shop_id, email, token_hash, issued_at, expires_at, window_start, send_count, status) VALUES
 ('staff-inv-01', 'shop-01', 'staff2@gmail.com', 'fdb7ea0d1c4c9c541c51ea56199e1784310feae640c5ed70f465ddb1c113c336', '2026-09-27 09:00:00', '2026-10-04 09:00:00', '2026-09-27 09:00:00', 1, 'PENDING');
 
-INSERT INTO Manager_Applications (id, user_id, full_name, phone, shop_name, description, address_line, city, ward, status, submitted_at) VALUES
-('mgr-app-01', 'user-customer-01', 'Trần Thị B', '0987654321', 'B Flower House', 'Xin mở shop hoa online phục vụ khu vực Cầu Giấy.', 'Số 10, Ngõ 20, Đường Cầu Giấy', 'Hà Nội', 'Dịch Vọng', 'PENDING', '2026-09-25 14:00:00');
+INSERT INTO Manager_Applications (id, user_id, full_name, phone, shop_name, description, address_line, city, district, ward, status, submitted_at) VALUES
+('mgr-app-01', 'user-customer-01', 'Trần Thị B', '0987654321', 'B Flower House', 'Xin mở shop hoa online phục vụ khu vực Cầu Giấy.', 'Số 10, Ngõ 20, Đường Cầu Giấy', 'Hà Nội', 'Cầu Giấy', 'Dịch Vọng', 'PENDING', '2026-09-25 14:00:00');

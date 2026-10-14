@@ -58,7 +58,7 @@ export default function CheckoutView() {
         if (!productId || !addressId) return
         const addr = addresses.find(a => a.id === addressId)
         if (!addr) return
-        if (!addr.ghnWardId) return
+        if (!addr.ghnDistrictId || !addr.ghnWardCode) return
 
         let active = true
         setFeeBusy(true)
@@ -109,11 +109,11 @@ export default function CheckoutView() {
                         <Label>Địa chỉ giao hàng</Label>
                         {addresses.length === 0 ? <p className="text-gray-500 text-sm">Chưa có địa chỉ. <a href="/account" className="text-brand-500">Thêm</a></p> : <>
                             <Select options={addresses.map(a => ({ value: a.id,
-                                label: `${a.addressLine}, ${a.ward}, ${a.city}${a.isDefault?' (MĐ)':''}` }))}
+                                label: `${a.addressLine}, ${a.ward}, ${a.district}, ${a.city}${a.isDefault?' (MĐ)':''}` }))}
                                 placeholder="Chọn địa chỉ" defaultValue={addressId} onChange={setAddressId} />
-                            {addressId && !addresses.find(a => a.id === addressId)?.ghnWardId && (
+                            {addressId && !(addresses.find(a => a.id === addressId)?.ghnDistrictId && addresses.find(a => a.id === addressId)?.ghnWardCode) && (
                                 <p className="mt-3 rounded-lg border border-yellow-100 bg-yellow-50 p-3 text-sm text-yellow-800">
-                                    Địa chỉ này chưa có mã Tỉnh/Phường của GHN nên chưa tính được phí vận chuyển.{' '}
+                                    Địa chỉ này chưa có mã Quận/Huyện và Phường/Xã của GHN nên chưa tính được phí vận chuyển.{' '}
                                     <a href="/account" className="underline">Cập nhật địa chỉ trong hồ sơ</a>.
                                 </p>
                             )}

@@ -87,9 +87,10 @@ public class AccountService {
         }
         address.setAddressLine(request.addressLine().strip());
         address.setCity(request.city().strip());
+        address.setDistrict(request.district().strip());
         address.setWard(request.ward().strip());
-        address.setGhnProvinceId(request.ghnProvinceId());
-        address.setGhnWardId(request.ghnWardId());
+        address.setGhnDistrictId(request.ghnDistrictId());
+        address.setGhnWardCode(request.ghnWardCode().strip());
         address.setRecipientName(request.recipientName().strip());
         address.setRecipientPhone(request.recipientPhone().strip());
         address.setAddressType(request.addressType());

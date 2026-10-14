@@ -175,7 +175,7 @@ export default function ManagerShopsView({ role, section = "all" }) {
                           />
                         </div>
                         
-                        <Button type="submit" disabled={!(c.address.ghnProvinceId && c.address.ghnWardId)}>Lưu địa chỉ shop</Button>
+                        <Button type="submit" disabled={!(c.address.ghnDistrictId && c.address.ghnWardCode)}>Lưu địa chỉ shop</Button>
                       </fieldset>
                     </form>
                   </div>

@@ -75,17 +75,33 @@ private static ResponseStatusException notFound() {
         Product product = products.findById(req.productId())
                 .filter(p -> p.getStatus() == ProductStatus.ACTIVE)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Sản phẩm không bán nữa."));
-        Address customerAddr = destination(customerId, req.addressId());
-        return ghn.calculateFee(customerAddr.getGhnWardId(), GhnService.DEFAULT_WEIGHT_GRAM);
+        return quote(product.getShop(), destination(customerId, req.addressId()));
     }
 
-    /** The customer's saved address; it must carry the GHN ward id a fee quote needs. */
+    /** Fee from the shop's pickup address to the customer's address. */
+    private BigDecimal quote(Shop shop, Address to) {
+        Address from = pickupAddress(shop);
+        return ghn.calculateFee(from.getGhnDistrictId(), from.getGhnWardCode(),
+                to.getGhnDistrictId(), to.getGhnWardCode(), GhnService.DEFAULT_WEIGHT_GRAM);
+    }
+
+    /** The shop's default (or first) address; it must carry GHN codes to be a pickup point. */
+    private Address pickupAddress(Shop shop) {
+        List<Address> list = addresses.findByShopIdAndUserIsNullOrderByCreatedDateAscIdAsc(shop.getId());
+        Address address = list.stream().filter(a -> Boolean.TRUE.equals(a.getIsDefault())).findFirst()
+                .orElse(list.isEmpty() ? null : list.get(0));
+        if (address == null || address.getGhnDistrictId() == null || address.getGhnWardCode() == null)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cửa hàng chưa có địa chỉ lấy hàng theo danh mục GHN.");
+        return address;
+    }
+
+    /** The customer's saved address; it must carry the GHN district id and ward code a fee quote needs. */
     private Address destination(String customerId, String addressId) {
         Address address = addresses.findById(addressId)
                 .filter(a -> a.getUser() != null && a.getUser().getId().equals(customerId))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Địa chỉ không tồn tại hoặc không thuộc về bạn."));
-        if (address.getGhnWardId() == null)
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Địa chỉ chưa có mã phường/xã GHN. Hãy lưu lại địa chỉ trong hồ sơ.");
+        if (address.getGhnDistrictId() == null || address.getGhnWardCode() == null)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Địa chỉ chưa có mã quận/huyện và phường/xã GHN. Hãy lưu lại địa chỉ trong hồ sơ.");
         return address;
     }
 
@@ -98,21 +114,23 @@ private static ResponseStatusException notFound() {
         Shop shop = product.getShop();
         if (shop.getStatus() != ShopStatus.ACTIVE)
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cửa hàng hiện không hoạt động.");
-        if (product.getStock() < req.quantity())
+        if (product.getType() != ProductType.CUSTOM && product.getStock() < req.quantity())
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Sản phẩm không đủ số lượng. Hiện còn " + product.getStock() + " sản phẩm.");
 
         Address customerAddr = destination(customerId, req.addressId());
 
         // Calculate fees
         BigDecimal subTotal = product.getPrice().multiply(BigDecimal.valueOf(req.quantity()));
-        BigDecimal shippingFee = ghn.calculateFee(customerAddr.getGhnWardId(), GhnService.DEFAULT_WEIGHT_GRAM);
+        BigDecimal shippingFee = quote(shop, customerAddr);
         BigDecimal totalAmount = subTotal.add(shippingFee);
 
-        // Lock product and decrement stock
+        // Lock product and decrement stock (chỉ áp dụng với hoa có sẵn)
         Product locked = products.findByIdForUpdate(product.getId()).orElseThrow(CustomerOrderService::notFound);
-        if (locked.getStock() < req.quantity())
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Sản phẩm vừa hết hàng. Vui lòng thử lại.");
-        locked.setStock(locked.getStock() - req.quantity());
+        if (locked.getType() != ProductType.CUSTOM) {
+            if (locked.getStock() < req.quantity())
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Sản phẩm vừa hết hàng. Vui lòng thử lại.");
+            locked.setStock(locked.getStock() - req.quantity());
+        }
 
         // Build entities
         String orderId = UUID.randomUUID().toString();
@@ -187,10 +205,10 @@ private static ResponseStatusException notFound() {
                                 .filter(o -> o.getCustomer().getId().equals(customerId))
                                 .orElseThrow(CustomerOrderService::notFound);
                 Address destination = order.getDeliveryAddress();
-                if (destination == null || destination.getGhnWardId() == null) {
+                if (destination == null || destination.getGhnDistrictId() == null || destination.getGhnWardCode() == null) {
                         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Địa chỉ nhận hàng chưa có thông tin GHN hợp lệ.");
                 }
-                return ghn.calculateFee(destination.getGhnWardId(), GhnService.DEFAULT_WEIGHT_GRAM);
+                return quote(order.getShop(), destination);
         }
 
         @Transactional

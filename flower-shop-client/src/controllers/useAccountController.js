@@ -50,7 +50,7 @@ export function useAccountController(user) {
   const saveAddress = e => {
     e.preventDefault()
     return run(async () => {
-      await accountService.saveAddress(editing, { ...address, recipientName: address.recipientName.trim(), recipientPhone: address.recipientPhone.trim(), addressLine: address.addressLine.trim(), ward: address.ward.trim(), city: address.city.trim() })
+      await accountService.saveAddress(editing, { ...address, recipientName: address.recipientName.trim(), recipientPhone: address.recipientPhone.trim(), addressLine: address.addressLine.trim(), district: address.district.trim(), ward: address.ward.trim(), city: address.city.trim() })
       setAddresses(await accountService.addresses()); cancel(); setNotice('Đã lưu địa chỉ.')
     })
   }
