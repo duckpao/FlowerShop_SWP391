@@ -43,7 +43,7 @@ public class ManagerOrderService {
     public record OrderItemResponse(String productId, String productName, BigDecimal price, Integer quantity) {}
 
     /** Thông tin vận đơn đối tác giao hàng (GHN) */
-    public record DeliveryInfo(String trackingCode, String deliveryPartnerId, String status) {}
+    public record DeliveryInfo(String trackingCode, String deliveryPartnerId, String status, String ghnStatus) {}
 
     /** Thông tin thanh toán (phương thức, trạng thái, số tiền) */
     public record PaymentInfo(String id, String method, String status, BigDecimal amount) {}
@@ -61,10 +61,12 @@ public class ManagerOrderService {
     private final ShopRepository shops;
     private final AddressRepository addresses;
     private final GhnService ghn;
+    private final DeliverySync deliverySync;
 
     public ManagerOrderService(OrderRepository orders, OrderDetailRepository orderDetails,
                                DeliveryRepository deliveries, PaymentRepository payments,
-                               ShopRepository shops, AddressRepository addresses, GhnService ghn) {
+                               ShopRepository shops, AddressRepository addresses, GhnService ghn,
+                               DeliverySync deliverySync) {
         this.orders = orders;
         this.orderDetails = orderDetails;
         this.deliveries = deliveries;
@@ -72,6 +74,11 @@ public class ManagerOrderService {
         this.shops = shops;
         this.addresses = addresses;
         this.ghn = ghn;
+        this.deliverySync = deliverySync;
+    }
+
+    private static String blankToEmpty(String value) {
+        return value == null ? "" : value.trim();
     }
 
     /** Tạo ngoại lệ 404 khi không tìm thấy đơn hàng */
@@ -161,19 +168,11 @@ public class ManagerOrderService {
         if (shopAddr == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Shop chưa cấu hình địa chỉ.");
         }
-        if (shopAddr.getGhnDistrictId() == null || shopAddr.getGhnWardCode() == null) {
-            resolveGhnAddress(shopAddr);
-            addresses.save(shopAddr);
-        }
 
         // Lấy địa chỉ người nhận
         Address toAddr = o.getDeliveryAddress();
         if (toAddr == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Đơn hàng chưa có địa chỉ nhận.");
-        }
-        if (toAddr.getGhnDistrictId() == null || toAddr.getGhnWardCode() == null) {
-            resolveGhnAddress(toAddr);
-            addresses.save(toAddr);
         }
 
         var details = orderDetails.findByOrderId(orderId);
@@ -198,15 +197,11 @@ public class ManagerOrderService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Số điện thoại của cửa hàng (hoặc chủ shop) không được để trống.");
         }
 
-        String toFullAddress = (toAddr.getAddressLine() != null ? toAddr.getAddressLine() : "") + ", " +
-                (toAddr.getWard() != null ? toAddr.getWard() : "") + ", " +
-                (toAddr.getDistrict() != null ? toAddr.getDistrict() : "") + ", " +
-                (toAddr.getCity() != null ? toAddr.getCity() : "");
-
-        String fromFullAddress = (shopAddr.getAddressLine() != null ? shopAddr.getAddressLine() : "") + ", " +
-                (shopAddr.getWard() != null ? shopAddr.getWard() : "") + ", " +
-                (shopAddr.getDistrict() != null ? shopAddr.getDistrict() : "") + ", " +
-                (shopAddr.getCity() != null ? shopAddr.getCity() : "");
+        // GHN takes ward and province by name; the street line goes in "address"
+        var toPlace = new GhnService.Place(blankToEmpty(toAddr.getAddressLine()), blankToEmpty(toAddr.getWard()),
+                blankToEmpty(toAddr.getDistrict()), blankToEmpty(toAddr.getCity()));
+        var fromPlace = new GhnService.Place(blankToEmpty(shopAddr.getAddressLine()), blankToEmpty(shopAddr.getWard()),
+                blankToEmpty(shopAddr.getDistrict()), blankToEmpty(shopAddr.getCity()));
 
         BigDecimal paidAmount = payments.findByOrderId(orderId).stream()
             .filter(payment -> payment.getStatus() == PaymentStatus.SUCCESS)
@@ -214,130 +209,43 @@ public class ManagerOrderService {
             .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal codAmount = o.getTotalAmount().subtract(paidAmount).max(BigDecimal.ZERO);
 
-        var result = ghn.createOrder(
-                toName, toPhone,
-                toFullAddress,
-                toAddr.getGhnDistrictId(), toAddr.getGhnWardCode(),
-                fromName, fromPhone,
-                fromFullAddress,
-                shopAddr.getGhnDistrictId(), shopAddr.getGhnWardCode(),
-            codAmount.intValue(), productName, quantity, price
-        );
+        var result = ghn.createOrder(toName, toPhone, toPlace, fromName, fromPhone, fromPlace,
+                codAmount.intValue(), productName, quantity, price);
 
         Delivery d = Delivery.builder().id(UUID.randomUUID().toString()).order(o)
                 .deliveryPartnerId("GHN").trackingCode(result.orderCode())
-                .status(DeliveryStatus.PENDING).createdBy(actor).build();
+                .status(DeliveryStatus.PENDING).ghnStatus("ready_to_pick").createdBy(actor).build();
         deliveries.save(d);
         o.setStatus(OrderStatus.DELIVERING); o.setLastModifyBy(actor);
         return new ShipResult(result.orderCode());
     }
 
-    /**
-     * Tự động phân giải địa chỉ dạng chuỗi (Tỉnh/Huyện/Xã) sang mã GHN tương ứng (ghnDistrictId, ghnWardCode).
-     * Phương thức này phục vụ tương thích ngược cho các địa chỉ cũ trong database chưa có mã định danh GHN.
-     * Quy trình:
-     * 1. Gọi API GHN lấy danh sách tỉnh thành và tìm tỉnh khớp với tên thành phố.
-     * 2. Lấy danh sách quận/huyện của tỉnh đó và tìm huyện khớp với tên quận/huyện.
-     * 3. Lấy danh sách phường/xã của huyện đó và tìm xã khớp với tên phường/xã.
-     * 4. Gán mã ghnDistrictId và ghnWardCode vào Entity Address. Nếu không tìm thấy, ném lỗi 400 yêu cầu cập nhật lại.
-     */
-    private void resolveGhnAddress(Address addr) {
-        if (addr.getCity() == null || addr.getCity().isBlank()) return;
-
-        try {
-            var provinces = ghn.provinces();
-            var matchedProvince = provinces.stream()
-                    .filter(p -> p.name().equalsIgnoreCase(addr.getCity()) || addr.getCity().toLowerCase().contains(p.name().toLowerCase()) || p.name().toLowerCase().contains(addr.getCity().toLowerCase()))
-                    .findFirst()
-                    .orElse(null);
-
-            if (matchedProvince != null && addr.getDistrict() != null && !addr.getDistrict().isBlank()) {
-                int provId = Integer.parseInt(matchedProvince.id());
-                var districts = ghn.districts(provId);
-                var matchedDistrict = districts.stream()
-                        .filter(dist -> dist.name().equalsIgnoreCase(addr.getDistrict()) || addr.getDistrict().toLowerCase().contains(dist.name().toLowerCase()) || dist.name().toLowerCase().contains(addr.getDistrict().toLowerCase()))
-                        .findFirst()
-                        .orElse(null);
-
-                if (matchedDistrict != null) {
-                    int distId = Integer.parseInt(matchedDistrict.id());
-                    addr.setGhnDistrictId(distId);
-
-                    if (addr.getWard() != null && !addr.getWard().isBlank()) {
-                        var wards = ghn.wards(distId);
-                        var matchedWard = wards.stream()
-                                .filter(w -> w.name().equalsIgnoreCase(addr.getWard()) || addr.getWard().toLowerCase().contains(w.name().toLowerCase()) || w.name().toLowerCase().contains(addr.getWard().toLowerCase()))
-                                .findFirst()
-                                .orElse(null);
-
-                        if (matchedWard != null) {
-                            addr.setGhnWardCode(matchedWard.id());
-                        }
-                    }
-                }
-            }
-        } catch (Exception e) {
-            // Không gán cứng giá trị mặc định để đảm bảo dữ liệu chính xác
-        }
-        
-        if (addr.getGhnDistrictId() == null || addr.getGhnWardCode() == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Không thể tự động phân giải mã GHN cho địa chỉ này. Vui lòng cập nhật lại địa chỉ với hệ thống GHN.");
-        }
-    }
-
-    /**
-     * Đồng bộ trạng thái vận đơn thực tế từ API GHN về hệ thống.
-     * Nếu GHN báo đã giao (DELIVERED): Tự động chuyển đơn hàng sang COMPLETED và cập nhật trạng thái thanh toán sang SUCCESS.
-     */
+    /** Pulls the shipment status from GHN and applies it to the delivery and order. */
     @Transactional
-    public DeliveryStatus refreshStatus(String shopId, String actor, String orderId) {
+    public DeliveryInfo refreshStatus(String shopId, String actor, String orderId) {
         owned(shopId, actor);
         Order o = orders.findByIdAndShopId(orderId, shopId).orElseThrow(ManagerOrderService::notFound);
         Delivery d = deliveries.findByOrderId(orderId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Đơn hàng chưa có vận đơn GHN."));
-        DeliveryStatus status = ghn.checkStatus(d.getTrackingCode());
-        d.setStatus(status); d.setLastModifyBy(actor);
-        if (status == DeliveryStatus.DELIVERED) {
-            o.setStatus(OrderStatus.COMPLETED); o.setLastModifyBy(actor);
-            payments.findByOrderId(orderId).forEach(p -> { p.setStatus(PaymentStatus.SUCCESS); p.setLastModifyBy(actor); });
-        }
-        return status;
+        deliverySync.apply(o, d, ghn.track(d.getTrackingCode()), actor);
+        return new DeliveryInfo(d.getTrackingCode(), d.getDeliveryPartnerId(), d.getStatus().name(), d.getGhnStatus());
     }
 
     /**
-     * Giả lập giao hàng thành công trên môi trường thử nghiệm (Sandbox / Dev).
-     * Gọi endpoint đổi trạng thái của GHN Sandbox, đồng thời cập nhật trạng thái đơn thành COMPLETED.
+     * Sends a switch-status action (cancel, return, storing) to GHN, then reads the waybill
+     * back so the stored state is what GHN reports rather than what was requested.
      */
     @Transactional
-    public DeliveryStatus simulateDelivered(String shopId, String actor, String orderId) {
+    public DeliveryInfo pushGhnStatus(String shopId, String actor, String orderId, String targetStatus) {
         owned(shopId, actor);
         Order o = orders.findByIdAndShopId(orderId, shopId).orElseThrow(ManagerOrderService::notFound);
         if (o.getStatus() != OrderStatus.DELIVERING)
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Chỉ đơn đang giao mới có thể giả lập GHN giao thành công.");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Chỉ đơn đang giao mới đẩy được trạng thái sang GHN.");
         Delivery d = deliveries.findByOrderId(orderId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Đơn hàng chưa có vận đơn GHN."));
-
-        try {
-            ghn.switchStatus(d.getTrackingCode(), "delivered");
-        } catch (Exception e) {
-            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
-                    "GHN không thể cập nhật trạng thái giao hàng trong môi trường test.", e);
-        }
-
-        d.setStatus(DeliveryStatus.DELIVERED);
-        d.setLastModifyBy(actor);
-        deliveries.save(d);
-
-        o.setStatus(OrderStatus.COMPLETED);
-        o.setLastModifyBy(actor);
-        orders.save(o);
-
-        payments.findByOrderId(orderId).forEach(p -> {
-            p.setStatus(PaymentStatus.SUCCESS);
-            p.setLastModifyBy(actor);
-        });
-
-        return DeliveryStatus.DELIVERED;
+        ghn.switchStatus(d.getTrackingCode(), targetStatus);
+        deliverySync.apply(o, d, ghn.track(d.getTrackingCode()), actor);
+        return new DeliveryInfo(d.getTrackingCode(), d.getDeliveryPartnerId(), d.getStatus().name(), d.getGhnStatus());
     }
 
     /** DTO chứa số lượng đơn hàng cần xử lý */
@@ -432,7 +340,7 @@ public class ManagerOrderService {
                         d.getProduct() != null ? d.getProduct().getName() : null, d.getPrice(), d.getQuantity()))
                 .toList();
         DeliveryInfo di = deliveries.findByOrderId(o.getId())
-                .map(d -> new DeliveryInfo(d.getTrackingCode(), d.getDeliveryPartnerId(), d.getStatus().name())).orElse(null);
+                .map(d -> new DeliveryInfo(d.getTrackingCode(), d.getDeliveryPartnerId(), d.getStatus().name(), d.getGhnStatus())).orElse(null);
         PaymentInfo pi = payments.findByOrderId(o.getId()).stream().findFirst()
                 .map(p -> new PaymentInfo(p.getId(), p.getPaymentMethod().name(), p.getStatus().name(), p.getAmount())).orElse(null);
         
@@ -440,8 +348,7 @@ public class ManagerOrderService {
         var a = o.getDeliveryAddress();
         String toAddr = a != null ? (a.getAddressLine() != null ? a.getAddressLine() : "") + ", " + 
                                     (a.getWard() != null ? a.getWard() : "") + ", " + 
-                                    (a.getDistrict() != null ? a.getDistrict() : "") + ", " + 
-                                    (a.getCity() != null ? a.getCity() : "") : "";
+                                    (a.getDistrict() != null ? a.getDistrict() : "") + ", " + (a.getCity() != null ? a.getCity() : "") : "";
         toAddr = toAddr.replaceAll("null, ", "").replaceAll("^, ", "").replaceAll(", $", "");
 
         // Định dạng địa chỉ gửi hàng của Shop
@@ -453,8 +360,7 @@ public class ManagerOrderService {
             if (shopAddr != null) {
                 fromAddr = (shopAddr.getAddressLine() != null ? shopAddr.getAddressLine() : "") + ", " + 
                            (shopAddr.getWard() != null ? shopAddr.getWard() : "") + ", " + 
-                           (shopAddr.getDistrict() != null ? shopAddr.getDistrict() : "") + ", " + 
-                           (shopAddr.getCity() != null ? shopAddr.getCity() : "");
+                           (shopAddr.getDistrict() != null ? shopAddr.getDistrict() : "") + ", " + (shopAddr.getCity() != null ? shopAddr.getCity() : "");
                 fromAddr = fromAddr.replaceAll("null, ", "").replaceAll("^, ", "").replaceAll(", $", "");
             }
         }

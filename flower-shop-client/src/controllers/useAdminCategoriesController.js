@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { adminCategoryService as api } from '../services/adminCategoryService'
+import { useConfirm } from '../components/ui/confirm/ConfirmProvider'
 
 const emptyForm = () => ({ name: '', description: '', status: 'ACTIVE' })
 
 export function useAdminCategoriesController() {
+  const { confirm } = useConfirm()
   const [categories, setCategories] = useState([])
   const [products, setProducts] = useState(null)
   const [form, setForm] = useState(emptyForm)
@@ -46,11 +48,11 @@ export function useAdminCategoriesController() {
   }
 
   // Chỉ dựa vào adminHidden, không dùng available: available còn false khi shop tự ẩn hoặc shop bị khóa.
-  const toggleHidden = product => {
+  const toggleHidden = async product => {
     const question = product.adminHidden
       ? `Bỏ ẩn sản phẩm ${product.name}?`
       : `Ẩn sản phẩm ${product.name} khỏi trang công khai?`
-    if (!window.confirm(question)) return
+    if (!await confirm({ title: product.adminHidden ? 'Bỏ ẩn sản phẩm' : 'Ẩn sản phẩm', message: question })) return
     return run(() => api.setHidden(product.id, !product.adminHidden),
       product.adminHidden ? 'Đã bỏ ẩn sản phẩm.' : 'Đã ẩn sản phẩm khỏi trang công khai.')
   }

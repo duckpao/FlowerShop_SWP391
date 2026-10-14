@@ -8,41 +8,9 @@ import { Table, TableBody, TableCell, TableHeader, TableRow } from '../component
 import ComponentCard from '../components/common/ComponentCard'
 import { Modal } from '../components/ui/modal'
 import { EyeIcon } from '../icons'
-
-/**
- * Bảng màu sắc tương ứng với từng trạng thái đơn hàng
- */
-const statusColors = {
-    PENDING: 'warning',
-    AWAITING_DEPOSIT: 'warning',
-    DEPOSIT_PAID: 'info',
-    PROCESSING: 'info',
-    DELIVERING: 'primary',
-    COMPLETED: 'success',
-    CANCELLED: 'error',
-    REFUNDED: 'error'
-}
-
-/**
- * Nhãn tiếng Việt tương ứng với từng trạng thái đơn hàng
- */
-const statusLabels = {
-    PENDING: 'Chờ xác nhận',
-    AWAITING_DEPOSIT: 'Chờ đặt cọc',
-    DEPOSIT_PAID: 'Đã cọc',
-    PROCESSING: 'Đang chuẩn bị',
-    DELIVERING: 'Đang giao',
-    COMPLETED: 'Đã hoàn thành',
-    CANCELLED: 'Đã hủy',
-    REFUNDED: 'Đã hoàn tiền'
-}
-const deliveryStatusLabels = {
-    PENDING: 'GHN chưa lấy hàng',
-    PICKED_UP: 'GHN đã lấy hàng',
-    ON_THE_WAY: 'Đang vận chuyển',
-    DELIVERED: 'Giao thành công',
-    FAILED: 'Giao thất bại',
-}
+import GhnSimulator from '../components/ghn/GhnSimulator'
+import { useConfirm } from '../components/ui/confirm/ConfirmProvider'
+import { ghnStatusLabels, orderStatusColors as statusColors, orderStatusLabels as statusLabels, orderTabs } from '../models/orderStatus'
 
 /**
  * Hàm định dạng thời gian tương đối (ví dụ: "5 phút trước", "2 giờ trước")
@@ -67,10 +35,11 @@ function timeAgo(dateString) {
  * Thực hiện quy trình đơn hàng 4 bước:
  * 1. PENDING (Chờ xác nhận): Shop bấm "Xác nhận đơn hàng" -> Chuyển sang PROCESSING.
  * 2. PROCESSING (Đang chuẩn bị): Shop làm hoa, bấm "Tạo mã vận đơn GHN & Giao" -> Tạo vận đơn GHN, chuyển sang DELIVERING.
- * 3. DELIVERING (Đang giao): Bấm "Kiểm tra GHN" để đồng bộ hoặc "Giả lập Giao xong" trên môi trường test.
- * 4. COMPLETED (Hoàn thành): Đơn hoàn tất, tiền về tài khoản shop.
+ * 3. DELIVERING (Đang giao): Trạng thái vận đơn đi theo GHN; bảng giả lập gửi từng bước sang GHN staging.
+ * 4. COMPLETED / REFUNDED: GHN báo giao thành công hoặc hoàn hàng thì đơn tự chuyển theo.
  */
 export default function OrderQueueView({ shop: initialShop }) {
+    const { confirm, notify } = useConfirm()
     const [shop, setShop] = useState(initialShop)
     const [data, setData] = useState(null)
     const [page, setPage] = useState(0)
@@ -78,7 +47,6 @@ export default function OrderQueueView({ shop: initialShop }) {
     const [busy, setBusy] = useState(false)
     const [error, setError] = useState('')
     const [notice, setNotice] = useState('')
-    const [refreshingOrderId, setRefreshingOrderId] = useState(null)
     
     // State quản lý Modal xem chi tiết và Modal hủy đơn
     const [detailModalOpen, setDetailModalOpen] = useState(false)
@@ -136,7 +104,7 @@ export default function OrderQueueView({ shop: initialShop }) {
      * Bước 2: Tạo vận đơn GHN & Chuyển giao hàng (PROCESSING -> DELIVERING)
      */
     const ship = async orderId => {
-        if (!confirm('Xác nhận tạo mã vận đơn GHN & chuyển sang giao hàng?')) return
+        if (!await confirm({ title: 'Tạo vận đơn GHN', message: 'Tạo mã vận đơn GHN và chuyển đơn sang giao hàng?', confirmLabel: 'Tạo vận đơn' })) return
         setBusy(true); setError(''); setNotice('')
         try {
             const r = await managerOrderService.ship(shop.id, orderId)
@@ -150,7 +118,7 @@ export default function OrderQueueView({ shop: initialShop }) {
      */
     const cancel = async () => {
         if (!cancelReason.trim()) {
-            alert('Vui lòng nhập lý do hủy đơn')
+            await notify({ message: 'Vui lòng nhập lý do hủy đơn.' })
             return
         }
         setBusy(true); setError(''); setNotice('')
@@ -174,34 +142,19 @@ export default function OrderQueueView({ shop: initialShop }) {
             const detail = await managerOrderService.detail(shop.id, orderSummary.id)
             setOrderDetail(detail)
         } catch (e) {
-            alert(e.message)
+            setDetailModalOpen(false)
+            await notify({ title: 'Không tải được chi tiết đơn', message: e.message })
         }
     }
 
     /**
-     * Đồng bộ trạng thái mới nhất từ hệ thống GHN về hệ thống FlowerShop
+     * Sau khi GHN đổi trạng thái: tải lại danh sách và chi tiết đơn đang mở
      */
-    const refreshShippingStatus = async orderSummary => {
-        setBusy(true); setError(''); setNotice('')
-        setRefreshingOrderId(orderSummary.id)
-        try {
-            const status = await managerOrderService.refreshStatus(shop.id, orderSummary.id)
-            await load(page, true)
-            setNotice(`GHN trả trạng thái: ${deliveryStatusLabels[status] || status} (đơn #${orderSummary.id.substring(0, 8)}).`)
-        } catch (e) { setError(e.message) } finally { setBusy(false); setRefreshingOrderId(null) }
-    }
-
-    /**
-     * Giả lập GHN giao thành công (cho môi trường test/sandbox) -> chuyển sang COMPLETED
-     */
-    const simulateDelivered = async orderSummary => {
-        if (!confirm('Bạn có muốn giả lập GHN giao thành công cho đơn hàng này?')) return
-        setBusy(true); setError(''); setNotice('')
-        try {
-            await managerOrderService.simulateDelivered(shop.id, orderSummary.id)
-            await load(page, true)
-            setNotice(`Đã giả lập giao thành công đơn hàng ${orderSummary.id.substring(0,8)} trên GHN. Đơn chuyển sang Hoàn thành!`)
-        } catch (e) { setError(e.message) } finally { setBusy(false) }
+    const onGhnChanged = async () => {
+        await load(page, true)
+        if (selectedOrder) {
+            try { setOrderDetail(await managerOrderService.detail(shop.id, selectedOrder.id)) } catch { /* the list reload already surfaced any error */ }
+        }
     }
 
     /**
@@ -232,7 +185,8 @@ export default function OrderQueueView({ shop: initialShop }) {
      */
     const handleUpdateGhn = async () => {
         if (!updatePayload.to_phone) {
-            alert('Vui lòng nhập số điện thoại'); return;
+            await notify({ message: 'Vui lòng nhập số điện thoại người nhận.' })
+            return
         }
         setBusy(true); setError(''); setNotice('');
         try {
@@ -266,14 +220,7 @@ export default function OrderQueueView({ shop: initialShop }) {
                 {/* Tabs / Filters */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
                     <div className="flex space-x-2 border-b border-gray-200 dark:border-gray-800 overflow-x-auto whitespace-nowrap pb-1">
-                        {[
-                            { id: '', label: 'Tất cả' },
-                            { id: 'PENDING', label: 'Chờ xác nhận' },
-                            { id: 'PROCESSING', label: 'Đang chuẩn bị' },
-                            { id: 'DELIVERING', label: 'Đang giao' },
-                            { id: 'COMPLETED', label: 'Hoàn thành' },
-                            { id: 'CANCELLED', label: 'Đã hủy' }
-                        ].map(tab => (
+                        {orderTabs.map(tab => (
                             <button
                                 key={tab.id}
                                 onClick={() => setStatusFilter(tab.id)}
@@ -358,16 +305,11 @@ export default function OrderQueueView({ shop: initialShop }) {
                                                     )}
                                                     
                                                     {o.status === 'DELIVERING' && (
-                                                        <>
-                                                            <Button size="sm" variant="outline" className="text-brand-600 border-brand-200 hover:bg-brand-50" onClick={() => refreshShippingStatus(o)} disabled={busy}>
-                                                                {refreshingOrderId === o.id ? 'Đang kiểm tra…' : 'Kiểm tra GHN'}
-                                                            </Button>
-                                                            <Button size="sm" className="bg-success-600 hover:bg-success-700 text-white" onClick={() => simulateDelivered(o)} disabled={busy}>
-                                                                Giả lập Giao xong
-                                                            </Button>
-                                                        </>
+                                                        <Button size="sm" className="bg-brand-600 hover:bg-brand-700 text-white" onClick={() => viewDetail(o)} disabled={busy}>
+                                                            Trạng thái GHN
+                                                        </Button>
                                                     )}
-                                                    
+
                                                     {(o.status === 'PENDING' || o.status === 'AWAITING_DEPOSIT' || o.status === 'PROCESSING') && (
                                                         <Button size="sm" variant="outline" className="text-error-500 hover:bg-error-50 hover:border-error-200" onClick={() => openCancelModal(o)} disabled={busy}>
                                                             Hủy đơn
@@ -414,10 +356,16 @@ export default function OrderQueueView({ shop: initialShop }) {
                             </div>
                         </div>
 
+                        {orderDetail.delivery && (
+                            <GhnSimulator key={orderDetail.delivery.trackingCode} shopId={shop.id} orderId={orderDetail.id}
+                                delivery={orderDetail.delivery} onChanged={onGhnChanged} />
+                        )}
+
                         <div className="grid grid-cols-2 gap-4 text-sm px-2">
                             <div>
                                 <p className="text-gray-500">Mã vận đơn (GHN):</p>
                                 <p className="font-medium text-gray-900 dark:text-white">{orderDetail.delivery?.trackingCode || 'Chưa có'}</p>
+                                {orderDetail.delivery?.ghnStatus && <p className="text-gray-500">{ghnStatusLabels[orderDetail.delivery.ghnStatus] || orderDetail.delivery.ghnStatus}</p>}
                             </div>
                             <div>
                                 <p className="text-gray-500">Trạng thái thanh toán:</p>
@@ -458,14 +406,9 @@ export default function OrderQueueView({ shop: initialShop }) {
                                     </Button>
                                 )}
                                 {orderDetail.status === 'DELIVERING' && (
-                                    <>
-                                        <Button variant="outline" className="text-brand-600 border-brand-200 hover:bg-brand-50" onClick={openUpdateGhnModal}>
-                                            Sửa vận đơn GHN
-                                        </Button>
-                                        <Button variant="outline" className="text-brand-600 border-brand-200 hover:bg-brand-50" onClick={() => { setDetailModalOpen(false); refreshShippingStatus(orderDetail); }}>
-                                            Cập nhật trạng thái giao hàng
-                                        </Button>
-                                    </>
+                                    <Button variant="outline" className="text-brand-600 border-brand-200 hover:bg-brand-50" onClick={openUpdateGhnModal}>
+                                        Sửa vận đơn GHN
+                                    </Button>
                                 )}
                             </div>
                         </div>

@@ -7,6 +7,7 @@ const get = async path => {
 }
 
 export const ghnService = {
+    // Province -> district -> ward; the ward id is a ward code.
     provinces: () => get('/api/public/ghn/provinces'),
     districts: id => get(`/api/public/ghn/provinces/${encodeURIComponent(id)}/districts`),
     wards: id => get(`/api/public/ghn/districts/${encodeURIComponent(id)}/wards`),

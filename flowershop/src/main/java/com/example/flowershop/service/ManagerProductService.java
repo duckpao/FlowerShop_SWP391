@@ -155,19 +155,27 @@ public class ManagerProductService {
         var imageUrls = input.images() == null ? List.<String>of() : input.images().stream()
                 .map(ImageInput::url)
                 .toList();
-        return saveProduct(shopId, id, actor, input.name(), input.description(), input.categoryId(), input.price(), input.stock(), input.status(), input.type(), imageUrls, null);
+        return saveProduct(shopId, id, actor, input.name(), input.description(), input.categoryId(), input.price(), input.stock(), input.status(), input.type(), imageUrls, null, List.of());
     }
 
     @Transactional
     public Result save(String shopId, String id, String actor, SaveProductInput input, List<MultipartFile> images) {
+        return save(shopId, id, actor, input, images, null);
+    }
+
+    @Transactional
+    public Result save(String shopId, String id, String actor, SaveProductInput input, List<MultipartFile> images, List<MultipartFile> videos) {
         var imageFiles = images == null ? List.<MultipartFile>of() : images;
         if (imageFiles.size() > 10) {
             throw new IllegalArgumentException("Không được chọn quá 10 ảnh.");
         }
         imageFiles.forEach(this::validateImageFile);
-        if (imageFiles.isEmpty()) {
-            return saveProduct(shopId, id, actor, input.name(), input.description(), input.categoryId(), input.price(), input.stock(), input.status(), input.type(), List.of(), input.primaryImageId());
+
+        var videoFiles = videos == null ? List.<MultipartFile>of() : videos;
+        if (videoFiles.size() > 5) {
+            throw new IllegalArgumentException("Không được chọn quá 5 video.");
         }
+        videoFiles.forEach(this::validateVideoFile);
 
         var uploadedImages = new ArrayList<String>();
         for (MultipartFile file : imageFiles) {
@@ -178,11 +186,20 @@ public class ManagerProductService {
             }
         }
 
-        return saveProduct(shopId, id, actor, input.name(), input.description(), input.categoryId(), input.price(), input.stock(), input.status(), input.type(), uploadedImages, input.primaryImageId());
+        var uploadedVideos = new ArrayList<String>();
+        for (MultipartFile file : videoFiles) {
+            try {
+                uploadedVideos.add(cloudinary.uploadVideo(file.getBytes(), file.getOriginalFilename(), file.getContentType()));
+            } catch (java.io.IOException e) {
+                throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Không thể đọc dữ liệu video. Vui lòng thử lại.", e);
+            }
+        }
+
+        return saveProduct(shopId, id, actor, input.name(), input.description(), input.categoryId(), input.price(), input.stock(), input.status(), input.type(), uploadedImages, input.primaryImageId(), uploadedVideos);
     }
 
     private Result saveProduct(String shopId, String id, String actor, String name, String description, String categoryId,
-                               BigDecimal price, Integer stock, ProductStatus status, ProductType type, List<String> uploadedImages, String primaryImageId) {
+                               BigDecimal price, Integer stock, ProductStatus status, ProductType type, List<String> uploadedImages, String primaryImageId, List<String> uploadedVideos) {
         var shop = owned(shopId, actor, true);
         var product = id == null ? new Product() : products.findByIdAndShopId(id, shopId).orElseThrow(ManagerProductService::missing);
         var existingImages = id == null || (primaryImageId == null && uploadedImages.isEmpty())
@@ -226,6 +243,22 @@ public class ManagerProductService {
                     .build());
         }
         images.flush();
+
+        long currentVideoCount = id == null ? 0 : this.videos.countByProductId(stored.getId());
+        for (int i = 0; i < uploadedVideos.size(); i++) {
+            this.videos.save(ProductVideo.builder()
+                    .id(UUID.randomUUID().toString())
+                    .product(stored)
+                    .videoUrl(uploadedVideos.get(i).strip())
+                    .displayOrder((int) currentVideoCount + i)
+                    .createdBy(actor)
+                    .lastModifyBy(actor)
+                    .build());
+        }
+        if (!uploadedVideos.isEmpty()) {
+            this.videos.flush();
+        }
+
         return result(stored);
     }
 
@@ -241,11 +274,31 @@ public class ManagerProductService {
         }
     }
 
+    private void validateVideoFile(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new IllegalArgumentException("Vui lòng chọn video để tải lên.");
+        }
+        if (file.getSize() > MAX_VIDEO_BYTES) {
+            throw new IllegalArgumentException("Video không được vượt quá 50MB.");
+        }
+        if (!ALLOWED_VIDEO_TYPES.contains(file.getContentType())) {
+            throw new IllegalArgumentException("Chỉ nhận video MP4, WebM hoặc MOV.");
+        }
+    }
+
     @Transactional
     public void hide(String shopId, String id, String actor) {
         owned(shopId, actor, true);
         var product = products.findByIdAndShopId(id, shopId).orElseThrow(ManagerProductService::missing);
         product.setStatus(ProductStatus.INACTIVE);
+        product.setLastModifyBy(actor);
+    }
+
+    @Transactional
+    public void unhide(String shopId, String id, String actor) {
+        owned(shopId, actor, true);
+        var product = products.findByIdAndShopId(id, shopId).orElseThrow(ManagerProductService::missing);
+        product.setStatus(ProductStatus.ACTIVE);
         product.setLastModifyBy(actor);
     }
 

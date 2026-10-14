@@ -2,6 +2,7 @@ package com.example.flowershop.service;
 
 import com.example.flowershop.dto.order.MakeOrderRequest;
 import com.example.flowershop.dto.order.MakeOrdersRequest;
+import com.example.flowershop.dto.order.ShippingFeeRequest;
 import com.example.flowershop.dto.order.OrderResponse;
 import com.example.flowershop.entity.*;
 import com.example.flowershop.entity.enums.OrderStatus;
@@ -10,6 +11,7 @@ import com.example.flowershop.entity.enums.PaymentMethod;
 import com.example.flowershop.entity.enums.PaymentStatus;
 import com.example.flowershop.entity.enums.PaymentType;
 import com.example.flowershop.entity.enums.ProductStatus;
+import com.example.flowershop.entity.enums.ProductType;
 import com.example.flowershop.entity.enums.ShopStatus;
 import com.example.flowershop.entity.enums.CouponStatus;
 import com.example.flowershop.entity.enums.DiscountType;
@@ -43,30 +45,16 @@ public class OrderService {
     private final ProductRepository productRepository;
     private final PaymentRepository paymentRepository;
     private final CouponRepository couponRepository;
+    private final ShopRepository shopRepository;
     private final GhnService ghn;
     @jakarta.persistence.PersistenceContext private jakarta.persistence.EntityManager entityManager;
-
-    /** Phí giao hàng GHN từ địa chỉ mặc định của shop tới địa chỉ nhận (cả hai phải có mã quận/phường GHN). */
-    private BigDecimal shippingFee(String shopId, Address deliveryAddress) {
-        var shopAddrs = addressRepository.findByShopIdAndUserIsNullOrderByCreatedDateAscIdAsc(shopId);
-        Address from = shopAddrs.stream().filter(a -> Boolean.TRUE.equals(a.getIsDefault())).findFirst()
-                .orElse(shopAddrs.isEmpty() ? null : shopAddrs.get(0));
-        if (from == null || from.getGhnDistrictId() == null)
-            throw ApiException.badRequest("Cửa hàng chưa thiết lập địa chỉ lấy hàng GHN.");
-        if (deliveryAddress.getGhnDistrictId() == null || deliveryAddress.getGhnWardCode() == null
-                || deliveryAddress.getGhnWardCode().isBlank())
-            throw ApiException.badRequest("Địa chỉ nhận hoa chưa có mã GHN. Vui lòng sửa địa chỉ trong tài khoản và chọn lại Tỉnh/Huyện/Xã.");
-        return ghn.calculateFee(from.getGhnDistrictId(), deliveryAddress.getGhnDistrictId(),
-                deliveryAddress.getGhnWardCode(), GhnService.DEFAULT_WEIGHT_GRAM);
-    }
 
     /** Ước tính phí giao hàng cho trang checkout. */
     @Transactional(readOnly = true)
     public BigDecimal estimateShippingFee(String userId, String shopId, String deliveryAddressId) {
-        Address address = addressRepository.findById(deliveryAddressId.trim())
-                .filter(a -> a.getShop() == null && a.getUser() != null && a.getUser().getId().equals(userId))
-                .orElseThrow(() -> ApiException.badRequest("Địa chỉ nhận hoa không tồn tại trong tài khoản của bạn."));
-        return shippingFee(shopId, address);
+        Shop shop = shopRepository.findById(shopId)
+                .orElseThrow(() -> ApiException.notFound("Không tìm thấy cửa hàng."));
+        return quoteFee(shop, resolveDestination(userId, deliveryAddressId));
     }
 
     /**
@@ -115,17 +103,14 @@ public class OrderService {
                 && !"ONLINE".equalsIgnoreCase(request.getPaymentMethod())) {
             throw ApiException.badRequest("Phương thức thanh toán không hợp lệ.");
         }
-        if (request.getRecipientName() == null || request.getRecipientName().isBlank()
-                || request.getPhone() == null || request.getPhone().isBlank()) {
-            throw ApiException.badRequest("Cần nhập tên và số điện thoại người nhận.");
+        String recipientName = firstNonBlank(request.getRecipientName(), user.getFullName());
+        String recipientPhone = firstNonBlank(request.getPhone(), user.getPhone());
+        if (recipientName == null || recipientPhone == null) {
+            throw ApiException.badRequest("Cần có tên và số điện thoại người nhận. Hãy cập nhật số điện thoại trong tài khoản.");
         }
 
-        // Đơn hàng phải dùng đúng địa chỉ đã lưu mà khách hàng chọn.
-        Address deliveryAddress = addressRepository.findById(request.getDeliveryAddressId().trim())
-                .filter(addr -> addr.getShop() == null && addr.getUser() != null
-                        && addr.getUser().getId().equals(userId))
-                .orElseThrow(() -> ApiException.badRequest("Địa chỉ nhận hoa không tồn tại trong tài khoản của bạn."));
-        BigDecimal shippingFee = shippingFee(request.getShopId(), deliveryAddress);
+        // 2. Địa chỉ nhận phải là địa chỉ đã lưu của khách và có mã GHN để tính phí
+        Address deliveryAddress = resolveDestination(userId, request.getDeliveryAddressId());
 
         // 3. Validate shop
         // Lấy danh sách cart items được chọn
@@ -166,7 +151,7 @@ public class OrderService {
             if (product.getStatus() != ProductStatus.ACTIVE || product.getShop().getStatus() != ShopStatus.ACTIVE) {
                 throw ApiException.badRequest("Sản phẩm hoặc cửa hàng không còn hoạt động.");
             }
-            if (product.getStock() < cartItem.getQuantity()) {
+            if (product.getType() != ProductType.CUSTOM && product.getStock() < cartItem.getQuantity()) {
                 throw ApiException.badRequest(
                         "Sản phẩm '" + product.getName() + "' không đủ tồn kho. " +
                         "Tồn kho: " + product.getStock() + ", Số lượng đặt: " + cartItem.getQuantity()
@@ -204,18 +189,21 @@ public class OrderService {
             couponRepository.save(coupon);
             couponId = coupon.getId();
         }
+        if (subTotal.subtract(discountAmount).signum() <= 0) throw ApiException.badRequest("Tổng thanh toán phải lớn hơn 0.");
+
+        // Phí vận chuyển do GHN tính; khách trả tiền hàng + phí này
+        Shop shop = selectedCartItems.get(0).getProduct().getShop();
+        BigDecimal shippingFee = quoteFee(shop, deliveryAddress);
         BigDecimal totalAmount = subTotal.subtract(discountAmount).add(shippingFee);
-        if (totalAmount.signum() <= 0) throw ApiException.badRequest("Tổng thanh toán phải lớn hơn 0.");
 
         // 5. Tạo Order
-        Shop shop = selectedCartItems.get(0).getProduct().getShop();
         Order order = Order.builder()
                 .id(UUID.randomUUID().toString())
                 .customer(user)
                 .shop(shop)
                 .deliveryAddress(deliveryAddress)
-                .recipientName(request.getRecipientName().trim())
-                .recipientPhone(request.getPhone().trim())
+                .recipientName(recipientName)
+                .recipientPhone(recipientPhone)
                 .couponId(couponId)
                 .orderType(OrderType.STANDARD)
                 .subTotal(subTotal)
@@ -250,10 +238,12 @@ public class OrderService {
 
             orderDetailRepository.save(orderDetail);
 
-            // Giảm stock
-            product.setStock(product.getStock() - cartItem.getQuantity());
-            product.setLastModifyBy(userId);
-            productRepository.save(product);
+            // Giảm stock (chỉ áp dụng với hoa có sẵn)
+            if (product.getType() != ProductType.CUSTOM) {
+                product.setStock(product.getStock() - cartItem.getQuantity());
+                product.setLastModifyBy(userId);
+                productRepository.save(product);
+            }
 
             orderItemResponses.add(OrderResponse.OrderItemResponse.builder()
                     .id(orderDetail.getId())
@@ -352,6 +342,41 @@ public class OrderService {
         }
     }
 
+    /** Phí GHN cho một đơn giao tới địa chỉ đã lưu của khách, để hiển thị trước khi đặt. */
+    @Transactional
+    public BigDecimal quoteShippingFee(String userId, ShippingFeeRequest request) {
+        Shop shop = shopRepository.findById(request.getShopId())
+                .orElseThrow(() -> ApiException.notFound("Không tìm thấy cửa hàng."));
+        return quoteFee(shop, resolveDestination(userId, request.getDeliveryAddressId()));
+    }
+
+    /** Fee from the shop's pickup address (default or first, with GHN codes) to the customer's address. */
+    private BigDecimal quoteFee(Shop shop, Address destination) {
+        List<Address> list = addressRepository.findByShopIdAndUserIsNullOrderByCreatedDateAscIdAsc(shop.getId());
+        Address from = list.stream().filter(a -> Boolean.TRUE.equals(a.getIsDefault())).findFirst()
+                .orElse(list.isEmpty() ? null : list.get(0));
+        if (from == null || from.getGhnDistrictId() == null || from.getGhnWardCode() == null)
+            throw ApiException.badRequest("Cửa hàng chưa có địa chỉ lấy hàng theo danh mục GHN nên chưa tính được phí vận chuyển.");
+        return ghn.calculateFee(from.getGhnDistrictId(), from.getGhnWardCode(),
+                destination.getGhnDistrictId(), destination.getGhnWardCode(), GhnService.DEFAULT_WEIGHT_GRAM);
+    }
+
+    /** The customer's saved address; it must carry the GHN district id and ward code a fee quote needs. */
+    private Address resolveDestination(String userId, String addressId) {
+        Address address = addressRepository.findById(addressId == null ? "" : addressId.trim())
+                .filter(a -> a.getUser() != null && a.getUser().getId().equals(userId))
+                .orElseThrow(() -> ApiException.badRequest("Vui lòng chọn một địa chỉ đã lưu trong tài khoản."));
+        if (address.getGhnDistrictId() == null || address.getGhnWardCode() == null)
+            throw ApiException.badRequest("Địa chỉ chưa có mã quận/huyện và phường/xã GHN. Hãy lưu lại địa chỉ trong hồ sơ.");
+        return address;
+    }
+
+    private static String firstNonBlank(String first, String second) {
+        if (first != null && !first.isBlank()) return first.trim();
+        if (second != null && !second.isBlank()) return second.trim();
+        return null;
+    }
+
     /**
      * Lấy lịch sử đơn hàng của user.
      */
@@ -429,7 +454,7 @@ public class OrderService {
         for (OrderDetail item : details) {
             if (item.getProduct() != null) {
                 Product product = productRepository.findByIdForUpdate(item.getProduct().getId()).orElse(null);
-                if (product != null) {
+                if (product != null && product.getType() != ProductType.CUSTOM) {
                     product.setStock(product.getStock() + item.getQuantity());
                     product.setLastModifyBy(actor);
                     productRepository.save(product);

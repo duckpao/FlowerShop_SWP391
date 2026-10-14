@@ -49,8 +49,8 @@ CREATE TABLE Addresses (
     ward VARCHAR(100),
     district VARCHAR(100),
     city VARCHAR(100),
+    ghn_district_id INT, -- mã quận/huyện và mã phường/xã của GHN, dùng để tính phí và tạo vận đơn
     ghn_ward_code VARCHAR(20),
-    ghn_district_id INT,
     is_default BOOLEAN DEFAULT FALSE,
     created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_by VARCHAR(36),
@@ -186,6 +186,7 @@ CREATE TABLE Categories (
     id VARCHAR(36) PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
     description TEXT,
+    group_name VARCHAR(50), -- nhóm trên menu: Chủ đề, Hoa tươi, Kiểu dáng
     status ENUM('ACTIVE', 'INACTIVE') DEFAULT 'ACTIVE',
     created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_by VARCHAR(36),
@@ -334,7 +335,8 @@ CREATE TABLE Deliveries (
     order_id VARCHAR(36) NOT NULL,
     delivery_partner_id VARCHAR(36),
     tracking_code VARCHAR(100),
-    status ENUM('PENDING', 'PICKED_UP', 'ON_THE_WAY', 'DELIVERED', 'FAILED') DEFAULT 'PENDING',
+    status ENUM('PENDING', 'PICKED_UP', 'ON_THE_WAY', 'DELIVERED', 'FAILED', 'RETURNING', 'RETURNED') DEFAULT 'PENDING',
+    ghn_status VARCHAR(40),
     tracking_notes TEXT,
     created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_by VARCHAR(36),
@@ -560,14 +562,51 @@ INSERT INTO Shops (id, owner_id, name, description, logo_url, status, created_by
 ('shop-01', 'user-shop-01', 'FPTU Smart Floral', 'Tiệm hoa sinh viên giá rẻ, thiết kế theo yêu cầu.', 'https://link-to-logo.com/logo1.png', 'ACTIVE', 'user-admin-01');
 
 -- 3. ADDRESSES
-INSERT INTO Addresses (id, user_id, shop_id, address_line, ward, district, city, is_default, created_by) VALUES
-('addr-shop-01', NULL, 'shop-01', 'Khu Công Nghệ Cao Hòa Lạc', 'Thạch Hòa', 'Thạch Thất', 'Hà Nội', TRUE, 'user-shop-01'),
-('addr-customer-01', 'user-customer-01', NULL, 'Số 10, Ngõ 20, Đường Cầu Giấy', 'Dịch Vọng', 'Cầu Giấy', 'Hà Nội', TRUE, 'user-customer-01');
+-- Mô hình 3 cấp: tỉnh (city) > quận/huyện (district) > phường/xã (ward). ghn_district_id / ghn_ward_code để NULL vì chưa lấy
+-- được mã từ API GHN; mở hồ sơ và chọn lại Tỉnh, Quận/Huyện, Phường/Xã để có mã thì mới tính được phí vận chuyển.
+INSERT INTO Addresses (id, user_id, shop_id, address_line, ward, district, city, recipient_name, recipient_phone, address_type, is_pickup, is_default, created_by) VALUES
+('addr-shop-01', NULL, 'shop-01', 'Khu Công Nghệ Cao Hòa Lạc', 'Thạch Hòa', 'Thạch Thất', 'Hà Nội', 'Nguyễn Đức Bảo', '0912345678', 'OFFICE', TRUE, TRUE, 'user-shop-01'),
+('addr-customer-01', 'user-customer-01', NULL, 'Số 10, Ngõ 20, Đường Cầu Giấy', 'Dịch Vọng', 'Cầu Giấy', 'Hà Nội', 'Trần Thị B', '0987654321', 'HOME', FALSE, TRUE, 'user-customer-01');
 
 -- 4. CATEGORIES
 INSERT INTO Categories (id, name, description, status, created_by) VALUES
 ('cat-01', 'Hoa Tình Yêu', 'Các mẫu hoa lãng mạn dành cho cặp đôi', 'ACTIVE', 'user-admin-01'),
-('cat-02', 'Hoa Khai Trương', 'Kệ hoa, lẵng hoa chúc mừng khai trương', 'ACTIVE', 'user-admin-01');
+('cat-02', 'Hoa Khai Trương', 'Kệ hoa, lẵng hoa chúc mừng khai trương', 'ACTIVE', 'user-admin-01'),
+-- Theo dịp
+('cat-03', 'Hoa Sinh Nhật', 'Bó hoa, giỏ hoa chúc mừng sinh nhật', 'ACTIVE', 'user-admin-01'),
+('cat-04', 'Hoa Chúc Mừng', 'Hoa chúc mừng thăng chức, thành công, sự kiện vui', 'ACTIVE', 'user-admin-01'),
+('cat-05', 'Hoa Chia Buồn', 'Vòng hoa, lẵng hoa viếng và chia buồn', 'ACTIVE', 'user-admin-01'),
+('cat-06', 'Hoa Chúc Sức Khỏe', 'Hoa thăm hỏi, chúc người thân mau khỏe', 'ACTIVE', 'user-admin-01'),
+('cat-07', 'Hoa Cảm Ơn', 'Hoa gửi lời cảm ơn thầy cô, đối tác, người thân', 'ACTIVE', 'user-admin-01'),
+('cat-08', 'Hoa Mừng Tốt Nghiệp', 'Hoa tặng lễ tốt nghiệp, bảo vệ luận văn', 'ACTIVE', 'user-admin-01'),
+('cat-09', 'Hoa Cưới', 'Hoa cầm tay cô dâu, hoa trang trí tiệc cưới', 'ACTIVE', 'user-admin-01'),
+('cat-10', 'Hoa Ngày 20/10', 'Hoa tặng Ngày Phụ nữ Việt Nam', 'ACTIVE', 'user-admin-01'),
+('cat-11', 'Hoa Ngày 8/3', 'Hoa tặng Ngày Quốc tế Phụ nữ', 'ACTIVE', 'user-admin-01'),
+('cat-12', 'Hoa Ngày Nhà Giáo', 'Hoa tri ân thầy cô ngày 20/11', 'ACTIVE', 'user-admin-01'),
+('cat-13', 'Hoa Valentine', 'Hoa tặng người yêu ngày 14/2', 'ACTIVE', 'user-admin-01'),
+('cat-14', 'Hoa Tết', 'Hoa trưng bàn, hoa chúc Tết đầu năm', 'ACTIVE', 'user-admin-01'),
+('cat-15', 'Hoa Giáng Sinh', 'Hoa và cành trang trí mùa Noel', 'ACTIVE', 'user-admin-01'),
+-- Theo loại hoa
+('cat-16', 'Hoa Hồng', 'Hồng đỏ, hồng pastel, hồng Ecuador', 'ACTIVE', 'user-admin-01'),
+('cat-17', 'Hoa Hướng Dương', 'Bó và giỏ hướng dương rực rỡ', 'ACTIVE', 'user-admin-01'),
+('cat-18', 'Hoa Đồng Tiền', 'Đồng tiền nhiều màu, bền hoa', 'ACTIVE', 'user-admin-01'),
+('cat-19', 'Hoa Ly', 'Ly thơm, ly Tycoon, ly Sorbonne', 'ACTIVE', 'user-admin-01'),
+('cat-20', 'Hoa Cúc', 'Cúc họa mi, cúc mẫu đơn, cúc pingpong', 'ACTIVE', 'user-admin-01'),
+('cat-21', 'Hoa Cẩm Chướng', 'Cẩm chướng đơn và chùm', 'ACTIVE', 'user-admin-01'),
+('cat-22', 'Hoa Cát Tường', 'Cát tường tím, trắng, hồng', 'ACTIVE', 'user-admin-01'),
+('cat-23', 'Baby Flower', 'Hoa baby trắng, baby nhuộm màu', 'ACTIVE', 'user-admin-01'),
+('cat-24', 'Lan Hồ Điệp', 'Chậu lan hồ điệp để bàn, làm quà biếu', 'ACTIVE', 'user-admin-01'),
+-- Theo kiểu dáng
+('cat-25', 'Bó Hoa Tươi', 'Hoa bó gói giấy, cầm tay', 'ACTIVE', 'user-admin-01'),
+('cat-26', 'Giỏ Hoa Tươi', 'Hoa cắm giỏ mây, giỏ gỗ', 'ACTIVE', 'user-admin-01'),
+('cat-27', 'Hộp Hoa Tươi', 'Hoa cắm hộp tròn, hộp vuông, hộp mica', 'ACTIVE', 'user-admin-01'),
+('cat-28', 'Bình Hoa Tươi', 'Hoa cắm sẵn trong bình thủy tinh, bình gốm', 'ACTIVE', 'user-admin-01'),
+('cat-29', 'Lẵng Hoa', 'Lẵng hoa chúc mừng và chia buồn cỡ lớn', 'ACTIVE', 'user-admin-01'),
+('cat-30', 'Kệ Hoa', 'Kệ hoa khai trương, hội nghị, sự kiện', 'ACTIVE', 'user-admin-01');
+
+UPDATE Categories SET group_name = 'Chủ đề' WHERE name IN ('Hoa Tình Yêu', 'Hoa Khai Trương', 'Hoa Sinh Nhật', 'Hoa Chúc Mừng', 'Hoa Chia Buồn', 'Hoa Chúc Sức Khỏe', 'Hoa Cảm Ơn', 'Hoa Mừng Tốt Nghiệp', 'Hoa Cưới', 'Hoa Ngày 20/10', 'Hoa Ngày 8/3', 'Hoa Ngày Nhà Giáo', 'Hoa Valentine', 'Hoa Tết', 'Hoa Giáng Sinh');
+UPDATE Categories SET group_name = 'Hoa tươi' WHERE name IN ('Hoa Hồng', 'Hoa Hướng Dương', 'Hoa Đồng Tiền', 'Hoa Ly', 'Hoa Cúc', 'Hoa Cẩm Chướng', 'Hoa Cát Tường', 'Baby Flower', 'Lan Hồ Điệp');
+UPDATE Categories SET group_name = 'Kiểu dáng' WHERE name IN ('Bó Hoa Tươi', 'Giỏ Hoa Tươi', 'Hộp Hoa Tươi', 'Bình Hoa Tươi', 'Lẵng Hoa', 'Kệ Hoa');
 
 -- 5. PRODUCTS
 INSERT INTO Products (id, shop_id, category_id, name, description, components, shelf_life_days, price, stock, status, created_by) VALUES

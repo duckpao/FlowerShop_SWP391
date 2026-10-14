@@ -1,5 +1,10 @@
 export const productStatusLabels = { ACTIVE: 'Đang bán', INACTIVE: 'Đã ẩn', OUT_OF_STOCK: 'Hết hàng' }
-export const productTypeLabels = { READY_MADE: 'Bó hoa có sẵn', CUSTOM: 'Bó hoa custom' }
+export const productTypeLabels = { READY_MADE: 'Có sẵn', CUSTOM: 'Hàng đặt trước' }
+export const productTypeOptions = [
+  ['', 'Tất cả loại hoa'],
+  ['READY_MADE', 'Có sẵn'],
+  ['CUSTOM', 'Hàng đặt trước'],
+]
 
 export const sortOptions = [
   ['newest', 'Mới nhất'],

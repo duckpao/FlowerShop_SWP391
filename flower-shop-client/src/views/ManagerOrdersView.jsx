@@ -7,14 +7,11 @@ import Button from '../components/ui/button/Button'
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '../components/ui/table'
 import ComponentCard from '../components/common/ComponentCard'
 
-const statusColors = {
-    PENDING:'warning', PROCESSING:'info', DELIVERING:'info', COMPLETED:'success', CANCELLED:'error', REFUNDED:'error'
-}
-const statusLabels = {
-    PENDING:'Chờ xác nhận', PROCESSING:'Đang xử lý', DELIVERING:'Đang giao', COMPLETED:'Đã giao', CANCELLED:'Đã hủy', REFUNDED:'Đã hoàn tiền'
-}
+import { useConfirm } from '../components/ui/confirm/ConfirmProvider'
+import { ghnStatusLabels, orderStatusColors as statusColors, orderStatusLabels as statusLabels } from '../models/orderStatus'
 
 export default function ManagerOrdersView({ shop: initialShop, onBack }) {
+    const { confirm } = useConfirm()
     const [shop, setShop] = useState(initialShop)
     const [data, setData] = useState(null)
     const [page, setPage] = useState(0)
@@ -58,7 +55,7 @@ export default function ManagerOrdersView({ shop: initialShop, onBack }) {
     }
 
     const ship = async orderId => {
-        if (!confirm('Xác nhận & tạo vận đơn GHN?')) return
+        if (!await confirm({ title: 'Tạo vận đơn GHN', message: 'Tạo mã vận đơn GHN và chuyển đơn sang giao hàng?', confirmLabel: 'Tạo vận đơn' })) return
         setBusy(true); setError(''); setNotice('')
         try {
             const r = await managerOrderService.ship(shop.id, orderId)
@@ -70,9 +67,9 @@ export default function ManagerOrdersView({ shop: initialShop, onBack }) {
     const refresh = async orderId => {
         setBusy(true); setError(''); setNotice('')
         try {
-            const status = await managerOrderService.refreshStatus(shop.id, orderId)
+            const delivery = await managerOrderService.refreshStatus(shop.id, orderId)
             await load(page, true)
-            setNotice(`Trạng thái GHN hiện tại: ${status}`)
+            setNotice(`Trạng thái GHN hiện tại: ${ghnStatusLabels[delivery.ghnStatus] || delivery.ghnStatus}`)
         } catch (e) { setError(e.message) } finally { setBusy(false) }
     }
 if (!shop) return <div className="p-8"><p className="text-gray-500">Đang tải thông tin shop…</p></div>

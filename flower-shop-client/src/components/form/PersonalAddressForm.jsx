@@ -4,7 +4,8 @@ export default function PersonalAddressForm({ controller: c, busy }) {
   const a = c.address
   const set = (key, value) => c.setAddress(current => ({ ...current, [key]: value }))
   const complete = a.recipientName.trim() && /^0[0-9]{9}$/.test(a.recipientPhone)
-    && a.city && a.ward && a.ghnWardCode && a.ghnDistrictId && a.addressLine.trim()
+    && a.city && a.district && a.ward && a.addressLine.trim()
+    && a.ghnDistrictId && a.ghnWardCode
   const row = 'w-full border-0 border-b border-gray-100 bg-transparent px-0 py-4 text-sm outline-none focus:border-brand-500 dark:border-gray-700 dark:text-white'
   const required = <span className="text-error-500"> *</span>
   return <form onSubmit={c.saveAddress} className="rounded-xl bg-gray-50 p-3 dark:bg-gray-900">

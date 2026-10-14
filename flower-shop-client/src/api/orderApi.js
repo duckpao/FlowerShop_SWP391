@@ -13,6 +13,9 @@ const orderApi = {
    */
   makeOrder: (userId, data) => axiosClient.post(`/orders/${userId}`, data),
 
+  /** Phí vận chuyển GHN từ shop tới một địa chỉ đã lưu. */
+  getShippingFee: (userId, data) => axiosClient.post(`/orders/${userId}/shipping-fee`, data),
+
   /**
    * Lấy lịch sử đơn hàng của user
    * @param {string} userId

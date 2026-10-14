@@ -36,6 +36,9 @@ public class Delivery {
     @Builder.Default
     private DeliveryStatus status = DeliveryStatus.PENDING;
 
+    @Column(name = "ghn_status", length = 40)
+    private String ghnStatus;
+
     @Column(name = "tracking_notes", columnDefinition = "TEXT")
     private String trackingNotes;
 

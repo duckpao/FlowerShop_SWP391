@@ -31,9 +31,9 @@ const paymentLabel = o => {
 
 export default function CustomerOrdersView() {
     const { user } = useAuth()
-    const [status, setStatus] = useState('')
     const [orders, setOrders] = useState(null)
     const [page, setPage] = useState(0)
+    const [status, setStatus] = useState('')
     const [busy, setBusy] = useState(true)
     const [error, setError] = useState('')
     const [payingId, setPayingId] = useState('')
@@ -45,7 +45,7 @@ export default function CustomerOrdersView() {
         setBusy(true)
         setError('')
         customerOrderService.list(page, status)
-            .then(data => { if (active) setOrders(data) })
+            .then(data => { if (active) { setOrders(data); setError('') } })
             .catch(e => { if (active) setError(e.message) })
             .finally(() => { if (active) setBusy(false) })
         return () => { active = false }

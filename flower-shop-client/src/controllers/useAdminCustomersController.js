@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { adminCustomerService as api } from '../services/adminCustomerService'
+import { useConfirm } from '../components/ui/confirm/ConfirmProvider'
 
 export function useAdminCustomersController() {
+  const { confirm } = useConfirm()
   const [query, setQuery] = useState('')
   const [status, updateStatus] = useState('')
   const [params, setParams] = useState({ q: '', status: '', page: 0, size: 10 })
@@ -24,7 +26,8 @@ export function useAdminCustomersController() {
   }
   async function toggle(customer) {
     const blocked = customer.status !== 'BANNED'
-    if (!window.confirm(`${blocked ? 'Khóa' : 'Mở khóa'} tài khoản ${customer.email}?${blocked ? ' Các phiên đăng nhập sẽ bị thu hồi.' : ''}`)) return
+    const message = `${blocked ? 'Khóa' : 'Mở khóa'} tài khoản ${customer.email}?${blocked ? ' Các phiên đăng nhập sẽ bị thu hồi.' : ''}`
+    if (!await confirm({ title: blocked ? 'Khóa tài khoản' : 'Mở khóa tài khoản', message, tone: blocked ? 'danger' : 'primary' })) return
     setBusy(true); setError(''); setNotice('')
     try {
       const result = await api.block(customer.id, blocked)

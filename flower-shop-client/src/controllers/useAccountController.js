@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import { accountService } from '../services/accountService'
 import { emptyAddress, profileInput } from '../models/accountModel'
+import { useConfirm } from '../components/ui/confirm/ConfirmProvider'
 
 export function useAccountController(user) {
+  const { confirm } = useConfirm()
   const [profile, setProfile] = useState(null)
   const [form, setForm] = useState({ fullName: '', phone: '' })
   const [addresses, setAddresses] = useState([])
@@ -64,7 +66,7 @@ export function useAccountController(user) {
   const saveAddress = e => {
     e.preventDefault()
     return run(async () => {
-      await accountService.saveAddress(editing, { ...address, recipientName: address.recipientName.trim(), recipientPhone: address.recipientPhone.trim(), addressLine: address.addressLine.trim(), ward: address.ward.trim(), district: address.district.trim(), city: address.city.trim() })
+      await accountService.saveAddress(editing, { ...address, recipientName: address.recipientName.trim(), recipientPhone: address.recipientPhone.trim(), addressLine: address.addressLine.trim(), district: address.district.trim(), ward: address.ward.trim(), city: address.city.trim() })
       setAddresses(await accountService.addresses()); cancel(); setNotice('Đã lưu địa chỉ.')
     })
   }
@@ -73,8 +75,8 @@ export function useAccountController(user) {
     setProfile(updated)
     setNotice('Đã cập nhật ảnh đại diện.')
   })
-  const remove = item => {
-    if (!window.confirm(`Xóa địa chỉ ${item.addressLine}?`)) return
+  const remove = async item => {
+    if (!await confirm({ title: 'Xóa địa chỉ', message: `Xóa địa chỉ ${item.addressLine}?`, confirmLabel: 'Xóa', tone: 'danger' })) return
     return run(async () => {
       await accountService.deleteAddress(item.id)
       setAddresses(await accountService.addresses()); if (editing === item.id) cancel()

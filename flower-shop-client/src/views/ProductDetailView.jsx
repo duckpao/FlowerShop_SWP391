@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { useProductDetailController } from '../controllers/useProductDetailController';
 import { useFavoriteToggle } from '../controllers/useFavoritesController';
 import ProductReviewsView from './ProductReviewsView';
@@ -14,14 +14,43 @@ export default function ProductDetailView({ auth, productId, id }) {
   const cartContext = useCartContext();
 
   const [quantity, setQuantity] = useState(1);
-  const [selectedImage, setSelectedImage] = useState(0);
+  const [selectedMediaIndex, setSelectedMediaIndex] = useState(0);
   const [busyCart, setBusyCart] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const videoRef = useRef(null);
 
   const p = c.product;
   const isFavorite = p ? favorites.saved.has(p.id) : false;
 
+  const mediaItems = useMemo(() => {
+    if (!p) return [];
+    const items = [];
+    if (p.images && p.images.length > 0) {
+      p.images.forEach((url, idx) => items.push({ type: 'image', url, key: `img-${idx}` }));
+    } else if (p.imageUrl) {
+      items.push({ type: 'image', url: p.imageUrl, key: 'img-main' });
+    }
+    if (p.videos && p.videos.length > 0) {
+      p.videos.forEach((v, idx) => items.push({
+        type: 'video',
+        url: v.videoUrl,
+        title: v.title,
+        key: `vid-${idx}`
+      }));
+    }
+    return items;
+  }, [p]);
+
+  useEffect(() => {
+    setIsPlaying(false);
+  }, [selectedMediaIndex]);
+
+  const currentMedia = mediaItems[selectedMediaIndex] || mediaItems[0];
+
+  const isAvailable = p && (p.type === 'CUSTOM' || p.stock > 0);
+
   const handleAddToCart = async () => {
-    if (!p || p.stock <= 0) return;
+    if (!p || !isAvailable) return;
     if (!cartContext?.addToCart) {
       toast.error('Chức năng giỏ hàng tạm thời không khả dụng.');
       return;
@@ -38,7 +67,7 @@ export default function ProductDetailView({ auth, productId, id }) {
   };
 
   const handleBuyNow = async () => {
-    if (!p || p.stock <= 0) return;
+    if (!p || !isAvailable) return;
     if (!cartContext?.addToCart) {
       toast.error('Chức năng giỏ hàng tạm thời không khả dụng.');
       return;
@@ -112,21 +141,48 @@ export default function ProductDetailView({ auth, productId, id }) {
             {/* Gallery Column */}
             <div className="space-y-4">
               <div className="relative aspect-square w-full overflow-hidden rounded-2xl bg-gray-100 dark:bg-gray-900 border border-gray-200 dark:border-white/10">
-                {p.images && p.images.length > 0 ? (
-                  <img
-                    src={p.images[selectedImage] || p.images[0]}
-                    alt={p.name}
-                    className="h-full w-full object-cover"
-                  />
-                ) : p.imageUrl ? (
-                  <img
-                    src={p.imageUrl}
-                    alt={p.name}
-                    className="h-full w-full object-cover"
-                  />
+                {currentMedia ? (
+                  currentMedia.type === 'video' ? (
+                    <div className="relative h-full w-full bg-black flex items-center justify-center">
+                      <video
+                        ref={videoRef}
+                        key={currentMedia.url}
+                        src={currentMedia.url}
+                        controls
+                        playsInline
+                        className="h-full w-full object-contain"
+                        onPlay={() => setIsPlaying(true)}
+                        onPause={() => setIsPlaying(false)}
+                        onEnded={() => setIsPlaying(false)}
+                      />
+                      {!isPlaying && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (videoRef.current) {
+                              videoRef.current.play();
+                              setIsPlaying(true);
+                            }
+                          }}
+                          className="group absolute inset-0 m-auto flex h-20 w-20 items-center justify-center rounded-full bg-black/60 hover:bg-brand-600 text-white shadow-2xl backdrop-blur-xs transition-all hover:scale-110 active:scale-95 cursor-pointer z-10 ring-4 ring-white/30"
+                          aria-label="Phát video"
+                        >
+                          <svg className="h-9 w-9 translate-x-0.5 fill-current transition-transform group-hover:scale-110" viewBox="0 0 24 24">
+                            <path d="M8 5v14l11-7z" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <img
+                      src={currentMedia.url}
+                      alt={p.name}
+                      className="h-full w-full object-cover"
+                    />
+                  )
                 ) : (
                   <div className="flex h-full w-full items-center justify-center text-gray-400">
-                    Chưa có ảnh
+                    Chưa có ảnh hoặc video
                   </div>
                 )}
 
@@ -147,21 +203,40 @@ export default function ProductDetailView({ auth, productId, id }) {
                 )}
               </div>
 
-              {/* Thumbnails */}
-              {p.images && p.images.length > 1 && (
+              {/* Thumbnails (Images & Videos) */}
+              {mediaItems.length > 1 && (
                 <div className="flex gap-3 overflow-x-auto pb-2">
-                  {p.images.map((url, index) => (
+                  {mediaItems.map((item, index) => (
                     <button
-                      key={url}
+                      key={item.key || item.url}
                       type="button"
-                      onClick={() => setSelectedImage(index)}
-                      className={`relative h-20 w-20 shrink-0 overflow-hidden rounded-xl border-2 transition-all ${
-                        selectedImage === index
+                      onClick={() => {
+                        setSelectedMediaIndex(index);
+                        setIsPlaying(false);
+                      }}
+                      className={`relative h-20 w-20 shrink-0 overflow-hidden rounded-xl border-2 transition-all cursor-pointer ${
+                        selectedMediaIndex === index
                           ? 'border-brand-500 shadow-md ring-2 ring-brand-500/20'
                           : 'border-transparent opacity-70 hover:opacity-100'
                       }`}
                     >
-                      <img src={url} alt="" className="h-full w-full object-cover" />
+                      {item.type === 'video' ? (
+                        <div className="relative h-full w-full bg-black">
+                          <video src={`${item.url}#t=0.001`} className="h-full w-full object-cover" preload="metadata" muted playsInline />
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-gray-900 shadow-xs">
+                              <svg className="h-3.5 w-3.5 translate-x-0.5 fill-current" viewBox="0 0 24 24">
+                                <path d="M8 5v14l11-7z" />
+                              </svg>
+                            </span>
+                          </div>
+                          <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1 py-0.2 text-[9px] font-bold tracking-wider text-white uppercase">
+                            Video
+                          </span>
+                        </div>
+                      ) : (
+                        <img src={item.url} alt="" className="h-full w-full object-cover" />
+                      )}
                     </button>
                   ))}
                 </div>
@@ -211,9 +286,19 @@ export default function ProductDetailView({ auth, productId, id }) {
                 </div>
                 <div className="text-right">
                   <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Tình trạng</span>
-                  <span className={`inline-flex items-center text-sm font-bold ${p.stock > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
-                    {p.stock > 0 ? `Còn ${p.stock} sản phẩm` : 'Tạm hết hàng'}
-                  </span>
+                  {p.type === 'CUSTOM' ? (
+                    <span className="inline-flex items-center px-3 py-1 rounded-xl text-sm font-bold bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-500/30">
+                      Hàng đặt trước
+                    </span>
+                  ) : (
+                    <span className={`inline-flex items-center px-3 py-1 rounded-xl text-sm font-bold ${
+                      p.stock > 0
+                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/30'
+                        : 'bg-rose-100 text-rose-800 border border-rose-300 dark:bg-rose-500/20 dark:text-rose-400 dark:border-rose-500/30'
+                    }`}>
+                      {p.stock > 0 ? `Có sẵn (Còn ${p.stock})` : 'Tạm hết hàng'}
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -225,17 +310,8 @@ export default function ProductDetailView({ auth, productId, id }) {
                 </p>
               </div>
 
-              {p.videos && p.videos.length > 0 && (
-                <div className="mb-6 space-y-3">
-                  <h3 className="text-sm font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Video sản phẩm</h3>
-                  {p.videos.map(video => (
-                    <video key={video.videoUrl} src={video.videoUrl} controls className="w-full rounded-xl bg-black" />
-                  ))}
-                </div>
-              )}
-
               {/* Actions Section */}
-              {p.stock > 0 ? (
+              {(p.type === 'CUSTOM' || p.stock > 0) ? (
                 <div className="mt-auto pt-6 border-t border-gray-100 dark:border-white/5 space-y-4">
                   {/* Quantity selector */}
                   <div className="flex items-center gap-4">
@@ -254,8 +330,8 @@ export default function ProductDetailView({ auth, productId, id }) {
                       </span>
                       <button
                         type="button"
-                        onClick={() => setQuantity(q => Math.min(p.stock, q + 1))}
-                        disabled={quantity >= p.stock || busyCart}
+                        onClick={() => setQuantity(q => (p.type === 'CUSTOM' ? q + 1 : Math.min(p.stock, q + 1)))}
+                        disabled={(p.type !== 'CUSTOM' && quantity >= p.stock) || busyCart}
                         className="px-3.5 py-2 font-bold text-gray-600 hover:bg-gray-200 disabled:opacity-30 dark:text-gray-300 dark:hover:bg-gray-800 transition-colors"
                       >
                         +

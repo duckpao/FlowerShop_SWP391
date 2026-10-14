@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { managerApplicationService as api } from '../services/managerApplicationService'
+import { useConfirm } from '../components/ui/confirm/ConfirmProvider'
 export function useAdminManagerApplicationsController() {
+  const { confirm } = useConfirm()
   const [data, setData] = useState(null)
   const [status, setStatus] = useState('PENDING')
   const [page, setPage] = useState(0)
@@ -18,7 +20,8 @@ export function useAdminManagerApplicationsController() {
     return () => { active = false }
   }, [status, page, revision])
   async function decide(id, approve) {
-    if (!window.confirm(approve ? 'Duyệt đơn, tạo shop và cấp quyền Manager?' : 'Từ chối đơn mở shop này?')) return
+    const message = approve ? 'Duyệt đơn, tạo shop và cấp quyền Manager?' : 'Từ chối đơn mở shop này?'
+    if (!await confirm({ title: approve ? 'Duyệt đơn mở shop' : 'Từ chối đơn mở shop', message, tone: approve ? 'primary' : 'danger' })) return
     setBusy(true); setError(''); setNotice('')
     try { await api.decide(id, approve, notes[id] || ''); setSelectedId(null); setNotice(approve ? 'Đã tạo shop và cấp quyền Manager. Người dùng cần đăng nhập lại.' : 'Đã từ chối. Tài khoản giữ nguyên quyền.'); setRevision(x => x + 1) }
     catch (e) { setError(e.message) } finally { setBusy(false) }

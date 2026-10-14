@@ -83,12 +83,13 @@ export const managerOrderService = {
     refreshStatus: (shopId, id) => authService.authenticatedRequest(`${base(shopId)}/${encodeURIComponent(id)}/refresh-status`, { method: 'POST' }),
 
     /**
-     * Giả lập giao hàng thành công trên môi trường thử nghiệm (Sandbox GHN).
+     * Gửi một trạng thái sang GHN (switch-status) và nhận lại trạng thái GHN báo về.
      * @param {string} shopId - ID của shop
      * @param {string} id - ID đơn hàng
+     * @param {string} status - Mã trạng thái GHN (picked, delivering, delivered...)
      */
-    simulateDelivered: (shopId, id) => authService.authenticatedRequest(`${base(shopId)}/${encodeURIComponent(id)}/simulate-delivered`, { method: 'POST' }),
-    
+    pushGhnStatus: (shopId, id, status) => authService.authenticatedRequest(`${base(shopId)}/${encodeURIComponent(id)}/ghn-status`, { method: 'POST', body: { status } }),
+
     /**
      * Cập nhật thông tin vận đơn GHN cho đơn hàng.
      * @param {string} shopId - ID của shop

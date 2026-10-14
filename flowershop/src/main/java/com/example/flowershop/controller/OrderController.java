@@ -2,6 +2,7 @@ package com.example.flowershop.controller;
 
 import com.example.flowershop.dto.order.MakeOrderRequest;
 import com.example.flowershop.dto.order.OrderResponse;
+import com.example.flowershop.dto.order.ShippingFeeRequest;
 import com.example.flowershop.service.OrderService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -57,11 +58,24 @@ public class OrderController {
      * GET /api/orders/{userId}/shipping-fee?shopId=...&addressId=...
      */
     @GetMapping("/{userId}/shipping-fee")
-    public ResponseEntity<java.util.Map<String, java.math.BigDecimal>> shippingFee(
+    public ResponseEntity<java.util.Map<String, java.math.BigDecimal>> estimateShippingFee(
             @PathVariable String userId, @RequestParam String shopId, @RequestParam String addressId,
             @AuthenticationPrincipal CurrentUser currentUser) {
         requireOwner(userId, currentUser);
         return ResponseEntity.ok(java.util.Map.of("shippingFee", orderService.estimateShippingFee(userId, shopId, addressId)));
+    }
+
+    /**
+     * Phí vận chuyển GHN cho đơn từ shop tới một địa chỉ đã lưu.
+     * POST /api/orders/{userId}/shipping-fee
+     */
+    @PostMapping("/{userId}/shipping-fee")
+    public java.util.Map<String, Object> shippingFee(
+            @PathVariable String userId,
+            @Valid @RequestBody ShippingFeeRequest request, @AuthenticationPrincipal CurrentUser currentUser
+    ) {
+        requireOwner(userId, currentUser);
+        return java.util.Map.of("shippingFee", orderService.quoteShippingFee(userId, request));
     }
 
     /**
