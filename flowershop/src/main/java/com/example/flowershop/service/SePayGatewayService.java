@@ -394,13 +394,14 @@ public class SePayGatewayService {
         }
         if (order.getStatus() != OrderStatus.PENDING) return false;
 
-        // Đóng giao dịch phía SePay trước, rồi kiểm tra lại phòng trường hợp khách vừa trả xong.
-        // Kiểu Shopee: hủy giao dịch KHÔNG hủy đơn; đơn được giữ tới hết hạn, khách thanh toán lại được, scheduler tự hủy khi quá hạn.
+        // Khách chủ động bấm Hủy ở SePay: đóng giao dịch trước, kiểm tra lại phòng trường hợp vừa trả xong, rồi hủy đơn.
+        // Các sự cố không gọi về trang hủy (back trình duyệt, mất mạng, đóng tab) thì đơn vẫn được giữ tới hết 10 phút.
         cancelAtSePay(invoiceNumber);
-        return reconcileWithSePayGateway(invoiceNumber);
+        if (reconcileWithSePayGateway(invoiceNumber)) return true;
+        return !orderService.cancelPendingOrder(order.getId(), "Khách hàng hủy giao dịch tại cổng SePay", authenticatedUserId);
     }
 
-    /** Khách bấm hủy ở cổng SePay cho giao dịch gộp: đóng giao dịch và đối soát; các đơn vẫn được giữ tới hết hạn. */
+    /** Khách bấm hủy ở cổng SePay cho giao dịch gộp: đóng giao dịch, đối soát, rồi hủy mọi đơn còn chờ. */
     private boolean cancelGroupCheckout(String groupInvoice, List<Payment> members, String userId) {
         for (Payment member : members) {
             Order order = member.getOrder();
@@ -410,7 +411,12 @@ public class SePayGatewayService {
             }
         }
         cancelAtSePay(groupInvoice);
-        return reconcileWithSePayGateway(groupInvoice);
+        if (reconcileWithSePayGateway(groupInvoice)) return true;
+        for (Payment member : members) {
+            orderService.cancelPendingOrder(member.getOrder().getId(),
+                    "Khách hàng hủy giao dịch tại cổng SePay", userId);
+        }
+        return false;
     }
 
     /**
@@ -512,7 +518,6 @@ public class SePayGatewayService {
         }
         order.setLastModifyBy(actor);
         orderRepository.save(order);
-        orderService.clearPaidOrderItems(order);
 
         log.info("Xác nhận thanh toán thành công cho đơn hàng: {}, invoice: {}, số tiền: {}đ",
                 order.getId(), invoiceNumber, paidAmount);

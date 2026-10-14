@@ -8,13 +8,12 @@ import PageMeta from '../components/common/PageMeta'
 import PageBreadCrumb from '../components/common/PageBreadCrumb'
 import Button from '../components/ui/button/Button'
 
-// Màn "Chờ thanh toán": đơn vừa đặt (hoặc vừa hủy giao dịch) được giữ 10 phút; khách trả ngay hoặc để đơn tự hủy khi quá hạn.
+// Màn "Chờ thanh toán": đơn online chưa trả (không mở được cổng, mất mạng, back trình duyệt...) được giữ 10 phút; khách trả lại hoặc để đơn tự hủy khi quá hạn.
 export default function PaymentPendingPage() {
   const { user, busy: authBusy } = useAuth()
   const [searchParams] = useSearchParams()
   const ids = searchParams.getAll('order')
   const idsKey = ids.join(',')
-  const cancelled = searchParams.get('cancelled') === '1'
 
   const [orders, setOrders] = useState(null)
   const [error, setError] = useState('')
@@ -70,9 +69,6 @@ export default function PaymentPendingPage() {
     if (!user) return <p className="text-center text-gray-700">Vui lòng <Link to={`/login?next=${encodeURIComponent(`/payment/pending?${searchParams.toString()}`)}`} className="font-semibold text-brand-600 underline">đăng nhập</Link> để tiếp tục thanh toán.</p>
     if (!orders) return error ? <p role="alert" className="text-center text-error-600">{error}</p> : <p role="status" className="text-center text-gray-500">Đang tải đơn hàng…</p>
     return <>
-      {cancelled && payable.length > 0 && (
-        <p role="status" className="mb-4 rounded-lg bg-warning-50 p-3 text-sm text-warning-800">Bạn đã hủy giao dịch. Đơn hàng vẫn được giữ, bạn có thể thanh toán lại trước khi hết thời gian.</p>
-      )}
       <div className="space-y-3">
         {orders.map(o => (
           <div key={o.id} className="flex items-center justify-between gap-3 rounded-xl border border-gray-100 p-4 text-sm dark:border-white/5">

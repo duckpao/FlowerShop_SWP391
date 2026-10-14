@@ -138,12 +138,18 @@ export default function CheckoutPage() {
         })),
       });
       const query = created.map(order => 'order=' + encodeURIComponent(order.id)).join('&');
+      await fetchCart();
       if (paymentMethod === 'ONLINE') {
-        // Đơn online được giữ 10 phút: sang màn chờ thanh toán (giỏ chỉ xóa khi đã trả tiền).
-        navigate('/payment/pending?' + query);
+        // Sang cổng SePay ngay. Nếu không mở được cổng thì đơn vẫn được giữ 10 phút ở màn chờ thanh toán.
+        const orderIds = created.map(order => order.id);
+        try {
+          if (orderIds.length === 1) await paymentApi.startSePayCheckout(orderIds[0], 'FULL');
+          else await paymentApi.startSePayGroupCheckout(orderIds);
+        } catch {
+          navigate('/payment/pending?' + query);
+        }
         return;
       }
-      await fetchCart();
       navigate('/payment/cod-success?' + query);
     } catch (err) {
       setOrderError(err.message || 'Đặt hàng thất bại. Vui lòng thử lại.');

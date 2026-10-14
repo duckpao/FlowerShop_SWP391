@@ -37,24 +37,6 @@ class PaymentCartLifecycleTests {
     }
 
     @Test
-    void successfulPaymentRemovesOnlyPurchasedQuantity() {
-        User customer = User.builder().id("customer-1").build();
-        Product flower = Product.builder().id("flower-1").build();
-        Order order = Order.builder().id("order-1").customer(customer).build();
-        OrderDetail detail = OrderDetail.builder().order(order).product(flower).quantity(2).build();
-        CartItem cartItem = CartItem.builder().id("cart-1").user(customer).product(flower).quantity(3).build();
-        when(details.findByOrderId("order-1")).thenReturn(List.of(detail));
-        when(cartItems.findByUserIdAndProductIdForUpdate("customer-1", "flower-1"))
-                .thenReturn(Optional.of(cartItem));
-
-        orderService.clearPaidOrderItems(order);
-
-        assertThat(cartItem.getQuantity()).isEqualTo(1);
-        verify(cartItems).save(cartItem);
-        verify(cartItems, never()).delete(any());
-    }
-
-    @Test
     void cancelledLegacyOrderRestoresMissingCartItemWithoutDuplicatingIt() {
         User customer = User.builder().id("customer-1").build();
         Product flower = Product.builder().id("flower-1").build();
@@ -92,7 +74,7 @@ class PaymentCartLifecycleTests {
     }
 
     @Test
-    void cancelledCheckoutKeepsOrderUntilItExpires() {
+    void cancelledCheckoutCancelsOrder() {
         Order order = Order.builder().id("order-1").customer(User.builder().id("customer-1").build())
                 .status(OrderStatus.PENDING).build();
         Payment payment = Payment.builder().order(order).invoiceNumber("invoice-1")
@@ -100,16 +82,15 @@ class PaymentCartLifecycleTests {
         SePayGatewayService gateway = spy(newGateway());
         when(payments.findByInvoiceNumber("invoice-1")).thenReturn(Optional.of(payment));
         doReturn(false).when(gateway).reconcileWithSePayGateway("invoice-1");
+        doReturn(true).when(orderService).cancelPendingOrder(anyString(), anyString(), anyString());
 
         assertThat(gateway.cancelCheckout("invoice-1", "customer-1")).isFalse();
 
-        // Kiểu Shopee: hủy giao dịch không hủy đơn, scheduler hủy khi quá 10 phút.
-        verify(orderService, never()).cancelPendingOrder(anyString(), anyString(), anyString());
-        verifyNoInteractions(cartItems);
+        verify(orderService).cancelPendingOrder(eq("order-1"), anyString(), eq("customer-1"));
     }
 
     @Test
-    void cancelledGroupCheckoutKeepsAllOrders() {
+    void cancelledGroupCheckoutCancelsAllOrders() {
         User customer = User.builder().id("customer-1").build();
         Order a = Order.builder().id("order-a").customer(customer).status(OrderStatus.PENDING).build();
         Order b = Order.builder().id("order-b").customer(customer).status(OrderStatus.PENDING).build();
@@ -119,10 +100,12 @@ class PaymentCartLifecycleTests {
         SePayGatewayService gateway = spy(newGateway());
         when(payments.findByGroupInvoice("GRP-1")).thenReturn(members);
         doReturn(false).when(gateway).reconcileWithSePayGateway("GRP-1");
+        doReturn(true).when(orderService).cancelPendingOrder(anyString(), anyString(), anyString());
 
         assertThat(gateway.cancelCheckout("GRP-1", "customer-1")).isFalse();
 
-        verify(orderService, never()).cancelPendingOrder(anyString(), anyString(), anyString());
+        verify(orderService).cancelPendingOrder(eq("order-a"), anyString(), eq("customer-1"));
+        verify(orderService).cancelPendingOrder(eq("order-b"), anyString(), eq("customer-1"));
     }
 
     @Test

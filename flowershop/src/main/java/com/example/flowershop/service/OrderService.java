@@ -263,11 +263,12 @@ public class OrderService {
                     .build());
         }
 
+        // Giỏ được xóa ngay khi tạo đơn (cả COD và online); đơn bị hủy/hết hạn thì khôi phục lại giỏ.
+        cartItemRepository.deleteAll(selectedCartItems);
+
         // 7. Xử lý phương thức thanh toán
         boolean isCod = "COD".equalsIgnoreCase(request.getPaymentMethod());
         if (isCod) {
-            // COD được xác nhận ngay khi tạo đơn; đơn ONLINE chỉ xóa giỏ khi ngân hàng xác nhận.
-            cartItemRepository.deleteAll(selectedCartItems);
             // COD: tạo bản ghi thanh toán ngay, trạng thái PENDING (sẽ thu tiền khi giao hàng)
             Payment codPayment = Payment.builder()
                     .id(UUID.randomUUID().toString())
@@ -303,25 +304,6 @@ public class OrderService {
                 .items(orderItemResponses)
                 .createdDate(order.getCreatedDate())
                 .build();
-    }
-
-    /** Xóa đúng số lượng của đơn đã thanh toán, giữ lại món khác hoặc số lượng khách thêm sau đó. */
-    @Transactional
-    public void clearPaidOrderItems(Order order) {
-        if (order == null || order.getCustomer() == null) return;
-        String userId = order.getCustomer().getId();
-        for (OrderDetail detail : orderDetailRepository.findByOrderId(order.getId())) {
-            if (detail.getProduct() == null) continue;
-            cartItemRepository.findByUserIdAndProductIdForUpdate(userId, detail.getProduct().getId())
-                    .ifPresent(cartItem -> {
-                        int remaining = cartItem.getQuantity() - detail.getQuantity();
-                        if (remaining <= 0) cartItemRepository.delete(cartItem);
-                        else {
-                            cartItem.setQuantity(remaining);
-                            cartItemRepository.save(cartItem);
-                        }
-                    });
-        }
     }
 
     /** Khôi phục giỏ từ chi tiết đơn bị hủy, kể cả đơn cũ đã xóa giỏ lúc tạo đơn. */

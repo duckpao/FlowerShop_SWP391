@@ -188,7 +188,6 @@ public class PaymentService {
                 .build();
 
         paymentRepository.save(payment);
-        orderService.clearPaidOrderItems(matchedOrder);
         log.info("Thanh toán thành công cho đơn hàng: {} với số tiền: {}đ", matchedOrder.getId(), transferAmount);
 
         return Map.of(
