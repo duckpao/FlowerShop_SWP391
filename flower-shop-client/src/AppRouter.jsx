@@ -16,6 +16,8 @@ import CheckoutPage from "./pages/CheckoutPage";
 import PaymentSuccessPage from "./pages/PaymentSuccessPage";
 import PaymentErrorPage from "./pages/PaymentErrorPage";
 import PaymentCancelPage from "./pages/PaymentCancelPage";
+import PaymentPendingPage from "./pages/PaymentPendingPage";
+import CodSuccessPage from "./pages/CodSuccessPage";
 import DevDepositTestPage from "./pages/DevDepositTestPage";
 import CustomerOrdersView from "./views/CustomerOrdersView";
 import CustomerOrderDetailView from "./views/CustomerOrderDetailView";
@@ -73,6 +75,8 @@ function AppRouterContent() {
             <Route path="/payment/success" element={<PaymentSuccessPage />} />
             <Route path="/payment/error" element={<PaymentErrorPage />} />
             <Route path="/payment/cancel" element={<PaymentCancelPage />} />
+            <Route path="/payment/pending" element={<PaymentPendingPage />} />
+            <Route path="/payment/cod-success" element={<CodSuccessPage />} />
             {import.meta.env.DEV && <Route path="/dev-deposit" element={<DevDepositTestPage />} />}
             <Route path="/admin/profile" element={<Navigate to="/account" replace />} />
             <Route path="/shop-admin/profile" element={<Navigate to="/account" replace />} />

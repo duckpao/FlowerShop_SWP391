@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useSearchParams } from 'react-router';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import { useCartContext } from '../context/CartContext';
 import { accountService } from '../services/accountService';
 import orderApi from '../api/orderApi';
@@ -13,6 +13,7 @@ const formatPrice = amount =>
 
 export default function CheckoutPage() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const returnToCart = `/cart?${searchParams.toString()}`;
   const { cart, loading, error, fetchCart, user, userId } = useCartContext();
   const requestedIds = searchParams.getAll('item');
@@ -44,9 +45,6 @@ export default function CheckoutPage() {
   const [paymentMethod, setPaymentMethod] = useState('ONLINE');
   const [orderLoading, setOrderLoading] = useState(false);
   const [orderError, setOrderError] = useState('');
-  const [orderSuccess, setOrderSuccess] = useState(null);
-  const [pendingOnlineOrderIds, setPendingOnlineOrderIds] = useState([]);
-  const hasPendingOnline = pendingOnlineOrderIds.length > 0;
 
   useEffect(() => { fetchCart(); }, [fetchCart]);
 
@@ -128,56 +126,31 @@ export default function CheckoutPage() {
     setOrderLoading(true);
     setOrderError('');
     try {
-      let orderIds = pendingOnlineOrderIds;
-      let created = [];
-      if (!orderIds.length) {
-        created = await orderApi.makeOrders(userId, {
-          deliveryAddressId: selectedAddressId,
-          recipientName: recipientName.trim(),
-          phone: phone.trim(),
-          paymentMethod,
-          shops: shopGroups.map(group => ({
-            shopId: group.shopId,
-            cartItemIds: group.items.map(item => item.id),
-            couponId: coupons[group.shopId]?.trim() || undefined,
-          })),
-        });
-        orderIds = created.map(order => order.id);
-      }
-
+      const created = await orderApi.makeOrders(userId, {
+        deliveryAddressId: selectedAddressId,
+        recipientName: recipientName.trim(),
+        phone: phone.trim(),
+        paymentMethod,
+        shops: shopGroups.map(group => ({
+          shopId: group.shopId,
+          cartItemIds: group.items.map(item => item.id),
+          couponId: coupons[group.shopId]?.trim() || undefined,
+        })),
+      });
+      const query = created.map(order => 'order=' + encodeURIComponent(order.id)).join('&');
       if (paymentMethod === 'ONLINE') {
-        setPendingOnlineOrderIds(orderIds);
-        if (orderIds.length === 1) await paymentApi.startSePayCheckout(orderIds[0], 'FULL');
-        else await paymentApi.startSePayGroupCheckout(orderIds);
+        // Đơn online được giữ 10 phút: sang màn chờ thanh toán (giỏ chỉ xóa khi đã trả tiền).
+        navigate('/payment/pending?' + query);
         return;
       }
-
-      setOrderSuccess(created);
       await fetchCart();
+      navigate('/payment/cod-success?' + query);
     } catch (err) {
       setOrderError(err.message || 'Đặt hàng thất bại. Vui lòng thử lại.');
     } finally {
       setOrderLoading(false);
     }
   };
-
-  if (orderSuccess) return (
-    <div className="mx-auto w-full max-w-2xl p-4 sm:p-8">
-      <PageMeta title="Đặt hàng thành công | Cửa hàng hoa" description="Đơn hàng COD đã được tạo" />
-      <div className="rounded-2xl border border-success-200 bg-white p-8 text-center shadow-sm dark:border-success-500/20 dark:bg-white/3">
-        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-success-500 text-2xl text-white">✓</div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{orderSuccess.length > 1 ? `Đã tạo ${orderSuccess.length} đơn COD thành công!` : 'Đặt hàng COD thành công!'}</h1>
-        <div className="mt-3 space-y-1 text-gray-600 dark:text-gray-300">
-          {orderSuccess.map(order => <p key={order.id}>Mã đơn hàng: <strong className="font-mono text-brand-600">{order.id}</strong></p>)}
-        </div>
-        <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">Vui lòng chuẩn bị tiền mặt khi nhận hoa.</p>
-        <div className="mt-6 flex flex-wrap justify-center gap-3">
-          <Link to="/cart"><Button variant="outline">Xem giỏ hàng</Button></Link>
-          <Link to="/"><Button>Tiếp tục mua sắm</Button></Link>
-        </div>
-      </div>
-    </div>
-  );
 
   return (
     <div className="mx-auto w-full max-w-6xl p-4 sm:p-6 lg:p-8">
@@ -207,15 +180,14 @@ export default function CheckoutPage() {
               <h1 className="text-xl font-bold text-gray-900 dark:text-white">Thông tin nhận hoa</h1>
               <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Kiểm tra người nhận và chọn địa chỉ giao hàng.</p>
             </div>
-            {hasPendingOnline && <p role="status" className="rounded-lg bg-warning-50 p-3 text-sm text-warning-800">Đơn hàng đã được tạo. Bạn có thể thử lại bước thanh toán online; thông tin nhận hoa của đơn không thay đổi.</p>}
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <label htmlFor="recipient-name" className="mb-1.5 block text-sm font-semibold text-gray-700 dark:text-gray-300">Họ và tên người nhận <span className="text-error-500">*</span></label>
-                <input id="recipient-name" value={recipientName} onChange={e => setRecipientName(e.target.value)} disabled={hasPendingOnline} maxLength={100} className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 disabled:opacity-60 dark:border-white/10 dark:bg-gray-800 dark:text-white" />
+                <input id="recipient-name" value={recipientName} onChange={e => setRecipientName(e.target.value)} maxLength={100} className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 disabled:opacity-60 dark:border-white/10 dark:bg-gray-800 dark:text-white" />
               </div>
               <div>
                 <label htmlFor="recipient-phone" className="mb-1.5 block text-sm font-semibold text-gray-700 dark:text-gray-300">Số điện thoại nhận hàng <span className="text-error-500">*</span></label>
-                <input id="recipient-phone" type="tel" value={phone} onChange={e => setPhone(e.target.value)} disabled={hasPendingOnline} maxLength={20} className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 disabled:opacity-60 dark:border-white/10 dark:bg-gray-800 dark:text-white" />
+                <input id="recipient-phone" type="tel" value={phone} onChange={e => setPhone(e.target.value)} maxLength={20} className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 disabled:opacity-60 dark:border-white/10 dark:bg-gray-800 dark:text-white" />
               </div>
             </div>
             <div>
@@ -223,7 +195,7 @@ export default function CheckoutPage() {
               {addressesLoading ? <p role="status" className="text-sm text-gray-500">Đang tải địa chỉ…</p> : addressError ? (
                 <div role="alert" className="text-sm text-error-600">{addressError} <button type="button" className="underline" onClick={() => setAddressRefreshKey(key => key + 1)}>Tải lại</button></div>
               ) : addresses.length ? (
-                <select id="delivery-address" value={selectedAddressId} onChange={e => setSelectedAddressId(e.target.value)} disabled={hasPendingOnline} className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 disabled:opacity-60 dark:border-white/10 dark:bg-gray-800 dark:text-white">
+                <select id="delivery-address" value={selectedAddressId} onChange={e => setSelectedAddressId(e.target.value)} className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 disabled:opacity-60 dark:border-white/10 dark:bg-gray-800 dark:text-white">
                   {addresses.map(address => <option key={address.id} value={address.id}>{address.isDefault ? '★ Mặc định — ' : ''}{[address.addressLine, address.ward, address.district, address.city].filter(Boolean).join(', ')}</option>)}
                 </select>
               ) : (
@@ -241,7 +213,7 @@ export default function CheckoutPage() {
                   ['COD', 'Thanh toán khi nhận hàng', 'Trả tiền mặt khi nhận hoa'],
                 ].map(([value, title, description]) => (
                   <label key={value} className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 ${paymentMethod === value ? 'border-brand-500 bg-brand-50/50 dark:bg-brand-500/10' : 'border-gray-200 dark:border-white/10'}`}>
-                    <input type="radio" name="paymentMethod" checked={paymentMethod === value} onChange={() => setPaymentMethod(value)} disabled={hasPendingOnline} className="mt-1 text-brand-600" />
+                    <input type="radio" name="paymentMethod" checked={paymentMethod === value} onChange={() => setPaymentMethod(value)} className="mt-1 text-brand-600" />
                     <span><strong className="block text-sm text-gray-900 dark:text-white">{title}</strong><small className="mt-1 block text-xs text-gray-500 dark:text-gray-400">{description}</small></span>
                   </label>
                 ))}
@@ -262,7 +234,7 @@ export default function CheckoutPage() {
                     </div>
                   ))}
                 </div>
-                <input value={coupons[group.shopId] || ''} onChange={e => setCoupons(prev => ({ ...prev, [group.shopId]: e.target.value }))} disabled={hasPendingOnline} placeholder="Mã giảm giá của shop (nếu có)" aria-label={'Mã giảm giá ' + group.shopName} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 dark:border-white/10 dark:bg-gray-800 dark:text-white" />
+                <input value={coupons[group.shopId] || ''} onChange={e => setCoupons(prev => ({ ...prev, [group.shopId]: e.target.value }))} placeholder="Mã giảm giá của shop (nếu có)" aria-label={'Mã giảm giá ' + group.shopName} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 dark:border-white/10 dark:bg-gray-800 dark:text-white" />
                 <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
                   <span>Phí vận chuyển (GHN)</span>
                   <span>{feeLoading ? 'Đang tính…' : shippingFees[group.shopId] != null ? formatPrice(shippingFees[group.shopId]) : '—'}</span>
@@ -281,7 +253,7 @@ export default function CheckoutPage() {
             {hasOverStockItem && <p role="alert" className="rounded-lg bg-error-50 p-3 text-sm text-error-600">Có sản phẩm vượt quá tồn kho. Vui lòng điều chỉnh trong giỏ.</p>}
             {orderError && <p role="alert" className="rounded-lg bg-error-50 p-3 text-sm text-error-600">{orderError}</p>}
             <Button type="button" onClick={handlePlaceOrder} disabled={orderLoading || loading || addressesLoading || feeLoading || !feesReady || !selectedAddressId || hasOverStockItem} className="w-full justify-center py-3.5 text-base font-bold">
-              {orderLoading ? 'Đang xử lý…' : hasPendingOnline ? 'Thử lại thanh toán online' : paymentMethod === 'ONLINE' ? 'Thanh toán online →' : 'Xác nhận đặt hàng COD'}
+              {orderLoading ? 'Đang xử lý…' : paymentMethod === 'ONLINE' ? 'Thanh toán online →' : 'Xác nhận đặt hàng COD'}
             </Button>
             <p className="text-center text-xs text-gray-400 dark:text-gray-500">Thông tin thanh toán được bảo vệ an toàn</p>
           </aside>
