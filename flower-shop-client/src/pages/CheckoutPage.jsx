@@ -55,12 +55,21 @@ export default function CheckoutPage() {
     if (userId) {
       accountService.profile().then(profile => {
         if (!active || !profile) return;
-        setRecipientName(profile.fullName || '');
-        setPhone(profile.phone || '');
+        // Hồ sơ chỉ là giá trị dự phòng: không ghi đè tên/số điện thoại đã lấy từ địa chỉ nhận hoa.
+        setRecipientName(prev => prev || profile.fullName || '');
+        setPhone(prev => prev || profile.phone || '');
       }).catch(() => {});
     }
     return () => { active = false; };
   }, [userId]);
+
+  // Người nhận và số điện thoại đi theo địa chỉ đang chọn (vẫn sửa tay được).
+  useEffect(() => {
+    const address = addresses.find(item => item.id === selectedAddressId);
+    if (!address) return;
+    if (address.recipientName) setRecipientName(address.recipientName);
+    if (address.recipientPhone) setPhone(address.recipientPhone);
+  }, [selectedAddressId, addresses]);
 
   useEffect(() => {
     let active = true;
