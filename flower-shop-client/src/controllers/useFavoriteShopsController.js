@@ -6,7 +6,7 @@ import { favoriteShopService } from '../services/favoriteShopService'
  * Controller dùng cho trang:
  * View Favorite Shop
  */
-export function useFavoriteShopsController(user) {
+export function useFavoriteShopsController(user, initializing = false) {
     const navigate = useNavigate()
 
     const [shops, setShops] = useState([])
@@ -43,13 +43,15 @@ export function useFavoriteShopsController(user) {
     }, [user])
 
     useEffect(() => {
+        if (initializing) return
         if (!user) {
-            navigate('/login')
+            navigate('/login?next=%2Ffollowing-shops', { replace: true })
             return
         }
+        if (user.role !== 'CUSTOMER') { setShops([]); return }
 
         load()
-    }, [user, navigate, load])
+    }, [user, initializing, navigate, load])
 
     const remove = async (shopId) => {
         try {
@@ -92,10 +94,11 @@ export function useFavoriteShopToggle(user, shopId) {
     const [error, setError] = useState('')
 
     const loadStatus = useCallback(async () => {
-        if (!user || !shopId) {
+        if (user?.role !== 'CUSTOMER' || !shopId) {
             setFavorite(false)
             return
         }
+        setLoading(true)
 
         try {
             setError('')
@@ -116,6 +119,8 @@ export function useFavoriteShopToggle(user, shopId) {
                 err?.message ||
                 'Không thể kiểm tra trạng thái theo dõi.'
             )
+        } finally {
+            setLoading(false)
         }
     }, [user, shopId])
 

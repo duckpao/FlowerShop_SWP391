@@ -54,12 +54,13 @@ const managerNavItems: NavItem[] = [
 
 const publicNavItems: NavItem[] = [
   { name: 'Trang chủ', path: '/', icon: <GridIcon fontSize={24} /> },
-  { name: 'Cửa hàng', path: '/#shops', icon: <ListIcon fontSize={24} /> },
+  { name: 'Cửa hàng', path: '/shops', icon: <ListIcon fontSize={24} /> },
   { name: 'Sản phẩm', path: '/#products', icon: <BoxCubeIcon fontSize={24} /> },
 ];
 
 const customerNavItems: NavItem[] = [
   ...publicNavItems,
+  { name: 'Cửa hàng đang theo dõi', path: '/following-shops', icon: <ListIcon fontSize={24} /> },
   { name: 'Theo dõi đơn hàng', path: '/orders', icon: <TableIcon fontSize={24} /> },
 ];
 
