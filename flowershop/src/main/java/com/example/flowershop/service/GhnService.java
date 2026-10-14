@@ -116,7 +116,7 @@ public class GhnService {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Chưa cấu hình GHN trên server.");
     }
 
-    // ---- Master data: province -> district -> ward ----
+    // Master data: province -> district -> ward
 
     /** GET /master-data/province. ProvinceID and ProvinceName of every province. */
     public List<Option> provinces() {
@@ -151,7 +151,7 @@ public class GhnService {
         return list;
     }
 
-    // ---- Orders ----
+    // Orders
 
     /**
      * POST /v2/shipping-order/fee. Quotes the shipping fee before the customer orders; the quote
@@ -177,11 +177,11 @@ public class GhnService {
      * POST /v2/shipping-order/create. Creates the waybill and returns order_code, the key for
      * every later call.
      *
-     * Addresses go by name, not id. is_new_*_address=false selects the three-level model, which
-     * requires the district name. cod_amount is what the courier collects (0 for orders already
-     * paid online). payment_type_id 1 makes the shop pay GHN,
-     * because the customer's shipping fee is already part of the order total. required_note
-     * CHOXEMHANGKHONGTHU lets the recipient look but not try.
+     * Addresses go by name; is_new_*_address=false is the three-level model and needs the district.
+     * from_* overrides the pickup address registered on the GHN shop, and return_* sends refused
+     * parcels back to the same address, so one GHN shop can serve many branches.
+     * cod_amount is 0 for orders already paid online; payment_type_id 1 makes the shop pay GHN
+     * because the customer's fee is already in the order total.
      */
     public CreateOrderResult createOrder(String toName, String toPhone, Place to,
                                          String fromName, String fromPhone, Place from,
@@ -202,6 +202,13 @@ public class GhnService {
         body.put("from_district_name", from.district());
         body.put("from_province_name", from.province());
         body.put("is_new_from_address", false);
+        body.put("return_name", fromName);
+        body.put("return_phone", fromPhone);
+        body.put("return_address", from.address());
+        body.put("return_ward_name", from.ward());
+        body.put("return_district_name", from.district());
+        body.put("return_province_name", from.province());
+        body.put("is_new_return_address", false);
         body.put("weight", DEFAULT_WEIGHT_GRAM);
         body.put("length", DEFAULT_LENGTH_CM);
         body.put("width", DEFAULT_WIDTH_CM);
@@ -274,7 +281,7 @@ public class GhnService {
         post("/shiip/public-api/v2/shipping-order/update", body);
     }
 
-    // ---- HTTP ----
+    // HTTP
 
     private JsonNode get(String path) {
         return send(base(path).GET().build(), path);
