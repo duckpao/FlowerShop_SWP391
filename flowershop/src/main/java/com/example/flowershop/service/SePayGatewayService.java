@@ -50,6 +50,8 @@ public class SePayGatewayService {
     private static final String DEPOSIT_EXPIRED_REASON = "Quá hạn 24 giờ không thanh toán tiền cọc";
     /** Thời hạn thanh toán tiền cọc kể từ lúc tạo đơn AWAITING_DEPOSIT. */
     public static final long DEPOSIT_DEADLINE_HOURS = 24;
+    /** Thời hạn thanh toán đơn thường kể từ lúc tạo đơn. */
+    public static final long PAYMENT_WINDOW_MINUTES = 10;
 
     private final OrderRepository orderRepository;
     private final PaymentRepository paymentRepository;
@@ -95,7 +97,7 @@ public class SePayGatewayService {
         if (order.getStatus() == OrderStatus.AWAITING_DEPOSIT) {
             return order.getCreatedDate().plusHours(DEPOSIT_DEADLINE_HOURS).isBefore(now);
         }
-        return order.getStatus() == OrderStatus.PENDING && order.getCreatedDate().plusMinutes(10).isBefore(now);
+        return order.getStatus() == OrderStatus.PENDING && order.getCreatedDate().plusMinutes(PAYMENT_WINDOW_MINUTES).isBefore(now);
     }
 
     /** Thời hạn hiển thị cho người dùng: đơn custom (đặt cọc) 24 giờ, đơn thường 10 phút. */

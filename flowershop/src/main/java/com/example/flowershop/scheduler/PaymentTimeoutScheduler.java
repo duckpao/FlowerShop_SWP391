@@ -27,7 +27,7 @@ public class PaymentTimeoutScheduler {
      */
     @Scheduled(fixedDelay = 30000)
     public void scanAndCancelExpiredOrders() {
-        LocalDateTime threshold = LocalDateTime.now().minusMinutes(10);
+        LocalDateTime threshold = LocalDateTime.now().minusMinutes(SePayGatewayService.PAYMENT_WINDOW_MINUTES);
         List<Order> expiredOrders = new ArrayList<>(
                 orderRepository.findByStatusAndCreatedDateBefore(OrderStatus.PENDING, threshold));
         // Đơn đặt cọc (AWAITING_DEPOSIT) quá hạn cọc thì cũng hủy.
