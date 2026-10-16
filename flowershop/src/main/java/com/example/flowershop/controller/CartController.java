@@ -21,13 +21,14 @@ public class CartController {
 
     private final CartService cartService;
 
+    /** Chặn truy cập chéo: userId trên URL phải trùng user đang đăng nhập (lấy từ JWT), nếu không trả 403. */
     private static void requireOwner(String userId, CurrentUser currentUser) {
         if (currentUser == null || !userId.equals(currentUser.id())) throw ApiException.forbidden("Không có quyền truy cập giỏ hàng này.");
     }
 
     /**
      * Thêm sản phẩm vào giỏ hàng.
-     * POST /api/cart/{userId}/add
+     * POST /api/cart/{userId}/add — body: productId + quantity (validate bằng @Valid), trả 201 + item sau khi thêm/cộng dồn.
      */
     @PostMapping("/{userId}/add")
     public ResponseEntity<CartItemResponse> addToCart(
@@ -40,7 +41,7 @@ public class CartController {
     }
 
     /**
-     * Xem toàn bộ giỏ hàng của user.
+     * Xem toàn bộ giỏ hàng của user (danh sách item + tổng số lượng + tổng tiền).
      * GET /api/cart/{userId}
      */
     @GetMapping("/{userId}")
@@ -50,7 +51,7 @@ public class CartController {
     }
 
     /**
-     * Cập nhật số lượng 1 cart item.
+     * Đặt lại số lượng cho 1 cart item (giá trị tuyệt đối, backend kiểm tra tồn kho).
      * PUT /api/cart/{userId}/items/{itemId}
      */
     @PutMapping("/{userId}/items/{itemId}")
@@ -64,7 +65,7 @@ public class CartController {
     }
 
     /**
-     * Xóa 1 sản phẩm khỏi giỏ hàng.
+     * Xóa 1 sản phẩm khỏi giỏ hàng; trả 204 No Content.
      * DELETE /api/cart/{userId}/items/{itemId}
      */
     @DeleteMapping("/{userId}/items/{itemId}")

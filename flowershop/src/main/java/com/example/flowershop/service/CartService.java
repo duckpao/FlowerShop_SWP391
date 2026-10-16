@@ -43,7 +43,10 @@ public class CartService {
 
     /**
      * Thêm sản phẩm vào giỏ hàng.
-     * Nếu sản phẩm đã tồn tại trong giỏ → cộng dồn số lượng.
+     * Các bước: kiểm tra user -> kiểm tra sản phẩm tồn tại và không INACTIVE -> kiểm tra tồn kho
+     * (bỏ qua với hàng CUSTOM) -> nếu đã có trong giỏ thì cộng dồn (kiểm tra lại tồn kho với tổng mới),
+     * nếu chưa thì tạo CartItem mới.
+     * @throws ApiException 404 nếu không có user/sản phẩm; 400 nếu hết hàng hoặc vượt tồn kho
      */
     @Transactional
     public CartItemResponse addToCart(String userId, AddToCartRequest request) {
@@ -100,7 +103,8 @@ public class CartService {
     }
 
     /**
-     * Lấy toàn bộ giỏ hàng của user.
+     * Lấy toàn bộ giỏ hàng của user: map từng CartItem sang response (kèm ảnh, tồn kho, thành tiền)
+     * và tính totalItems (số dòng), totalQuantity (tổng số lượng), grandTotal (tổng tiền theo giá hiện tại).
      */
     @Transactional(readOnly = true)
     public CartResponse getCart(String userId) {
@@ -130,7 +134,8 @@ public class CartService {
     }
 
     /**
-     * Cập nhật số lượng của 1 cart item.
+     * Đặt lại số lượng của 1 cart item. Kiểm tra item thuộc về user, rồi kiểm tra số lượng mới
+     * không vượt tồn kho khả dụng (bỏ qua với hàng CUSTOM).
      */
     @Transactional
     public CartItemResponse updateCartItem(String userId, String cartItemId, UpdateCartItemRequest request) {
@@ -151,9 +156,7 @@ public class CartService {
         return toCartItemResponse(cartItem);
     }
 
-    /**
-     * Xóa 1 sản phẩm khỏi giỏ hàng.
-     */
+    /** Xóa 1 cart item khỏi giỏ (sau khi xác nhận item thuộc về user). */
     @Transactional
     public void removeCartItem(String userId, String cartItemId) {
         CartItem cartItem = getCartItemOrThrow(cartItemId, userId);
@@ -162,6 +165,7 @@ public class CartService {
 
     /**
      * Xóa nhiều cart items theo danh sách ID (dùng sau khi đặt hàng thành công).
+     * Chỉ xóa item thuộc về user, id lạ hoặc của người khác bị bỏ qua âm thầm.
      */
     @Transactional
     public void clearCartItems(String userId, List<String> cartItemIds) {
@@ -174,6 +178,7 @@ public class CartService {
 
     // ===================== HELPER METHODS =====================
 
+    /** Lấy CartItem theo id; 404 nếu không có, 403 nếu item thuộc user khác. */
     private CartItem getCartItemOrThrow(String cartItemId, String userId) {
         CartItem cartItem = cartItemRepository.findById(cartItemId)
                 .orElseThrow(() -> ApiException.notFound("Không tìm thấy cart item với id: " + cartItemId));
@@ -185,6 +190,10 @@ public class CartService {
         return cartItem;
     }
 
+    /**
+     * Chuyển CartItem sang DTO trả về frontend: tính thành tiền = giá hiện tại x số lượng,
+     * kèm danh sách ảnh (theo displayOrder), tồn kho khả dụng và thông tin shop để FE gom đơn theo shop.
+     */
     CartItemResponse toCartItemResponse(CartItem cartItem) {
         Product product = cartItem.getProduct();
         BigDecimal itemTotal = product.getPrice().multiply(BigDecimal.valueOf(cartItem.getQuantity()));

@@ -21,7 +21,8 @@ public class PaymentController {
     private final PaymentService paymentService;
 
     /**
-     * PHASE 5: Khởi tạo phiên thanh toán SePay Gateway (an toàn, tính tiền server-side)
+     * PHASE 5: Khởi tạo phiên thanh toán SePay Gateway (an toàn, tính tiền server-side).
+     * Trả checkoutUrl + các field đã ký HMAC để FE POST form sang cổng SePay. Chỉ chủ đơn mới tạo được.
      * POST /api/payments/sepay/create
      */
     @PostMapping("/payments/sepay/create")
@@ -45,6 +46,10 @@ public class PaymentController {
         return ResponseEntity.ok(sePayGatewayService.createGroupPayment(request, currentUser.id()));
     }
 
+    /**
+     * Khách đóng/hủy cổng SePay: hủy giao dịch + đơn tương ứng.
+     * POST /api/payments/sepay/cancel/{invoiceNumber} — trả {"paid": true} nếu thực ra đã thanh toán (không hủy được).
+     */
     @PostMapping("/payments/sepay/cancel/{invoiceNumber}")
     public Map<String, Boolean> cancelCheckout(@PathVariable String invoiceNumber,
                                                @AuthenticationPrincipal CurrentUser currentUser) {
@@ -52,7 +57,7 @@ public class PaymentController {
     }
 
     /**
-     * Khởi tạo form thanh toán theo orderId (endpoint tương thích)
+     * Khởi tạo form thanh toán theo orderId (endpoint tương thích với bản cũ)
      * POST /api/sepay/checkout/{orderId}
      */
     @PostMapping("/sepay/checkout/{orderId}")
@@ -85,7 +90,7 @@ public class PaymentController {
     }
 
     /**
-     * Truy vấn trạng thái thanh toán theo orderId
+     * Truy vấn trạng thái thanh toán theo orderId (có đối soát chủ động với SePay trước khi trả kết quả)
      * GET /api/payments/status-by-order/{orderId} và GET /api/payment/status/{orderId}
      */
     @GetMapping({"/payments/status-by-order/{orderId}", "/payment/status/{orderId}"})
@@ -103,7 +108,7 @@ public class PaymentController {
     }
 
     /**
-     * Nhận Webhook giao dịch tài khoản ngân hàng trực tiếp từ SePay
+     * Nhận Webhook giao dịch tài khoản ngân hàng trực tiếp từ SePay (không dùng JWT, xác thực bằng API key ở header Authorization)
      * POST /api/webhook/sepay
      */
     @PostMapping("/webhook/sepay")

@@ -2,27 +2,35 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import cartApi from '../api/cartApi';
 import { API_BASE } from '../apiBase';
 
-// Quản lý giỏ hàng khách tạm thời trong bộ nhớ (In-memory), không lưu vào localStorage
+// Giỏ khách nằm ở biến module (sống qua việc đổi route, mất khi F5/đóng tab) -> tránh lưu dữ liệu giỏ ở client
 let inMemoryGuestItems = [];
 
-// Xóa key cũ trong localStorage nếu còn sót lại
+// Dọn key localStorage của phiên bản cũ từng lưu giỏ khách
 try {
   localStorage.removeItem('flower_guest_cart');
   localStorage.removeItem('flower_checkout_info');
 } catch {}
 
+/** Đọc danh sách item giỏ của khách từ biến module (không đụng localStorage). */
 function getGuestCart() {
   return inMemoryGuestItems;
 }
 
+/** Ghi đè danh sách item giỏ của khách vào biến module. */
 function saveGuestCart(items) {
   inMemoryGuestItems = items;
 }
 
+/** Xóa sạch giỏ khách (gọi sau khi đã merge thành công vào tài khoản). */
 function clearGuestCart() {
   inMemoryGuestItems = [];
 }
 
+/**
+ * Tính lại tổng từ danh sách item để có dạng dữ liệu giống response backend:
+ * { items, totalItems (số dòng), totalQuantity (tổng số lượng), grandTotal (tổng tiền) }.
+ * Giúp UI render giỏ khách và giỏ user bằng cùng một code.
+ */
 function calculateGuestTotals(items) {
   const totalQuantity = items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
   const grandTotal = items.reduce((sum, item) => sum + (Number(item.itemTotal) || 0), 0);
@@ -43,14 +51,19 @@ export function useCart(userId) {
   const [cart, setCart] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  // Chặn effect đồng bộ giỏ khách chạy chồng nhau (tránh cộng trùng số lượng lên server)
   const isSyncingRef = useRef(false);
 
+  /** Ghi thông báo lỗi vào state `error` (UI hiển thị) và tắt cờ loading. */
   const handleError = (err) => {
     setError(err.message || 'Có lỗi xảy ra.');
     setLoading(false);
   };
 
-  /** Fetch giỏ hàng: nếu có userId lấy từ BE, nếu không lấy từ localStorage của khách */
+  /**
+   * Tải giỏ hàng vào state `cart`.
+   * Có userId -> GET /cart/{userId} từ backend; không có -> dựng từ giỏ in-memory của khách.
+   */
   const fetchCart = useCallback(async () => {
     if (!userId) {
       const guestItems = getGuestCart();
@@ -70,7 +83,7 @@ export function useCart(userId) {
     }
   }, [userId]);
 
-  /** Đồng bộ giỏ khách vào tài khoản user khi vừa đăng nhập */
+  /** Đồng bộ giỏ khách vào tài khoản user khi vừa đăng nhập (merge bằng cách addToCart từng món, BE tự cộng dồn) */
   useEffect(() => {
     if (!userId || isSyncingRef.current) return;
 
@@ -87,17 +100,28 @@ export function useCart(userId) {
             await cartApi.addToCart(userId, { productId, quantity });
           }
         }
+        // Chỉ xóa giỏ khách khi tất cả đã đẩy lên thành công; lỗi giữa chừng thì giữ lại để lần sau thử lại
         clearGuestCart();
       } catch (err) {
         console.warn('Lỗi khi đồng bộ giỏ hàng của khách vào tài khoản:', err);
       } finally {
         isSyncingRef.current = false;
-        fetchCart();
+        fetchCart(); // luôn tải lại để hiển thị giỏ server sau khi merge
       }
     })();
   }, [userId, fetchCart]);
 
-  /** Thêm sản phẩm vào giỏ */
+  /**
+   * Thêm sản phẩm vào giỏ (cộng dồn nếu đã có).
+   * - User: POST /cart/{userId}/add rồi fetchCart; backend kiểm tra tồn kho và trạng thái sản phẩm.
+   * - Guest: lấy thông tin sản phẩm (từ productData hoặc API public), kiểm tra tồn kho tại client,
+   *   rồi cộng dồn hoặc thêm dòng mới vào giỏ in-memory.
+   * productData (tùy chọn) chỉ dùng cho guest để hiển thị tên/giá/ảnh mà không phải gọi lại API.
+   * Ném lỗi lên cho caller (nút Add to cart) để hiện thông báo.
+   * @param {string} productId
+   * @param {number} [quantity=1]
+   * @param {object|null} [productData]
+   */
   const addToCart = useCallback(async (productId, quantity = 1, productData = null) => {
     setLoading(true);
     setError(null);
@@ -116,9 +140,10 @@ export function useCart(userId) {
       return;
     }
 
-    // 2. Nếu là Guest (chưa đăng nhập): lưu vào localStorage
+    // 2. Guest: lưu in-memory, tự kiểm tra tồn kho ở client (server chưa biết giỏ này)
     try {
       let product = productData;
+      // Không có dữ liệu sản phẩm từ trang gọi -> tự lấy từ API public
       if (!product) {
         try {
           const res = await fetch(`${API_BASE}/api/public/products/${productId}`);
@@ -136,6 +161,7 @@ export function useCart(userId) {
       );
 
       const price = Number(product?.price || 0);
+      // Không biết tồn kho thì cho phép tối đa 99; backend vẫn kiểm tra lại khi tạo đơn
       const stock = product?.stock != null ? Number(product.stock) : 99;
 
       if (stock <= 0) {
@@ -149,6 +175,7 @@ export function useCart(userId) {
         if (newQty > currentStock) {
           throw new Error(`Tổng số lượng trong giỏ (${newQty}) vượt quá tồn kho hiện có (${currentStock}).`);
         }
+        // Sản phẩm đã có trong giỏ -> cộng dồn số lượng, giữ nguyên giá lúc thêm lần đầu
         guestItems[existingIdx] = {
           ...currentItem,
           quantity: newQty,
@@ -158,6 +185,7 @@ export function useCart(userId) {
         if (quantity > stock) {
           throw new Error(`Số lượng yêu cầu (${quantity}) vượt quá tồn kho hiện có (${stock}).`);
         }
+        // Lưu bản tóm tắt sản phẩm để CartItem render giống item từ backend
         const productSummary = {
           id: productId,
           name: product?.name || 'Sản phẩm',
@@ -170,7 +198,7 @@ export function useCart(userId) {
         };
 
         guestItems.push({
-          id: 'guest-' + productId,
+          id: 'guest-' + productId, // id giả, mỗi sản phẩm 1 dòng
           productId,
           product: productSummary,
           quantity: quantity,
@@ -189,7 +217,14 @@ export function useCart(userId) {
     }
   }, [userId, fetchCart]);
 
-  /** Cập nhật số lượng sản phẩm trong giỏ */
+  /**
+   * Đặt số lượng mới (giá trị tuyệt đối, không phải delta) cho 1 dòng trong giỏ.
+   * - User: PUT lên backend (backend kiểm tra tồn kho), rồi luôn fetchCart để khớp server.
+   * - Guest: tự kiểm tra tồn kho ở client, cập nhật quantity + itemTotal trong mảng in-memory.
+   * Lỗi chỉ được set vào `error`, không ném ra ngoài (khác addToCart).
+   * @param {string} itemId id dòng giỏ ('guest-<productId>' với khách)
+   * @param {number} quantity số lượng mới
+   */
   const updateItem = useCallback(async (itemId, quantity) => {
     setLoading(true);
     setError(null);
@@ -201,6 +236,7 @@ export function useCart(userId) {
       } catch (err) {
         handleError(err);
       } finally {
+        // Dù thành công hay lỗi đều tải lại để UI khớp với số lượng thực tế trên server
         await fetchCart();
         setLoading(false);
       }
@@ -233,7 +269,11 @@ export function useCart(userId) {
     }
   }, [userId, fetchCart]);
 
-  /** Xóa sản phẩm khỏi giỏ */
+  /**
+   * Xóa 1 dòng sản phẩm khỏi giỏ.
+   * - User: gọi DELETE lên backend rồi fetchCart để đồng bộ (kể cả khi lỗi).
+   * - Guest: lọc item khỏi mảng in-memory và tính lại tổng.
+   */
   const removeItem = useCallback(async (itemId) => {
     setLoading(true);
     setError(null);
@@ -264,7 +304,8 @@ export function useCart(userId) {
     }
   }, [userId, fetchCart]);
 
-  // Tự động tải giỏ hàng ngay khi mở web hoặc chuyển tab
+  // Tải giỏ khi mount/đổi user, và tải lại khi quay lại tab/cửa sổ để badge giỏ không bị cũ
+  // (vd: đã thanh toán xong ở tab khác, giỏ đã bị xóa phía server)
   useEffect(() => {
     fetchCart();
 

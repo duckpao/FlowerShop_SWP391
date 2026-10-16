@@ -5,13 +5,20 @@ import PageBreadCrumb from '../components/common/PageBreadCrumb';
 import Button from '../components/ui/button/Button';
 import { TrashBinIcon } from '../icons';
 
+/**
+ * Trang giỏ hàng (/cart): nhận state/hàm từ useCart qua props, gom item theo shop, cho tick chọn món,
+ * chỉnh số lượng (updateItem), xóa (removeItem) và chuyển sang /checkout với các món đã chọn.
+ */
 export default function CartPage({ cart, loading, error, fetchCart, updateItem, removeItem, userId, user }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  // ?item=<id> do trang checkout gửi lại khi bấm "Quay lại giỏ hàng" -> khôi phục các món đã tick
   const requestedIds = searchParams.getAll('item');
   const requestedIdsKey = searchParams.toString();
+  // null = chưa khởi tạo lựa chọn (đang chờ giỏ tải xong); khác với [] = người dùng bỏ chọn hết
   const [selectedItemIds, setSelectedItemIds] = useState(null);
 
+  // Đồng bộ lựa chọn với giỏ: lần đầu chọn theo URL (hoặc chọn tất cả), các lần sau chỉ loại món đã bị xóa
   useEffect(() => {
     if (cart?.items) {
       setSelectedItemIds(previous => {
@@ -41,11 +48,14 @@ export default function CartPage({ cart, loading, error, fetchCart, updateItem, 
       shopName: shopName || 'Cửa hàng',
       items: items.filter(item => item.product?.shopId === shopId),
     }));
+  // Chặn sang checkout nếu món đã chọn vượt tồn kho
   const hasOverStockItem = selectedItems.some(item => item.product?.stock != null && item.quantity > item.product.stock);
 
+  // Tick/bỏ tick 1 món
   const handleToggleItem = itemId => {
     setSelectedItemIds(previous => (previous || []).includes(itemId) ? previous.filter(id => id !== itemId) : [...(previous || []), itemId]);
   };
+  // Tick/bỏ tick cả shop: đã chọn đủ thì bỏ hết, ngược lại chọn thêm các món còn thiếu
   const handleToggleShop = group => {
     const ids = group.items.map(item => item.id);
     const allSelected = ids.every(id => selectedItemIds?.includes(id));
@@ -53,13 +63,15 @@ export default function CartPage({ cart, loading, error, fetchCart, updateItem, 
       ? (previous || []).filter(id => !ids.includes(id))
       : [...new Set([...(previous || []), ...ids])]);
   };
+  // Tick/bỏ tick tất cả: đã chọn đủ thì bỏ hết, ngược lại chọn hết
   const handleToggleSelectAll = () => {
     setSelectedItemIds(selectedItemIds?.length === items.length ? [] : items.map(item => item.id));
   };
+  // Chuyển sang /checkout, truyền các món đã chọn qua query (checkout tự đọc lại từ giỏ, không tin giá từ URL)
   const continueToCheckout = () => {
     if (!selectedItems.length || hasOverStockItem) return;
     if (!userId || !user) {
-      navigate('/login?next=/cart');
+      navigate('/login?next=/cart'); // khách chưa đăng nhập: đăng nhập xong quay lại giỏ (giỏ khách được merge vào tài khoản)
       return;
     }
     if (user.role !== 'CUSTOMER') return;
@@ -151,7 +163,7 @@ export default function CartPage({ cart, loading, error, fetchCart, updateItem, 
                           <span className="text-2xl">💐</span>
                         )}
                       </Link>
-
+rong @
                       {/* Tên & Shop */}
                       <div className="flex-1 min-w-0">
                         <Link
@@ -195,9 +207,24 @@ export default function CartPage({ cart, loading, error, fetchCart, updateItem, 
                         >
                           -
                         </button>
-                        <span className="px-3 py-1 text-sm font-semibold text-gray-800 dark:text-white min-w-[32px] text-center">
-                          {item.quantity}
-                        </span>
+                        {/* Nhập số lượng: key theo quantity để reset khi server/giỏ đổi; áp dụng khi blur hoặc Enter */}
+                        <input
+                          key={item.quantity}
+                          type="number"
+                          min={1}
+                          max={product.stock ?? undefined}
+                          defaultValue={item.quantity}
+                          disabled={loading}
+                          onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+                          onBlur={(e) => {
+                            let q = Math.floor(Number(e.target.value));
+                            if (!(q >= 1)) q = item.quantity;
+                            if (product.stock != null) q = Math.min(q, product.stock);
+                            if (q === item.quantity) e.target.value = item.quantity;
+                            else updateItem(item.id, q);
+                          }}
+                          className="w-12 py-1 text-sm font-semibold text-center text-gray-800 dark:text-white bg-transparent outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                        />
                         <button
                           type="button"
                           onClick={() => updateItem(item.id, item.quantity + 1)}

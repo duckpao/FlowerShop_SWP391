@@ -12,14 +12,15 @@ import Button from '../components/ui/button/Button'
 export default function PaymentPendingPage() {
   const { user, busy: authBusy } = useAuth()
   const [searchParams] = useSearchParams()
+  // Danh sách đơn cần trả: /payment/pending?order=<id>&order=<id>
   const ids = searchParams.getAll('order')
-  const idsKey = ids.join(',')
+  const idsKey = ids.join(',') // chuỗi ổn định làm dependency cho effect
 
   const [orders, setOrders] = useState(null)
   const [error, setError] = useState('')
   const [paying, setPaying] = useState(false)
-  const [left, setLeft] = useState(0)
-  const [reloadKey, setReloadKey] = useState(0)
+  const [left, setLeft] = useState(0) // số giây còn lại để trả tiền
+  const [reloadKey, setReloadKey] = useState(0) // tăng để ép tải lại đơn
 
   useEffect(() => {
     if (!user || !idsKey) return undefined
@@ -30,11 +31,14 @@ export default function PaymentPendingPage() {
     return () => { active = false }
   }, [user, idsKey, reloadKey])
 
+  // payable: còn hạn trả (backend chỉ trả paymentSecondsLeft cho đơn chưa trả và chưa hết hạn)
   const payable = (orders || []).filter(o => o.paymentSecondsLeft != null)
   const paid = (orders || []).filter(o => o.paymentStatus === 'SUCCESS' && o.status !== 'CANCELLED')
   const cancelledOrders = (orders || []).filter(o => o.status === 'CANCELLED')
+  // Nhiều đơn gộp 1 giao dịch -> lấy thời gian của đơn sắp hết hạn nhất
   const serverLeft = payable.length ? Math.min(...payable.map(o => o.paymentSecondsLeft)) : 0
 
+  // Đồng hồ đếm ngược chạy ở client, nhưng gốc thời gian luôn lấy từ server (tránh lệch giờ máy khách)
   useEffect(() => { setLeft(serverLeft) }, [serverLeft])
   useEffect(() => {
     if (!payable.length) return undefined
@@ -48,6 +52,7 @@ export default function PaymentPendingPage() {
   }, [left, payable.length])
 
   const total = payable.reduce((sum, o) => sum + Number(o.totalAmount || 0), 0)
+  // Trả lại: 1 đơn -> giao dịch đơn; nhiều đơn -> giao dịch gộp (giống CheckoutPage)
   const pay = async () => {
     setPaying(true)
     setError('')

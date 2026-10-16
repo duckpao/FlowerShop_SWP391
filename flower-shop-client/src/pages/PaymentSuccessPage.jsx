@@ -5,9 +5,12 @@ import PageMeta from '../components/common/PageMeta';
 import Button from '../components/ui/button/Button';
 import { useCartContext } from '../context/CartContext';
 
+// Trang SePay redirect về sau khi thanh toán. Không tin việc redirect là đã trả tiền:
+// poll backend (xác nhận qua webhook/IPN của SePay) tới khi isPaid = true hoặc hết số lần thử.
 export default function PaymentSuccessPage() {
   const { fetchCart } = useCartContext();
   const [searchParams] = useSearchParams();
+  // SePay có thể trả mã hóa đơn bằng 1 trong 2 tên query; orderId là đường dự phòng khi không có hóa đơn
   const invoiceNumber = searchParams.get('invoice_number') || searchParams.get('order_invoice_number');
   const orderId = searchParams.get('orderId');
 
@@ -15,6 +18,7 @@ export default function PaymentSuccessPage() {
   const [paymentData, setPaymentData] = useState(null);
   const [pollCount, setPollCount] = useState(0);
 
+  // Poll tối đa 10 lần x 2,5s ≈ 25s; quá hạn thì hiện "đang xác nhận" thay vì báo lỗi (webhook có thể đến trễ)
   const maxAttempts = 10;
   const pollIntervalMs = 2500;
   const timerRef = useRef(null);
@@ -22,6 +26,8 @@ export default function PaymentSuccessPage() {
   useEffect(() => {
     let attempts = 0;
 
+    // Hỏi backend trạng thái thanh toán (theo invoice, dự phòng theo orderId); dừng khi đã trả/đã hủy,
+    // lỗi hoặc chưa xong thì hẹn gọi lại sau pollIntervalMs cho tới maxAttempts
     const checkStatus = async () => {
       try {
         let res;
@@ -35,7 +41,7 @@ export default function PaymentSuccessPage() {
         if (data && (data.invoiceNumber || data.orderId || data.paymentId)) {
           setPaymentData(data);
 
-          // Nếu đã xác nhận thanh toán thành công
+          // Dừng poll khi đã trả tiền hoặc đơn đã bị hủy (vd: hết hạn thanh toán)
           if (data.isPaid === true || data.orderStatus === 'CANCELLED') {
             setLoading(false);
             return;
@@ -67,15 +73,18 @@ export default function PaymentSuccessPage() {
   }, [invoiceNumber, orderId]);
 
   const isConfirmed = paymentData?.isPaid === true;
+  // Đã trả xong: bỏ mã hóa đơn đang chờ và tải lại giỏ (backend đã xóa các món đã đặt)
   useEffect(() => {
     if (isConfirmed) {
       sessionStorage.removeItem('flower_pending_invoice');
       fetchCart();
     }
   }, [isConfirmed, fetchCart]);
+  // Đơn đặt cọc: lần này mới trả DEPOSIT, còn phải trả FINAL trước khi giao
   const isDeposit = paymentData?.paymentType === 'DEPOSIT';
   const [payingFinal, setPayingFinal] = useState(false);
   const [finalError, setFinalError] = useState('');
+  // Tạo giao dịch FINAL cho phần còn lại và chuyển sang cổng SePay
   const payRemaining = async () => {
     setPayingFinal(true);
     setFinalError('');
@@ -86,6 +95,7 @@ export default function PaymentSuccessPage() {
       setPayingFinal(false);
     }
   };
+  // Định dạng số tiền VND
   const formatPrice = (amount) =>
     new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount || 0);
 

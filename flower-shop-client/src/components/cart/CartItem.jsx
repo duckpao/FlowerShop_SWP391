@@ -9,14 +9,17 @@
 export default function CartItem({ item, onUpdate, onRemove }) {
   const { id, product, quantity, itemTotal } = item;
 
+  // Giảm 1; không cho xuống dưới 1 (muốn bỏ món thì dùng nút xóa)
   const handleDecrease = () => {
     if (quantity > 1) onUpdate(id, quantity - 1);
   };
 
+  // Tăng 1; giới hạn tồn kho được chặn bằng nút disabled và kiểm tra lại ở useCart/backend
   const handleIncrease = () => {
     onUpdate(id, quantity + 1);
   };
 
+  // Định dạng số tiền VND
   const formatPrice = (amount) =>
     new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount);
 
@@ -46,7 +49,23 @@ export default function CartItem({ item, onUpdate, onRemove }) {
       {/* Điều chỉnh số lượng */}
       <div style={styles.quantityControl}>
         <button style={styles.qtyBtn} onClick={handleDecrease}>−</button>
-        <span style={styles.qtyDisplay}>{quantity}</span>
+        {/* key theo quantity để reset khi giỏ đổi; áp dụng khi blur hoặc Enter */}
+        <input
+          key={quantity}
+          type="number"
+          min={1}
+          max={product.stock ?? undefined}
+          defaultValue={quantity}
+          onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+          onBlur={(e) => {
+            let q = Math.floor(Number(e.target.value));
+            if (!(q >= 1)) q = quantity;
+            if (product.stock != null) q = Math.min(q, product.stock);
+            if (q === quantity) e.target.value = quantity;
+            else onUpdate(id, q);
+          }}
+          style={styles.qtyDisplay}
+        />
         <button
           style={styles.qtyBtn}
           onClick={handleIncrease}
@@ -115,7 +134,7 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'center',
   },
-  qtyDisplay: { fontSize: 14, fontWeight: 600, minWidth: 24, textAlign: 'center' },
+  qtyDisplay: { fontSize: 14, fontWeight: 600, width: 44, textAlign: 'center', border: '1px solid #ddd', borderRadius: 6, padding: '4px 0' },
   itemTotal: { minWidth: 90, textAlign: 'right' },
   totalAmount: { fontSize: 14, fontWeight: 700, color: '#e8604c' },
   removeBtn: {

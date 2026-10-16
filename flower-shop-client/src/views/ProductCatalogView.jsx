@@ -37,6 +37,7 @@ export default function ProductCatalogView({ auth, shops, isEmbedded = false }) 
   const favorites = useFavoriteToggle(auth?.user);
   const cartContext = useCartContext();
 
+  // Nút giỏ trên thẻ sản phẩm: thêm 1 cái; chặn click lan ra thẻ <Link> bao ngoài để không chuyển sang trang chi tiết
   const handleQuickAdd = async (e, product) => {
     e.preventDefault();
     e.stopPropagation();

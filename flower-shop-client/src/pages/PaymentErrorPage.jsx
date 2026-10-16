@@ -2,10 +2,12 @@ import { useSearchParams, Link } from 'react-router';
 import PageMeta from '../components/common/PageMeta';
 import Button from '../components/ui/button/Button';
 
+// Trang kết quả khi thanh toán không thành công / bị hủy (nhận cờ cancelled, deposit từ PaymentCancelPage)
 export default function PaymentErrorPage() {
   const [searchParams] = useSearchParams();
   const invoiceNumber = searchParams.get('invoice_number') || searchParams.get('order_invoice_number');
   const orderId = searchParams.get('orderId');
+  // cancelled=1: khách chủ động hủy ở cổng (khác với lỗi/không xác nhận được)
   const cancelled = searchParams.get('cancelled') === '1';
   const deposit = searchParams.get('deposit') === '1'; // thanh toán cọc/phần còn lại: đơn không bị hủy
 
