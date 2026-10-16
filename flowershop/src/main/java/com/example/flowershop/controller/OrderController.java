@@ -22,12 +22,13 @@ public class OrderController {
 
     private final OrderService orderService;
 
+    /** Chặn truy cập chéo: userId trên URL phải trùng user đang đăng nhập (JWT), nếu không trả 403. */
     private static void requireOwner(String userId, CurrentUser currentUser) {
         if (currentUser == null || !userId.equals(currentUser.id())) throw ApiException.forbidden("Không có quyền truy cập đơn hàng này.");
     }
 
     /**
-     * Tạo đơn hàng từ các sản phẩm đã chọn trong giỏ.
+     * Tạo 1 đơn hàng (1 shop) từ các sản phẩm đã chọn trong giỏ; trả 201 + thông tin đơn.
      * POST /api/orders/{userId}
      */
     @PostMapping("/{userId}")
@@ -41,7 +42,8 @@ public class OrderController {
     }
 
     /**
-     * Đặt nhiều đơn một lúc (mỗi shop một đơn, kiểu giỏ hàng nhiều shop).
+     * Đặt nhiều đơn một lúc (mỗi shop một đơn, kiểu giỏ hàng nhiều shop) — đây là API checkout đang dùng.
+     * Cùng một transaction: lỗi ở shop nào thì cả nhóm rollback.
      * POST /api/orders/{userId}/batch
      */
     @PostMapping("/{userId}/batch")
@@ -54,7 +56,7 @@ public class OrderController {
     }
 
     /**
-     * Ước tính phí giao hàng GHN cho checkout.
+     * Ước tính phí giao hàng GHN cho checkout (bản GET, trả {"shippingFee": số tiền}).
      * GET /api/orders/{userId}/shipping-fee?shopId=...&addressId=...
      */
     @GetMapping("/{userId}/shipping-fee")
@@ -79,7 +81,7 @@ public class OrderController {
     }
 
     /**
-     * Lịch sử đơn hàng của user.
+     * Lịch sử đơn hàng của user, mới nhất trước.
      * GET /api/orders/{userId}
      */
     @GetMapping("/{userId}")

@@ -8,18 +8,29 @@ import PageMeta from '../components/common/PageMeta';
 import PageBreadCrumb from '../components/common/PageBreadCrumb';
 import Button from '../components/ui/button/Button';
 
+/** Định dạng số tiền sang VND kiểu Việt Nam (vd 150.000 ₫); null/undefined coi như 0. */
 const formatPrice = amount =>
   new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount || 0);
 
+/**
+ * Trang xác nhận đơn hàng (/checkout?item=<id>&item=<id>).
+ * Luồng: lọc item đã chọn từ giỏ -> gom theo shop -> chọn địa chỉ -> tính phí ship GHN mỗi shop
+ * -> handlePlaceOrder tạo đơn (mỗi shop 1 đơn) -> ONLINE sang SePay | COD sang trang thành công.
+ * Chỉ CUSTOMER đã đăng nhập mới đặt được; số tiền cuối cùng do backend tính lại.
+ */
 export default function CheckoutPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  // Giữ nguyên các ?item=... để quay lại giỏ vẫn còn tick đúng sản phẩm đã chọn
   const returnToCart = `/cart?${searchParams.toString()}`;
   const { cart, loading, error, fetchCart, user, userId } = useCartContext();
+  // Các cart item được chọn ở trang giỏ, truyền qua URL: /checkout?item=<id>&item=<id>
   const requestedIds = searchParams.getAll('item');
   const selectedIds = new Set(requestedIds);
   const selectedItems = (cart?.items || []).filter(item => selectedIds.has(item.id));
+  // true nếu có item trong URL mà giỏ không còn (đã xóa/đã đặt ở tab khác)
   const missingItems = selectedItems.length !== selectedIds.size;
+  // Mỗi shop là 1 đơn riêng nên gom sản phẩm đã chọn theo shopId
   const shopIds = [...new Set(selectedItems.map(item => item.product?.shopId))];
   const shopGroups = shopIds.map(shopId => {
     const items = selectedItems.filter(item => item.product?.shopId === shopId);
@@ -32,6 +43,7 @@ export default function CheckoutPage() {
   });
   const selectedQuantity = selectedItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
   const selectedTotal = selectedItems.reduce((sum, item) => sum + Number(item.itemTotal || 0), 0);
+  // Chặn đặt hàng nếu số lượng trong giỏ vượt tồn kho hiện tại
   const hasOverStockItem = selectedItems.some(item => item.product?.stock != null && item.quantity > item.product.stock);
 
   const [recipientName, setRecipientName] = useState('');
@@ -45,6 +57,7 @@ export default function CheckoutPage() {
   const [orderLoading, setOrderLoading] = useState(false);
   const [orderError, setOrderError] = useState('');
 
+  // Luôn lấy giỏ mới nhất khi vào trang để giá/tồn kho không bị cũ
   useEffect(() => { fetchCart(); }, [fetchCart]);
 
   useEffect(() => {
@@ -70,6 +83,7 @@ export default function CheckoutPage() {
     if (address.recipientPhone) setPhone(address.recipientPhone);
   }, [selectedAddressId, addresses]);
 
+  // Tải địa chỉ đã lưu, mặc định chọn địa chỉ isDefault (hoặc địa chỉ đầu tiên). `active` chống set state sau khi unmount/đổi user
   useEffect(() => {
     let active = true;
     setAddresses([]);
@@ -96,8 +110,10 @@ export default function CheckoutPage() {
   const [shippingFees, setShippingFees] = useState({});
   const [feeErrors, setFeeErrors] = useState({});
   const [feeLoading, setFeeLoading] = useState(false);
+  // Chuỗi ổn định làm dependency của effect (mảng shopIds mỗi render là object mới)
   const shopKey = shopIds.join(',');
 
+  // Tính phí ship GHN riêng cho từng shop (khoảng cách khác nhau); đổi địa chỉ/shop thì tính lại
   useEffect(() => {
     let active = true;
     setShippingFees({});
@@ -116,10 +132,20 @@ export default function CheckoutPage() {
     return () => { active = false; };
   }, [userId, shopKey, selectedAddressId]);
 
+  // Chỉ cho đặt khi shop nào cũng đã có phí ship (tránh đặt với phí thiếu)
   const feesReady = shopGroups.length > 0 && shopGroups.every(group => shippingFees[group.shopId] != null);
   const totalShipping = shopGroups.reduce((sum, group) => sum + (shippingFees[group.shopId] || 0), 0);
 
+  /**
+   * Xử lý bấm "Đặt hàng":
+   * 1. Validate (chống double-click, đủ tên/SĐT, địa chỉ hợp lệ, không vượt tồn kho).
+   * 2. orderApi.makeOrders: tạo đơn, mỗi shop 1 đơn (backend tự tính giá + ship, xóa item khỏi giỏ).
+   * 3. fetchCart để cập nhật badge giỏ.
+   * 4. ONLINE: 1 đơn -> startSePayCheckout, nhiều đơn -> startSePayGroupCheckout (1 giao dịch gộp);
+   *    nếu mở cổng lỗi thì sang /payment/pending. COD: sang /payment/cod-success.
+   */
   const handlePlaceOrder = async () => {
+    // Chặn double-click và các trạng thái chưa hợp lệ (nút cũng bị disable, đây là lớp bảo vệ thứ hai)
     if (orderLoading || loading || feeLoading || !feesReady || !userId || requestedIds.length === 0 || missingItems || selectedItems.length === 0) return;
     if (shopIds.some(id => !id) || hasOverStockItem) return;
     if (!recipientName.trim() || !phone.trim()) {
@@ -134,6 +160,7 @@ export default function CheckoutPage() {
     setOrderLoading(true);
     setOrderError('');
     try {
+      // Chỉ gửi id cart item + địa chỉ; giá/phí ship do backend tự tính lại, không tin số tiền từ client
       const created = await orderApi.makeOrders(userId, {
         deliveryAddressId: selectedAddressId,
         recipientName: recipientName.trim(),
@@ -145,11 +172,12 @@ export default function CheckoutPage() {
         })),
       });
       const query = created.map(order => 'order=' + encodeURIComponent(order.id)).join('&');
-      await fetchCart();
+      await fetchCart(); // backend đã xóa các item vừa đặt khỏi giỏ -> cập nhật badge
       if (paymentMethod === 'ONLINE') {
         // Sang cổng SePay ngay. Nếu không mở được cổng thì đơn vẫn được giữ 10 phút ở màn chờ thanh toán.
         const orderIds = created.map(order => order.id);
         try {
+          // 1 đơn: giao dịch đơn; nhiều đơn: gộp thành 1 giao dịch để khách chỉ thanh toán 1 lần
           if (orderIds.length === 1) await paymentApi.startSePayCheckout(orderIds[0], 'FULL');
           else await paymentApi.startSePayGroupCheckout(orderIds);
         } catch {

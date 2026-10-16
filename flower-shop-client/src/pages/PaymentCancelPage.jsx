@@ -5,8 +5,11 @@ import paymentApi from '../api/paymentApi';
 import { useCartContext } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 
+// SePay redirect về đây khi khách bấm hủy trên cổng. Trang này gọi backend hủy giao dịch rồi chuyển sang /payment/error.
+// Không hiển thị kết quả trực tiếp vì khách có thể đã trả tiền nhưng bấm hủy/quay lại muộn (result.paid).
 export default function PaymentCancelPage() {
   const [searchParams] = useSearchParams();
+  // Chốt mã hóa đơn 1 lần; ưu tiên query của SePay, dự phòng mã đã lưu lúc tạo giao dịch (redirectToSePay)
   const [invoiceNumber] = useState(() => searchParams.get('invoice_number')
     || searchParams.get('order_invoice_number') || sessionStorage.getItem('flower_pending_invoice'));
   const navigate = useNavigate();
@@ -16,6 +19,7 @@ export default function PaymentCancelPage() {
 
   useEffect(() => {
     if (busy) return;
+    // Cần đăng nhập để hủy giao dịch; đăng nhập xong quay lại đúng trang này
     if (!userId) {
       const next = invoiceNumber
         ? `/payment/cancel?invoice_number=${encodeURIComponent(invoiceNumber)}`
@@ -29,10 +33,12 @@ export default function PaymentCancelPage() {
     }
     let active = true;
     let timer;
+    // Gọi hủy; nếu mạng lỗi thì thử lại mỗi 2 giây cho tới khi backend phản hồi
     const cancelAndReturn = async () => {
       try {
         const result = await paymentApi.cancelCheckout(invoiceNumber);
         if (!active) return;
+        // Webhook báo đã trả tiền trước khi hủy kịp -> coi như thành công, không hủy
         if (result?.paid) {
           navigate(`/payment/success?invoice_number=${encodeURIComponent(invoiceNumber)}`, { replace: true });
           return;
@@ -44,7 +50,7 @@ export default function PaymentCancelPage() {
           const type = (res?.data || res)?.paymentType;
           deposit = type === 'DEPOSIT' || type === 'FINAL';
         } catch { /* không lấy được trạng thái thì coi như đơn thường */ }
-        await fetchCart();
+        await fetchCart(); // đơn bị hủy -> sản phẩm được trả về giỏ
         if (!active) return;
         sessionStorage.removeItem('flower_pending_invoice');
         navigate(`/payment/error?cancelled=1${deposit ? '&deposit=1' : ''}&invoice_number=${encodeURIComponent(invoiceNumber)}`, { replace: true });

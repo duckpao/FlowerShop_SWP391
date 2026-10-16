@@ -62,7 +62,9 @@ public class PaymentService {
     }
 
     /**
-     * 1. Sinh thông tin thanh toán VietQR cho đơn hàng
+     * 1. Sinh thông tin thanh toán VietQR cho đơn hàng.
+     * Kiểm tra chủ đơn, đơn còn PENDING và chưa quá 10 phút; nội dung chuyển khoản = [vaPrefix] + mã DHxxxxxxxx,
+     * số tiền lấy từ totalAmount của đơn (không tin client). Trả URL ảnh VietQR để FE hiển thị.
      */
     @Transactional
     public PaymentQrResponse generatePaymentQr(String orderId, String userId) {
@@ -110,7 +112,11 @@ public class PaymentService {
     }
 
     /**
-     * 2. Xử lý Webhook gửi từ SePay (khi tiền nổ vào tài khoản ngân hàng)
+     * 2. Xử lý Webhook gửi từ SePay (khi tiền nổ vào tài khoản ngân hàng).
+     * Các bước: xác thực API key -> bỏ qua tiền ra -> chống xử lý trùng theo mã giao dịch (idempotency)
+     * -> tìm đơn PENDING từ nội dung chuyển khoản -> khóa đơn -> đối chiếu số tiền khớp tuyệt đối
+     * -> đơn sang PROCESSING và lưu Payment SUCCESS.
+     * Trả {success, message, orderId}; success=false nếu không khớp đơn/số tiền/trạng thái.
      */
     @Transactional
     public Map<String, Object> processSePayWebhook(SePayWebhookDto webhookDto, String authHeader) {
@@ -198,9 +204,11 @@ public class PaymentService {
     }
 
     /**
-     * 3. Kiểm tra trạng thái đơn hàng cho Frontend Polling (kèm đối soát chủ động thời gian thực)
+     * 3. Kiểm tra trạng thái đơn hàng cho Frontend Polling (kèm đối soát chủ động thời gian thực).
+     * Nếu Payment ONLINE gần nhất chưa SUCCESS và đơn chưa hủy thì hỏi lại SePay (phòng webhook đến chậm),
+     * rồi trả isPaid, số tiền đã trả, mã giao dịch, thông báo và tiến trình đơn.
+     * Không @Transactional: đối soát gọi HTTP sang SePay, không giữ khóa DB. Việc hủy đơn quá hạn do scheduler làm.
      */
-    /** Không @Transactional: đối soát gọi HTTP sang SePay, không giữ khóa DB. Việc hủy đơn quá hạn do scheduler làm. */
     public PaymentStatusResponse checkPaymentStatus(String orderId, String userId) {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> ApiException.notFound("Không tìm thấy đơn hàng với id: " + orderId));
@@ -242,12 +250,17 @@ public class PaymentService {
         return status.build();
     }
 
+    /** Chặn xem/thanh toán đơn của người khác: userId phải là khách đặt đơn, nếu không trả 403. */
     private static void requireOwner(Order order, String userId) {
         if (userId == null || order.getCustomer() == null || !userId.equals(order.getCustomer().getId())) {
             throw ApiException.forbidden("Không có quyền truy cập đơn hàng này.");
         }
     }
 
+    /**
+     * Tìm đơn PENDING từ nội dung chuyển khoản: regex lấy "DH" + 8 ký tự hex, tra theo prefix id.
+     * Chỉ trả đơn khi khớp đúng 1; khớp nhiều đơn thì bỏ qua (tránh xác nhận nhầm), không khớp trả null.
+     */
     private Order findMatchingOrder(String content) {
         Pattern pattern = Pattern.compile("(?i)DH([a-f0-9]{8})(?![a-f0-9])");
         Matcher matcher = pattern.matcher(content);

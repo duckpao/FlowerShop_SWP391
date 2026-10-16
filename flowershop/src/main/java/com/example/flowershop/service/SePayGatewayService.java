@@ -85,12 +85,14 @@ public class SePayGatewayService {
     @Value("${sepay.cancel-url:http://localhost:8080/payment/cancel}")
     private String cancelUrl;
 
+    /** Mã đơn rút gọn: 8 ký tự hex đầu của UUID viết hoa, dùng đặt tên invoice và mô tả giao dịch. */
     private String getShortOrderCode(String orderId) {
         if (orderId == null) return "DH000000";
         String clean = orderId.replace("-", "").toUpperCase();
         return clean.length() >= 8 ? clean.substring(0, 8) : clean;
     }
 
+    /** Đơn đã quá hạn thanh toán chưa: AWAITING_DEPOSIT quá 24 giờ, PENDING quá 10 phút kể từ lúc tạo. */
     private static boolean isExpired(Order order) {
         if (order.getCreatedDate() == null) return false;
         java.time.LocalDateTime now = java.time.LocalDateTime.now();
@@ -136,7 +138,11 @@ public class SePayGatewayService {
     }
 
     /**
-     * PHASE 5: Khởi tạo thanh toán SePay với tính toán số tiền bảo mật từ Server
+     * PHASE 5: Khởi tạo thanh toán SePay với tính toán số tiền bảo mật từ Server.
+     * Các bước: kiểm tra cấu hình cổng + phương thức -> khóa đơn (SELECT FOR UPDATE) -> kiểm tra chủ đơn,
+     * trạng thái, hạn thanh toán, không phải COD -> xác định loại thanh toán FULL/DEPOSIT/FINAL hợp lệ với đơn
+     * -> tính số tiền phải trả ở server -> đánh FAILED các Payment ONLINE PENDING cũ cùng loại
+     * -> tạo Payment PENDING với invoice mới -> ký HMAC các field gửi cổng.
      */
     @Transactional
     public CreatePaymentResponse createPayment(CreatePaymentRequest request, String authenticatedUserId) {
@@ -256,7 +262,11 @@ public class SePayGatewayService {
                 .build();
     }
 
-    /** PHASE 6: Thứ tự field gửi đi phải trùng thứ tự ký (SDK SePay ký theo thứ tự field của form). */
+    /**
+     * PHASE 6: Dựng các field form checkout gửi sang SePay và ký chữ ký ở cuối.
+     * Thứ tự field gửi đi phải trùng thứ tự ký (SDK SePay ký theo thứ tự field của form), nên dùng LinkedHashMap.
+     * success/error/cancel URL kèm invoice_number để các trang kết quả FE biết poll giao dịch nào.
+     */
     private Map<String, String> signedCheckoutFields(String invoiceNumber, long amount, String description,
                                                      String customerId, String paymentMethod) {
         Map<String, String> fields = new LinkedHashMap<>();
@@ -351,9 +361,7 @@ public class SePayGatewayService {
                 .build();
     }
 
-    /**
-     * Backward-compatible: Khởi tạo cho controller cũ
-     */
+    /** Tương thích endpoint cũ: tạo thanh toán FULL cho đơn rồi trả riêng checkoutUrl + fields. */
     @Transactional
     public SePayCheckoutFormResponse initiateCheckout(String orderId, String authenticatedUserId) {
         CreatePaymentResponse res = createPayment(
@@ -368,6 +376,10 @@ public class SePayGatewayService {
 
     /**
      * Hủy đơn đang chờ khi khách quay về từ nút hủy của SePay.
+     * Giao dịch gộp thì chuyển sang cancelGroupCheckout. Giao dịch đơn: kiểm tra chủ đơn + là giao dịch ONLINE;
+     * nếu đã trả thì không hủy; nếu đơn đã hủy thì chỉ khôi phục giỏ; nếu đang PENDING thì hủy phía SePay,
+     * đối soát lần cuối rồi mới hủy đơn.
+     * @return true nếu đơn thực tế đã được thanh toán (không hủy), false nếu đã hủy/không còn chờ
      * Không @Transactional: gọi HTTP sang SePay không được giữ khóa DB.
      */
     public boolean cancelCheckout(String invoiceNumber, String authenticatedUserId) {
@@ -449,6 +461,7 @@ public class SePayGatewayService {
         orderService.cancelExpiredOrder(orderId, awaitingDeposit ? DEPOSIT_EXPIRED_REASON : EXPIRED_REASON);
     }
 
+    /** Kết quả ghi nhận một khoản tiền về: thành công, đã ghi trước đó, cần hoàn tiền, không thấy invoice, hoặc lệch tiền. */
     private enum PaidOutcome { PAID, ALREADY_PAID, REFUND_REQUIRED, NOT_FOUND, AMOUNT_MISMATCH }
 
     /**
@@ -526,7 +539,10 @@ public class SePayGatewayService {
 
     /**
      * Chủ động đối soát với Cổng SePay qua REST API (nguồn xác nhận thanh toán duy nhất).
+     * Gọi GET /v1/order/detail/{invoice}; chỉ khi order_status = CAPTURED và invoice khớp mới ghi nhận
+     * (giao dịch gộp qua applyGroupPaid, giao dịch đơn qua applyPaid).
      * Gọi HTTP bên ngoài transaction, chỉ mở transaction ngắn để ghi kết quả.
+     * @return true nếu đơn thực sự được xác nhận đã thanh toán
      */
     public boolean reconcileWithSePayGateway(String invoiceNumber) {
         if (invoiceNumber == null) return false;
@@ -577,6 +593,7 @@ public class SePayGatewayService {
                 .anyMatch(o -> o == PaidOutcome.PAID || o == PaidOutcome.ALREADY_PAID);
     }
 
+    /** Invoice đã SUCCESS và đơn của nó chưa bị hủy (tức khoản tiền còn hiệu lực). */
     private boolean isOrderPaidBy(String invoiceNumber) {
         return paymentRepository.findByInvoiceNumber(invoiceNumber)
                 .map(p -> p.getOrder().getStatus() != OrderStatus.CANCELLED)
@@ -595,7 +612,10 @@ public class SePayGatewayService {
         }
     }
 
-    /** @return body khi HTTP 2xx, ngược lại null. */
+    /**
+     * Gọi REST API SePay với Basic auth (merchantId:secretKey), timeout 6 giây. Lỗi mạng/HTTP chỉ ghi log.
+     * @return body khi HTTP 2xx, ngược lại null.
+     */
     private String callSePayApi(String method, String path, String jsonBody) {
         if (secretKey == null || secretKey.isBlank()) return null;
         try {
@@ -622,7 +642,8 @@ public class SePayGatewayService {
     }
 
     /**
-     * PHASE 11: Truy vấn trạng thái thanh toán theo invoiceNumber (kèm đối soát chủ động thời gian thực)
+     * PHASE 11: Truy vấn trạng thái thanh toán theo invoiceNumber (kèm đối soát chủ động thời gian thực).
+     * Là API mà các trang success/pending của FE poll; invoice gộp (GRP-...) trả trạng thái tổng hợp.
      */
     public PaymentStatusResponse getStatusByInvoice(String invoiceNumber, String authenticatedUserId) {
         List<Payment> members = paymentRepository.findByGroupInvoice(invoiceNumber);
@@ -676,15 +697,17 @@ public class SePayGatewayService {
                 .build();
     }
 
-    /**
-     * Truy vấn trạng thái theo paymentId (kèm đối soát chủ động thời gian thực)
-     */
+    /** Truy vấn trạng thái theo paymentId (kèm đối soát chủ động thời gian thực). */
     public PaymentStatusResponse getStatusById(String paymentId, String authenticatedUserId) {
         Payment payment = paymentRepository.findById(paymentId)
                 .orElseThrow(() -> ApiException.notFound("Không tìm thấy thông tin thanh toán với id: " + paymentId));
         return buildStatus(payment, authenticatedUserId);
     }
 
+    /**
+     * Dựng response trạng thái cho 1 Payment: kiểm tra quyền xem, đối soát với SePay nếu còn chờ,
+     * rồi suy ra isPaid (SUCCESS và đơn chưa hủy) cùng thông báo phù hợp (đã cọc / đã trả / bị hủy / đang chờ).
+     */
     private PaymentStatusResponse buildStatus(Payment payment, String authenticatedUserId) {
         if (authenticatedUserId == null || payment.getOrder() == null
                 || payment.getOrder().getCustomer() == null

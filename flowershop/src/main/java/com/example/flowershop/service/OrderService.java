@@ -49,7 +49,7 @@ public class OrderService {
     private final GhnService ghn;
     @jakarta.persistence.PersistenceContext private jakarta.persistence.EntityManager entityManager;
 
-    /** Ước tính phí giao hàng cho trang checkout. */
+    /** Ước tính phí giao hàng cho trang checkout: tìm shop, kiểm tra địa chỉ nhận của khách rồi hỏi GHN. */
     @Transactional(readOnly = true)
     public BigDecimal estimateShippingFee(String userId, String shopId, String deliveryAddressId) {
         Shop shop = shopRepository.findById(shopId)
@@ -59,7 +59,9 @@ public class OrderService {
 
     /**
      * Đặt nhiều đơn một lúc (mỗi shop một đơn). Cùng một transaction: một shop lỗi thì cả nhóm rollback.
-     * Sắp xếp theo shopId để thứ tự khóa kho ổn định giữa các request đồng thời.
+     * Sắp xếp theo shopId để thứ tự khóa kho ổn định giữa các request đồng thời (tránh deadlock).
+     * Từ chối nếu một shop xuất hiện 2 lần. Nếu có >1 shop, các đơn được gắn chung checkoutGroup
+     * để thanh toán gộp. Mỗi phần được chuyển thành MakeOrderRequest rồi gọi makeOrder.
      */
     @Transactional
     public List<OrderResponse> makeOrders(String userId, MakeOrdersRequest request) {
@@ -99,7 +101,8 @@ public class OrderService {
      *  3. Tạo Order
      *  4. Tạo OrderDetail cho mỗi sản phẩm
      *  5. Giảm stock sản phẩm
-     *  6. Giữ cart items của đơn ONLINE cho tới khi thanh toán được xác nhận
+     *  6. Xóa cart items ngay khi tạo đơn (cả COD và ONLINE); đơn bị hủy/hết hạn thì khôi phục lại giỏ
+     *  7. COD: tạo Payment PENDING và chuyển đơn sang PROCESSING; ONLINE: giữ PENDING chờ thanh toán SePay
      */
     @Transactional
     public OrderResponse makeOrder(String userId, MakeOrderRequest request) {
@@ -306,7 +309,11 @@ public class OrderService {
                 .build();
     }
 
-    /** Khôi phục giỏ từ chi tiết đơn bị hủy, kể cả đơn cũ đã xóa giỏ lúc tạo đơn. */
+    /**
+     * Khôi phục giỏ từ chi tiết đơn bị hủy, kể cả đơn cũ đã xóa giỏ lúc tạo đơn.
+     * Với mỗi sản phẩm: chưa có trong giỏ thì tạo lại CartItem; đã có nhưng ít hơn thì nâng lên số lượng đã đặt.
+     * Không làm gì nếu đơn không ở trạng thái CANCELLED.
+     */
     @Transactional
     public void restoreCancelledOrderItems(Order order) {
         if (order == null || order.getStatus() != OrderStatus.CANCELLED || order.getCustomer() == null) return;
@@ -332,7 +339,7 @@ public class OrderService {
         }
     }
 
-    /** Phí GHN cho một đơn giao tới địa chỉ đã lưu của khách, để hiển thị trước khi đặt. */
+    /** Phí GHN cho một đơn giao tới địa chỉ đã lưu của khách (bản POST của estimateShippingFee), hiển thị trước khi đặt. */
     @Transactional
     public BigDecimal quoteShippingFee(String userId, ShippingFeeRequest request) {
         Shop shop = shopRepository.findById(request.getShopId())
@@ -340,7 +347,10 @@ public class OrderService {
         return quoteFee(shop, resolveDestination(userId, request.getDeliveryAddressId()));
     }
 
-    /** Fee from the shop's pickup address (default or first, with GHN codes) to the customer's address. */
+    /**
+     * Hỏi GHN phí ship từ địa chỉ lấy hàng của shop (ưu tiên địa chỉ mặc định, không thì địa chỉ đầu tiên)
+     * tới địa chỉ khách. Lỗi 400 nếu shop chưa có địa chỉ với mã quận/phường GHN.
+     */
     private BigDecimal quoteFee(Shop shop, Address destination) {
         List<Address> list = addressRepository.findByShopIdAndUserIsNullOrderByCreatedDateAscIdAsc(shop.getId());
         Address from = list.stream().filter(a -> Boolean.TRUE.equals(a.getIsDefault())).findFirst()
@@ -351,7 +361,7 @@ public class OrderService {
                 destination.getGhnDistrictId(), destination.getGhnWardCode(), GhnService.DEFAULT_WEIGHT_GRAM);
     }
 
-    /** The customer's saved address; it must carry the GHN district id and ward code a fee quote needs. */
+    /** Lấy địa chỉ đã lưu của khách (phải thuộc đúng user) và bắt buộc có mã quận + phường GHN để tính phí. */
     private Address resolveDestination(String userId, String addressId) {
         Address address = addressRepository.findById(addressId == null ? "" : addressId.trim())
                 .filter(a -> a.getUser() != null && a.getUser().getId().equals(userId))
@@ -361,6 +371,7 @@ public class OrderService {
         return address;
     }
 
+    /** Trả giá trị đầu tiên không rỗng (đã trim), hoặc null nếu cả hai đều rỗng. */
     private static String firstNonBlank(String first, String second) {
         if (first != null && !first.isBlank()) return first.trim();
         if (second != null && !second.isBlank()) return second.trim();
@@ -368,7 +379,7 @@ public class OrderService {
     }
 
     /**
-     * Lấy lịch sử đơn hàng của user.
+     * Lấy lịch sử đơn hàng của user (mới nhất trước), kèm danh sách sản phẩm từng đơn.
      */
     @Transactional(readOnly = true)
     public List<OrderResponse> getOrderHistory(String userId) {
@@ -417,12 +428,20 @@ public class OrderService {
         cancelPendingOrder(orderId, reason, "SYSTEM_AUTO_CANCEL");
     }
 
-    /** @return true nếu đơn thực sự bị hủy (false nếu đơn đã được thanh toán/xử lý trước đó). */
+    /**
+     * Hủy đơn chờ thanh toán do khách/hệ thống yêu cầu (có khôi phục giỏ).
+     * @return true nếu đơn thực sự bị hủy (false nếu đơn đã được thanh toán/xử lý trước đó).
+     */
     @Transactional
     public boolean cancelPendingOrder(String orderId, String reason, String actor) {
         return cancelPending(orderId, reason, actor, true);
     }
 
+    /**
+     * Lõi hủy đơn PENDING/AWAITING_DEPOSIT: khóa đơn và đọc lại từ DB (tránh race với webhook thanh toán),
+     * đặt CANCELLED, hoàn kho, hoàn lượt coupon, đánh fail các Payment PENDING, và khôi phục giỏ nếu restoreCart.
+     * @return false nếu không có đơn hoặc đơn đã sang trạng thái khác (đã thanh toán...)
+     */
     private boolean cancelPending(String orderId, String reason, String actor, boolean restoreCart) {
         Order order = orderRepository.findById(orderId).orElse(null);
         if (order == null) return false;

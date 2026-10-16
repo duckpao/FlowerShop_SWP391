@@ -33,9 +33,11 @@ export default function CartDrawer({
     return () => document.removeEventListener('keydown', handleKey);
   }, [onClose]);
 
+  // Định dạng số tiền VND
   const formatPrice = (amount) =>
     new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount);
 
+  // Giỏ rỗng khi chưa tải xong hoặc không có dòng nào
   const isEmpty = !cart || cart.items.length === 0;
 
   return (

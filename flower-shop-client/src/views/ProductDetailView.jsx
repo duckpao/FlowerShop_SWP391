@@ -49,6 +49,7 @@ export default function ProductDetailView({ auth, productId, id }) {
 
   const isAvailable = p && (p.type === 'CUSTOM' || p.stock > 0);
 
+  // Thêm vào giỏ (guest hay user đều dùng chung addToCart của CartContext); truyền p để guest có sẵn tên/giá/ảnh
   const handleAddToCart = async () => {
     if (!p || !isAvailable) return;
     if (!cartContext?.addToCart) {
@@ -66,6 +67,7 @@ export default function ProductDetailView({ auth, productId, id }) {
     }
   };
 
+  // Mua ngay: thêm vào giỏ rồi chuyển sang /cart (chưa có luồng đặt thẳng, vẫn qua giỏ -> checkout)
   const handleBuyNow = async () => {
     if (!p || !isAvailable) return;
     if (!cartContext?.addToCart) {
@@ -75,7 +77,7 @@ export default function ProductDetailView({ auth, productId, id }) {
     setBusyCart(true);
     try {
       await cartContext.addToCart(p.id, quantity, p);
-      window.location.href = '/cart';
+      window.location.href = '/cart'; // reload cứng: giỏ được tải lại từ server ở trang mới
     } catch (err) {
       toast.error(err.message || 'Không thể thêm vào giỏ hàng.');
       setBusyCart(false);

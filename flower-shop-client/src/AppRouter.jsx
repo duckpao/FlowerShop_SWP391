@@ -116,6 +116,7 @@ function ProductDetailViewWrapper({ auth }) {
   return <ProductDetailView auth={auth} productId={match ? decodeURIComponent(match[1]) : ""} />;
 }
 
+// CartPage nhận state/hành động giỏ qua props (lấy từ CartContext) nên cần wrapper để dùng được hook
 function CartPageWrapper() {
   const cartHook = useCartContext();
   return (
