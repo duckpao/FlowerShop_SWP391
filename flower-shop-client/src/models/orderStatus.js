@@ -1,3 +1,4 @@
+// Nhãn tiếng Việt cho trạng thái đơn hàng của hệ thống
 export const orderStatusLabels = {
     PENDING: 'Chờ xác nhận',
     AWAITING_DEPOSIT: 'Chờ đặt cọc',
@@ -9,6 +10,7 @@ export const orderStatusLabels = {
     REFUNDED: 'Hoàn hàng',
 }
 
+// Màu Badge tương ứng với từng trạng thái đơn
 export const orderStatusColors = {
     PENDING: 'warning',
     AWAITING_DEPOSIT: 'warning',
@@ -20,6 +22,7 @@ export const orderStatusColors = {
     REFUNDED: 'error',
 }
 
+// Các tab lọc đơn trong màn hình quản lý đơn hàng ('' = tất cả)
 export const orderTabs = [
     { id: '', label: 'Tất cả' },
     { id: 'PENDING', label: orderStatusLabels.PENDING },
@@ -30,7 +33,7 @@ export const orderTabs = [
     { id: 'REFUNDED', label: orderStatusLabels.REFUNDED },
 ]
 
-// Status codes as GHN reports them: https://developer.ghn.vn/en/docs/order/update
+// Nhãn tiếng Việt cho mã trạng thái vận đơn GHN. Status codes as GHN reports them: https://developer.ghn.vn/en/docs/order/update
 export const ghnStatusLabels = {
     ready_to_pick: 'Mới tạo, chờ lấy hàng',
     picking: 'Đang lấy hàng',
@@ -47,13 +50,14 @@ export const ghnStatusLabels = {
     cancel: 'Đã hủy vận đơn',
 }
 
-// Actions the shop can send to GHN (switch-status), and the GHN statuses each is allowed from.
+// Thao tác shop được gửi sang GHN và các trạng thái GHN cho phép thao tác đó. Actions the shop can send to GHN (switch-status), and the GHN statuses each is allowed from.
 export const ghnActions = {
     cancel: { label: 'Hủy vận đơn', from: ['ready_to_pick', 'picking'], danger: true },
     storing: { label: 'Yêu cầu giao lại', from: ['storing', 'waiting_to_return'] },
     return: { label: 'Yêu cầu trả hàng', from: ['delivery_fail', 'storing', 'waiting_to_return', 'return'], danger: true },
 }
 
+// 4 chặng hiển thị trên thanh tiến trình của GhnSimulator
 export const ghnStages = [
     { label: 'Lấy hàng', statuses: ['ready_to_pick', 'picking', 'picked'] },
     { label: 'Luân chuyển', statuses: ['storing', 'sorting', 'transporting'] },

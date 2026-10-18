@@ -59,7 +59,7 @@ export default function OrderQueueView({ shop: initialShop }) {
     const [updateGhnModalOpen, setUpdateGhnModalOpen] = useState(false)
     const [updatePayload, setUpdatePayload] = useState({ to_name: '', to_phone: '', weight: 2000, note: 'CHOXEMHANGKHONGTHU' })
 
-    // Nếu không truyền shop từ props, tự động lấy shop đầu tiên thuộc quyền quản lý của user
+    // Nếu không truyền shop từ props, tự động lấy shop đầu tiên của user (managerShopService.list)
     useEffect(() => {
         if (initialShop) return
         let active = true
@@ -71,6 +71,7 @@ export default function OrderQueueView({ shop: initialShop }) {
 
     /**
      * Tải danh sách đơn hàng từ backend theo trang và bộ lọc trạng thái
+     * Gọi: managerOrderService.list -> GET /api/shop/mine/{shopId}/orders
      */
     const load = async (pg, preserveNotice = false) => {
         if (!shop) return
@@ -90,6 +91,7 @@ export default function OrderQueueView({ shop: initialShop }) {
 
     /**
      * Bước 1: Xác nhận đơn hàng (PENDING -> PROCESSING)
+     * Gọi: managerOrderService.confirm -> POST .../orders/{id}/confirm
      */
     const confirmOrder = async orderId => {
         setBusy(true); setError(''); setNotice('')
@@ -102,6 +104,7 @@ export default function OrderQueueView({ shop: initialShop }) {
 
     /**
      * Bước 2: Tạo vận đơn GHN & Chuyển giao hàng (PROCESSING -> DELIVERING)
+     * Gọi: managerOrderService.ship -> POST .../orders/{id}/ship (backend gọi GHN shipping-order/create)
      */
     const ship = async orderId => {
         if (!await confirm({ title: 'Tạo vận đơn GHN', message: 'Tạo mã vận đơn GHN và chuyển đơn sang giao hàng?', confirmLabel: 'Tạo vận đơn' })) return
@@ -115,6 +118,7 @@ export default function OrderQueueView({ shop: initialShop }) {
 
     /**
      * Hủy đơn hàng trước khi giao (kèm lý do bắt buộc)
+     * Gọi: managerOrderService.cancelOrder -> POST .../orders/{id}/cancel
      */
     const cancel = async () => {
         if (!cancelReason.trim()) {
@@ -133,6 +137,7 @@ export default function OrderQueueView({ shop: initialShop }) {
 
     /**
      * Mở modal xem thông tin chi tiết đơn hàng (sản phẩm, địa chỉ người gửi, người nhận, GHN tracking)
+     * Gọi: managerOrderService.detail -> GET .../orders/{id}
      */
     const viewDetail = async orderSummary => {
         setSelectedOrder(orderSummary)
@@ -149,6 +154,7 @@ export default function OrderQueueView({ shop: initialShop }) {
 
     /**
      * Sau khi GHN đổi trạng thái: tải lại danh sách và chi tiết đơn đang mở
+     * GhnSimulator gọi hàm này qua prop onChanged; dùng load() và managerOrderService.detail
      */
     const onGhnChanged = async () => {
         await load(page, true)
@@ -181,7 +187,8 @@ export default function OrderQueueView({ shop: initialShop }) {
     }
 
     /**
-     * Xử lý gọi API cập nhật vận đơn GHN
+     * Xử lý gọi API cập nhật vận đơn GHN (tên, SĐT người nhận, cân nặng, ghi chú)
+     * Gọi: managerOrderService.updateGhnOrder -> POST .../orders/{id}/update-ghn (backend gọi GHN shipping-order/update)
      */
     const handleUpdateGhn = async () => {
         if (!updatePayload.to_phone) {

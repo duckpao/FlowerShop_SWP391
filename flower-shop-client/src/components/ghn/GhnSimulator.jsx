@@ -7,6 +7,8 @@ import { ghnActions, ghnStages, ghnStatusLabels } from '../../models/orderStatus
 const time = () => new Date().toLocaleTimeString('vi-VN')
 
 /**
+ * Bảng điều khiển vận đơn GHN trong modal chi tiết đơn: hiển thị chặng hiện tại, nút đồng bộ,
+ * các thao tác shop được phép gửi sang GHN và nhật ký thao tác.
  * Drives a GHN staging shipment. Every button calls the backend, which calls GHN's
  * switch-status API and then reads the shipment back, so the status shown is GHN's own.
  */
@@ -17,8 +19,10 @@ export default function GhnSimulator({ shopId, orderId, delivery, onChanged }) {
     const [error, setError] = useState('')
     const [log, setLog] = useState([])
 
+    // Ghi một dòng nhật ký (mới nhất lên đầu)
     const record = entry => setLog(items => [{ ...entry, at: time() }, ...items])
 
+    // Chạy một lời gọi managerOrderService.*, cập nhật trạng thái theo kết quả GHN trả về, rồi gọi onChanged để cha tải lại
     const run = async (label, call) => {
         setBusy(true); setError('')
         try {
@@ -32,6 +36,7 @@ export default function GhnSimulator({ shopId, orderId, delivery, onChanged }) {
         } finally { setBusy(false) }
     }
 
+    // Xác nhận rồi gọi managerOrderService.pushGhnStatus -> backend -> GHN switch-status (cancel/return/storing)
     const push = async action => {
         const { label, danger } = ghnActions[action]
         const ok = await confirm({
@@ -43,9 +48,11 @@ export default function GhnSimulator({ shopId, orderId, delivery, onChanged }) {
         if (ok) run(label, () => managerOrderService.pushGhnStatus(shopId, orderId, action))
     }
 
+    // Chặng đang ở và các thao tác hợp lệ với trạng thái hiện tại
     const stageIndex = ghnStages.findIndex(stage => stage.statuses.includes(current))
     const available = Object.entries(ghnActions).filter(([, a]) => a.from.includes(current))
 
+    // Nút 'Đồng bộ từ GHN' gọi managerOrderService.refreshStatus -> backend -> GHN shipping-order/detail
     return <section aria-label="Giả lập trạng thái GHN" className="rounded-lg border border-gray-200 p-4 dark:border-white/10">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
             <div>

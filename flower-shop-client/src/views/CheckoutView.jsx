@@ -52,7 +52,7 @@ export default function CheckoutView() {
         return () => { active = false }
     }, [productId, user])
 
-    // The fee is asked from GHN every time the destination changes; null means "not known yet".
+    // Mỗi khi đổi địa chỉ/số lượng, hỏi phí ship GHN: customerOrderService.fee -> POST /api/customer/orders/fee. null = chưa biết.
     useEffect(() => {
         setShippingFee(null); setFeeError('')
         if (!productId || !addressId) return
@@ -69,6 +69,7 @@ export default function CheckoutView() {
         return () => { active = false }
     }, [addressId, productId, quantity, addresses])
 
+    // Đặt hàng: customerOrderService.checkout -> POST /api/customer/orders/checkout, xong chuyển sang trang chi tiết đơn
     const handleCheckout = async e => {
         e.preventDefault()
         if (!addressId) { setError('Vui lòng chọn địa chỉ.'); return }

@@ -7,14 +7,19 @@ import com.example.flowershop.entity.enums.PaymentStatus;
 import com.example.flowershop.repository.PaymentRepository;
 import org.springframework.stereotype.Component;
 
-/** Applies a status reported by GHN to the delivery and, when it ends the shipment, to the order. */
+/**
+ * Đồng bộ trạng thái GHN báo về vào Delivery và, khi vận đơn kết thúc, vào Order.
+ * delivered -> COMPLETED (và đánh dấu thanh toán SUCCESS), returned -> REFUNDED, cancel -> CANCELLED.
+ */
 @Component
 public class DeliverySync {
     private final PaymentRepository payments;
 
     public DeliverySync(PaymentRepository payments) { this.payments = payments; }
 
+    /** Cập nhật Delivery theo tracking; chỉ đổi trạng thái Order khi đơn đang DELIVERING. */
     public void apply(Order order, Delivery delivery, GhnService.Tracking tracking, String actor) {
+        // Luôn lưu trạng thái thô của GHN và trạng thái rút gọn của hệ thống
         delivery.setStatus(tracking.status());
         delivery.setGhnStatus(tracking.ghnStatus());
         delivery.setLastModifyBy(actor);

@@ -19,7 +19,9 @@ import java.time.Duration;
 import java.util.*;
 
 /**
- * Client for Giao Hàng Nhanh (GHN). Docs: https://developer.ghn.vn/en/docs/getting-started/overview
+ * Client gọi API Giao Hàng Nhanh (GHN): tra cứu tỉnh/quận/phường, tính phí ship, tạo vận đơn,
+ * theo dõi, đổi trạng thái và cập nhật vận đơn.
+ * (Bản gốc) Client for Giao Hàng Nhanh (GHN). Docs: https://developer.ghn.vn/en/docs/getting-started/overview
  *
  * Every call sends the {@code Token} and {@code ShopId} headers. Production is
  * https://online-gateway.ghn.vn and staging is https://dev-online-gateway.ghn.vn; the base URL is
@@ -33,15 +35,16 @@ import java.util.*;
 @Service
 public class GhnService {
 
-    /** One entry of a master-data list: the id (or ward code) to send back to GHN, and its name. */
+    /** Một mục trong danh sách địa danh GHN (id/mã phường + tên). One entry of a master-data list: the id (or ward code) to send back to GHN, and its name. */
     public record Option(String id, String name) {}
 
-    /** A postal address as GHN names it: street line, ward, district and province. */
+    /** Địa chỉ theo cách GHN gọi tên: đường, phường, quận, tỉnh. A postal address as GHN names it: street line, ward, district and province. */
     public record Place(String address, String ward, String district, String province) {}
 
+    /** Kết quả tạo vận đơn: mã vận đơn (order_code) và tổng phí GHN. */
     public record CreateOrderResult(String orderCode, int totalFee) {}
 
-    /** Raw GHN status code plus the coarser status stored on our Delivery row. */
+    /** Trạng thái thô của GHN kèm trạng thái rút gọn lưu ở Delivery. Raw GHN status code plus the coarser status stored on our Delivery row. */
     public record Tracking(String ghnStatus, DeliveryStatus status) {}
 
     static final int DEFAULT_WEIGHT_GRAM = 2000;
@@ -49,15 +52,15 @@ public class GhnService {
     private static final int DEFAULT_WIDTH_CM = 30;
     private static final int DEFAULT_HEIGHT_CM = 30;
 
-    /** service_type_id 2 is the standard service for parcels under 20 kg. */
+    /** Dịch vụ GHN loại 2 (hàng dưới 20kg). service_type_id 2 is the standard service for parcels under 20 kg. */
     private static final int SERVICE_TYPE_ID = 2;
 
-    /** payment_type_id 1: the shop pays GHN. The customer's shipping fee is already in the order total. */
+    /** Người trả phí GHN = shop, vì phí ship của khách đã nằm trong tổng đơn. payment_type_id 1: the shop pays GHN. The customer's shipping fee is already in the order total. */
     private static final int PAYMENT_TYPE_SHOP_PAYS = 1;
 
     private static final int WARD_PAGE_SIZE = 200;
 
-    /** Order status codes from https://developer.ghn.vn/en/docs/master-data/order-status */
+    /** Ánh xạ mã trạng thái GHN sang DeliveryStatus của hệ thống. Order status codes from https://developer.ghn.vn/en/docs/master-data/order-status */
     private static final Map<String, DeliveryStatus> STATUS_MAP = Map.ofEntries(
             Map.entry("ready_to_pick", DeliveryStatus.PENDING),
             Map.entry("picking", DeliveryStatus.PENDING),
@@ -85,7 +88,7 @@ public class GhnService {
     );
 
     /**
-     * Actions a shop may send to GHN, each POST /v2/switch-status/{action}. Pickup, transit and
+     * Các thao tác shop được gửi sang GHN (hủy, trả hàng, giao lại). Actions a shop may send to GHN, each POST /v2/switch-status/{action}. Pickup, transit and
      * delivery are done by GHN staff, so those statuses can only be read back with {@link #track}.
      */
     public static final Set<String> SWITCH_ACTIONS = Set.of("cancel", "return", "storing");
@@ -93,6 +96,7 @@ public class GhnService {
     /** reason_code GHN requires on cancel; GHN-CANCEL-OTHER pairs with a free-text reason. */
     private static final String CANCEL_REASON_CODE = "GHN-CANCEL-OTHER";
 
+    /** Đổi mã trạng thái GHN sang DeliveryStatus; mã lạ coi là FAILED. */
     public static DeliveryStatus toDeliveryStatus(String ghnStatus) {
         return STATUS_MAP.getOrDefault(ghnStatus, DeliveryStatus.FAILED);
     }
@@ -111,6 +115,7 @@ public class GhnService {
         this.shopId = shopId;
     }
 
+    /** Báo 503 nếu server chưa cấu hình token/shopId GHN. */
     private void ensureConfigured() {
         if (token.isBlank() || shopId.isBlank())
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Chưa cấu hình GHN trên server.");
@@ -283,10 +288,12 @@ public class GhnService {
 
     // HTTP
 
+    /** Gọi GET tới GHN, trả về phần data. */
     private JsonNode get(String path) {
         return send(base(path).GET().build(), path);
     }
 
+    /** Gọi POST JSON tới GHN, trả về phần data. */
     private JsonNode post(String path, Map<String, Object> body) {
         try {
             HttpRequest request = base(path)
@@ -301,6 +308,7 @@ public class GhnService {
         }
     }
 
+    /** Tạo request có sẵn header Token và ShopId. */
     private HttpRequest.Builder base(String path) {
         return HttpRequest.newBuilder()
                 .uri(URI.create(apiUrl + path))
@@ -324,6 +332,7 @@ public class GhnService {
         }
     }
 
+    /** Đổi lỗi GHN thành thông báo tiếng Việt dễ hiểu. */
     private static String failureMessage(JsonNode json, String path) {
         String msg = json.path("message").asText("GHN " + path + " thất bại.");
         String codeMessage = json.path("code_message").asText("");

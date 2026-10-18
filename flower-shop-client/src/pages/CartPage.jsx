@@ -135,7 +135,7 @@ export default function CartPage({ cart, loading, error, fetchCart, updateItem, 
   const needsGhnArea = Boolean(selectedAddress && (!selectedAddress.ghnDistrictId || !selectedAddress.ghnWardCode));
   const targetShop = shopIds.length === 1 ? shopIds[0] : '';
 
-  // The fee is asked from GHN whenever shop or destination changes; null means not known yet.
+  // Khi đổi shop/địa chỉ nhận, hỏi phí ship GHN: orderApi.getShippingFee -> POST /api/orders/{userId}/shipping-fee. null = chưa biết.
   useEffect(() => {
     setShippingFee(null);
     setFeeError('');
