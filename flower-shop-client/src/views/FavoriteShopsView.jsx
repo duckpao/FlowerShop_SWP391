@@ -32,8 +32,12 @@ export default function FavoriteShopsView({
                 <h1>Cửa hàng đang theo dõi</h1>
                 <p>Bạn sẽ nhận email khi những cửa hàng này đăng sản phẩm mới. Bỏ theo dõi để ngừng nhận thông báo.</p>
                 <div className="catalog-actions">
-                    <Link to="/shops">Khám phá cửa hàng</Link>
-                    <button type="button" onClick={reload} disabled={loading}>Tải lại danh sách</button>
+                    <Link
+                        to="/shops"
+                        className="inline-flex items-center justify-center rounded-lg bg-brand-600 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-brand-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+                    >
+                        Khám phá cửa hàng
+                    </Link>
                 </div>
 
                 {error && (

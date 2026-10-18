@@ -1,0 +1,57 @@
+import { useEffect, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { staffApplicationService } from '../services/staffApplicationService'
+import { customFlowerService } from '../services/customFlowerService'
+import { productService } from '../services/productService'
+import { BudgetSuggestions, customButton, CustomRequestCard } from '../components/customFlowers/CustomFlowerParts'
+import '../styles/custom-flowers.css'
+
+export default function CustomFlowerOrderView({ auth }) {
+  const [params] = useSearchParams()
+  const [shops, setShops] = useState([])
+  const [form, setForm] = useState({ shopId: params.get('shopId') || '', budget: params.get('budget') || '500000', quantity: params.get('quantity') || '1', description: '', flowers: '', colors: '', occasion: '', wrapping: '', deliveryDate: '' })
+  const [selected, setSelected] = useState(null)
+  const [saved, setSaved] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  useEffect(() => { let active = true; staffApplicationService.search('').then(v => { if (active) setShops(v) }).catch(e => { if (active) setError(e.message) }); return () => { active = false } }, [])
+  useEffect(() => {
+    const id = params.get('productId'); if (!id) return
+    let active = true
+    productService.detail(id).then(p => { if (active && p.shopId === params.get('shopId')) setSelected(p) }).catch(e => { if (active) setError(e.message) })
+    return () => { active = false }
+  }, [params])
+  const edit = (name, value) => { setForm(f => ({ ...f, [name]: value })); if (['shopId', 'budget', 'quantity'].includes(name)) setSelected(null) }
+  async function submit(e) {
+    e.preventDefault(); if (busy) return; setBusy(true); setError('')
+    try {
+      const { shopId, budget, quantity, description, ...preferences } = form
+      const result = await customFlowerService.create({ shopId, budget: Number(budget), quantity: Number(quantity), description, preferences: { ...preferences, referenceProductId: selected?.id || null } })
+      setSaved(result)
+    } catch (failure) { setError(failure.message) } finally { setBusy(false) }
+  }
+  if (auth?.busy && !auth?.user) return <p role="status">Đang kiểm tra đăng nhập…</p>
+  if (!auth?.user) return <main className="catalog-page"><h1>Đặt hoa theo yêu cầu</h1><p>Đăng nhập bằng tài khoản khách hàng để gửi yêu cầu.</p><Link className={customButton} to={`/login?next=${encodeURIComponent('/custom-orders/new' + window.location.search)}`}>Đăng nhập</Link><Link to="/budget-flowers">Xem mẫu theo ngân sách</Link></main>
+  if (auth.user.role !== 'CUSTOMER') return <main className="catalog-page"><p>Chức năng này dành cho tài khoản khách hàng.</p></main>
+  return <main className="catalog-page custom-flower-page">
+    <header className="catalog-page-header"><div><p className="text-sm text-brand-600">Thiết kế theo ý bạn</p><h1>Đặt hoa theo yêu cầu riêng</h1></div><Link to="/custom-orders">Yêu cầu của tôi</Link></header>
+    {saved ? <section className="catalog-panel space-y-4"><p role="status" className="message success">Đã gửi yêu cầu. Shop sẽ xem và phản hồi trong danh sách yêu cầu của bạn.</p><CustomRequestCard request={saved} /><Link className={customButton} to="/custom-orders">Theo dõi phản hồi</Link></section> : <>
+      <section className="catalog-panel"><p className="mb-5 text-gray-500">Mô tả bó hoa bạn mong muốn. Mẫu có sẵn chỉ để tham khảo; shop sẽ báo giá tổng trong ngân sách. Gửi yêu cầu chưa phát sinh thanh toán hoặc giữ hàng.</p>
+        {error && <p role="alert" className="message error">{error}</p>}
+        <form onSubmit={submit}><fieldset disabled={busy} className="space-y-5">
+          <div className="grid gap-4 md:grid-cols-3"><label>Cửa hàng<select required value={form.shopId} onChange={e => edit('shopId', e.target.value)}><option value="">Chọn cửa hàng</option>{shops.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
+            <label>Ngân sách tổng (VND)<input required type="number" min="1" max="9999999999.99" step="0.01" value={form.budget} onChange={e => edit('budget', e.target.value)} /></label>
+            <label>Số bó/mẫu<input required type="number" min="1" max="100" step="1" value={form.quantity} onChange={e => edit('quantity', e.target.value)} /></label></div>
+          <div className="grid gap-4 md:grid-cols-2">
+            {[["flowers", "Loại hoa mong muốn", "Hoa hồng, baby, tulip…", 200], ["colors", "Tông màu", "Hồng pastel, trắng…", 100], ["occasion", "Dịp tặng", "Sinh nhật, tốt nghiệp…", 100], ["wrapping", "Giấy gói / phụ kiện", "Giấy kraft, ruy băng…", 200]].map(([key, label, placeholder, length]) => <label key={key}>{label}<input maxLength={length} value={form[key]} placeholder={placeholder} onChange={e => edit(key, e.target.value)} /></label>)}
+            <label>Ngày mong muốn nhận hoa<input type="date" value={form.deliveryDate} onChange={e => edit('deliveryDate', e.target.value)} /></label>
+          </div>
+          <label>Mô tả chi tiết (10–3.000 ký tự)<textarea required minLength={10} maxLength={3000} rows={4} value={form.description} placeholder="Kiểu bó hoa, thông điệp, yêu cầu cần tránh…" onChange={e => edit('description', e.target.value)} /></label>
+          {selected && <div className="rounded-xl bg-brand-50 p-4 dark:bg-brand-500/10"><p>Mẫu tham khảo: <strong>{selected.name}</strong></p><button type="button" onClick={() => setSelected(null)}>Bỏ mẫu tham khảo</button></div>}
+          <button className={customButton} disabled={!form.shopId || busy}>{busy ? 'Đang gửi…' : 'Gửi yêu cầu cho shop'}</button>
+        </fieldset></form>
+      </section>
+      {form.shopId && <section className="catalog-panel"><BudgetSuggestions budget={form.budget} quantity={form.quantity} shopId={form.shopId} selectedId={selected?.id} onChoose={setSelected} /></section>}
+    </>}
+  </main>
+}

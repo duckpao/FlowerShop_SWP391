@@ -43,6 +43,7 @@ const adminNavItems: NavItem[] = [
 ];
 
 const managerNavItems: NavItem[] = [
+  { name: 'Yêu cầu đặt hoa riêng', path: '/shop-admin/custom-orders', icon: <ListIcon fontSize={24} /> },
   { name: 'Tổng quan', path: '/shop-admin', icon: <GridIcon fontSize={24} /> },
   { name: 'Quản lý shop', path: '/shop-admin/shop', icon: <PageIcon fontSize={24} /> },
   { name: 'Quản lý mặt hàng', path: '/shop-admin/products', icon: <BoxCubeIcon fontSize={24} /> },
@@ -53,12 +54,14 @@ const managerNavItems: NavItem[] = [
 ];
 
 const publicNavItems: NavItem[] = [
+  { name: 'Hoa theo ngân sách', path: '/budget-flowers', icon: <BoxCubeIcon fontSize={24} /> },
   { name: 'Trang chủ', path: '/', icon: <GridIcon fontSize={24} /> },
   { name: 'Cửa hàng', path: '/shops', icon: <ListIcon fontSize={24} /> },
   { name: 'Sản phẩm', path: '/#products', icon: <BoxCubeIcon fontSize={24} /> },
 ];
 
 const customerNavItems: NavItem[] = [
+  { name: 'Đặt hoa theo yêu cầu', path: '/custom-orders', icon: <ListIcon fontSize={24} /> },
   ...publicNavItems,
   { name: 'Cửa hàng đang theo dõi', path: '/following-shops', icon: <ListIcon fontSize={24} /> },
   { name: 'Theo dõi đơn hàng', path: '/orders', icon: <TableIcon fontSize={24} /> },
