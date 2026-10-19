@@ -1,0 +1,49 @@
+@import './catalog.css';
+
+/* Keep CTA links and buttons readable above the shared catalog styles. */
+.catalog-page a.custom-flower-button,
+.catalog-page button.custom-flower-button,
+.dark .catalog-page a.custom-flower-button,
+.dark .catalog-page button.custom-flower-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.75rem;
+  border: 1px solid #be123c;
+  border-radius: .65rem;
+  background: #be123c;
+  padding: .65rem 1rem;
+  color: #fff;
+  font-size: .875rem;
+  font-weight: 700;
+  line-height: 1.5;
+  text-align: center;
+  text-decoration: none;
+  opacity: 1;
+}
+.catalog-page a.custom-flower-button:hover,
+.catalog-page button.custom-flower-button:hover:not(:disabled),
+.dark .catalog-page a.custom-flower-button:hover,
+.dark .catalog-page button.custom-flower-button:hover:not(:disabled) {
+  border-color: #9f1239;
+  background: #9f1239;
+  color: #fff;
+  text-decoration: none;
+}
+.catalog-page .custom-flower-button:focus-visible {
+  outline: 3px solid #fb7185;
+  outline-offset: 3px;
+}
+.catalog-page button.custom-flower-button:disabled,
+.dark .catalog-page button.custom-flower-button:disabled {
+  border-color: #667085;
+  background: #667085;
+  color: #fff;
+  opacity: 1;
+  cursor: not-allowed;
+}
+.custom-flower-page label { display: flex; flex-direction: column; gap: .45rem; font-size: .875rem; font-weight: 500; }
+.custom-flower-page input, .custom-flower-page select, .custom-flower-page textarea { width: 100%; border: 1px solid #d0d5dd; border-radius: .65rem; background: white; color: #101828; padding: .7rem .8rem; font: inherit; }
+.custom-flower-page input:focus, .custom-flower-page select:focus, .custom-flower-page textarea:focus { outline: 2px solid var(--color-brand-500); outline-offset: 2px; }
+.dark .custom-flower-page input, .dark .custom-flower-page select, .dark .custom-flower-page textarea { border-color: #475467; background: #1d2939; color: #f2f4f7; }
+.custom-flower-page fieldset:disabled { opacity: .65; }

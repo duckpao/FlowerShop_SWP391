@@ -25,6 +25,10 @@ import { useAuthController } from "./controllers/useAuthController";
 import { AuthProvider } from "./context/AuthContext";
 import { CartProvider, useCartContext } from "./context/CartContext";
 import FavoriteShopsView from './views/FavoriteShopsView'
+import ShopDirectoryView from './views/ShopDirectoryView'
+import BudgetFlowersView from './views/BudgetFlowersView'
+import CustomFlowerOrderView from './views/CustomFlowerOrderView'
+import CustomerCustomOrdersView from './views/CustomerCustomOrdersView'
 
 export default function AppRouter() {
   return (
@@ -51,6 +55,11 @@ function AppRouterContent() {
             <Route path="/" element={<HomeView auth={controller} />} />
             <Route path="/account" element={<AccountViewRoute auth={controller} />} />
             <Route path="/products" element={<ProductCatalogView auth={controller} />} />
+            <Route path="/shops" element={<ShopDirectoryView auth={controller} />} />
+            <Route path="/budget-flowers" element={<BudgetFlowersView />} />
+            <Route path="/custom-orders/new" element={<CustomFlowerOrderView auth={controller} />} />
+            <Route path="/custom-orders" element={<CustomerCustomOrdersView auth={controller} />} />
+            <Route path="/following-shops" element={<FavoriteShopsView auth={controller} />} />
             <Route path="/products/:id" element={<ProductDetailViewWrapper auth={controller} />} />
 
             <Route
