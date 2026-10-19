@@ -1,6 +1,5 @@
 package com.example.flowershop.service;
 
-import com.example.flowershop.dto.payment.PaymentQrResponse;
 import com.example.flowershop.dto.payment.PaymentStatusResponse;
 import com.example.flowershop.dto.payment.SePayWebhookDto;
 import com.example.flowershop.entity.Order;
@@ -19,8 +18,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -33,83 +30,11 @@ public class PaymentService {
     private final OrderRepository orderRepository;
     private final PaymentRepository paymentRepository;
     private final SePayGatewayService sePayGatewayService;
-    private final OrderService orderService;
+    private final NotificationService notificationService;
     @jakarta.persistence.PersistenceContext private jakarta.persistence.EntityManager entityManager;
-
-    @Value("${sepay.bank-id:MB}")
-    private String bankId;
-
-    @Value("${sepay.account-number:0912345678}")
-    private String accountNumber;
-
-    @Value("${sepay.account-name:FLOWERSHOP}")
-    private String accountName;
-
-    @Value("${sepay.va-prefix:TKPNXT}")
-    private String vaPrefix;
 
     @Value("${sepay.api-key:}")
     private String apiKey;
-
-    /**
-     * Tạo mã chuyển khoản ngắn gọn từ Order ID (dạng DH + 8 ký tự hex viết hoa).
-     * Ví dụ: Order ID "18e6c055-895d-4308-930d-b837a89c5eb7" -> "DH18E6C055"
-     */
-    public String getShortOrderCode(String orderId) {
-        if (orderId == null) return "DH";
-        String clean = orderId.replace("-", "").toUpperCase();
-        return "DH" + (clean.length() >= 8 ? clean.substring(0, 8) : clean);
-    }
-
-    /**
-     * 1. Sinh thông tin thanh toán VietQR cho đơn hàng.
-     * Kiểm tra chủ đơn, đơn còn PENDING và chưa quá 10 phút; nội dung chuyển khoản = [vaPrefix] + mã DHxxxxxxxx,
-     * số tiền lấy từ totalAmount của đơn (không tin client). Trả URL ảnh VietQR để FE hiển thị.
-     */
-    @Transactional
-    public PaymentQrResponse generatePaymentQr(String orderId, String userId) {
-        Order order = orderRepository.findById(orderId)
-                .orElseThrow(() -> ApiException.notFound("Không tìm thấy đơn hàng với id: " + orderId));
-        requireOwner(order, userId);
-
-        if (order.getStatus() == OrderStatus.PENDING && order.getCreatedDate() != null
-                && order.getCreatedDate().plusMinutes(10).isBefore(java.time.LocalDateTime.now())) {
-            throw ApiException.badRequest("Đơn hàng đã hết hạn thanh toán (quá 10 phút).");
-        }
-
-        if (order.getStatus() != OrderStatus.PENDING) {
-            throw ApiException.badRequest("Đơn hàng này đã được thanh toán hoặc không ở trạng thái chờ.");
-        }
-
-        String orderCode = getShortOrderCode(orderId);
-        String transferContent = (vaPrefix != null && !vaPrefix.isBlank() ? vaPrefix + " " : "") + orderCode;
-
-        // Tạo link ảnh VietQR động chuẩn NAPAS
-        String encodedAccountName = URLEncoder.encode(accountName, StandardCharsets.UTF_8);
-        String encodedContent = URLEncoder.encode(transferContent, StandardCharsets.UTF_8);
-        long amountLong = order.getTotalAmount().longValue();
-
-        String qrUrl = String.format(
-                "https://img.vietqr.io/image/%s-%s-compact2.png?amount=%d&addInfo=%s&accountName=%s",
-                bankId,
-                accountNumber,
-                amountLong,
-                encodedContent,
-                encodedAccountName
-        );
-
-        return PaymentQrResponse.builder()
-                .orderId(order.getId())
-                .orderCode(orderCode)
-                .amount(order.getTotalAmount())
-                .bankId(bankId)
-                .accountNumber(accountNumber)
-                .accountName(accountName)
-                .transferContent(transferContent)
-                .qrUrl(qrUrl)
-                .paymentStatus(order.getStatus().name())
-                .build();
-    }
 
     /**
      * 2. Xử lý Webhook gửi từ SePay (khi tiền nổ vào tài khoản ngân hàng).
@@ -194,6 +119,7 @@ public class PaymentService {
                 .build();
 
         paymentRepository.save(payment);
+        notificationService.notifyOrderPlaced(matchedOrder);
         log.info("Thanh toán thành công cho đơn hàng: {} với số tiền: {}đ", matchedOrder.getId(), transferAmount);
 
         return Map.of(
