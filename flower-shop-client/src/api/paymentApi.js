@@ -22,24 +22,10 @@ const paymentApi = {
   },
 
   /**
-   * PHASE 11: Kiểm tra trạng thái theo paymentId
-   */
-  getPaymentStatusById: (paymentId) => {
-    return axiosClient.get(`/payments/${paymentId}`);
-  },
-
-  /**
    * Kiểm tra trạng thái thanh toán theo orderId
    */
   checkPaymentStatus: (orderId) => {
     return axiosClient.get(`/payments/status-by-order/${orderId}`);
-  },
-
-  /**
-   * Tạo thông tin thanh toán VietQR nhúng trực tiếp (modal QR)
-   */
-  createQrPayment: (orderId) => {
-    return axiosClient.post(`/payment/create-qr/${orderId}`);
   },
 
   /**

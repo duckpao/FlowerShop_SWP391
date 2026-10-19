@@ -1,9 +1,8 @@
-// Access tokens live only in memory, never localStorage/sessionStorage.
-let accessToken = null
+const KEY = 'access_token'
 export const authModel = {
-  getToken: () => accessToken,
-  setToken: token => { accessToken = token },
-  clear: () => { accessToken = null },
+  getToken: () => localStorage.getItem(KEY),
+  setToken: token => localStorage.setItem(KEY, token),
+  clear: () => localStorage.removeItem(KEY),
 }
 export const roleLabels = {
   ADMIN: 'Quản trị viên', CUSTOMER: 'Khách hàng', SHOP: 'Quản lý cửa hàng (Vendor)', SHOP_STAFF: 'Nhân viên cửa hàng',

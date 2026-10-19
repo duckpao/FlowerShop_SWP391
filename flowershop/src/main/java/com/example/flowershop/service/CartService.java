@@ -163,19 +163,6 @@ public class CartService {
         cartItemRepository.delete(cartItem);
     }
 
-    /**
-     * Xóa nhiều cart items theo danh sách ID (dùng sau khi đặt hàng thành công).
-     * Chỉ xóa item thuộc về user, id lạ hoặc của người khác bị bỏ qua âm thầm.
-     */
-    @Transactional
-    public void clearCartItems(String userId, List<String> cartItemIds) {
-        for (String id : cartItemIds) {
-            if (cartItemRepository.existsByIdAndUserId(id, userId)) {
-                cartItemRepository.deleteById(id);
-            }
-        }
-    }
-
     // ===================== HELPER METHODS =====================
 
     /** Lấy CartItem theo id; 404 nếu không có, 403 nếu item thuộc user khác. */

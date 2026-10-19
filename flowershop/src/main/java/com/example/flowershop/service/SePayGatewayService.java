@@ -4,7 +4,6 @@ import com.example.flowershop.dto.payment.CreateGroupPaymentRequest;
 import com.example.flowershop.dto.payment.CreatePaymentRequest;
 import com.example.flowershop.dto.payment.CreatePaymentResponse;
 import com.example.flowershop.dto.payment.PaymentStatusResponse;
-import com.example.flowershop.dto.payment.SePayCheckoutFormResponse;
 import com.example.flowershop.entity.Order;
 import com.example.flowershop.entity.Payment;
 import com.example.flowershop.entity.Refund;
@@ -361,19 +360,6 @@ public class SePayGatewayService {
                 .build();
     }
 
-    /** Tương thích endpoint cũ: tạo thanh toán FULL cho đơn rồi trả riêng checkoutUrl + fields. */
-    @Transactional
-    public SePayCheckoutFormResponse initiateCheckout(String orderId, String authenticatedUserId) {
-        CreatePaymentResponse res = createPayment(
-                CreatePaymentRequest.builder().orderId(orderId).paymentType(PaymentType.FULL).build(),
-                authenticatedUserId
-        );
-        return SePayCheckoutFormResponse.builder()
-                .checkoutUrl(res.getCheckoutUrl())
-                .fields(res.getFields())
-                .build();
-    }
-
     /**
      * Hủy đơn đang chờ khi khách quay về từ nút hủy của SePay.
      * Giao dịch gộp thì chuyển sang cancelGroupCheckout. Giao dịch đơn: kiểm tra chủ đơn + là giao dịch ONLINE;
@@ -695,13 +681,6 @@ public class SePayGatewayService {
                 .message(message)
                 .paidAt(first.getLastModifyDate())
                 .build();
-    }
-
-    /** Truy vấn trạng thái theo paymentId (kèm đối soát chủ động thời gian thực). */
-    public PaymentStatusResponse getStatusById(String paymentId, String authenticatedUserId) {
-        Payment payment = paymentRepository.findById(paymentId)
-                .orElseThrow(() -> ApiException.notFound("Không tìm thấy thông tin thanh toán với id: " + paymentId));
-        return buildStatus(payment, authenticatedUserId);
     }
 
     /**
