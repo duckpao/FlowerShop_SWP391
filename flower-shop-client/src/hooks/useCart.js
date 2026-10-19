@@ -2,8 +2,51 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import cartApi from '../api/cartApi';
 import { API_BASE } from '../apiBase';
 
-// Giỏ khách nằm ở biến module (sống qua việc đổi route, mất khi F5/đóng tab)
-let guestItems = [];
+const GUEST_KEY = 'flower_guest_cart';
+const GUEST_TTL_MS = 7 * 24 * 60 * 60 * 1000; // giỏ khách quá 7 ngày thì bỏ
+
+function loadGuestItems() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(GUEST_KEY));
+    if (saved && Array.isArray(saved.items) && Date.now() - saved.savedAt < GUEST_TTL_MS) return saved.items;
+  } catch { /* dữ liệu hỏng hoặc không có localStorage thì coi như giỏ rỗng */ }
+  return [];
+}
+
+function saveGuestItems(items) {
+  try {
+    if (items.length) localStorage.setItem(GUEST_KEY, JSON.stringify({ savedAt: Date.now(), items }));
+    else localStorage.removeItem(GUEST_KEY);
+  } catch { /* localStorage đầy/bị chặn: giỏ vẫn chạy trong RAM */ }
+}
+
+// Giỏ khách: biến module (sống qua đổi route) + localStorage (sống qua F5)
+let guestItems = loadGuestItems();
+let guestRefreshed = false; // mỗi lần tải trang chỉ đối chiếu giá/kho với server một lần
+
+// Giá/kho lưu từ lần trước có thể đã cũ: hỏi lại server, sản phẩm không còn thì bỏ khỏi giỏ
+async function refreshGuestItems() {
+  const refreshed = [];
+  for (const item of guestItems) {
+    const productId = item.product?.id || item.productId;
+    try {
+      const res = await fetch(`${API_BASE}/api/public/products/${productId}`);
+      if (res.status === 404) continue;
+      if (res.ok) {
+        const fresh = await res.json();
+        const price = Number(fresh.price || 0);
+        const stock = fresh.stock != null ? Number(fresh.stock) : item.product?.stock;
+        if (stock != null && stock <= 0) continue;
+        const quantity = stock != null ? Math.min(item.quantity, stock) : item.quantity;
+        refreshed.push({ ...item, quantity, unitPrice: price, itemTotal: price * quantity,
+          product: { ...item.product, price, stock } });
+        continue;
+      }
+    } catch { /* không hỏi được thì giữ nguyên món này */ }
+    refreshed.push(item);
+  }
+  return refreshed;
+}
 
 // Dựng dữ liệu cùng dạng response backend để UI render giỏ khách và giỏ user bằng một code
 function toCart(items) {
@@ -27,6 +70,7 @@ export function useCart(userId) {
   // Ghi giỏ khách và cập nhật UI
   const setGuestItems = (items) => {
     guestItems = items;
+    saveGuestItems(items);
     setCart(toCart(items));
   };
 
@@ -47,6 +91,11 @@ export function useCart(userId) {
   /** Tải giỏ: user -> GET từ backend; khách -> dựng từ giỏ in-memory. */
   const fetchCart = useCallback(async () => {
     if (!userId) {
+      if (!guestRefreshed && guestItems.length) {
+        guestRefreshed = true;
+        guestItems = await refreshGuestItems();
+        saveGuestItems(guestItems);
+      }
       setCart(toCart(guestItems));
       return;
     }
@@ -75,6 +124,7 @@ export function useCart(userId) {
           }
         }
         guestItems = []; // lỗi giữa chừng thì giữ lại để lần sau thử lại
+        saveGuestItems(guestItems);
       } catch (err) {
         console.warn('Lỗi khi đồng bộ giỏ hàng của khách vào tài khoản:', err);
       } finally {
