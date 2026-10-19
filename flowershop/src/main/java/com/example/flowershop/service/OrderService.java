@@ -2,7 +2,6 @@ package com.example.flowershop.service;
 
 import com.example.flowershop.dto.order.MakeOrderRequest;
 import com.example.flowershop.dto.order.MakeOrdersRequest;
-import com.example.flowershop.dto.order.ShippingFeeRequest;
 import com.example.flowershop.dto.order.OrderResponse;
 import com.example.flowershop.entity.*;
 import com.example.flowershop.entity.enums.OrderStatus;
@@ -47,6 +46,7 @@ public class OrderService {
     private final CouponRepository couponRepository;
     private final ShopRepository shopRepository;
     private final GhnService ghn;
+    private final NotificationService notificationService;
     @jakarta.persistence.PersistenceContext private jakarta.persistence.EntityManager entityManager;
 
     /** Ước tính phí giao hàng cho trang checkout: tìm shop, kiểm tra địa chỉ nhận của khách rồi hỏi GHN. */
@@ -149,10 +149,10 @@ public class OrderService {
             selectedCartItems.add(cartItem);
         }
         // Đặt lại món đang nằm trong đơn PENDING cũ của chính khách: hủy đơn cũ (trả kho) thay vì tạo đơn trùng trừ kho lần nữa.
-        // Không khôi phục giỏ ở đây, vì giỏ hiện tại (số lượng khách vừa chỉnh) mới là thứ khách muốn đặt.
-        for (String pendingId : orderDetailRepository.findPendingOrderIds(userId,
-                selectedCartItems.stream().map(item -> item.getProduct().getId()).toList())) {
-            cancelPending(pendingId, "Khách đặt lại đơn mới cho cùng sản phẩm", userId, false);
+        // Món đang được đặt lại không khôi phục (giỏ hiện tại mới là thứ khách muốn đặt); các món khác của đơn cũ trả về giỏ.
+        List<String> reorderedProductIds = selectedCartItems.stream().map(item -> item.getProduct().getId()).toList();
+        for (String pendingId : orderDetailRepository.findPendingOrderIds(userId, reorderedProductIds)) {
+            cancelPending(pendingId, "Khách đặt lại đơn mới cho cùng sản phẩm", userId, reorderedProductIds);
         }
         selectedCartItems.sort(Comparator.comparing(item -> item.getProduct().getId()));
         for (CartItem cartItem : selectedCartItems) {
@@ -290,6 +290,7 @@ public class OrderService {
             order.setStatus(OrderStatus.PROCESSING);
             order.setLastModifyBy(userId);
             order = orderRepository.save(order);
+            notificationService.notifyOrderPlaced(order);
         }
 
         entityManager.flush(); // @CreationTimestamp chỉ được gán khi flush; thiếu dòng này response trả createdDate=null
@@ -316,11 +317,17 @@ public class OrderService {
      */
     @Transactional
     public void restoreCancelledOrderItems(Order order) {
+        restoreCancelledOrderItems(order, List.of());
+    }
+
+    /** Như trên nhưng bỏ qua các sản phẩm trong skipProductIds (vd: món khách đang đặt lại). */
+    private void restoreCancelledOrderItems(Order order, java.util.Collection<String> skipProductIds) {
         if (order == null || order.getStatus() != OrderStatus.CANCELLED || order.getCustomer() == null) return;
         String userId = order.getCustomer().getId();
         for (OrderDetail detail : orderDetailRepository.findByOrderId(order.getId())) {
             if (detail.getProduct() == null) continue;
             String productId = detail.getProduct().getId();
+            if (skipProductIds.contains(productId)) continue;
             CartItem current = cartItemRepository.findByUserIdAndProductIdForUpdate(userId, productId).orElse(null);
             if (current == null) {
                 cartItemRepository.save(CartItem.builder()
@@ -337,14 +344,6 @@ public class OrderService {
                 cartItemRepository.save(current);
             }
         }
-    }
-
-    /** Phí GHN cho một đơn giao tới địa chỉ đã lưu của khách (bản POST của estimateShippingFee), hiển thị trước khi đặt. */
-    @Transactional
-    public BigDecimal quoteShippingFee(String userId, ShippingFeeRequest request) {
-        Shop shop = shopRepository.findById(request.getShopId())
-                .orElseThrow(() -> ApiException.notFound("Không tìm thấy cửa hàng."));
-        return quoteFee(shop, resolveDestination(userId, request.getDeliveryAddressId()));
     }
 
     /**
@@ -434,15 +433,15 @@ public class OrderService {
      */
     @Transactional
     public boolean cancelPendingOrder(String orderId, String reason, String actor) {
-        return cancelPending(orderId, reason, actor, true);
+        return cancelPending(orderId, reason, actor, List.of());
     }
 
     /**
      * Lõi hủy đơn PENDING/AWAITING_DEPOSIT: khóa đơn và đọc lại từ DB (tránh race với webhook thanh toán),
-     * đặt CANCELLED, hoàn kho, hoàn lượt coupon, đánh fail các Payment PENDING, và khôi phục giỏ nếu restoreCart.
+     * đặt CANCELLED, hoàn kho, hoàn lượt coupon, đánh fail các Payment PENDING, và khôi phục giỏ (trừ các sản phẩm trong skipRestoreProductIds).
      * @return false nếu không có đơn hoặc đơn đã sang trạng thái khác (đã thanh toán...)
      */
-    private boolean cancelPending(String orderId, String reason, String actor, boolean restoreCart) {
+    private boolean cancelPending(String orderId, String reason, String actor, java.util.Collection<String> skipRestoreProductIds) {
         Order order = orderRepository.findById(orderId).orElse(null);
         if (order == null) return false;
         // Khóa và đọc lại từ DB: entity trong persistence context có thể đã cũ so với IPN vừa commit.
@@ -483,7 +482,7 @@ public class OrderService {
 
         // 4. Hủy các payment PENDING của đơn hàng
         paymentRepository.failPendingByOrderId(order.getId(), actor);
-        if (restoreCart) restoreCancelledOrderItems(order);
+        restoreCancelledOrderItems(order, skipRestoreProductIds);
         return true;
     }
 }
