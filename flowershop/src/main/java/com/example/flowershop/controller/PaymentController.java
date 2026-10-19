@@ -57,27 +57,6 @@ public class PaymentController {
     }
 
     /**
-     * Khởi tạo form thanh toán theo orderId (endpoint tương thích với bản cũ)
-     * POST /api/sepay/checkout/{orderId}
-     */
-    @PostMapping("/sepay/checkout/{orderId}")
-    public ResponseEntity<SePayCheckoutFormResponse> initiateCheckout(@PathVariable String orderId, @AuthenticationPrincipal CurrentUser currentUser) {
-        return ResponseEntity.ok(sePayGatewayService.initiateCheckout(orderId, currentUser.id()));
-    }
-
-    /**
-     * PHASE 11: Truy vấn trạng thái thanh toán theo paymentId
-     * GET /api/payments/{paymentId}
-     */
-    @GetMapping("/payments/{paymentId}")
-    public ResponseEntity<PaymentStatusResponse> getPaymentById(
-            @PathVariable String paymentId,
-            @AuthenticationPrincipal CurrentUser currentUser
-    ) {
-        return ResponseEntity.ok(sePayGatewayService.getStatusById(paymentId, currentUser.id()));
-    }
-
-    /**
      * PHASE 10 & 11: Truy vấn trạng thái thanh toán theo invoiceNumber (cho Polling kết quả)
      * GET /api/payments/status-by-invoice/{invoiceNumber}
      */
@@ -96,15 +75,6 @@ public class PaymentController {
     @GetMapping({"/payments/status-by-order/{orderId}", "/payment/status/{orderId}"})
     public ResponseEntity<PaymentStatusResponse> getPaymentByOrder(@PathVariable String orderId, @AuthenticationPrincipal CurrentUser currentUser) {
         return ResponseEntity.ok(paymentService.checkPaymentStatus(orderId, currentUser.id()));
-    }
-
-    /**
-     * Sinh thông tin VietQR trực tiếp
-     * POST /api/payments/create-qr/{orderId} và POST /api/payment/create-qr/{orderId}
-     */
-    @PostMapping({"/payments/create-qr/{orderId}", "/payment/create-qr/{orderId}"})
-    public ResponseEntity<PaymentQrResponse> createQrPayment(@PathVariable String orderId, @AuthenticationPrincipal CurrentUser currentUser) {
-        return ResponseEntity.ok(paymentService.generatePaymentQr(orderId, currentUser.id()));
     }
 
     /**

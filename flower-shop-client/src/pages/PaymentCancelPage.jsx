@@ -33,7 +33,8 @@ export default function PaymentCancelPage() {
     }
     let active = true;
     let timer;
-    // Gọi hủy; nếu mạng lỗi thì thử lại mỗi 2 giây cho tới khi backend phản hồi
+    let retries = 0;
+    // Gọi hủy; lỗi thì thử lại mỗi 2 giây, tối đa 5 lần rồi sang trang lỗi (tránh lặp vô hạn khi sai invoice/không có quyền)
     const cancelAndReturn = async () => {
       try {
         const result = await paymentApi.cancelCheckout(invoiceNumber);
@@ -56,6 +57,10 @@ export default function PaymentCancelPage() {
         navigate(`/payment/error?cancelled=1${deposit ? '&deposit=1' : ''}&invoice_number=${encodeURIComponent(invoiceNumber)}`, { replace: true });
       } catch {
         if (!active) return;
+        if (++retries > 5) {
+          navigate('/payment/error', { replace: true });
+          return;
+        }
         setWaiting(true);
         timer = setTimeout(cancelAndReturn, 2000);
       }

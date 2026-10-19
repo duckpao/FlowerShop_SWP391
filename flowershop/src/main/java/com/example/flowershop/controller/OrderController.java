@@ -1,8 +1,6 @@
 package com.example.flowershop.controller;
 
-import com.example.flowershop.dto.order.MakeOrderRequest;
 import com.example.flowershop.dto.order.OrderResponse;
-import com.example.flowershop.dto.order.ShippingFeeRequest;
 import com.example.flowershop.service.OrderService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -25,20 +23,6 @@ public class OrderController {
     /** Chặn truy cập chéo: userId trên URL phải trùng user đang đăng nhập (JWT), nếu không trả 403. */
     private static void requireOwner(String userId, CurrentUser currentUser) {
         if (currentUser == null || !userId.equals(currentUser.id())) throw ApiException.forbidden("Không có quyền truy cập đơn hàng này.");
-    }
-
-    /**
-     * Tạo 1 đơn hàng (1 shop) từ các sản phẩm đã chọn trong giỏ; trả 201 + thông tin đơn.
-     * POST /api/orders/{userId}
-     */
-    @PostMapping("/{userId}")
-    public ResponseEntity<OrderResponse> makeOrder(
-            @PathVariable String userId,
-            @Valid @RequestBody MakeOrderRequest request, @AuthenticationPrincipal CurrentUser currentUser
-    ) {
-        requireOwner(userId, currentUser);
-        OrderResponse response = orderService.makeOrder(userId, request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     /**
@@ -65,19 +49,6 @@ public class OrderController {
             @AuthenticationPrincipal CurrentUser currentUser) {
         requireOwner(userId, currentUser);
         return ResponseEntity.ok(java.util.Map.of("shippingFee", orderService.estimateShippingFee(userId, shopId, addressId)));
-    }
-
-    /**
-     * Phí vận chuyển GHN cho đơn từ shop tới một địa chỉ đã lưu.
-     * POST /api/orders/{userId}/shipping-fee
-     */
-    @PostMapping("/{userId}/shipping-fee")
-    public java.util.Map<String, Object> shippingFee(
-            @PathVariable String userId,
-            @Valid @RequestBody ShippingFeeRequest request, @AuthenticationPrincipal CurrentUser currentUser
-    ) {
-        requireOwner(userId, currentUser);
-        return java.util.Map.of("shippingFee", orderService.quoteShippingFee(userId, request));
     }
 
     /**

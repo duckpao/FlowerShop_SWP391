@@ -163,7 +163,6 @@ export default function CartPage({ cart, loading, error, fetchCart, updateItem, 
                           <span className="text-2xl">💐</span>
                         )}
                       </Link>
-rong @
                       {/* Tên & Shop */}
                       <div className="flex-1 min-w-0">
                         <Link

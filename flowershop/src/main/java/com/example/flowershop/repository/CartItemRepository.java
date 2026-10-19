@@ -18,6 +18,4 @@ public interface CartItemRepository extends JpaRepository<CartItem, String> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT item FROM CartItem item WHERE item.user.id = :userId AND item.product.id = :productId")
     Optional<CartItem> findByUserIdAndProductIdForUpdate(@Param("userId") String userId, @Param("productId") String productId);
-
-    boolean existsByIdAndUserId(String id, String userId);
 }

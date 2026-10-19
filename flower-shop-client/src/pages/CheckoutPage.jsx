@@ -140,7 +140,7 @@ export default function CheckoutPage() {
    * Xử lý bấm "Đặt hàng":
    * 1. Validate (chống double-click, đủ tên/SĐT, địa chỉ hợp lệ, không vượt tồn kho).
    * 2. orderApi.makeOrders: tạo đơn, mỗi shop 1 đơn (backend tự tính giá + ship, xóa item khỏi giỏ).
-   * 3. fetchCart để cập nhật badge giỏ.
+   * 3. fetchCart để cập nhật badge giỏ (ONLINE: chỉ khi không mở được cổng, vì sang SePay thì trang kết quả tự tải lại).
    * 4. ONLINE: 1 đơn -> startSePayCheckout, nhiều đơn -> startSePayGroupCheckout (1 giao dịch gộp);
    *    nếu mở cổng lỗi thì sang /payment/pending. COD: sang /payment/cod-success.
    */
@@ -172,7 +172,6 @@ export default function CheckoutPage() {
         })),
       });
       const query = created.map(order => 'order=' + encodeURIComponent(order.id)).join('&');
-      await fetchCart(); // backend đã xóa các item vừa đặt khỏi giỏ -> cập nhật badge
       if (paymentMethod === 'ONLINE') {
         // Sang cổng SePay ngay. Nếu không mở được cổng thì đơn vẫn được giữ 10 phút ở màn chờ thanh toán.
         const orderIds = created.map(order => order.id);
@@ -181,10 +180,12 @@ export default function CheckoutPage() {
           if (orderIds.length === 1) await paymentApi.startSePayCheckout(orderIds[0], 'FULL');
           else await paymentApi.startSePayGroupCheckout(orderIds);
         } catch {
+          await fetchCart();
           navigate('/payment/pending?' + query);
         }
         return;
       }
+      await fetchCart(); // backend đã xóa các item vừa đặt khỏi giỏ -> cập nhật badge (ONLINE: trang success/cancel tự tải lại)
       navigate('/payment/cod-success?' + query);
     } catch (err) {
       setOrderError(err.message || 'Đặt hàng thất bại. Vui lòng thử lại.');
