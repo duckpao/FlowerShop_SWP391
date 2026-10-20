@@ -1,6 +1,7 @@
 import { Link } from "react-router";
 import ManagerShopsView from "./ManagerShopsView";
 import ManagerOrdersView from "./ManagerOrdersView";
+import ManagerCustomOrdersView from "./ManagerCustomOrdersView";
 import OrderQueueView from "./OrderQueueView";
 import AdminProfileView from "./AdminProfileView";
 import ComponentCard from "../components/common/ComponentCard";
@@ -87,6 +88,7 @@ export default function ManagerDashboardView({
   const current = quickActions.find((item) => item.href === path && item.section !== "chat");
   const profile = path === "/shop-admin/profile";
   const orderQueue = path === "/shop-admin/order-queue";
+  const customOrders = path === "/shop-admin/custom-orders";
   
   return (
     <div className="w-full">
@@ -96,7 +98,7 @@ export default function ManagerDashboardView({
         </div>
       )}
       
-      {!current && !profile && !orderQueue && (
+      {!current && !profile && !orderQueue && !customOrders && (
         <>
           <PageMeta title="Tổng quan Quản lý | Hệ thống" description="Bảng điều khiển dành cho Shop Manager" />
           <PageBreadCrumb pageTitle="Tổng quan cửa hàng" />
@@ -150,7 +152,7 @@ export default function ManagerDashboardView({
         </>
       )}
       
-      {orderQueue ? (
+      {customOrders ? <ManagerCustomOrdersView user={user} /> : orderQueue ? (
         <OrderQueueView shop={null} />
       ) : current && current.section === "orders" ? (
         <ManagerOrdersView shop={null} onBack={() => {}} />

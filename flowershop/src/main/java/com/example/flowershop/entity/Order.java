@@ -60,6 +60,10 @@ public class Order {
     @Column(name = "shipping_fee", nullable = false, precision = 12, scale = 2)
     private BigDecimal shippingFee = BigDecimal.ZERO;
 
+    /** Các đơn cùng một lần thanh toán giỏ hàng (mỗi shop một đơn) có chung mã; null với đơn đặt lẻ. */
+    @Column(name = "checkout_group", length = 36)
+    private String checkoutGroup;
+
     @Column(name = "total_amount", nullable = false, precision = 12, scale = 2)
     private BigDecimal totalAmount;
 
