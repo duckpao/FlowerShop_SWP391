@@ -84,6 +84,7 @@ CREATE TABLE Otp_Challenges (
     window_start TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     failed_attempts INT NOT NULL DEFAULT 0,
     send_count INT NOT NULL DEFAULT 1,
+    used_at TIMESTAMP NULL,
     created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_by VARCHAR(36),
     last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -302,6 +303,7 @@ CREATE TABLE Orders (
     customer_note TEXT,
     cancel_reason TEXT,
     shop_note TEXT,
+    checkout_group VARCHAR(36), -- chung cho các đơn (mỗi shop một đơn) tạo trong cùng một lần thanh toán giỏ; NULL với đơn lẻ
     status ENUM('PENDING', 'AWAITING_DEPOSIT', 'DEPOSIT_PAID', 'PROCESSING', 'DELIVERING', 'COMPLETED', 'CANCELLED', 'REFUNDED') DEFAULT 'PENDING',
     created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_by VARCHAR(36),
@@ -310,7 +312,8 @@ CREATE TABLE Orders (
     FOREIGN KEY (customer_id) REFERENCES Users(id),
     FOREIGN KEY (shop_id) REFERENCES Shops(id),
     FOREIGN KEY (delivery_address_id) REFERENCES Addresses(id),
-    FOREIGN KEY (coupon_id) REFERENCES Coupons(id)
+    FOREIGN KEY (coupon_id) REFERENCES Coupons(id),
+    INDEX idx_orders_checkout_group (checkout_group)
 );
 
 CREATE TABLE Order_Details (
@@ -404,15 +407,17 @@ CREATE TABLE Payments (
     payment_type ENUM('DEPOSIT', 'FINAL', 'FULL') NOT NULL,
     payment_method ENUM('ONLINE', 'COD') NOT NULL,
     amount DECIMAL(12, 2) NOT NULL,
-    gateway_transaction_no VARCHAR(100), -- vnp_TransactionNo
+    gateway_transaction_no VARCHAR(100), -- mã giao dịch từ cổng thanh toán
     invoice_number VARCHAR(100) UNIQUE, -- Mã hóa đơn duy nhất dùng cho SePay/IPN
+    group_invoice VARCHAR(100), -- mã gửi SePay khi thanh toán gộp nhiều đơn; NULL với thanh toán đơn lẻ
     gateway_response JSON,
     status ENUM('PENDING', 'SUCCESS', 'FAILED') DEFAULT 'PENDING',
     created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_by VARCHAR(36),
     last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     last_modify_by VARCHAR(36),
-    FOREIGN KEY (order_id) REFERENCES Orders(id)
+    FOREIGN KEY (order_id) REFERENCES Orders(id),
+    INDEX idx_payments_group_invoice (group_invoice)
 );
 
 CREATE TABLE Refunds (
@@ -485,6 +490,7 @@ CREATE TABLE Blogs (
     title VARCHAR(255) NOT NULL,
     content LONGTEXT NOT NULL, -- HTML/Rich Text
     thumbnail_url VARCHAR(500),
+    images JSON,
     status ENUM('DRAFT', 'PUBLISHED', 'HIDDEN') DEFAULT 'PUBLISHED',
     created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_by VARCHAR(36),
@@ -615,15 +621,8 @@ INSERT INTO Products (id, shop_id, category_id, name, description, components, s
 ('prod-02', 'shop-01', 'cat-02', 'Lẵng Hướng Dương Ban Mai', 'Hoa hướng dương tặng khai trương, tốt nghiệp', '{"sunflowers": 5, "yellow_roses": 5}', 5, 650000.00, 20, 'ACTIVE', 'user-shop-01');
 
 -- 5.1 PRODUCT IMAGES
-INSERT INTO Product_Images (id, product_id, image_url, is_primary, display_order, created_by) VALUES
-('img-prod-01-01', 'prod-01', 'https://res.cloudinary.com/your-cloud/image/upload/public-id-1.jpg', TRUE, 1, 'user-shop-01'),
-('img-prod-01-02', 'prod-01', 'https://res.cloudinary.com/your-cloud/image/upload/public-id-2.jpg', FALSE, 2, 'user-shop-01'),
-('img-prod-02-01', 'prod-02', 'https://res.cloudinary.com/your-cloud/image/upload/public-id-3.jpg', TRUE, 1, 'user-shop-01');
 
 -- 5.2 PRODUCT VIDEOS
-INSERT INTO Product_Videos (id, product_id, video_url, title, description, display_order, created_by) VALUES
-('vid-prod-01-01', 'prod-01', 'https://res.cloudinary.com/your-cloud/video/upload/video-id-1.mp4', 'Hướng dẫn cắm hoa', 'Cách cắm bó hồng đỏ mix baby', 1, 'user-shop-01'),
-('vid-prod-02-01', 'prod-02', 'https://res.cloudinary.com/your-cloud/video/upload/video-id-2.mp4', 'Unboxing lẵng hoa', 'Xem cách lẵng hoa được gói', 1, 'user-shop-01');
 
 -- 6. COUPONS
 INSERT INTO Coupons (id, shop_id, code, discount_type, discount_value, min_order_value, max_discount_value, start_date, end_date, usage_limit, used_count, created_by) VALUES
@@ -667,10 +666,8 @@ INSERT INTO Product_Reviews (id, product_id, user_id, order_id, rating, comment,
 
 -- 15. BLOGS & COMMENTS
 INSERT INTO Blogs (id, shop_id, title, content, thumbnail_url, status, created_by) VALUES
-('blog-01', 'shop-01', 'Cách Giữ Hoa Hồng Tươi Lâu', '<p>Bí quyết giữ hoa hồng tươi lâu đến 7 ngày...</p>', 'https://res.cloudinary.com/your-cloud/image/upload/blog-thumb-id.jpg', 'PUBLISHED', 'user-shop-01');
+('blog-01', 'shop-01', 'Cách Giữ Hoa Hồng Tươi Lâu', '<p>Bí quyết giữ hoa hồng tươi lâu đến 7 ngày...</p>', NULL, 'PUBLISHED', 'user-shop-01');
 
-INSERT INTO Blog_Images (id, blog_id, image_url, display_order, created_by) VALUES
-('blog-img-01', 'blog-01', 'https://res.cloudinary.com/your-cloud/image/upload/blog-img-id-1.jpg', 1, 'user-shop-01');
 
 INSERT INTO Blog_Comments (id, blog_id, user_id, parent_comment_id, content, created_by) VALUES
 ('cmt-01', 'blog-01', 'user-customer-01', NULL, 'Bài viết rất hữu ích, cảm ơn shop!', 'user-customer-01'),
@@ -704,3 +701,38 @@ INSERT INTO Staff_Invitations (id, shop_id, email, token_hash, issued_at, expire
 
 INSERT INTO Manager_Applications (id, user_id, full_name, phone, shop_name, description, address_line, city, district, ward, status, submitted_at) VALUES
 ('mgr-app-01', 'user-customer-01', 'Trần Thị B', '0987654321', 'B Flower House', 'Xin mở shop hoa online phục vụ khu vực Cầu Giấy.', 'Số 10, Ngõ 20, Đường Cầu Giấy', 'Hà Nội', 'Cầu Giấy', 'Dịch Vọng', 'PENDING', '2026-09-25 14:00:00');
+
+-- ==========================================
+-- NOTIFICATIONS & SHOP FOLLOW MAIL (migration 020, 024)
+-- ==========================================
+CREATE TABLE IF NOT EXISTS Notifications (
+    id VARCHAR(36) PRIMARY KEY,
+    user_id VARCHAR(36) NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    message TEXT,
+    link VARCHAR(255),
+    is_read BOOLEAN NOT NULL DEFAULT FALSE,
+    created_date DATETIME(6) NOT NULL,
+    CONSTRAINT fk_notification_user FOREIGN KEY (user_id) REFERENCES Users(id),
+    INDEX ix_notification_user (user_id, created_date)
+);
+
+CREATE TABLE IF NOT EXISTS Shop_Product_Publications (
+    product_id VARCHAR(36) PRIMARY KEY,
+    published_at DATETIME(6) NOT NULL
+);
+CREATE TABLE IF NOT EXISTS Shop_Product_Mails (
+    id VARCHAR(36) PRIMARY KEY,
+    product_id VARCHAR(36) NOT NULL,
+    shop_id VARCHAR(36) NOT NULL,
+    user_id VARCHAR(36) NOT NULL,
+    status VARCHAR(16) NOT NULL DEFAULT 'PENDING',
+    attempts INT NOT NULL DEFAULT 0,
+    next_attempt_at DATETIME(6) NOT NULL,
+    created_at DATETIME(6) NOT NULL,
+    sent_at DATETIME(6),
+    CONSTRAINT uk_shop_product_mail UNIQUE (product_id, user_id),
+    INDEX ix_shop_product_mail_due (status, next_attempt_at, created_at)
+);
+INSERT IGNORE INTO Shop_Product_Publications(product_id, published_at)
+SELECT id, COALESCE(created_date, NOW()) FROM Products WHERE status = 'ACTIVE';

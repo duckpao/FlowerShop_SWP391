@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
-import orderApi from '../api/orderApi';
-import paymentApi from '../api/paymentApi';
+import orderService from '../services/orderService';
+import paymentService from '../services/paymentService';
 import Button from '../components/ui/button/Button';
 import { useAuth } from '../context/AuthContext';
 
@@ -17,7 +17,7 @@ export default function DevDepositTestPage() {
   useEffect(() => {
     if (!user?.id) return;
     setLoading(true);
-    orderApi.getOrderHistory(user.id)
+    orderService.getOrderHistory(user.id)
       .then((data) => setOrders((Array.isArray(data) ? data : []).filter((o) => o.orderType === 'CUSTOM')))
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
@@ -27,7 +27,7 @@ export default function DevDepositTestPage() {
     setPayingId(orderId);
     setError('');
     try {
-      await paymentApi.startSePayCheckout(orderId, paymentType);
+      await paymentService.startSePayCheckout(orderId, paymentType);
     } catch (err) {
       setError(err.message || 'Không thể tạo thanh toán.');
       setPayingId(null);

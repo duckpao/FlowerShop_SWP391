@@ -76,17 +76,4 @@ public class PaymentController {
     public ResponseEntity<PaymentStatusResponse> getPaymentByOrder(@PathVariable String orderId, @AuthenticationPrincipal CurrentUser currentUser) {
         return ResponseEntity.ok(paymentService.checkPaymentStatus(orderId, currentUser.id()));
     }
-
-    /**
-     * Nhận Webhook giao dịch tài khoản ngân hàng trực tiếp từ SePay (không dùng JWT, xác thực bằng API key ở header Authorization)
-     * POST /api/webhook/sepay
-     */
-    @PostMapping("/webhook/sepay")
-    public ResponseEntity<Map<String, Object>> receiveBankWebhook(
-            @RequestBody SePayWebhookDto webhookDto,
-            @RequestHeader(value = "Authorization", required = false) String authHeader
-    ) {
-        Map<String, Object> result = paymentService.processSePayWebhook(webhookDto, authHeader);
-        return ResponseEntity.ok(result);
-    }
 }

@@ -1,6 +1,6 @@
 import axiosClient from './axiosClient';
 
-const orderApi = {
+const orderService = {
   /** Phí vận chuyển GHN (bản GET, truyền shopId + addressId qua query). */
   shippingFee: (userId, shopId, addressId) =>
     axiosClient.get(`/orders/${userId}/shipping-fee`, { params: { shopId, addressId } }),
@@ -15,5 +15,5 @@ const orderApi = {
   getOrderHistory: (userId) => axiosClient.get(`/orders/${userId}`),
 };
 
-export default orderApi;
+export default orderService;
 

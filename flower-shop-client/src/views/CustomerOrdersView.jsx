@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import { useAuth } from '../context/AuthContext'
 import { customerOrderService } from '../services/customerOrderService'
-import paymentApi from '../api/paymentApi'
+import paymentService from '../services/paymentService'
 import { formatPrice } from '../models/productModel'
 import Badge from '../components/ui/badge/Badge'
 import Button from '../components/ui/button/Button'
@@ -79,8 +79,8 @@ export default function CustomerOrdersView() {
         setPayingId(group.id)
         setError('')
         try {
-            if (group.ids.length === 1) await paymentApi.startSePayCheckout(group.ids[0], 'FULL')
-            else await paymentApi.startSePayGroupCheckout(group.ids)
+            if (group.ids.length === 1) await paymentService.startSePayCheckout(group.ids[0], 'FULL')
+            else await paymentService.startSePayGroupCheckout(group.ids)
         } catch (e) {
             setError(e.message || 'Không thể tạo thanh toán. Vui lòng thử lại.')
             setPayingId('')

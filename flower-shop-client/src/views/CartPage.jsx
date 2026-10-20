@@ -41,7 +41,6 @@ export default function CartPage({ cart, loading, error, fetchCart, updateItem, 
   const selectedItems = items.filter(item => selectedItemIds?.includes(item.id));
   const selectedQuantity = selectedItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
   const selectedTotal = selectedItems.reduce((sum, item) => sum + Number(item.itemTotal || 0), 0);
-  // Kiểu Shopee: nhóm sản phẩm theo shop, mỗi shop sẽ thành một đơn riêng khi thanh toán.
   const shopGroups = [...new Map(items.map(item => [item.product?.shopId, item.product?.shopName])).entries()]
     .map(([shopId, shopName]) => ({
       shopId,
@@ -133,129 +132,129 @@ export default function CartPage({ cart, loading, error, fetchCart, updateItem, 
                     <span className="text-sm font-bold text-gray-900 dark:text-white">🏪 {group.shopName}</span>
                   </div>
                   <div className="divide-y divide-gray-100 dark:divide-white/5">
-              {group.items.map((item) => {
-                const isSelected = selectedItemIds?.includes(item.id);
-                const product = item.product || {};
-                const imageUrl = product.images?.[0] || product.image;
+                    {group.items.map((item) => {
+                      const isSelected = selectedItemIds?.includes(item.id);
+                      const product = item.product || {};
+                      const imageUrl = product.images?.[0] || product.image;
 
-                return (
-                  <div
-                    key={item.id}
-                    className={`p-4 sm:p-5 transition-colors ${isSelected ? 'bg-brand-50/40 dark:bg-brand-500/5' : ''}`}
-                  >
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-                      {/* Checkbox */}
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => handleToggleItem(item.id)}
-                        className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500 dark:border-white/10 dark:bg-gray-800 mt-1 sm:mt-0"
-                      />
-
-                      {/* Ảnh sản phẩm */}
-                      <Link
-                        to={`/products/${encodeURIComponent(product.id || '')}`}
-                        className="h-20 w-20 flex-shrink-0 overflow-hidden rounded-lg border border-gray-100 bg-gray-50 dark:border-white/5 dark:bg-gray-800 flex items-center justify-center"
-                      >
-                        {imageUrl ? (
-                          <img src={imageUrl} alt={product.name} className="h-full w-full object-cover" />
-                        ) : (
-                          <span className="text-2xl">💐</span>
-                        )}
-                      </Link>
-                      {/* Tên & Shop */}
-                      <div className="flex-1 min-w-0">
-                        <Link
-                          to={`/products/${encodeURIComponent(product.id || '')}`}
-                          className="font-semibold text-gray-900 hover:text-brand-500 dark:text-white dark:hover:text-brand-400 line-clamp-1 transition-colors text-base"
+                      return (
+                        <div
+                          key={item.id}
+                          className={`p-4 sm:p-5 transition-colors ${isSelected ? 'bg-brand-50/40 dark:bg-brand-500/5' : ''}`}
                         >
-                          {product.name || 'Sản phẩm'}
-                        </Link>
-                        <div className="flex flex-wrap items-center gap-2 mt-1">
-                          {product.stock != null && (
-                            <span className={`text-xs px-2 py-0.5 rounded font-medium ${
-                              item.quantity > product.stock
-                                ? 'bg-error-50 text-error-600 dark:bg-error-500/10 dark:text-error-400 font-bold'
-                                : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'
-                            }`}>
-                              {item.quantity > product.stock
-                                ? `⚠️ Vượt quá tồn kho (Còn ${product.stock})`
-                                : `Kho: ${product.stock}`}
-                            </span>
-                          )}
+                          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                            {/* Checkbox */}
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => handleToggleItem(item.id)}
+                              className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500 dark:border-white/10 dark:bg-gray-800 mt-1 sm:mt-0"
+                            />
+
+                            {/* Ảnh sản phẩm */}
+                            <Link
+                              to={`/products/${encodeURIComponent(product.id || '')}`}
+                              className="h-20 w-20 flex-shrink-0 overflow-hidden rounded-lg border border-gray-100 bg-gray-50 dark:border-white/5 dark:bg-gray-800 flex items-center justify-center"
+                            >
+                              {imageUrl ? (
+                                <img src={imageUrl} alt={product.name} className="h-full w-full object-cover" />
+                              ) : (
+                                <span className="text-2xl">💐</span>
+                              )}
+                            </Link>
+                            {/* Tên & Shop */}
+                            <div className="flex-1 min-w-0">
+                              <Link
+                                to={`/products/${encodeURIComponent(product.id || '')}`}
+                                className="font-semibold text-gray-900 hover:text-brand-500 dark:text-white dark:hover:text-brand-400 line-clamp-1 transition-colors text-base"
+                              >
+                                {product.name || 'Sản phẩm'}
+                              </Link>
+                              <div className="flex flex-wrap items-center gap-2 mt-1">
+                                {product.stock != null && (
+                                  <span className={`text-xs px-2 py-0.5 rounded font-medium ${
+                                    item.quantity > product.stock
+                                      ? 'bg-error-50 text-error-600 dark:bg-error-500/10 dark:text-error-400 font-bold'
+                                      : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'
+                                  }`}>
+                                    {item.quantity > product.stock
+                                      ? `⚠️ Vượt quá tồn kho (Còn ${product.stock})`
+                                      : `Kho: ${product.stock}`}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 sm:hidden">
+                                Đơn giá: {formatPrice(item.unitPrice || product.price)}
+                              </p>
+                            </div>
+
+                            {/* Đơn giá (Desktop) */}
+                            <div className="hidden sm:block text-right min-w-[100px]">
+                              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                {formatPrice(item.unitPrice || product.price)}
+                              </span>
+                            </div>
+
+                            {/* Bộ điều khiển số lượng */}
+                            <div className="flex items-center border border-gray-200 dark:border-white/10 rounded-lg overflow-hidden bg-gray-50 dark:bg-gray-800">
+                              <button
+                                type="button"
+                                onClick={() => updateItem(item.id, Math.max(1, item.quantity - 1))}
+                                disabled={item.quantity <= 1 || loading}
+                                className="px-2.5 py-1 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/10 disabled:opacity-40 transition-colors font-bold"
+                              >
+                                -
+                              </button>
+                              {/* Nhập số lượng: key theo quantity để reset khi server/giỏ đổi; áp dụng khi blur hoặc Enter */}
+                              <input
+                                key={item.quantity}
+                                type="number"
+                                min={1}
+                                max={product.stock ?? undefined}
+                                defaultValue={item.quantity}
+                                disabled={loading}
+                                onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+                                onBlur={(e) => {
+                                  let q = Math.floor(Number(e.target.value));
+                                  if (!(q >= 1)) q = item.quantity;
+                                  if (product.stock != null) q = Math.min(q, product.stock);
+                                  if (q === item.quantity) e.target.value = item.quantity;
+                                  else updateItem(item.id, q);
+                                }}
+                                className="w-12 py-1 text-sm font-semibold text-center text-gray-800 dark:text-white bg-transparent outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => updateItem(item.id, item.quantity + 1)}
+                                disabled={loading || (product.stock != null && item.quantity >= product.stock)}
+                                className="px-2.5 py-1 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/10 disabled:opacity-40 transition-colors font-bold"
+                                title={product.stock != null && item.quantity >= product.stock ? `Đã đạt số lượng tồn kho tối đa (${product.stock})` : 'Tăng số lượng'}
+                              >
+                                +
+                              </button>
+                            </div>
+
+                            {/* Thành tiền */}
+                            <div className="text-right min-w-[110px]">
+                              <span className="font-bold text-brand-600 dark:text-brand-400 text-base">
+                                {formatPrice(item.itemTotal || (item.unitPrice * item.quantity))}
+                              </span>
+                            </div>
+
+                            {/* Nút xóa */}
+                            <button
+                              type="button"
+                              onClick={() => removeItem(item.id)}
+                              disabled={loading}
+                              className="text-gray-400 hover:text-error-500 transition-colors p-1 rounded hover:bg-error-50 dark:hover:bg-error-500/10"
+                              title="Xóa sản phẩm này"
+                            >
+                              <TrashBinIcon className="h-5 w-5" />
+                            </button>
+                          </div>
                         </div>
-                        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 sm:hidden">
-                          Đơn giá: {formatPrice(item.unitPrice || product.price)}
-                        </p>
-                      </div>
-
-                      {/* Đơn giá (Desktop) */}
-                      <div className="hidden sm:block text-right min-w-[100px]">
-                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                          {formatPrice(item.unitPrice || product.price)}
-                        </span>
-                      </div>
-
-                      {/* Bộ điều khiển số lượng */}
-                      <div className="flex items-center border border-gray-200 dark:border-white/10 rounded-lg overflow-hidden bg-gray-50 dark:bg-gray-800">
-                        <button
-                          type="button"
-                          onClick={() => updateItem(item.id, Math.max(1, item.quantity - 1))}
-                          disabled={item.quantity <= 1 || loading}
-                          className="px-2.5 py-1 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/10 disabled:opacity-40 transition-colors font-bold"
-                        >
-                          -
-                        </button>
-                        {/* Nhập số lượng: key theo quantity để reset khi server/giỏ đổi; áp dụng khi blur hoặc Enter */}
-                        <input
-                          key={item.quantity}
-                          type="number"
-                          min={1}
-                          max={product.stock ?? undefined}
-                          defaultValue={item.quantity}
-                          disabled={loading}
-                          onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
-                          onBlur={(e) => {
-                            let q = Math.floor(Number(e.target.value));
-                            if (!(q >= 1)) q = item.quantity;
-                            if (product.stock != null) q = Math.min(q, product.stock);
-                            if (q === item.quantity) e.target.value = item.quantity;
-                            else updateItem(item.id, q);
-                          }}
-                          className="w-12 py-1 text-sm font-semibold text-center text-gray-800 dark:text-white bg-transparent outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => updateItem(item.id, item.quantity + 1)}
-                          disabled={loading || (product.stock != null && item.quantity >= product.stock)}
-                          className="px-2.5 py-1 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/10 disabled:opacity-40 transition-colors font-bold"
-                          title={product.stock != null && item.quantity >= product.stock ? `Đã đạt số lượng tồn kho tối đa (${product.stock})` : 'Tăng số lượng'}
-                        >
-                          +
-                        </button>
-                      </div>
-
-                      {/* Thành tiền */}
-                      <div className="text-right min-w-[110px]">
-                        <span className="font-bold text-brand-600 dark:text-brand-400 text-base">
-                          {formatPrice(item.itemTotal || (item.unitPrice * item.quantity))}
-                        </span>
-                      </div>
-
-                      {/* Nút xóa */}
-                      <button
-                        type="button"
-                        onClick={() => removeItem(item.id)}
-                        disabled={loading}
-                        className="text-gray-400 hover:text-error-500 transition-colors p-1 rounded hover:bg-error-50 dark:hover:bg-error-500/10"
-                        title="Xóa sản phẩm này"
-                      >
-                        <TrashBinIcon className="h-5 w-5" />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
+                      );
+                    })}
                   </div>
                 </div>
               ))}

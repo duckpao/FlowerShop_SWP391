@@ -2,13 +2,12 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { useCartContext } from '../context/CartContext';
 import { accountService } from '../services/accountService';
-import orderApi from '../api/orderApi';
-import paymentApi from '../api/paymentApi';
+import orderService from '../services/orderService';
+import paymentService from '../services/paymentService';
 import PageMeta from '../components/common/PageMeta';
 import PageBreadCrumb from '../components/common/PageBreadCrumb';
 import Button from '../components/ui/button/Button';
 
-/** Định dạng số tiền sang VND kiểu Việt Nam (vd 150.000 ₫); null/undefined coi như 0. */
 const formatPrice = amount =>
   new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount || 0);
 
@@ -121,7 +120,7 @@ export default function CheckoutPage() {
     if (!userId || !selectedAddressId || !shopKey) return undefined;
     setFeeLoading(true);
     Promise.all(shopKey.split(',').map(shopId =>
-      orderApi.shippingFee(userId, shopId, selectedAddressId)
+      orderService.shippingFee(userId, shopId, selectedAddressId)
         .then(res => [shopId, Number(res.shippingFee), null])
         .catch(err => [shopId, null, err.message || 'Không tính được phí giao hàng.'])
     )).then(results => {
@@ -139,7 +138,7 @@ export default function CheckoutPage() {
   /**
    * Xử lý bấm "Đặt hàng":
    * 1. Validate (chống double-click, đủ tên/SĐT, địa chỉ hợp lệ, không vượt tồn kho).
-   * 2. orderApi.makeOrders: tạo đơn, mỗi shop 1 đơn (backend tự tính giá + ship, xóa item khỏi giỏ).
+   * 2. orderService.makeOrders: tạo đơn, mỗi shop 1 đơn (backend tự tính giá + ship, xóa item khỏi giỏ).
    * 3. fetchCart để cập nhật badge giỏ (ONLINE: chỉ khi không mở được cổng, vì sang SePay thì trang kết quả tự tải lại).
    * 4. ONLINE: 1 đơn -> startSePayCheckout, nhiều đơn -> startSePayGroupCheckout (1 giao dịch gộp);
    *    nếu mở cổng lỗi thì sang /payment/pending. COD: sang /payment/cod-success.
@@ -161,7 +160,7 @@ export default function CheckoutPage() {
     setOrderError('');
     try {
       // Chỉ gửi id cart item + địa chỉ; giá/phí ship do backend tự tính lại, không tin số tiền từ client
-      const created = await orderApi.makeOrders(userId, {
+      const created = await orderService.makeOrders(userId, {
         deliveryAddressId: selectedAddressId,
         recipientName: recipientName.trim(),
         phone: phone.trim(),
@@ -177,8 +176,8 @@ export default function CheckoutPage() {
         const orderIds = created.map(order => order.id);
         try {
           // 1 đơn: giao dịch đơn; nhiều đơn: gộp thành 1 giao dịch để khách chỉ thanh toán 1 lần
-          if (orderIds.length === 1) await paymentApi.startSePayCheckout(orderIds[0], 'FULL');
-          else await paymentApi.startSePayGroupCheckout(orderIds);
+          if (orderIds.length === 1) await paymentService.startSePayCheckout(orderIds[0], 'FULL');
+          else await paymentService.startSePayGroupCheckout(orderIds);
         } catch {
           await fetchCart();
           navigate('/payment/pending?' + query);

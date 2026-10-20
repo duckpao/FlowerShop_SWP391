@@ -1,6 +1,6 @@
 import axiosClient from './axiosClient';
 
-const cartApi = {
+const cartService = {
   /**
    * Thêm sản phẩm vào giỏ hàng
    * @param {string} userId
@@ -32,5 +32,5 @@ const cartApi = {
     axiosClient.delete(`/cart/${userId}/items/${itemId}`),
 };
 
-export default cartApi;
+export default cartService;
 

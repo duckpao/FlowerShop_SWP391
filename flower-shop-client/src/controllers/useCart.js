@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import cartApi from '../api/cartApi';
+import cartService from '../services/cartService';
 import { API_BASE } from '../apiBase';
 
 const GUEST_KEY = 'flower_guest_cart';
@@ -102,7 +102,7 @@ export function useCart(userId) {
     setLoading(true);
     setError(null);
     try {
-      setCart(await cartApi.getCart(userId));
+      setCart(await cartService.getCart(userId));
     } catch (err) {
       setError(err.message || 'Có lỗi xảy ra.');
     } finally {
@@ -120,7 +120,7 @@ export function useCart(userId) {
         for (const item of guestItems) {
           const productId = item.product?.id || item.productId;
           if (productId) {
-            await cartApi.addToCart(userId, { productId, quantity: item.quantity || 1 });
+            await cartService.addToCart(userId, { productId, quantity: item.quantity || 1 });
           }
         }
         guestItems = []; // lỗi giữa chừng thì giữ lại để lần sau thử lại
@@ -140,7 +140,7 @@ export function useCart(userId) {
    */
   const addToCart = useCallback((productId, quantity = 1, productData = null) => run(async () => {
     if (userId) {
-      await cartApi.addToCart(userId, { productId, quantity });
+      await cartService.addToCart(userId, { productId, quantity });
       await fetchCart();
       return;
     }
@@ -200,7 +200,7 @@ export function useCart(userId) {
   const updateItem = useCallback((itemId, quantity) => run(async () => {
     if (userId) {
       try {
-        await cartApi.updateCartItem(userId, itemId, { quantity });
+        await cartService.updateCartItem(userId, itemId, { quantity });
       } finally {
         await fetchCart(); // dù lỗi cũng tải lại để UI khớp server
       }
@@ -219,7 +219,7 @@ export function useCart(userId) {
   const removeItem = useCallback((itemId) => run(async () => {
     if (userId) {
       try {
-        await cartApi.removeCartItem(userId, itemId);
+        await cartService.removeCartItem(userId, itemId);
       } finally {
         await fetchCart();
       }

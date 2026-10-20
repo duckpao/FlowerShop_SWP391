@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSearchParams, Link } from 'react-router';
-import paymentApi from '../api/paymentApi';
+import paymentService from '../services/paymentService';
 import PageMeta from '../components/common/PageMeta';
 import Button from '../components/ui/button/Button';
 import { useCartContext } from '../context/CartContext';
@@ -32,9 +32,9 @@ export default function PaymentSuccessPage() {
       try {
         let res;
         if (invoiceNumber) {
-          res = await paymentApi.getPaymentStatusByInvoice(invoiceNumber);
+          res = await paymentService.getPaymentStatusByInvoice(invoiceNumber);
         } else if (orderId) {
-          res = await paymentApi.checkPaymentStatus(orderId);
+          res = await paymentService.checkPaymentStatus(orderId);
         }
 
         const data = res?.data || res;
@@ -89,7 +89,7 @@ export default function PaymentSuccessPage() {
     setPayingFinal(true);
     setFinalError('');
     try {
-      await paymentApi.startSePayCheckout(paymentData.orderId, 'FINAL');
+      await paymentService.startSePayCheckout(paymentData.orderId, 'FINAL');
     } catch (err) {
       setFinalError(err.message || 'Không thể tạo thanh toán. Vui lòng thử lại.');
       setPayingFinal(false);

@@ -29,11 +29,11 @@ Sau khi khởi tạo database mới, cần chạy các migration trong `flowersh
 
 ### Lỗi font tiếng Việt trong dữ liệu mẫu
 
-`database.sql` và `db.sql` trước đây thiếu dòng `SET NAMES utf8mb4`, nên client mysql trong container
+`database.sql` trước đây thiếu dòng `SET NAMES utf8mb4`, nên client mysql trong container
 đọc file UTF-8 như latin1 và lưu sai toàn bộ chữ tiếng Việt ("Hoa Khai Trương" thành "Hoa Khai TrÆ°Æ¡ng").
 Lỗi này còn làm địa chỉ mẫu lưu thành "HÃ  Ná»™i", không khớp danh sách khu vực giao hàng.
 
-Hai file đã được vá nên **database tạo mới không còn dính lỗi**. Với database đang chạy, chạy
+File đã được vá nên **database tạo mới không còn dính lỗi**. Với database đang chạy, chạy
 `flowershop/sql/017_fix_utf8_mojibake.sql` để sửa dữ liệu tại chỗ mà không phải tạo lại;
 script có điều kiện bảo vệ nên chạy lại nhiều lần vẫn an toàn và không đụng vào dữ liệu vốn đã đúng.
 

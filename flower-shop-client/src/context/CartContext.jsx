@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useMemo } from 'react';
-import { useCart } from '../hooks/useCart';
+import { useCart } from '../controllers/useCart';
 import { useAuth } from './AuthContext';
 
 const CartContext = createContext(null);
