@@ -35,9 +35,15 @@ class PaymentBusinessTests {
 
     static SePayGatewayService newGateway(OrderRepository orders, PaymentRepository payments,
                                           RefundRepository refunds, OrderService orderService) {
+        return newGateway(orders, payments, refunds, orderService, mock(com.example.flowershop.service.NotificationService.class));
+    }
+
+    static SePayGatewayService newGateway(OrderRepository orders, PaymentRepository payments,
+                                          RefundRepository refunds, OrderService orderService,
+                                          com.example.flowershop.service.NotificationService notifications) {
         TransactionTemplate tx = mock(TransactionTemplate.class);
         when(tx.execute(any())).thenAnswer(inv -> inv.<TransactionCallback<?>>getArgument(0).doInTransaction(null));
-        SePayGatewayService service = new SePayGatewayService(orders, payments, refunds, orderService, tx);
+        SePayGatewayService service = new SePayGatewayService(orders, payments, refunds, orderService, tx, notifications);
         ReflectionTestUtils.setField(service, "entityManager", mock(EntityManager.class));
         return service;
     }
@@ -146,7 +152,7 @@ class PaymentBusinessTests {
     @Test
     void codOrderInProcessingIsNotReportedAsPaid() {
         SePayGatewayService gateway = mock(SePayGatewayService.class);
-        PaymentService service = new PaymentService(orders, payments, gateway, mock(com.example.flowershop.service.NotificationService.class));
+        PaymentService service = new PaymentService(orders, payments, gateway);
         Order order = Order.builder().id("order-1").customer(User.builder().id("customer-1").build())
                 .status(OrderStatus.PROCESSING).build();
         Payment cod = Payment.builder().order(order).paymentMethod(PaymentMethod.COD)
@@ -190,7 +196,7 @@ class PaymentBusinessTests {
     @Test
     void statusCheckDoesNotCancelExpiredOrder() {
         SePayGatewayService gateway = mock(SePayGatewayService.class);
-        PaymentService service = new PaymentService(orders, payments, gateway, mock(com.example.flowershop.service.NotificationService.class));
+        PaymentService service = new PaymentService(orders, payments, gateway);
         Order order = Order.builder().id("order-expired")
                 .customer(User.builder().id("customer-1").build())
                 .status(OrderStatus.PENDING)
@@ -296,6 +302,7 @@ class PaymentBusinessTests {
     @Test
     void cancelPendingOrderAlsoCancelsAwaitingDepositOrderWithoutDetails() {
         var orderRepo = mock(OrderRepository.class);
+        var notifications = mock(com.example.flowershop.service.NotificationService.class);
         var service = new OrderService(orderRepo, mock(com.example.flowershop.repository.OrderDetailRepository.class),
                 mock(com.example.flowershop.repository.CartItemRepository.class),
                 mock(com.example.flowershop.repository.UserRepository.class),
@@ -303,7 +310,7 @@ class PaymentBusinessTests {
                 mock(com.example.flowershop.repository.ProductRepository.class), payments,
                 mock(com.example.flowershop.repository.CouponRepository.class), mock(com.example.flowershop.repository.ShopRepository.class),
                 mock(com.example.flowershop.service.GhnService.class),
-                mock(com.example.flowershop.service.NotificationService.class));
+                notifications);
         ReflectionTestUtils.setField(service, "entityManager", mock(EntityManager.class));
         Order order = customOrder(OrderStatus.AWAITING_DEPOSIT, "400000", "0", LocalDateTime.now().minusHours(25));
         when(orderRepo.findById(order.getId())).thenReturn(Optional.of(order));
@@ -316,6 +323,8 @@ class PaymentBusinessTests {
         when(orderRepo.findById("paid-order")).thenReturn(Optional.of(paid));
         assertThat(service.cancelPendingOrder("paid-order", "test", "SYSTEM")).isFalse();
         assertThat(paid.getStatus()).isEqualTo(OrderStatus.DEPOSIT_PAID);
+        verify(notifications).notifyPaymentFailed(order, "test");      // đơn bị hủy → báo khách
+        verify(notifications, never()).notifyPaymentFailed(eq(paid), anyString());   // đơn đã trả → không báo
     }
 
     @Test
@@ -337,9 +346,41 @@ class PaymentBusinessTests {
     }
 
     @Test
+    void paymentSuccessNotifiesOnceEvenIfReconciledAgain() {
+        var notifications = mock(com.example.flowershop.service.NotificationService.class);
+        SePayGatewayService service = newGateway(orders, payments, refunds, orderService, notifications);
+        Order order = pendingOrder();
+        Payment payment = Payment.builder().id("p1").order(order).paymentMethod(PaymentMethod.ONLINE)
+                .paymentType(PaymentType.FULL).status(PaymentStatus.PENDING)
+                .amount(new BigDecimal("100000")).invoiceNumber("inv-full").build();
+        when(payments.findByInvoiceNumber("inv-full")).thenReturn(Optional.of(payment));
+
+        ReflectionTestUtils.invokeMethod(service, "applyPaid", "inv-full", new BigDecimal("100000"), "tx-1", "{}", "TEST");
+        Object again = ReflectionTestUtils.invokeMethod(service, "applyPaid", "inv-full", new BigDecimal("100000"), "tx-1", "{}", "TEST");
+
+        assertThat(again).hasToString("ALREADY_PAID");
+        verify(notifications, times(1)).notifyPaymentSuccess(order, PaymentType.FULL);
+    }
+
+    @Test
+    void amountMismatchDoesNotNotifySuccess() {
+        var notifications = mock(com.example.flowershop.service.NotificationService.class);
+        SePayGatewayService service = newGateway(orders, payments, refunds, orderService, notifications);
+        Order order = pendingOrder();
+        Payment payment = Payment.builder().id("p1").order(order).paymentMethod(PaymentMethod.ONLINE)
+                .paymentType(PaymentType.FULL).status(PaymentStatus.PENDING)
+                .amount(new BigDecimal("100000")).invoiceNumber("inv-full").build();
+        when(payments.findByInvoiceNumber("inv-full")).thenReturn(Optional.of(payment));
+
+        ReflectionTestUtils.invokeMethod(service, "applyPaid", "inv-full", new BigDecimal("1"), "tx-1", "{}", "TEST");
+
+        verifyNoInteractions(notifications);
+    }
+
+    @Test
     void statusTellsFrontendWhatToPayNext() {
         SePayGatewayService gateway = mock(SePayGatewayService.class);
-        PaymentService service = new PaymentService(orders, payments, gateway, mock(com.example.flowershop.service.NotificationService.class));
+        PaymentService service = new PaymentService(orders, payments, gateway);
         Order awaiting = customOrder(OrderStatus.AWAITING_DEPOSIT, "400000", "0", LocalDateTime.now());
         when(orders.findById(awaiting.getId())).thenReturn(Optional.of(awaiting));
         when(payments.findByOrderId(awaiting.getId())).thenReturn(List.of());

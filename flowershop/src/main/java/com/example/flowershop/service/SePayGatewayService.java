@@ -57,6 +57,7 @@ public class SePayGatewayService {
     private final RefundRepository refundRepository;
     private final OrderService orderService;
     private final TransactionTemplate transactionTemplate;
+    private final NotificationService notificationService;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
 
@@ -517,6 +518,7 @@ public class SePayGatewayService {
         }
         order.setLastModifyBy(actor);
         orderRepository.save(order);
+        notificationService.notifyPaymentSuccess(order, payment.getPaymentType());   // chỉ tới đây khi PAID lần đầu (lần sau trả ALREADY_PAID)
 
         log.info("Xác nhận thanh toán thành công cho đơn hàng: {}, invoice: {}, số tiền: {}đ",
                 order.getId(), invoiceNumber, paidAmount);

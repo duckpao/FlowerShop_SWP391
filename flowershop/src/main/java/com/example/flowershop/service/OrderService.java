@@ -291,6 +291,8 @@ public class OrderService {
             order.setLastModifyBy(userId);
             order = orderRepository.save(order);
             notificationService.notifyOrderPlaced(order);
+        } else {
+            notificationService.notifyPaymentPending(order);
         }
 
         entityManager.flush(); // @CreationTimestamp chỉ được gán khi flush; thiếu dòng này response trả createdDate=null
@@ -433,7 +435,10 @@ public class OrderService {
      */
     @Transactional
     public boolean cancelPendingOrder(String orderId, String reason, String actor) {
-        return cancelPending(orderId, reason, actor, List.of());
+        boolean cancelled = cancelPending(orderId, reason, actor, List.of());
+        // Không báo ở cancelPending: nó cũng được gọi khi khách đặt lại món (không phải thanh toán thất bại).
+        if (cancelled) orderRepository.findById(orderId).ifPresent(o -> notificationService.notifyPaymentFailed(o, reason));
+        return cancelled;
     }
 
     /**
