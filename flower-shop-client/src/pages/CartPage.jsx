@@ -67,63 +67,11 @@ export default function CartPage({ cart, loading, error, fetchCart, updateItem, 
   const handleToggleSelectAll = () => {
     setSelectedItemIds(selectedItemIds?.length === items.length ? [] : items.map(item => item.id));
   };
-
-  // Lấy danh sách các item đang được chọn
-  const selectedItems = items.filter(item => selectedItemIds.includes(item.id));
-  const totalQuantity = items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
-  const selectedQuantity = selectedItems.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
-  const selectedTotal = selectedItems.reduce(
-    (sum, item) => sum + Number(item.itemTotal || 0),
-    0
-  );
-
-  // Group các item được chọn theo shopId (vì mỗi đơn hàng thuộc 1 shop)
-  const selectedByShop = selectedItems.reduce((acc, item) => {
-    const shopId = item.product?.shopId || 'unknown';
-    if (!acc[shopId]) {
-      acc[shopId] = {
-        shopName: item.product?.shopName || 'Cửa hàng hoa',
-        items: [],
-      };
-    }
-    acc[shopId].items.push(item);
-    return acc;
-  }, {});
-
-  const shopIds = Object.keys(selectedByShop);
-  const hasMultipleShopsSelected = shopIds.length > 1;
-  const selectedAddress = savedAddresses.find(a => a.id === addressId);
-  const needsGhnArea = Boolean(selectedAddress && (!selectedAddress.ghnDistrictId || !selectedAddress.ghnWardCode));
-  const targetShop = shopIds.length === 1 ? shopIds[0] : '';
-
-  // Khi đổi shop/địa chỉ nhận, hỏi phí ship GHN: orderApi.getShippingFee -> POST /api/orders/{userId}/shipping-fee. null = chưa biết.
-  useEffect(() => {
-    setShippingFee(null);
-    setFeeError('');
-    if (!isUserLoggedIn || !targetShop || !addressId || needsGhnArea) return;
-    let active = true;
-    setFeeBusy(true);
-    orderApi.getShippingFee(userId || user.id, {
-      shopId: targetShop,
-      deliveryAddressId: addressId,
-    })
-      .then(res => { if (active) setShippingFee(Number(res.shippingFee)); })
-      .catch(err => { if (active) setFeeError(err.message || 'Không tính được phí vận chuyển từ GHN.'); })
-      .finally(() => { if (active) setFeeBusy(false); });
-    return () => { active = false; };
-  }, [isUserLoggedIn, userId, user?.id, targetShop, addressId, needsGhnArea]);
-
-  const orderTotal = shippingFee !== null ? selectedTotal + shippingFee : null;
-
-  // Kiểm tra xem có sản phẩm nào được chọn mà số lượng vượt quá tồn kho không
-  const hasOverStockItem = selectedItems.some(
-    item => item.product?.stock != null && item.quantity > item.product.stock
-  );
-
-  // Xử lý thanh toán & đặt hàng
-  const handlePlaceOrder = async () => {
-    if (!isUserLoggedIn) {
-      navigate('/login?next=/cart');
+  // Chuyển sang /checkout, truyền các món đã chọn qua query (checkout tự đọc lại từ giỏ, không tin giá từ URL)
+  const continueToCheckout = () => {
+    if (!selectedItems.length || hasOverStockItem) return;
+    if (!userId || !user) {
+      navigate('/login?next=/cart'); // khách chưa đăng nhập: đăng nhập xong quay lại giỏ (giỏ khách được merge vào tài khoản)
       return;
     }
     if (user.role !== 'CUSTOMER') return;

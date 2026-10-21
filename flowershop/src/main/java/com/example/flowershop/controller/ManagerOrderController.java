@@ -98,6 +98,16 @@ public class ManagerOrderController {
         return service.pushGhnStatus(shopId, u.id(), id, body.get("status"));
     }
 
+    /** Đổi trạng thái đơn trực tiếp trong DB (không gọi GHN), body: { "status": "COMPLETED" }. */
+    @Operation(summary = "Đổi trạng thái đơn thủ công, không gọi GHN")
+    @PostMapping("/{id}/set-status")
+    @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
+    public ManagerOrderService.StatusResult setStatus(@PathVariable String shopId, @PathVariable String id,
+                                                      @RequestBody java.util.Map<String, String> body,
+                                                      @AuthenticationPrincipal CurrentUser u) {
+        return service.changeStatus(shopId, u.id(), id, body.get("status"));
+    }
+
     /**
      * Lấy danh sách hàng đợi các đơn hàng cần xử lý gấp (PENDING, AWAITING_DEPOSIT, PROCESSING).
      */

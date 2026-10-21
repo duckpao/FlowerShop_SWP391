@@ -109,6 +109,15 @@ export const managerOrderService = {
     pushGhnStatus: (shopId, id, status) => authService.authenticatedRequest(`${base(shopId)}/${encodeURIComponent(id)}/ghn-status`, { method: 'POST', body: { status } }),
 
     /**
+     * Đổi trạng thái đơn trực tiếp trong DB, không gọi GHN. Trả về { status, warning }.
+     * Gọi: POST /api/shop/mine/{shopId}/orders/{id}/set-status -> ManagerOrderController.setStatus
+     * @param {string} shopId - ID của shop
+     * @param {string} id - ID đơn hàng
+     * @param {string} status - Trạng thái mới (PENDING, PROCESSING, DELIVERING, COMPLETED, CANCELLED, REFUNDED...)
+     */
+    setStatus: (shopId, id, status) => authService.authenticatedRequest(`${base(shopId)}/${encodeURIComponent(id)}/set-status`, { method: 'POST', body: { status } }),
+
+    /**
      * Cập nhật thông tin vận đơn GHN cho đơn hàng.
      * Gọi: POST /api/shop/mine/{shopId}/orders/{id}/update-ghn -> ManagerOrderController.updateGhn
      *   -> GhnService.updateOrder -> GHN POST /v2/shipping-order/update.
