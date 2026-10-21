@@ -8,6 +8,7 @@ import PageMeta from '../components/common/PageMeta';
 import PageBreadCrumb from '../components/common/PageBreadCrumb';
 import Button from '../components/ui/button/Button';
 
+/** Định dạng số tiền sang VND kiểu Việt Nam (vd 150.000 ₫); null/undefined coi như 0. */
 const formatPrice = amount =>
   new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount || 0);
 

@@ -248,6 +248,69 @@ public class ManagerOrderService {
         return new DeliveryInfo(d.getTrackingCode(), d.getDeliveryPartnerId(), d.getStatus().name(), d.getGhnStatus());
     }
 
+    /** Kết quả đổi trạng thái thủ công; warning không rỗng khi đơn chưa có vận đơn nên các thao tác GHN chưa dùng được */
+    public record StatusResult(String status, String warning) {}
+
+    private static final Set<OrderStatus> BEFORE_SHIPPING = EnumSet.of(OrderStatus.PENDING,
+            OrderStatus.AWAITING_DEPOSIT, OrderStatus.DEPOSIT_PAID, OrderStatus.PROCESSING);
+
+    /**
+     * Đổi trạng thái đơn trực tiếp trong DB, KHÔNG gọi GHN (dùng để test và để shop tự chỉnh từng đơn).
+     * Giữ bản ghi Delivery khớp với trạng thái mới để ship/refreshStatus/pushGhnStatus vẫn chạy đúng:
+     * - Đơn đã có vận đơn thì không được lùi về trước giai đoạn giao (ship() sẽ tạo vận đơn thứ 2 cho cùng đơn).
+     * - COMPLETED / REFUNDED / CANCELLED đặt vận đơn thành delivered / returned / cancel như khi GHN báo về
+     *   (COMPLETED còn đánh dấu thanh toán SUCCESS, giống DeliverySync).
+     * - DELIVERING mà vận đơn đã kết thúc thì đưa vận đơn về ready_to_pick.
+     */
+    @Transactional
+    public StatusResult changeStatus(String shopId, String actor, String orderId, String target) {
+        owned(shopId, actor);
+        Order o = orders.findByIdAndShopId(orderId, shopId).orElseThrow(ManagerOrderService::notFound);
+        OrderStatus next;
+        try {
+            next = OrderStatus.valueOf(target == null ? "" : target.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Trạng thái không hợp lệ: " + target);
+        }
+        if (o.getStatus() == next)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Đơn đã ở trạng thái này.");
+
+        Delivery d = deliveries.findByOrderId(orderId).orElse(null);
+        String warning = null;
+        if (d != null && BEFORE_SHIPPING.contains(next))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Đơn đã có vận đơn GHN " + d.getTrackingCode()
+                    + " nên không thể lùi về trước giai đoạn giao.");
+        if (next == OrderStatus.DELIVERING && d == null)
+            warning = "Đơn chưa có vận đơn GHN nên chưa đồng bộ hoặc đẩy trạng thái GHN được.";
+
+        if (d != null) {
+            switch (next) {
+                case DELIVERING -> {
+                    if (d.getGhnStatus() == null || Set.of("delivered", "returned", "cancel").contains(d.getGhnStatus())) {
+                        d.setGhnStatus("ready_to_pick");
+                        d.setStatus(DeliveryStatus.PENDING);
+                    }
+                }
+                case COMPLETED -> { d.setGhnStatus("delivered"); d.setStatus(DeliveryStatus.DELIVERED); }
+                case REFUNDED -> { d.setGhnStatus("returned"); d.setStatus(DeliveryStatus.RETURNED); }
+                case CANCELLED -> { d.setGhnStatus("cancel"); d.setStatus(DeliveryStatus.FAILED); }
+                default -> { }
+            }
+            d.setLastModifyBy(actor);
+        }
+        if (next == OrderStatus.COMPLETED) {
+            payments.findByOrderId(orderId).forEach(p -> {
+                p.setStatus(PaymentStatus.SUCCESS);
+                p.setLastModifyBy(actor);
+            });
+        }
+        if (next == OrderStatus.CANCELLED && (o.getCancelReason() == null || o.getCancelReason().isBlank()))
+            o.setCancelReason("Shop chuyển trạng thái thủ công.");
+        o.setStatus(next);
+        o.setLastModifyBy(actor);
+        return new StatusResult(next.name(), warning);
+    }
+
     /** DTO chứa số lượng đơn hàng cần xử lý */
     public record QueueCount(long pendingCount) {}
 

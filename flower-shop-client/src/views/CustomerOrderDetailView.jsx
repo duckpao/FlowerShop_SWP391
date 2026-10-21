@@ -50,6 +50,7 @@ export default function CustomerOrderDetailView() {
     const [trackingBusy, setTrackingBusy] = useState(false)
     const [trackingError, setTrackingError] = useState('')
 
+    // Tải chi tiết đơn (customerOrderService.detail), rồi hỏi lại phí GHN hiện tại (customerOrderService.shippingFee)
     useEffect(() => {
         if (!user || !id) return
         let active = true
@@ -70,6 +71,7 @@ export default function CustomerOrderDetailView() {
         return () => { active = false }
     }, [user, id])
 
+    // Cập nhật trạng thái giao hàng: customerOrderService.refreshTracking -> POST /api/customer/orders/{id}/refresh-tracking -> GHN
     const refreshTracking = async () => {
         setTrackingBusy(true)
         setTrackingError('')

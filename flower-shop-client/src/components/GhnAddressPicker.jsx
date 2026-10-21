@@ -4,6 +4,8 @@ import Select from './form/Select'
 import Label from './form/Label'
 
 /**
+ * Chọn địa chỉ 3 cấp Tỉnh -> Quận -> Phường bằng dữ liệu GHN, qua ghnService (-> /api/public/ghn/*).
+ * Được dùng trong PersonalAddressForm (form địa chỉ).
  * Address picker: province -> district -> ward, from GHN master data. Reports the names for
  * display (city, district, ward) and the GHN codes to store (ghnDistrictId, ghnWardCode).
  * Changing a level clears the levels below it, so a stale code never survives.
@@ -17,6 +19,7 @@ export default function GhnAddressPicker({ value, onChange }) {
     const districtId = value?.ghnDistrictId ? String(value.ghnDistrictId) : ''
     const wardCode = value?.ghnWardCode || ''
 
+    // Tải danh sách tỉnh một lần khi mở: ghnService.provinces()
     useEffect(() => {
         let active = true
         ghnService.provinces()
@@ -33,6 +36,7 @@ export default function GhnAddressPicker({ value, onChange }) {
         if (match) setProvinceId(String(match.id))
     }, [provinces, value?.city, provinceId])
 
+    // Khi chọn tỉnh, tải danh sách quận: ghnService.districts(provinceId)
     useEffect(() => {
         if (!provinceId) { setDistricts([]); return }
         let active = true
@@ -42,6 +46,7 @@ export default function GhnAddressPicker({ value, onChange }) {
         return () => { active = false }
     }, [provinceId])
 
+    // Khi chọn quận, tải danh sách phường: ghnService.wards(districtId)
     useEffect(() => {
         if (!districtId) { setWards([]); return }
         let active = true
@@ -51,15 +56,18 @@ export default function GhnAddressPicker({ value, onChange }) {
         return () => { active = false }
     }, [districtId])
 
+    // Đổi tỉnh: xóa quận/phường cũ để không giữ mã GHN lỗi thời
     const pickProvince = id => {
         const province = provinces.find(p => String(p.id) === String(id))
         setProvinceId(id ? String(id) : '')
         onChange({ ...value, city: province?.name || '', district: '', ghnDistrictId: null, ward: '', ghnWardCode: '' })
     }
+    // Đổi quận: lưu tên + ghnDistrictId (dùng tính phí ship), xóa phường cũ
     const pickDistrict = id => {
         const district = districts.find(d => String(d.id) === String(id))
         onChange({ ...value, district: district?.name || '', ghnDistrictId: id ? Number(id) : null, ward: '', ghnWardCode: '' })
     }
+    // Chọn phường: lưu tên + ghnWardCode (mã chuỗi, có thể bắt đầu bằng số 0)
     const pickWard = code => {
         const ward = wards.find(w => String(w.id) === String(code))
         onChange({ ...value, ward: ward?.name || '', ghnWardCode: code ? String(code) : '' })
