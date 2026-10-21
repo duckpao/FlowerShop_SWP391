@@ -3,6 +3,7 @@ import ManagerShopsView from "./ManagerShopsView";
 import ManagerOrdersView from "./ManagerOrdersView";
 import ManagerCustomOrdersView from "./ManagerCustomOrdersView";
 import OrderQueueView from "./OrderQueueView";
+import ManagerOrderStatusView from "./ManagerOrderStatusView";
 import AdminProfileView from "./AdminProfileView";
 import ComponentCard from "../components/common/ComponentCard";
 import PageMeta from "../components/common/PageMeta";
@@ -89,7 +90,8 @@ export default function ManagerDashboardView({
   const profile = path === "/shop-admin/profile";
   const orderQueue = path === "/shop-admin/order-queue";
   const customOrders = path === "/shop-admin/custom-orders";
-  
+  const orderStatus = path === "/shop-admin/order-status";
+
   return (
     <div className="w-full">
       {error && (
@@ -98,7 +100,7 @@ export default function ManagerDashboardView({
         </div>
       )}
       
-      {!current && !profile && !orderQueue && !customOrders && (
+      {!current && !profile && !orderQueue && !customOrders && !orderStatus && (
         <>
           <PageMeta title="Tổng quan Quản lý | Hệ thống" description="Bảng điều khiển dành cho Shop Manager" />
           <PageBreadCrumb pageTitle="Tổng quan cửa hàng" />
@@ -152,7 +154,7 @@ export default function ManagerDashboardView({
         </>
       )}
       
-      {customOrders ? <ManagerCustomOrdersView user={user} /> : orderQueue ? (
+      {customOrders ? <ManagerCustomOrdersView user={user} /> : orderStatus ? <ManagerOrderStatusView /> : orderQueue ? (
         <OrderQueueView shop={null} />
       ) : current && current.section === "orders" ? (
         <ManagerOrdersView shop={null} onBack={() => {}} />

@@ -10,6 +10,11 @@ import ComponentCard from '../components/common/ComponentCard'
 import { useConfirm } from '../components/ui/confirm/ConfirmProvider'
 import { ghnStatusLabels, orderStatusColors as statusColors, orderStatusLabels as statusLabels } from '../models/orderStatus'
 
+/**
+ * Bảng quản lý đơn hàng của shop: lọc theo trạng thái, phân trang.
+ * Hành động theo trạng thái: PENDING -> xác nhận, PROCESSING -> tạo vận đơn GHN,
+ * DELIVERING -> kiểm tra trạng thái GHN.
+ */
 export default function ManagerOrdersView({ shop: initialShop, onBack }) {
     const { confirm } = useConfirm()
     const [shop, setShop] = useState(initialShop)
@@ -20,6 +25,7 @@ export default function ManagerOrdersView({ shop: initialShop, onBack }) {
     const [error, setError] = useState('')
     const [notice, setNotice] = useState('')
 
+    // Nếu không truyền shop từ props, lấy shop đầu tiên của user: managerShopService.list('SHOP')
     useEffect(() => {
         if (initialShop) return
         let active = true
@@ -29,6 +35,7 @@ export default function ManagerOrdersView({ shop: initialShop, onBack }) {
         return () => { active = false }
     }, [initialShop])
 
+    // Tải đơn hàng của trang pg theo bộ lọc: managerOrderService.list -> GET /api/shop/mine/{shopId}/orders
     const load = async (pg, preserveNotice = false) => {
         if (!shop) return
         setBusy(true); setError('')
@@ -45,6 +52,7 @@ export default function ManagerOrdersView({ shop: initialShop, onBack }) {
     }
     useEffect(() => { if (shop) load(0) }, [shop?.id, statusFilter])
 
+    // Xác nhận đơn (PENDING -> PROCESSING): managerOrderService.confirm -> POST .../{id}/confirm
     const confirmOrder = async orderId => {
         setBusy(true); setError(''); setNotice('')
         try {
@@ -54,6 +62,7 @@ export default function ManagerOrdersView({ shop: initialShop, onBack }) {
         } catch (e) { setError(e.message) } finally { setBusy(false) }
     }
 
+    // Tạo vận đơn GHN (PROCESSING -> DELIVERING): managerOrderService.ship -> POST .../{id}/ship -> GHN
     const ship = async orderId => {
         if (!await confirm({ title: 'Tạo vận đơn GHN', message: 'Tạo mã vận đơn GHN và chuyển đơn sang giao hàng?', confirmLabel: 'Tạo vận đơn' })) return
         setBusy(true); setError(''); setNotice('')
@@ -64,6 +73,7 @@ export default function ManagerOrdersView({ shop: initialShop, onBack }) {
         } catch (e) { setError(e.message) } finally { setBusy(false) }
     }
 
+    // Lấy trạng thái mới từ GHN: managerOrderService.refreshStatus -> POST .../{id}/refresh-status, rồi tải lại danh sách
     const refresh = async orderId => {
         setBusy(true); setError(''); setNotice('')
         try {
