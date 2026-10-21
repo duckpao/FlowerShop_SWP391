@@ -1,8 +1,6 @@
 package com.example.flowershop.controller;
 
-import com.example.flowershop.dto.order.MakeOrderRequest;
 import com.example.flowershop.dto.order.OrderResponse;
-import com.example.flowershop.dto.order.ShippingFeeRequest;
 import com.example.flowershop.service.OrderService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -22,39 +20,39 @@ public class OrderController {
 
     private final OrderService orderService;
 
+    /** Chặn truy cập chéo: userId trên URL phải trùng user đang đăng nhập (JWT), nếu không trả 403. */
     private static void requireOwner(String userId, CurrentUser currentUser) {
         if (currentUser == null || !userId.equals(currentUser.id())) throw ApiException.forbidden("Không có quyền truy cập đơn hàng này.");
     }
 
     /**
-     * Tạo đơn hàng từ các sản phẩm đã chọn trong giỏ.
-     * POST /api/orders/{userId}
+     * Đặt nhiều đơn một lúc (mỗi shop một đơn, kiểu giỏ hàng nhiều shop) — đây là API checkout đang dùng.
+     * Cùng một transaction: lỗi ở shop nào thì cả nhóm rollback.
+     * POST /api/orders/{userId}/batch
      */
-    @PostMapping("/{userId}")
-    public ResponseEntity<OrderResponse> makeOrder(
+    @PostMapping("/{userId}/batch")
+    public ResponseEntity<List<OrderResponse>> makeOrders(
             @PathVariable String userId,
-            @Valid @RequestBody MakeOrderRequest request, @AuthenticationPrincipal CurrentUser currentUser
-    ) {
+            @Valid @RequestBody com.example.flowershop.dto.order.MakeOrdersRequest request,
+            @AuthenticationPrincipal CurrentUser currentUser) {
         requireOwner(userId, currentUser);
-        OrderResponse response = orderService.makeOrder(userId, request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        return ResponseEntity.status(HttpStatus.CREATED).body(orderService.makeOrders(userId, request));
     }
 
     /**
-     * Phí vận chuyển GHN cho đơn từ shop tới một địa chỉ đã lưu.
-     * POST /api/orders/{userId}/shipping-fee
+     * Ước tính phí giao hàng GHN cho checkout (bản GET, trả {"shippingFee": số tiền}).
+     * GET /api/orders/{userId}/shipping-fee?shopId=...&addressId=...
      */
-    @PostMapping("/{userId}/shipping-fee")
-    public java.util.Map<String, Object> shippingFee(
-            @PathVariable String userId,
-            @Valid @RequestBody ShippingFeeRequest request, @AuthenticationPrincipal CurrentUser currentUser
-    ) {
+    @GetMapping("/{userId}/shipping-fee")
+    public ResponseEntity<java.util.Map<String, java.math.BigDecimal>> estimateShippingFee(
+            @PathVariable String userId, @RequestParam String shopId, @RequestParam String addressId,
+            @AuthenticationPrincipal CurrentUser currentUser) {
         requireOwner(userId, currentUser);
-        return java.util.Map.of("shippingFee", orderService.quoteShippingFee(userId, request));
+        return ResponseEntity.ok(java.util.Map.of("shippingFee", orderService.estimateShippingFee(userId, shopId, addressId)));
     }
 
     /**
-     * Lịch sử đơn hàng của user.
+     * Lịch sử đơn hàng của user, mới nhất trước.
      * GET /api/orders/{userId}
      */
     @GetMapping("/{userId}")

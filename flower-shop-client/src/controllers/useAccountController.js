@@ -8,7 +8,7 @@ export function useAccountController(user) {
   const [profile, setProfile] = useState(null)
   const [form, setForm] = useState({ fullName: '', phone: '' })
   const [addresses, setAddresses] = useState([])
-  const [cities, setCities] = useState([])
+  const [addressesLoaded, setAddressesLoaded] = useState(false)
   const [address, setAddress] = useState(emptyAddress())
   const [editing, setEditing] = useState(null)
   const [busy, setBusy] = useState(true)
@@ -20,13 +20,29 @@ export function useAccountController(user) {
     ? 'Số điện thoại phải bắt đầu bằng 0 và có đúng 10 chữ số' : serverPhoneError
   useEffect(() => {
     let active = true
-    setBusy(true); setError('')
-    Promise.all([accountService.profile(), ...(user.role === 'CUSTOMER' ? [accountService.addresses()] : [])])
-      .then(([p, list = [], allowed = []]) => {
+    setBusy(true); setError(''); setAddressesLoaded(false)
+    Promise.allSettled([accountService.profile(), user.role === 'CUSTOMER' ? accountService.addresses() : Promise.resolve([])])
+      .then(([profileResult, addressesResult]) => {
         if (!active) return
-        setProfile(p); setForm(profileInput(p)); setAddresses(list); setCities(allowed)
-        setAddress(emptyAddress(allowed[0] || '')); setEditing(null)
-      }).catch(e => { if (active) setError(e.message) })
+        if (profileResult.status === 'fulfilled' && profileResult.value) {
+          setProfile(profileResult.value)
+          setForm(profileInput(profileResult.value))
+        } else {
+          setProfile(null)
+        }
+        if (addressesResult.status === 'fulfilled') {
+          setAddresses(Array.isArray(addressesResult.value) ? addressesResult.value : [])
+          setAddressesLoaded(true)
+        } else {
+          setAddresses([])
+        }
+        const failures = [profileResult, addressesResult]
+          .filter(result => result.status === 'rejected')
+          .map(result => result.reason?.message || 'Không tải được dữ liệu tài khoản.')
+        if (profileResult.status === 'fulfilled' && !profileResult.value) failures.push('Không tải được hồ sơ cá nhân.')
+        if (failures.length) setError(failures.join(' '))
+        setAddress(emptyAddress()); setEditing(null)
+      })
       .finally(() => { if (active) setBusy(false) })
     return () => { active = false }
   }, [user.id, user.role, reload])
@@ -38,7 +54,7 @@ export function useAccountController(user) {
       return false
     } finally { setBusy(false) }
   }
-  const cancel = () => { setEditing(null); setAddress(emptyAddress(cities[0] || '')) }
+  const cancel = () => { setEditing(null); setAddress(emptyAddress()) }
   const saveProfile = e => {
     e.preventDefault()
     if (phoneError) return
@@ -76,7 +92,7 @@ export function useAccountController(user) {
     setError(''); setNotice('')
   }
   return {
-    profile, form, setForm: next => { setServerPhoneError(''); setForm(next) }, phoneError, addresses, cities, address, setAddress, editing, busy, error, notice,
+    profile, form, setForm: next => { setServerPhoneError(''); setForm(next) }, phoneError, addresses, addressesLoaded, address, setAddress, editing, busy, error, notice,
     saveProfile, saveAddress, uploadAvatar, remove, makeDefault, edit, cancel, retry: () => setReload(x => x + 1)
   }
 }

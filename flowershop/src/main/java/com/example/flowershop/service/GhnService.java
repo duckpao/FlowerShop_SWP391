@@ -48,9 +48,9 @@ public class GhnService {
     public record Tracking(String ghnStatus, DeliveryStatus status) {}
 
     static final int DEFAULT_WEIGHT_GRAM = 2000;
-    private static final int DEFAULT_LENGTH_CM = 30;
-    private static final int DEFAULT_WIDTH_CM = 30;
-    private static final int DEFAULT_HEIGHT_CM = 30;
+    private static final int DEFAULT_LENGTH_CM = 20;
+    private static final int DEFAULT_WIDTH_CM = 20;
+    private static final int DEFAULT_HEIGHT_CM = 20;
 
     /** Dịch vụ GHN loại 2 (hàng dưới 20kg). service_type_id 2 is the standard service for parcels under 20 kg. */
     private static final int SERVICE_TYPE_ID = 2;

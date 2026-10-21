@@ -11,6 +11,8 @@ const LayoutContent: React.FC = () => {
   const { isExpanded, isHovered, isMobileOpen } = useSidebar();
   const { pathname } = useLocation();
   const isBackOffice = pathname.startsWith("/admin") || pathname.startsWith("/shop-admin");
+  // Trang đơn hàng không cần thanh danh mục cửa hàng.
+  const showCategoryMenu = !isBackOffice && !pathname.startsWith("/orders");
 
   return (
     <div className="min-h-screen xl:flex">
@@ -25,7 +27,7 @@ const LayoutContent: React.FC = () => {
         )}
       >
         <AppHeader />
-        {!isBackOffice && <CategoryMenu />}
+        {showCategoryMenu && <CategoryMenu />}
         <main className="flex-grow mx-auto w-full max-w-(--breakpoint-2xl) p-4 md:p-6">
           <Outlet />
         </main>

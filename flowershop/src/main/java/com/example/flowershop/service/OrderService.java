@@ -1,7 +1,7 @@
 package com.example.flowershop.service;
 
 import com.example.flowershop.dto.order.MakeOrderRequest;
-import com.example.flowershop.dto.order.ShippingFeeRequest;
+import com.example.flowershop.dto.order.MakeOrdersRequest;
 import com.example.flowershop.dto.order.OrderResponse;
 import com.example.flowershop.entity.*;
 import com.example.flowershop.entity.enums.OrderStatus;
@@ -28,7 +28,6 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.time.LocalDateTime;
 import java.math.RoundingMode;
-import java.util.Optional;
 import lombok.extern.slf4j.Slf4j;
 import java.util.stream.Collectors;
 
@@ -47,6 +46,52 @@ public class OrderService {
     private final CouponRepository couponRepository;
     private final ShopRepository shopRepository;
     private final GhnService ghn;
+    private final NotificationService notificationService;
+    @jakarta.persistence.PersistenceContext private jakarta.persistence.EntityManager entityManager;
+
+    /** Ước tính phí giao hàng cho trang checkout: tìm shop, kiểm tra địa chỉ nhận của khách rồi hỏi GHN. */
+    @Transactional(readOnly = true)
+    public BigDecimal estimateShippingFee(String userId, String shopId, String deliveryAddressId) {
+        Shop shop = shopRepository.findById(shopId)
+                .orElseThrow(() -> ApiException.notFound("Không tìm thấy cửa hàng."));
+        return quoteFee(shop, resolveDestination(userId, deliveryAddressId));
+    }
+
+    /**
+     * Đặt nhiều đơn một lúc (mỗi shop một đơn). Cùng một transaction: một shop lỗi thì cả nhóm rollback.
+     * Sắp xếp theo shopId để thứ tự khóa kho ổn định giữa các request đồng thời (tránh deadlock).
+     * Từ chối nếu một shop xuất hiện 2 lần. Nếu có >1 shop, các đơn được gắn chung checkoutGroup
+     * để thanh toán gộp. Mỗi phần được chuyển thành MakeOrderRequest rồi gọi makeOrder.
+     */
+    @Transactional
+    public List<OrderResponse> makeOrders(String userId, MakeOrdersRequest request) {
+        var parts = request.getShops().stream()
+                .sorted(Comparator.comparing(MakeOrdersRequest.ShopOrder::getShopId)).toList();
+        if (parts.stream().map(MakeOrdersRequest.ShopOrder::getShopId).distinct().count() != parts.size()) {
+            throw ApiException.badRequest("Mỗi shop chỉ được xuất hiện một lần trong yêu cầu đặt hàng.");
+        }
+        // Nhiều shop: gắn chung một mã nhóm để màn đơn hàng hiển thị và thanh toán như một đơn.
+        String group = parts.size() > 1 ? UUID.randomUUID().toString() : null;
+        List<OrderResponse> orders = new ArrayList<>();
+        for (var part : parts) {
+            MakeOrderRequest single = new MakeOrderRequest();
+            single.setShopId(part.getShopId());
+            single.setCartItemIds(part.getCartItemIds());
+            single.setCouponId(part.getCouponId());
+            single.setDeliveryAddressId(request.getDeliveryAddressId());
+            single.setPaymentMethod(request.getPaymentMethod());
+            single.setRecipientName(request.getRecipientName());
+            single.setPhone(request.getPhone());
+            OrderResponse created = makeOrder(userId, single);
+            if (group != null) {
+                Order saved = orderRepository.findById(created.getId()).orElseThrow();
+                saved.setCheckoutGroup(group);
+                orderRepository.save(saved);
+            }
+            orders.add(created);
+        }
+        return orders;
+    }
 
     /**
      * Tạo đơn hàng từ các cart items đã chọn.
@@ -56,7 +101,8 @@ public class OrderService {
      *  3. Tạo Order
      *  4. Tạo OrderDetail cho mỗi sản phẩm
      *  5. Giảm stock sản phẩm
-     *  6. Xóa các cart items đã chọn
+     *  6. Xóa cart items ngay khi tạo đơn (cả COD và ONLINE); đơn bị hủy/hết hạn thì khôi phục lại giỏ
+     *  7. COD: tạo Payment PENDING và chuyển đơn sang PROCESSING; ONLINE: giữ PENDING chờ thanh toán SePay
      */
     @Transactional
     public OrderResponse makeOrder(String userId, MakeOrderRequest request) {
@@ -101,6 +147,12 @@ public class OrderService {
             }
 
             selectedCartItems.add(cartItem);
+        }
+        // Đặt lại món đang nằm trong đơn PENDING cũ của chính khách: hủy đơn cũ (trả kho) thay vì tạo đơn trùng trừ kho lần nữa.
+        // Món đang được đặt lại không khôi phục (giỏ hiện tại mới là thứ khách muốn đặt); các món khác của đơn cũ trả về giỏ.
+        List<String> reorderedProductIds = selectedCartItems.stream().map(item -> item.getProduct().getId()).toList();
+        for (String pendingId : orderDetailRepository.findPendingOrderIds(userId, reorderedProductIds)) {
+            cancelPending(pendingId, "Khách đặt lại đơn mới cho cùng sản phẩm", userId, reorderedProductIds);
         }
         selectedCartItems.sort(Comparator.comparing(item -> item.getProduct().getId()));
         for (CartItem cartItem : selectedCartItems) {
@@ -214,10 +266,10 @@ public class OrderService {
                     .build());
         }
 
-        // 7. Xóa cart items đã đặt hàng
+        // Giỏ được xóa ngay khi tạo đơn (cả COD và online); đơn bị hủy/hết hạn thì khôi phục lại giỏ.
         cartItemRepository.deleteAll(selectedCartItems);
 
-        // 8. Xử lý phương thức thanh toán
+        // 7. Xử lý phương thức thanh toán
         boolean isCod = "COD".equalsIgnoreCase(request.getPaymentMethod());
         if (isCod) {
             // COD: tạo bản ghi thanh toán ngay, trạng thái PENDING (sẽ thu tiền khi giao hàng)
@@ -238,8 +290,10 @@ public class OrderService {
             order.setStatus(OrderStatus.PROCESSING);
             order.setLastModifyBy(userId);
             order = orderRepository.save(order);
+            notificationService.notifyOrderPlaced(order);
         }
 
+        entityManager.flush(); // @CreationTimestamp chỉ được gán khi flush; thiếu dòng này response trả createdDate=null
         return OrderResponse.builder()
                 .id(order.getId())
                 .status(order.getStatus().name())
@@ -256,15 +310,46 @@ public class OrderService {
                 .build();
     }
 
-    /** Phí GHN cho một đơn giao tới địa chỉ đã lưu của khách, để hiển thị trước khi đặt. */
+    /**
+     * Khôi phục giỏ từ chi tiết đơn bị hủy, kể cả đơn cũ đã xóa giỏ lúc tạo đơn.
+     * Với mỗi sản phẩm: chưa có trong giỏ thì tạo lại CartItem; đã có nhưng ít hơn thì nâng lên số lượng đã đặt.
+     * Không làm gì nếu đơn không ở trạng thái CANCELLED.
+     */
     @Transactional
-    public BigDecimal quoteShippingFee(String userId, ShippingFeeRequest request) {
-        Shop shop = shopRepository.findById(request.getShopId())
-                .orElseThrow(() -> ApiException.notFound("Không tìm thấy cửa hàng."));
-        return quoteFee(shop, resolveDestination(userId, request.getDeliveryAddressId()));
+    public void restoreCancelledOrderItems(Order order) {
+        restoreCancelledOrderItems(order, List.of());
     }
 
-    /** Fee from the shop's pickup address (default or first, with GHN codes) to the customer's address. */
+    /** Như trên nhưng bỏ qua các sản phẩm trong skipProductIds (vd: món khách đang đặt lại). */
+    private void restoreCancelledOrderItems(Order order, java.util.Collection<String> skipProductIds) {
+        if (order == null || order.getStatus() != OrderStatus.CANCELLED || order.getCustomer() == null) return;
+        String userId = order.getCustomer().getId();
+        for (OrderDetail detail : orderDetailRepository.findByOrderId(order.getId())) {
+            if (detail.getProduct() == null) continue;
+            String productId = detail.getProduct().getId();
+            if (skipProductIds.contains(productId)) continue;
+            CartItem current = cartItemRepository.findByUserIdAndProductIdForUpdate(userId, productId).orElse(null);
+            if (current == null) {
+                cartItemRepository.save(CartItem.builder()
+                        .id(UUID.randomUUID().toString())
+                        .user(order.getCustomer())
+                        .product(detail.getProduct())
+                        .quantity(detail.getQuantity())
+                        .createdBy(userId)
+                        .lastModifyBy(userId)
+                        .build());
+            } else if (current.getQuantity() < detail.getQuantity()) {
+                current.setQuantity(detail.getQuantity());
+                current.setLastModifyBy(userId);
+                cartItemRepository.save(current);
+            }
+        }
+    }
+
+    /**
+     * Hỏi GHN phí ship từ địa chỉ lấy hàng của shop (ưu tiên địa chỉ mặc định, không thì địa chỉ đầu tiên)
+     * tới địa chỉ khách. Lỗi 400 nếu shop chưa có địa chỉ với mã quận/phường GHN.
+     */
     private BigDecimal quoteFee(Shop shop, Address destination) {
         List<Address> list = addressRepository.findByShopIdAndUserIsNullOrderByCreatedDateAscIdAsc(shop.getId());
         Address from = list.stream().filter(a -> Boolean.TRUE.equals(a.getIsDefault())).findFirst()
@@ -275,7 +360,7 @@ public class OrderService {
                 destination.getGhnDistrictId(), destination.getGhnWardCode(), GhnService.DEFAULT_WEIGHT_GRAM);
     }
 
-    /** The customer's saved address; it must carry the GHN district id and ward code a fee quote needs. */
+    /** Lấy địa chỉ đã lưu của khách (phải thuộc đúng user) và bắt buộc có mã quận + phường GHN để tính phí. */
     private Address resolveDestination(String userId, String addressId) {
         Address address = addressRepository.findById(addressId == null ? "" : addressId.trim())
                 .filter(a -> a.getUser() != null && a.getUser().getId().equals(userId))
@@ -285,6 +370,7 @@ public class OrderService {
         return address;
     }
 
+    /** Trả giá trị đầu tiên không rỗng (đã trim), hoặc null nếu cả hai đều rỗng. */
     private static String firstNonBlank(String first, String second) {
         if (first != null && !first.isBlank()) return first.trim();
         if (second != null && !second.isBlank()) return second.trim();
@@ -292,7 +378,7 @@ public class OrderService {
     }
 
     /**
-     * Lấy lịch sử đơn hàng của user.
+     * Lấy lịch sử đơn hàng của user (mới nhất trước), kèm danh sách sản phẩm từng đơn.
      */
     @Transactional(readOnly = true)
     public List<OrderResponse> getOrderHistory(String userId) {
@@ -321,6 +407,7 @@ public class OrderService {
                     .orderType(order.getOrderType().name())
                     .subTotal(order.getSubTotal())
                     .discountAmount(order.getDiscountAmount())
+                    .shippingFee(order.getShippingFee())
                     .totalAmount(order.getTotalAmount())
                     .deliveryAddressId(order.getDeliveryAddress().getId())
                     .recipientName(order.getRecipientName())
@@ -332,21 +419,42 @@ public class OrderService {
     }
 
     /**
-     * Tự động hủy đơn hàng quá 10 phút chưa thanh toán.
+     * Tự động hủy đơn hàng quá hạn chưa thanh toán (PENDING 10 phút, AWAITING_DEPOSIT 24 giờ).
      * Hoàn lại tồn kho cho từng sản phẩm, hoàn lại coupon (nếu có), và hủy các payment pending.
      */
     @Transactional
     public void cancelExpiredOrder(String orderId, String reason) {
-        Order order = orderRepository.findByIdForUpdate(orderId).orElse(null);
-        if (order == null || order.getStatus() != OrderStatus.PENDING) {
-            return;
+        cancelPendingOrder(orderId, reason, "SYSTEM_AUTO_CANCEL");
+    }
+
+    /**
+     * Hủy đơn chờ thanh toán do khách/hệ thống yêu cầu (có khôi phục giỏ).
+     * @return true nếu đơn thực sự bị hủy (false nếu đơn đã được thanh toán/xử lý trước đó).
+     */
+    @Transactional
+    public boolean cancelPendingOrder(String orderId, String reason, String actor) {
+        return cancelPending(orderId, reason, actor, List.of());
+    }
+
+    /**
+     * Lõi hủy đơn PENDING/AWAITING_DEPOSIT: khóa đơn và đọc lại từ DB (tránh race với webhook thanh toán),
+     * đặt CANCELLED, hoàn kho, hoàn lượt coupon, đánh fail các Payment PENDING, và khôi phục giỏ (trừ các sản phẩm trong skipRestoreProductIds).
+     * @return false nếu không có đơn hoặc đơn đã sang trạng thái khác (đã thanh toán...)
+     */
+    private boolean cancelPending(String orderId, String reason, String actor, java.util.Collection<String> skipRestoreProductIds) {
+        Order order = orderRepository.findById(orderId).orElse(null);
+        if (order == null) return false;
+        // Khóa và đọc lại từ DB: entity trong persistence context có thể đã cũ so với IPN vừa commit.
+        entityManager.refresh(order, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
+        if (order.getStatus() != OrderStatus.PENDING && order.getStatus() != OrderStatus.AWAITING_DEPOSIT) {
+            return false;
         }
 
-        log.info("Tự động hủy đơn hàng quá 10 phút chưa thanh toán: #{} (Lý do: {})", order.getId(), reason);
+        log.info("Hủy đơn hàng chờ thanh toán: #{} (Lý do: {})", order.getId(), reason);
 
         // 1. Cập nhật trạng thái Order sang CANCELLED
         order.setStatus(OrderStatus.CANCELLED);
-        order.setLastModifyBy("SYSTEM_AUTO_CANCEL");
+        order.setLastModifyBy(actor);
         orderRepository.save(order);
 
         // 2. Hoàn lại stock cho các sản phẩm trong đơn
@@ -356,7 +464,7 @@ public class OrderService {
                 Product product = productRepository.findByIdForUpdate(item.getProduct().getId()).orElse(null);
                 if (product != null && product.getType() != ProductType.CUSTOM) {
                     product.setStock(product.getStock() + item.getQuantity());
-                    product.setLastModifyBy("SYSTEM_AUTO_CANCEL");
+                    product.setLastModifyBy(actor);
                     productRepository.save(product);
                     log.info("Hoàn lại stock sản phẩm {}: +{}", product.getId(), item.getQuantity());
                 }
@@ -373,14 +481,9 @@ public class OrderService {
         }
 
         // 4. Hủy các payment PENDING của đơn hàng
-        List<Payment> payments = paymentRepository.findByOrderId(order.getId());
-        for (Payment payment : payments) {
-            if (payment.getStatus() == PaymentStatus.PENDING) {
-                payment.setStatus(PaymentStatus.FAILED);
-                payment.setLastModifyBy("SYSTEM_AUTO_CANCEL");
-                paymentRepository.save(payment);
-            }
-        }
+        paymentRepository.failPendingByOrderId(order.getId(), actor);
+        restoreCancelledOrderItems(order, skipRestoreProductIds);
+        return true;
     }
 }
 

@@ -40,6 +40,13 @@ public class CustomerOrderController {
         return service.list(user.id(), page, status);
     }
 
+    /** Tóm tắt các đơn theo id (màn chờ thanh toán / đặt hàng thành công). GET /api/customer/orders/by-ids?ids=a,b */
+    @GetMapping("/by-ids")
+    public java.util.List<CustomerOrderService.OrderSummary> byIds(@AuthenticationPrincipal CurrentUser user,
+                                                         @RequestParam java.util.List<String> ids) {
+        return service.byIds(user.id(), ids);
+    }
+
     @GetMapping("/{id}")
     public CustomerOrderService.OrderDetailResponse detail(@AuthenticationPrincipal CurrentUser user,
                                                            @PathVariable String id) {

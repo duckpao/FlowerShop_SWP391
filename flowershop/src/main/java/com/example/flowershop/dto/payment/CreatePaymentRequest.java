@@ -18,7 +18,7 @@ public class CreatePaymentRequest {
 
     private PaymentType paymentType; // FULL, DEPOSIT, FINAL
 
-    private String paymentMethod;    // BANK_TRANSFER, CREDIT_CARD, NAPAS (null = cho khách chọn trên cổng)
+    private String paymentMethod;    // CARD, BANK_TRANSFER, NAPAS_BANK_TRANSFER (null = cho khách chọn trên cổng)
 
     private String userId;           // Khách hàng thực hiện thanh toán
 }
