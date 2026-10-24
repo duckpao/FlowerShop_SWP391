@@ -7,6 +7,7 @@ import { managerShopService } from "../services/managerShopService";
 import { managerOrderService } from "../services/managerOrderService";
 import {
   BoxCubeIcon,
+  CalenderIcon,
   ChevronDownIcon,
   GridIcon,
   HorizontaLDots,
@@ -63,6 +64,7 @@ const customerNavItems: NavItem[] = [
   { name: 'Đặt hoa theo yêu cầu', path: '/custom-orders', icon: <ListIcon fontSize={24} /> },
   ...publicNavItems,
   { name: 'Cửa hàng đang theo dõi', path: '/following-shops', icon: <ListIcon fontSize={24} /> },
+  { name: 'Dịp đặc biệt', path: '/occasions', icon: <CalenderIcon fontSize={24} /> },
   { name: 'Theo dõi đơn hàng', path: '/orders', icon: <TableIcon fontSize={24} /> },
 ];
 

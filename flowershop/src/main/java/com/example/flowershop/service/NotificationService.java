@@ -49,6 +49,12 @@ public class NotificationService {
                 "/shop-admin/orders/" + order.getId());
     }
 
+    /** Thông báo chuông cho một người dùng (nhắc dịp đặc biệt...). */
+    @Transactional
+    public void notifyUser(User user, String title, String message, String link) {
+        create(user, title, message, link);
+    }
+
     private void create(User user, String title, String message, String link) {
         notifications.save(Notification.builder()
                 .id(UUID.randomUUID().toString())
