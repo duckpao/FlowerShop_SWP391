@@ -13,7 +13,7 @@ const base = shopId => `/api/shop/mine/${encodeURIComponent(shopId)}/orders`
  * Luồng gọi: View/Component -> managerOrderService -> authService.authenticatedRequest (fetch)
  *   -> ManagerOrderController (Spring Boot, quyền ROLE_SHOP) -> ManagerOrderService
  *   -> (với các thao tác vận đơn) GhnService -> API Giao Hàng Nhanh.
- * Được dùng bởi: OrderQueueView, ManagerOrdersView, GhnSimulator.
+ * Được dùng bởi: OrderQueueView, GhnSimulator.
  */
 export const managerOrderService = {
     /**

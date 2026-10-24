@@ -6,13 +6,18 @@ const orderApi = {
     axiosClient.get(`/orders/${userId}/shipping-fee`, { params: { shopId, addressId } }),
 
   /**
-   * Phí vận chuyển GHN từ shop tới một địa chỉ đã lưu (dùng ở CartPage).
-   * Gọi: POST /api/orders/{userId}/shipping-fee -> OrderController.shippingFee
-   *   -> OrderService.quoteShippingFee -> GhnService.calculateFee -> GHN /v2/shipping-order/fee.
+   * Đặt nhiều đơn một lúc (mỗi shop một đơn), dùng ở CheckoutPage.
+   * Gọi: POST /api/orders/{userId}/batch -> OrderController.makeOrders -> OrderService.makeOrders.
    * @param {string} userId
-   * @param {{ shopId: string, deliveryAddressId: string }} data
+   * @param {{
+   *   deliveryAddressId: string,
+   *   recipientName: string,
+   *   phone: string,
+   *   paymentMethod: 'COD' | 'ONLINE',
+   *   shops: { shopId: string, cartItemIds: string[], couponId?: string }[]
+   * }} data
    */
-  getShippingFee: (userId, data) => axiosClient.post(`/orders/${userId}/shipping-fee`, data),
+  makeOrders: (userId, data) => axiosClient.post(`/orders/${userId}/batch`, data),
 
   /**
    * Lấy lịch sử đơn hàng của user

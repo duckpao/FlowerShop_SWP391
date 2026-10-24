@@ -3,6 +3,7 @@ import { useManagerShopController } from "../controllers/useManagerShopControlle
 import { shopStatusLabels } from "../models/shopModel";
 import StaffApplicationsView from "./StaffApplicationsView";
 import ProductsView from "./ProductsView";
+import OrderQueueView from "./OrderQueueView";
 import ComponentCard from "../components/common/ComponentCard";
 import Badge from "../components/ui/badge/Badge";
 import Button from "../components/ui/button/Button";
@@ -98,7 +99,7 @@ export default function ManagerShopsView({ role, section = "all" }) {
 
       {c.selected && (
         <div className="space-y-6">
-          <ComponentCard title={`Chi tiết: ${c.selected.name}`}>
+          <ComponentCard title={`Xem chi tiết: ${c.selected.name}`}>
             <div className="mb-4">
               <Badge color={getStatusColor(c.selected.status)}>
                 {shopStatusLabels[c.selected.status]}
@@ -240,7 +241,7 @@ export default function ManagerShopsView({ role, section = "all" }) {
           )}
 
           {role === "SHOP" && ["all", "orders"].includes(section) && (
-            <ManagerOrdersView key={`orders-${c.selected.id}`} shop={c.selected} onBack={() => c.setSection("all")} />
+            <OrderQueueView key={`orders-${c.selected.id}`} shop={c.selected} />
           )}
         </div>
       )}

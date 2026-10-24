@@ -47,9 +47,7 @@ const managerNavItems: NavItem[] = [
   { name: 'Tổng quan', path: '/shop-admin', icon: <GridIcon fontSize={24} /> },
   { name: 'Quản lý shop', path: '/shop-admin/shop', icon: <PageIcon fontSize={24} /> },
   { name: 'Quản lý mặt hàng', path: '/shop-admin/products', icon: <BoxCubeIcon fontSize={24} /> },
-  { name: 'Hàng chờ xử lý', path: '/shop-admin/order-queue', icon: <ListIcon fontSize={24} /> },
   { name: 'Quản lý đơn hàng', path: '/shop-admin/orders', icon: <TableIcon fontSize={24} /> },
-  { name: 'Chuyển trạng thái đơn', path: '/shop-admin/order-status', icon: <TableIcon fontSize={24} /> },
   { name: 'Quản lý nhân sự', path: '/shop-admin/staff', icon: <UserCircleIcon fontSize={24} /> },
   { name: 'Nhắn tin nhanh', path: '#', icon: <ListIcon fontSize={24} /> }
 ];
@@ -88,7 +86,7 @@ const AppSidebar: React.FC = () => {
   const navItems = isAdmin
     ? adminNavItems
     : isManager
-      ? managerNavItems.map(item => item.path === '/shop-admin/order-queue' ? { ...item, badge: queueCount } : item)
+      ? managerNavItems.map(item => item.path === '/shop-admin/orders' ? { ...item, badge: queueCount } : item)
       : user?.role === 'CUSTOMER'
         ? customerNavItems
         : publicNavItems;
