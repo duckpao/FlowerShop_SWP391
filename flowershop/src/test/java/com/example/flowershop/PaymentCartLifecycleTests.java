@@ -31,7 +31,8 @@ class PaymentCartLifecycleTests {
     private final OrderService orderService = spy(new OrderService(orders, details, cartItems,
             mock(UserRepository.class), mock(AddressRepository.class), mock(ProductRepository.class),
             payments, mock(CouponRepository.class), mock(com.example.flowershop.repository.ShopRepository.class), mock(com.example.flowershop.service.GhnService.class),
-            mock(com.example.flowershop.service.NotificationService.class)));
+            mock(com.example.flowershop.service.NotificationService.class),
+            mock(org.springframework.context.ApplicationEventPublisher.class)));
 
     private SePayGatewayService newGateway() {
         return PaymentBusinessTests.newGateway(orders, payments, mock(RefundRepository.class), orderService);

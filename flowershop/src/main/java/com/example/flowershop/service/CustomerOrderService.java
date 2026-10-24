@@ -59,12 +59,15 @@ public class CustomerOrderService {
     private final GhnService ghn;
     private final ProductImageRepository productImages;
     private final DeliverySync deliverySync;
+    private final org.springframework.context.ApplicationEventPublisher events;
 
     public CustomerOrderService(ProductRepository products, AddressRepository addresses,
                                 OrderRepository orders, OrderDetailRepository orderDetails,
                                 PaymentRepository payments, DeliveryRepository deliveries,
                                 UserRepository users, GhnService ghn,
-                                ProductImageRepository productImages, DeliverySync deliverySync) {
+                                ProductImageRepository productImages, DeliverySync deliverySync,
+                                org.springframework.context.ApplicationEventPublisher events) {
+        this.events = events;
         this.products = products;
         this.addresses = addresses;
         this.orders = orders;
@@ -168,6 +171,7 @@ private static ResponseStatusException notFound() {
         orders.save(order);
         orderDetails.save(detail);
         payments.save(payment);
+        events.publishEvent(new com.example.flowershop.event.OrderPlacedEvent(List.of(orderId)));
         return new CheckoutResponse(orderId, subTotal, shippingFee, totalAmount, OrderStatus.PENDING.name());
     }
 

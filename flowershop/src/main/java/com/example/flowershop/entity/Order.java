@@ -11,6 +11,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
+@EntityListeners(com.example.flowershop.event.OrderStatusListener.class)
 @Table(name = "Orders")
 @Getter
 @Setter
@@ -98,4 +99,8 @@ public class Order {
 
     @Column(name = "last_modify_by", length = 36)
     private String lastModifyBy;
+
+    /** Trạng thái lúc nạp từ DB, để OrderStatusListener biết đơn vừa đổi trạng thái; không lưu xuống DB. */
+    @Transient
+    private OrderStatus statusSnapshot;
 }

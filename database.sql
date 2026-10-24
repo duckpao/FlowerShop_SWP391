@@ -548,12 +548,17 @@ CREATE TABLE Customer_Occasions (
     customer_id VARCHAR(36) NOT NULL,
     title VARCHAR(255) NOT NULL,
     occasion_date DATE NOT NULL,
-    reminder_sent BOOLEAN DEFAULT FALSE,
+    reminder_sent BOOLEAN DEFAULT FALSE, -- dịp một lần: đã nhắc xong
+    recurring_yearly BOOLEAN NOT NULL DEFAULT FALSE, -- lặp lại hằng năm (sinh nhật, kỷ niệm)
+    notify_days_before INT NOT NULL DEFAULT 7, -- nhắc trước ngày dịp bao nhiêu ngày (mặc định 1 tuần)
+    notify_time TIME NOT NULL DEFAULT '08:00:00', -- giờ gửi nhắc
+    last_reminded_for DATE NULL, -- ngày diễn ra của lần dịp đã nhắc gần nhất, tránh nhắc lặp
     created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_by VARCHAR(36),
     last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     last_modify_by VARCHAR(36),
-    FOREIGN KEY (customer_id) REFERENCES Users(id)
+    FOREIGN KEY (customer_id) REFERENCES Users(id),
+    INDEX idx_occasions_customer (customer_id)
 );
 
 -- Thông báo trong ứng dụng (chuông thông báo)
@@ -728,8 +733,8 @@ INSERT INTO Blog_Comments (id, blog_id, user_id, parent_comment_id, content, cre
 INSERT INTO Favorite_Products (user_id, product_id, created_by) VALUES
 ('user-customer-01', 'prod-01', 'user-customer-01');
 
-INSERT INTO Customer_Occasions (id, customer_id, title, occasion_date, reminder_sent, created_by) VALUES
-('occ-01', 'user-customer-01', 'Kỷ niệm ngày cưới', '2026-10-15', FALSE, 'user-customer-01');
+INSERT INTO Customer_Occasions (id, customer_id, title, occasion_date, reminder_sent, recurring_yearly, notify_days_before, notify_time, created_by) VALUES
+('occ-01', 'user-customer-01', 'Kỷ niệm ngày cưới', '2026-10-15', FALSE, TRUE, 7, '08:00:00', 'user-customer-01');
 
 -- 17. AUTH & SHOP/STAFF ONBOARDING
 INSERT INTO Otp_Challenges (id, user_id, purpose, code_hash, issued_at, expires_at, window_start, failed_attempts, send_count) VALUES
