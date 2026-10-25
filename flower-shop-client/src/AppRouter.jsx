@@ -1,6 +1,6 @@
 import { Toaster } from 'react-hot-toast';
 import AccountView from './views/AccountView';
-import { Navigate, Route, BrowserRouter as Router, Routes, useLocation, useParams } from "react-router";
+import { Navigate, Route, BrowserRouter as Router, Routes, useLocation } from "react-router";
 import AppLayout from "./layout/AppLayout";
 import AuthView from "./views/AuthView";
 import HomeView from "./views/HomeView";
@@ -30,6 +30,8 @@ import ShopDirectoryView from './views/ShopDirectoryView'
 import BudgetFlowersView from './views/BudgetFlowersView'
 import CustomFlowerOrderView from './views/CustomFlowerOrderView'
 import CustomerCustomOrdersView from './views/CustomerCustomOrdersView'
+import FloralCareView from './views/FloralCareView'
+import FloralCareDetailView from './views/FloralCareDetailView'
 
 export default function AppRouter() {
   return (
@@ -62,6 +64,8 @@ function AppRouterContent() {
             <Route path="/custom-orders" element={<CustomerCustomOrdersView auth={controller} />} />
             <Route path="/following-shops" element={<FavoriteShopsView auth={controller} />} />
             <Route path="/occasions" element={<OccasionsView auth={controller} />} />
+            <Route path="/floral-care" element={<FloralCareView />} />
+            <Route path="/floral-care/:id" element={<FloralCareDetailView />} />
             <Route path="/products/:id" element={<ProductDetailViewWrapper auth={controller} />} />
 
             <Route

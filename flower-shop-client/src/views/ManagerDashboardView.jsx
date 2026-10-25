@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import { managerShopService } from "../services/managerShopService";
 import ManagerShopsView from "./ManagerShopsView";
 import ManagerCustomOrdersView from "./ManagerCustomOrdersView";
+import ManagerBlogsView from "./ManagerBlogsView";
 import OrderQueueView from "./OrderQueueView";
 import AdminProfileView from "./AdminProfileView";
 import ComponentCard from "../components/common/ComponentCard";
@@ -47,6 +48,18 @@ const quickActions = [
     description: "Đăng, cập nhật, xóa và ẩn các sản phẩm của cửa hàng.",
   },
   {
+    href: "/shop-admin/blogs",
+    title: "Bài chăm sóc hoa",
+    section: "blogs",
+    color: "bg-pink-50 text-pink-600 dark:bg-pink-500/10 dark:text-pink-400",
+    icon: (
+      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h9l5 5v11a2 2 0 01-2 2zM8 13h8M8 17h5M14 3v5h5" />
+      </svg>
+    ),
+    description: "Đăng hướng dẫn chăm sóc hoa và nội dung quảng bá của cửa hàng.",
+  },
+  {
     href: "/shop-admin/orders",
     title: "Quản lý đơn hàng",
     section: "orders",
@@ -69,15 +82,13 @@ const statCards = [
 
 export default function ManagerDashboardView({
   user,
-  logout,
-  busy,
   error,
   path,
 }) {
   const current = quickActions.find((item) => item.href === path && item.section !== "chat");
   const profile = path === "/shop-admin/profile";
   const customOrders = path === "/shop-admin/custom-orders";
-  const needsShop = customOrders || current?.section === "orders";
+  const needsShop = customOrders || current?.section === "orders" || current?.section === "blogs";
 
   // Tải shop của Manager một lần, rồi truyền xuống các view con qua prop `shop`
   // (tương tự `user` do App truyền xuống). Mỗi Manager chỉ quản lý một shop.
@@ -169,7 +180,9 @@ export default function ManagerDashboardView({
         </>
       )}
       
-      {shopGate ? shopGate : customOrders ? <ManagerCustomOrdersView user={user} shop={shop} /> : current && current.section === "orders" ? (
+      {shopGate ? shopGate : customOrders ? <ManagerCustomOrdersView user={user} shop={shop} /> : current && current.section === "blogs" ? (
+        <ManagerBlogsView shop={shop} />
+      ) : current && current.section === "orders" ? (
         <OrderQueueView shop={shop} />
       ) : current ? (
         <ManagerShopsView

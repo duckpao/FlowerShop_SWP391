@@ -41,9 +41,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/public/products/*/reviews").permitAll()
                         .requestMatchers(HttpMethod.GET, "/", "/index.html", "/assets/**", "/images/**", "/vite.svg", "/favicon.svg", "/icons.svg",
                                 "/login", "/account", "/admin", "/admin/**", "/shop-admin", "/shop-admin/**",
-                                "/products", "/products/*", "/favorites", "/shops/*", "/checkout", "/orders", "/orders/*",
+                                "/products", "/products/*", "/favorites", "/shops/*", "/floral-care", "/floral-care/*", "/checkout", "/orders", "/orders/*",
                                 "/cart", "/home", "/occasions", "/payment/**", "/invitations/accept").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/public/shops", "/api/public/shops/*", "/api/public/shops/*/products", "/api/public/products", "/api/public/products/*", "/api/public/categories", "/api/public/ghn/provinces", "/api/public/ghn/provinces/*/districts", "/api/public/ghn/districts/*/wards").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/public/shops", "/api/public/shops/*", "/api/public/shops/*/products", "/api/public/products", "/api/public/products/*", "/api/public/categories", "/api/public/blogs", "/api/public/blogs/*", "/api/public/ghn/provinces", "/api/public/ghn/provinces/*/districts", "/api/public/ghn/districts/*/wards").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/payments/sepay/ipn", "/api/sepay/ipn", "/api/webhook/sepay").permitAll()
                         .requestMatchers("/api/cart/**", "/api/orders/**", "/api/payments/**", "/api/payment/**", "/api/sepay/checkout/**").hasRole("CUSTOMER")
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
