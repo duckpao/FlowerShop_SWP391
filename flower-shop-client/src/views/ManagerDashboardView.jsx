@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import { managerShopService } from "../services/managerShopService";
 import ManagerShopsView from "./ManagerShopsView";
 import ManagerCustomOrdersView from "./ManagerCustomOrdersView";
+import ManagerChatView from "./ManagerChatView";
 import ManagerBlogsView from "./ManagerBlogsView";
 import OrderQueueView from "./OrderQueueView";
 import AdminProfileView from "./AdminProfileView";
@@ -88,7 +89,8 @@ export default function ManagerDashboardView({
   const current = quickActions.find((item) => item.href === path && item.section !== "chat");
   const profile = path === "/shop-admin/profile";
   const customOrders = path === "/shop-admin/custom-orders";
-  const needsShop = customOrders || current?.section === "orders" || current?.section === "blogs";
+  const chat = path === "/shop-admin/chat";
+  const needsShop = customOrders || chat || current?.section === "orders" || current?.section === "blogs";
 
   // Tải shop của Manager một lần, rồi truyền xuống các view con qua prop `shop`
   // (tương tự `user` do App truyền xuống). Mỗi Manager chỉ quản lý một shop.
@@ -126,7 +128,7 @@ export default function ManagerDashboardView({
         </div>
       )}
       
-      {!current && !profile && !customOrders && (
+      {!current && !profile && !customOrders && !chat && (
         <>
           <PageMeta title="Tổng quan Quản lý | Hệ thống" description="Bảng điều khiển dành cho Shop Manager" />
           <PageBreadCrumb pageTitle="Tổng quan cửa hàng" />
@@ -180,7 +182,7 @@ export default function ManagerDashboardView({
         </>
       )}
       
-      {shopGate ? shopGate : customOrders ? <ManagerCustomOrdersView user={user} shop={shop} /> : current && current.section === "blogs" ? (
+      {shopGate ? shopGate : chat ? <ManagerChatView user={user} shop={shop} /> : customOrders ? <ManagerCustomOrdersView user={user} shop={shop} /> : current && current.section === "blogs" ? (
         <ManagerBlogsView shop={shop} />
       ) : current && current.section === "orders" ? (
         <OrderQueueView shop={shop} />

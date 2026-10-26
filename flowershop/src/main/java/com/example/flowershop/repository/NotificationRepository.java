@@ -11,6 +11,8 @@ public interface NotificationRepository extends JpaRepository<Notification, Stri
 
     List<Notification> findByUserIdOrderByCreatedDateDesc(String userId);
 
+    java.util.Optional<com.example.flowershop.entity.Notification> findFirstByUserIdAndLinkOrderByCreatedDateDesc(String userId, String link);
+
     long countByUserIdAndReadFalse(String userId);
 
     @Modifying

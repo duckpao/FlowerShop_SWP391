@@ -26,6 +26,8 @@ public class CustomFlowerOrderController {
     public CustomFlowerOrderService.Result detail(@AuthenticationPrincipal CurrentUser user,@PathVariable String id){return service.detail(user.id(),id);}
     @GetMapping("/api/shop/mine/{shopId}/custom-orders") @PreAuthorize("hasRole('SHOP')")
     public CustomFlowerOrderService.Results list(@PathVariable String shopId,@AuthenticationPrincipal CurrentUser user,@RequestParam(required=false) CustomOrderStatus status,@RequestParam(defaultValue="0") int page){return service.shopRequests(shopId,user.id(),status,page);}
+    @GetMapping("/api/shop/mine/{shopId}/custom-orders/{id}") @PreAuthorize("hasRole('SHOP')")
+    public CustomFlowerOrderService.Result shopDetail(@PathVariable String shopId,@PathVariable String id,@AuthenticationPrincipal CurrentUser user){return service.shopRequest(shopId,user.id(),id);}
     @PutMapping("/api/shop/mine/{shopId}/custom-orders/{id}") @PreAuthorize("hasRole('SHOP')")
     public CustomFlowerOrderService.Result decide(@PathVariable String shopId,@PathVariable String id,@AuthenticationPrincipal CurrentUser user,@Valid @RequestBody CustomFlowerOrderService.Decision input){return service.decide(shopId,user.id(),id,input);}
 }

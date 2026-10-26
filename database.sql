@@ -359,12 +359,18 @@ CREATE TABLE Chat_Sessions (
     id VARCHAR(36) PRIMARY KEY,
     customer_id VARCHAR(36) NOT NULL,
     shop_id VARCHAR(36) NOT NULL,
+    last_message_at DATETIME(6) NULL,
+    last_message_preview VARCHAR(255) NULL,
+    customer_unread_count INT NOT NULL DEFAULT 0, -- tin shop gửi mà khách chưa đọc
+    shop_unread_count INT NOT NULL DEFAULT 0, -- tin khách gửi mà shop chưa đọc
     created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_by VARCHAR(36),
     last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     last_modify_by VARCHAR(36),
     FOREIGN KEY (customer_id) REFERENCES Users(id),
-    FOREIGN KEY (shop_id) REFERENCES Shops(id)
+    FOREIGN KEY (shop_id) REFERENCES Shops(id),
+    UNIQUE KEY uq_chat_customer_shop (customer_id, shop_id),
+    INDEX idx_chat_shop_last (shop_id, last_message_at)
 );
 
 CREATE TABLE Chat_Messages (
@@ -374,13 +380,17 @@ CREATE TABLE Chat_Messages (
     sender_type ENUM('CUSTOMER', 'SHOP') NOT NULL,
     message TEXT,
     media JSON, -- Hình ảnh, video, voucher đính kèm
+    context_type ENUM('NONE', 'CUSTOM_ORDER', 'PRODUCT') NOT NULL DEFAULT 'NONE', -- thẻ đính kèm: đơn custom hoặc sản phẩm
+    context_id VARCHAR(36) NULL,
+    context_snapshot JSON NULL, -- tên, giá, ảnh, trạng thái tại lúc gửi
     is_read BOOLEAN DEFAULT FALSE,
     created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_by VARCHAR(36),
     last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     last_modify_by VARCHAR(36),
     FOREIGN KEY (session_id) REFERENCES Chat_Sessions(id),
-    FOREIGN KEY (sender_id) REFERENCES Users(id)
+    FOREIGN KEY (sender_id) REFERENCES Users(id),
+    INDEX idx_chat_messages_session (session_id, created_date)
 );
 
 -- ==========================================
@@ -500,7 +510,9 @@ CREATE TABLE Blogs (
     created_by VARCHAR(36),
     last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     last_modify_by VARCHAR(36),
-    FOREIGN KEY (shop_id) REFERENCES Shops(id)
+    FOREIGN KEY (shop_id) REFERENCES Shops(id),
+    INDEX idx_blogs_public_feed (status, created_date),
+    INDEX idx_blogs_shop_feed (shop_id, created_date)
 );
 
 CREATE TABLE Blog_Images (
