@@ -40,6 +40,7 @@ const adminNavItems: NavItem[] = [
   { name: 'Tổng quan', path: '/admin', icon: <GridIcon fontSize={24} /> },
   { name: 'Quản lý người dùng', path: '/admin/users', icon: <UserCircleIcon fontSize={24} /> },
   { name: 'Quản lý các shop', path: '/admin/shops', icon: <BoxCubeIcon fontSize={24} /> },
+  { name: 'Danh mục & kiểm duyệt', path: '/admin/categories', icon: <TableIcon fontSize={24} /> },
   { name: 'Xem khiếu nại', path: '#', icon: <ListIcon fontSize={24} /> }
 ];
 
