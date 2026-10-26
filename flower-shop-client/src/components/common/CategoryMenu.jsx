@@ -3,7 +3,7 @@ import { Link, useLocation, useSearchParams } from 'react-router'
 import { catalogService } from '../../services/catalogService'
 import { sortOptions } from '../../models/productModel'
 
-// Display order of the menu sections; categories with no group go under "Khác".
+// Default sections shown first; groups created or renamed by the admin follow, and categories with no group go under "Khác".
 const GROUP_ORDER = ['Chủ đề', 'Hoa tươi', 'Kiểu dáng']
 const OTHER = 'Khác'
 const CLOSE_DELAY_MS = 120
@@ -42,7 +42,9 @@ export default function CategoryMenu() {
             if (!byGroup.has(key)) byGroup.set(key, [])
             byGroup.get(key).push(c)
         }
-        const ordered = [...GROUP_ORDER, OTHER].filter(key => byGroup.has(key))
+        // Nhóm mặc định đứng trước theo thứ tự cố định, nhóm do admin tạo/đổi tên theo sau, "Khác" luôn cuối
+        const extra = [...byGroup.keys()].filter(key => !GROUP_ORDER.includes(key) && key !== OTHER).sort((a, b) => a.localeCompare(b, 'vi'))
+        const ordered = [...GROUP_ORDER, ...extra, OTHER].filter(key => byGroup.has(key))
         return ordered.map(key => ({ key, items: byGroup.get(key) }))
     }, [categories])
 
