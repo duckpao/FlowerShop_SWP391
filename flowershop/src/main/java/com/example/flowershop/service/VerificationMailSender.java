@@ -17,7 +17,7 @@ public class VerificationMailSender {
         deliver(event);
     }
     @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
-    public void sendOtp(AuthMailEvent event) {
+public void sendOtp(AuthMailEvent event) {
         if (isOtp(event)) deliver(event);
     }
     private boolean isOtp(AuthMailEvent event) {

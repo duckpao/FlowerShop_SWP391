@@ -15,6 +15,7 @@ public interface UserRepository extends JpaRepository<User, String>, JpaSpecific
     Optional<User> findByEmail(String email);
 
     @Query("select u.id from User u where u.email = :email")
+    
     Optional<String> findUserIdByEmail(@Param("email") String email);
 
     @Query(value = "select * from Users where id = :id for update", nativeQuery = true)

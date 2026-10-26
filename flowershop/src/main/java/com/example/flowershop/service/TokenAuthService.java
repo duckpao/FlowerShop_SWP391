@@ -30,8 +30,10 @@ public class TokenAuthService {
     @Transactional
     public Tokens login(LoginRequest request) {
         if(captcha.required(request.email())) captcha.verify(request.email(),"login",request.captchaId(),request.captchaAnswer());
-        String id=users.findUserIdByEmail(request.email().strip().toLowerCase(Locale.ROOT)).orElse(null);
-        User user=id == null ? null : users.findByIdForUpdate(id).orElse(null);
+        String id =users.findUserIdByEmail(request.email().strip().toLowerCase(Locale.ROOT)).orElse(null);
+        User user= id == null ? 
+        null : 
+        users.findByIdForUpdate(id).orElse(null);
         if (user == null || user.getPasswordHash() == null) {
             captcha.failed(request.email());
             throw invalid();
@@ -40,8 +42,10 @@ public class TokenAuthService {
         boolean matches=request.password().getBytes(StandardCharsets.UTF_8).length <=72 && encoder.matches(request.password(), hash);
         if (!matches || !eligible(user)) { captcha.failed(request.email()); throw invalid(); }
         captcha.clear(request.email());
-        AuthSession session=new AuthSession(); session.setId(UUID.randomUUID().toString());
-        session.setUserId(user.getId()); session.setExpiresAt(Instant.now().plusSeconds(604800));
+        AuthSession session=new AuthSession();
+         session.setId(UUID.randomUUID().toString());
+        session.setUserId(user.getId());
+         session.setExpiresAt(Instant.now().plusSeconds(604800));
         return rotate(user, session);
     }
     @Transactional(noRollbackFor=BadCredentialsException.class)
