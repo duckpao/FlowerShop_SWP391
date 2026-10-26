@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { customFlowerService } from '../services/customFlowerService'
 import { CustomRequestCard, customButton, customStatus } from '../components/customFlowers/CustomFlowerParts'
 import '../styles/custom-flowers.css'
@@ -12,7 +13,13 @@ function DecisionForm({ request, busy, submit }) {
       <button className={customButton}>Gửi phản hồi</button></fieldset>
   </form>
 }
+// Yêu cầu bị từ chối đã đóng nên không còn lối vào trao đổi
+const ChatLink = ({ request }) => request.status === 'REJECTED' ? null
+  : <Link className={`${customButton} mt-4 inline-flex`} to={`/shop-admin/chat?customOrderId=${encodeURIComponent(request.id)}`}>Trao đổi với khách</Link>
+
 export default function ManagerCustomOrdersView({ user, shop }) {
+  const [params] = useSearchParams(), openId = params.get('open') || ''
+  const [opened, setOpened] = useState(null), [openError, setOpenError] = useState('')
   const shopId = shop?.id || '', [status, setStatus] = useState('')
   const [data, setData] = useState(null), [page, setPage] = useState(0), [revision, setRevision] = useState(0)
   const [busy, setBusy] = useState(false), [saving, setSaving] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('')
@@ -22,6 +29,14 @@ export default function ManagerCustomOrdersView({ user, shop }) {
     customFlowerService.shopRequests(shopId, page, status).then(v => { if (active) setData(v) }).catch(e => { if (active) setError(e.message) }).finally(() => { if (active) setBusy(false) })
     return () => { active = false }
   }, [shopId, page, status, revision])
+  // Thẻ chat dẫn tới ?open=: tải riêng yêu cầu đó để hiện ngay dù nó nằm ở trang khác hoặc khác bộ lọc
+  useEffect(() => {
+    setOpened(null); setOpenError('')
+    if (!openId || !shopId) return
+    let active = true
+    customFlowerService.shopDetail(shopId, openId).then(v => { if (active) setOpened(v) }).catch(e => { if (active) setOpenError(e.message) })
+    return () => { active = false }
+  }, [openId, shopId, revision])
   async function decide(id, body) {
     if (saving) return
     setSaving(true); setError(''); setNotice('')
@@ -35,7 +50,9 @@ export default function ManagerCustomOrdersView({ user, shop }) {
       <button disabled={busy || saving || !shopId} onClick={() => setRevision(v => v + 1)}>Tải lại</button></div>
     {error && <p role="alert" className="message error">{error}</p>}{notice && <p role="status" className="message success">{notice}</p>}{busy && <p role="status">Đang tải yêu cầu…</p>}
     {!shop && !error && <p>Chưa có cửa hàng để xử lý yêu cầu.</p>}{data?.totalElements === 0 && <p>Chưa có yêu cầu ở trạng thái này.</p>}
-    {data?.content.map(r => <CustomRequestCard key={r.id} request={r}>{['REQUESTED', 'NEGOTIATING'].includes(r.status) && <DecisionForm request={r} busy={saving} submit={decide} />}</CustomRequestCard>)}
+    {openError && <p role="alert" className="message error">{openError}</p>}
+    {opened && <div aria-label="Yêu cầu đang xem" className="rounded-2xl ring-2 ring-brand-500"><CustomRequestCard request={opened}><ChatLink request={opened} />{['REQUESTED', 'NEGOTIATING'].includes(opened.status) && <DecisionForm request={opened} busy={saving} submit={decide} />}</CustomRequestCard></div>}
+    {data?.content.filter(r => r.id !== openId).map(r => <CustomRequestCard key={r.id} request={r}><ChatLink request={r} />{['REQUESTED', 'NEGOTIATING'].includes(r.status) && <DecisionForm request={r} busy={saving} submit={decide} />}</CustomRequestCard>)}
     {data && data.totalPages > 1 && <div className="catalog-actions"><button disabled={busy || saving || page === 0} onClick={() => setPage(v => v - 1)}>Trang trước</button><span>{page + 1}/{data.totalPages}</span><button disabled={busy || saving || page + 1 >= data.totalPages} onClick={() => setPage(v => v + 1)}>Trang sau</button></div>}
   </section></main>
 }
