@@ -62,11 +62,14 @@ public class ManagerOrderService {
     private final AddressRepository addresses;
     private final GhnService ghn;
     private final DeliverySync deliverySync;
+    private final RefundRepository refunds;
+    private final NotificationService notifications;
 
     public ManagerOrderService(OrderRepository orders, OrderDetailRepository orderDetails,
                                DeliveryRepository deliveries, PaymentRepository payments,
                                ShopRepository shops, AddressRepository addresses, GhnService ghn,
-                               DeliverySync deliverySync) {
+                               DeliverySync deliverySync, RefundRepository refunds,
+                               NotificationService notifications) {
         this.orders = orders;
         this.orderDetails = orderDetails;
         this.deliveries = deliveries;
@@ -75,6 +78,16 @@ public class ManagerOrderService {
         this.addresses = addresses;
         this.ghn = ghn;
         this.deliverySync = deliverySync;
+        this.refunds = refunds;
+        this.notifications = notifications;
+    }
+
+    /** Tổng tiền khách đã trả thật (các Payment SUCCESS) cho đơn. */
+    private BigDecimal paidAmount(String orderId) {
+        return payments.findByOrderId(orderId).stream()
+                .filter(payment -> payment.getStatus() == PaymentStatus.SUCCESS)
+                .map(Payment::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     private static String blankToEmpty(String value) {
@@ -147,7 +160,7 @@ public class ManagerOrderService {
     /**
      * Tạo vận đơn GHN và chuyển đơn sang DELIVERING (Đang giao).
      * Quy trình:
-     * 1. Xác thực đơn hàng đang ở trạng thái PROCESSING.
+     * 1. Xác thực đơn hàng đang ở trạng thái PROCESSING, hoặc DEPOSIT_PAID (đơn đặt cọc: phần còn lại GHN thu hộ).
      * 2. Lấy địa chỉ lấy hàng mặc định của Shop (tự động phân giải mã GHN nếu là dữ liệu cũ).
      * 3. Lấy địa chỉ nhận hàng của khách (tự động phân giải mã GHN nếu chưa có).
      * 4. Gọi API GHN /shipping-order/create với đầy đủ thông tin người gửi, người nhận, kích thước và hàng hóa.
@@ -158,8 +171,8 @@ public class ManagerOrderService {
     public ShipResult ship(String shopId, String actor, String orderId) {
         owned(shopId, actor);
         Order o = orders.findByIdAndShopId(orderId, shopId).orElseThrow(ManagerOrderService::notFound);
-        if (o.getStatus() != OrderStatus.PROCESSING)
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Chỉ đơn hàng PROCESSING mới có thể gửi GHN.");
+        if (o.getStatus() != OrderStatus.PROCESSING && o.getStatus() != OrderStatus.DEPOSIT_PAID)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Chỉ đơn hàng PROCESSING hoặc đã đặt cọc mới có thể gửi GHN.");
 
         // Lấy địa chỉ kho/shop gửi hàng
         var shopAddrs = addresses.findByShopIdAndUserIsNullOrderByCreatedDateAscIdAsc(shopId);
@@ -203,11 +216,14 @@ public class ManagerOrderService {
         var fromPlace = new GhnService.Place(blankToEmpty(shopAddr.getAddressLine()), blankToEmpty(shopAddr.getWard()),
                 blankToEmpty(shopAddr.getDistrict()), blankToEmpty(shopAddr.getCity()));
 
-        BigDecimal paidAmount = payments.findByOrderId(orderId).stream()
-            .filter(payment -> payment.getStatus() == PaymentStatus.SUCCESS)
-            .map(Payment::getAmount)
-            .reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal codAmount = o.getTotalAmount().subtract(paidAmount).max(BigDecimal.ZERO);
+        BigDecimal codAmount = o.getTotalAmount().subtract(paidAmount(orderId)).max(BigDecimal.ZERO);
+        // Đơn đã cọc chưa có phiếu COD: ghi phần còn lại GHN thu hộ, giao thành công thì DeliverySync đánh dấu SUCCESS.
+        if (codAmount.signum() > 0 && payments.findByOrderId(orderId).stream().noneMatch(p -> p.getPaymentMethod() == PaymentMethod.COD)) {
+            payments.save(Payment.builder().id(UUID.randomUUID().toString()).order(o)
+                    .paymentType(PaymentType.FINAL).paymentMethod(PaymentMethod.COD).amount(codAmount)
+                    .invoiceNumber("COD-" + orderId.replace("-", "").substring(0, 8).toUpperCase())
+                    .status(PaymentStatus.PENDING).createdBy(actor).lastModifyBy(actor).build());
+        }
 
         var result = ghn.createOrder(toName, toPhone, toPlace, fromName, fromPhone, fromPlace,
                 codAmount.intValue(), productName, quantity, price);
@@ -318,13 +334,13 @@ public class ManagerOrderService {
     public record CancelRequest(String reason) {}
 
     /**
-     * Lấy danh sách hàng đợi xử lý của shop (chỉ bao gồm các đơn PENDING, AWAITING_DEPOSIT, PROCESSING).
+     * Lấy danh sách hàng đợi xử lý của shop (chỉ bao gồm các đơn PENDING, AWAITING_DEPOSIT, DEPOSIT_PAID, PROCESSING).
      */
     public Results queue(String shopId, String actor, int page, String status) {
         owned(shopId, actor);
         Pageable pageable = PageRequest.of(page, 20, Sort.by(Sort.Order.desc("createdDate"), Sort.Order.asc("id")));
         Page<Order> result;
-        List<OrderStatus> queueStatuses = List.of(OrderStatus.PENDING, OrderStatus.AWAITING_DEPOSIT, OrderStatus.PROCESSING);
+        List<OrderStatus> queueStatuses = List.of(OrderStatus.PENDING, OrderStatus.AWAITING_DEPOSIT, OrderStatus.DEPOSIT_PAID, OrderStatus.PROCESSING);
         
         if (status != null && !status.isBlank()) {
             try {
@@ -356,18 +372,29 @@ public class ManagerOrderService {
 
     /**
      * Hủy đơn hàng trước khi chuyển sang giai đoạn giao hàng.
-     * Chỉ cho phép hủy khi đơn ở trạng thái PENDING, AWAITING_DEPOSIT hoặc PROCESSING.
+     * Chỉ cho phép hủy khi đơn ở trạng thái PENDING, AWAITING_DEPOSIT, DEPOSIT_PAID hoặc PROCESSING.
+     * Nếu khách đã trả tiền (cọc hoặc đủ) thì tạo yêu cầu hoàn tiền và báo staff để liên hệ khách.
      */
     @Transactional
     public void cancel(String shopId, String actor, String orderId, String reason) {
         owned(shopId, actor);
         Order o = orders.findByIdAndShopId(orderId, shopId).orElseThrow(ManagerOrderService::notFound);
-        if (o.getStatus() != OrderStatus.PENDING && o.getStatus() != OrderStatus.AWAITING_DEPOSIT && o.getStatus() != OrderStatus.PROCESSING) {
+        if (o.getStatus() != OrderStatus.PENDING && o.getStatus() != OrderStatus.AWAITING_DEPOSIT
+                && o.getStatus() != OrderStatus.DEPOSIT_PAID && o.getStatus() != OrderStatus.PROCESSING) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Chỉ có thể hủy đơn hàng trước khi bắt đầu giao.");
         }
         o.setStatus(OrderStatus.CANCELLED);
         o.setCancelReason(reason);
         o.setLastModifyBy(actor);
+
+        BigDecimal paid = paidAmount(orderId);
+        if (paid.signum() > 0) {
+            Refund refund = Refund.builder().id(UUID.randomUUID().toString()).order(o).amount(paid)
+                    .reason("Shop hủy đơn" + (reason == null || reason.isBlank() ? "." : ": " + reason))
+                    .createdBy(actor).lastModifyBy(actor).build();
+            refunds.save(refund);
+            notifications.notifyRefundRequested(refund);
+        }
     }
 
     /**

@@ -19,6 +19,7 @@ import PaymentCancelPage from "./views/PaymentCancelPage";
 import PaymentPendingPage from "./views/PaymentPendingPage";
 import CodSuccessPage from "./views/CodSuccessPage";
 import DevDepositTestPage from "./pages/DevDepositTestPage";
+import OrderInvoiceView from "./views/OrderInvoiceView";
 import CustomerOrdersView from "./views/CustomerOrdersView";
 import CustomerOrderDetailView from "./views/CustomerOrderDetailView";
 import { useAuthController } from "./controllers/useAuthController";
@@ -53,6 +54,8 @@ function AppRouterContent() {
         <Routes>
           <Route path="/login" element={<AuthView {...controller} />} />
           <Route path="/invitations/accept" element={<AcceptInvitationView />} />
+          {/* Hóa đơn nằm ngoài AppLayout để in không kèm menu */}
+          <Route path="/orders/:id/invoice" element={<OrderInvoiceView />} />
 
           {/* All routes wrapped in AppLayout which handles public/admin/shop nav items dynamically */}
           <Route element={<AppLayout />}>

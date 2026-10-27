@@ -47,6 +47,8 @@ public interface OrderRepository extends JpaRepository<Order, String> {
      */
     boolean existsByDeliveryAddressId(String addressId);
 
+    boolean existsByCustomRequestIdAndStatusNot(String customRequestId, OrderStatus status);
+
     /**
      * Lấy danh sách đơn hàng của shop theo tập hợp trạng thái (ví dụ: hàng đợi chờ xử lý PENDING, PROCESSING), có phân trang.
      */

@@ -97,6 +97,86 @@ public class OrderService {
     }
 
     /**
+     * Tạo đơn đặt cọc (CUSTOM, AWAITING_DEPOSIT) từ yêu cầu hoa tùy chỉnh đã được shop chấp nhận và báo giá.
+     * Tổng = báo giá của shop + phí GHN; tiền cọc tính lúc tạo thanh toán (SePayGatewayService.requiredDeposit).
+     * Khóa yêu cầu để 2 lần bấm cùng lúc không tạo 2 đơn; đơn cũ đã hủy (hết hạn cọc) thì được đặt lại.
+     */
+    @Transactional
+    public OrderResponse makeCustomOrder(String userId, String requestId, com.example.flowershop.dto.order.MakeCustomOrderRequest request) {
+        CustomOrderRequest custom = entityManager.find(CustomOrderRequest.class, requestId,
+                jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
+        if (custom == null || !custom.getCustomer().getId().equals(userId))
+            throw ApiException.notFound("Không tìm thấy yêu cầu hoa tùy chỉnh.");
+        if (custom.getStatus() != com.example.flowershop.entity.enums.CustomOrderStatus.ACCEPTED)
+            throw ApiException.badRequest("Shop chưa chấp nhận yêu cầu này.");
+        if (orderRepository.existsByCustomRequestIdAndStatusNot(requestId, OrderStatus.CANCELLED))
+            throw ApiException.badRequest("Yêu cầu này đã có đơn đặt cọc.");
+        BigDecimal quotedPrice;
+        try {
+            var node = new com.fasterxml.jackson.databind.ObjectMapper().readTree(
+                    custom.getDesiredComponents() == null ? "{}" : custom.getDesiredComponents()).path("quotedPrice");
+            quotedPrice = node.isNumber() ? node.decimalValue() : null;
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            quotedPrice = null;
+        }
+        if (quotedPrice == null || quotedPrice.signum() <= 0) throw ApiException.badRequest("Yêu cầu chưa có báo giá của shop.");
+
+        Shop shop = custom.getShop();
+        if (shop.getStatus() != ShopStatus.ACTIVE) throw ApiException.badRequest("Cửa hàng hiện không hoạt động.");
+        User user = custom.getCustomer();
+        Address deliveryAddress = resolveDestination(userId, request.getDeliveryAddressId());
+        BigDecimal shippingFee = quoteFee(shop, deliveryAddress);
+        BigDecimal totalAmount = quotedPrice.add(shippingFee);
+
+        Order order = orderRepository.save(Order.builder()
+                .id(UUID.randomUUID().toString())
+                .customer(user)
+                .shop(shop)
+                .deliveryAddress(deliveryAddress)
+                .recipientName(firstNonBlank(request.getRecipientName(), user.getFullName()))
+                .recipientPhone(firstNonBlank(request.getPhone(), user.getPhone()))
+                .orderType(OrderType.CUSTOM)
+                .customRequestId(requestId)
+                .subTotal(quotedPrice)
+                .shippingFee(shippingFee)
+                .totalAmount(totalAmount)
+                .customerNote(custom.getDescription())
+                .status(OrderStatus.AWAITING_DEPOSIT)
+                .createdBy(userId)
+                .lastModifyBy(userId)
+                .build());
+        // Hoa làm theo yêu cầu không có sản phẩm trong kho: một dòng giá = báo giá, kèm thiết kế khách đã gửi.
+        OrderDetail detail = orderDetailRepository.save(OrderDetail.builder()
+                .id(UUID.randomUUID().toString())
+                .order(order)
+                .customMaterials(custom.getDesiredComponents())
+                .price(quotedPrice)
+                .quantity(1)
+                .createdBy(userId)
+                .lastModifyBy(userId)
+                .build());
+
+        entityManager.flush();
+        events.publishEvent(new com.example.flowershop.event.OrderPlacedEvent(List.of(order.getId())));
+        return OrderResponse.builder()
+                .id(order.getId())
+                .status(order.getStatus().name())
+                .orderType(order.getOrderType().name())
+                .subTotal(quotedPrice)
+                .discountAmount(BigDecimal.ZERO)
+                .shippingFee(shippingFee)
+                .totalAmount(totalAmount)
+                .deliveryAddressId(deliveryAddress.getId())
+                .recipientName(order.getRecipientName())
+                .recipientPhone(order.getRecipientPhone())
+                .items(List.of(OrderResponse.OrderItemResponse.builder()
+                        .id(detail.getId()).productName("Hoa đặt theo yêu cầu")
+                        .price(quotedPrice).quantity(1).itemTotal(quotedPrice).build()))
+                .createdDate(order.getCreatedDate())
+                .build();
+    }
+
+    /**
      * Tạo đơn hàng từ các cart items đã chọn.
      * Flow:
      *  1. Validate user, address, cart items

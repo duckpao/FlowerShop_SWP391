@@ -152,10 +152,7 @@ export default function CheckoutPage() {
       setOrderError('Vui lòng nhập tên và số điện thoại người nhận.');
       return;
     }
-    if (!selectedAddressId || !addresses.some(address => address.id === selectedAddressId)) {
-      setOrderError('Vui lòng chọn địa chỉ nhận hoa đã lưu trong tài khoản.');
-      return;
-    }
+    
 
     setOrderLoading(true);
     setOrderError('');

@@ -7,6 +7,7 @@ import ManagerChatView from "./ManagerChatView";
 import ManagerBlogsView from "./ManagerBlogsView";
 import OrderQueueView from "./OrderQueueView";
 import AdminProfileView from "./AdminProfileView";
+import StaffRefundsView from "./StaffRefundsView";
 import ComponentCard from "../components/common/ComponentCard";
 import PageMeta from "../components/common/PageMeta";
 import PageBreadCrumb from "../components/common/PageBreadCrumb";
@@ -119,6 +120,8 @@ export default function ManagerDashboardView({
       </p>
     </div>
   );
+
+  if (path === "/shop-admin/refunds") return <StaffRefundsView />;
 
   return (
     <div className="w-full">

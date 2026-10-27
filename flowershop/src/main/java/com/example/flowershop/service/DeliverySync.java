@@ -3,13 +3,14 @@ package com.example.flowershop.service;
 import com.example.flowershop.entity.Delivery;
 import com.example.flowershop.entity.Order;
 import com.example.flowershop.entity.enums.OrderStatus;
+import com.example.flowershop.entity.enums.PaymentMethod;
 import com.example.flowershop.entity.enums.PaymentStatus;
 import com.example.flowershop.repository.PaymentRepository;
 import org.springframework.stereotype.Component;
 
 /**
  * Đồng bộ trạng thái GHN báo về vào Delivery và, khi vận đơn kết thúc, vào Order.
- * delivered -> COMPLETED (và đánh dấu thanh toán SUCCESS), returned -> REFUNDED, cancel -> CANCELLED.
+ * delivered -> COMPLETED (và đánh dấu khoản COD SUCCESS), returned -> REFUNDED, cancel -> CANCELLED.
  */
 @Component
 public class DeliverySync {
@@ -27,7 +28,9 @@ public class DeliverySync {
         switch (tracking.ghnStatus()) {
             case "delivered" -> {
                 order.setStatus(OrderStatus.COMPLETED);
-                payments.findByOrderId(order.getId()).forEach(p -> {
+                // Chỉ tiền GHN thu hộ; lần thanh toán online FAILED/hủy không được thành SUCCESS
+                payments.findByOrderId(order.getId()).stream()
+                        .filter(p -> p.getPaymentMethod() == PaymentMethod.COD).forEach(p -> {
                     p.setStatus(PaymentStatus.SUCCESS);
                     p.setLastModifyBy(actor);
                 });

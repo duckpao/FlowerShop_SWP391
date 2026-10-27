@@ -10,6 +10,19 @@ import PageBreadCrumb from '../components/common/PageBreadCrumb'
 
 import { ghnStatusLabels, orderStatusColors as statusColors, orderStatusLabels as statusLabels } from '../models/orderStatus'
 
+const refundStatusLabels = {
+    REQUESTED: 'Chờ cửa hàng liên hệ',
+    APPROVED: 'Cửa hàng đã liên hệ, đang hoàn tiền',
+    PROCESSED: 'Đã hoàn tiền',
+    REJECTED: 'Bị từ chối',
+}
+const refundStatusColors = { REQUESTED: 'warning', APPROVED: 'info', PROCESSED: 'success', REJECTED: 'error' }
+
+/** Tổng đã trả thành công (cọc + phần còn lại, hoặc toàn bộ); dùng để biết đơn đã có hóa đơn chưa. */
+const paidAmount = order => (order.payments || [])
+    .filter(p => p.status === 'SUCCESS')
+    .reduce((sum, p) => sum + Number(p.amount || 0), 0)
+
 const trackingSteps = [
     'Cửa hàng đang chuẩn bị đơn hàng',
     'Cửa hàng đã giao hàng cho đơn vị vận chuyển',
@@ -147,7 +160,7 @@ export default function CustomerOrderDetailView() {
                             <th className="px-4 py-2 text-right text-sm">Thành tiền</th>
                         </tr></thead>
                         <tbody>{order.items?.map((item, i) => <tr key={i} className="border-t">
-                            <td className="px-4 py-2">{item.productName || '-'}</td>
+                            <td className="px-4 py-2">{item.productName || (item.productId ? '-' : 'Hoa đặt theo yêu cầu')}</td>
                             <td className="px-4 py-2 text-right">{formatPrice(item.price)}</td>
                             <td className="px-4 py-2 text-right">{item.quantity}</td>
                             <td className="px-4 py-2 text-right font-medium">{formatPrice(item.price * item.quantity)}</td>
@@ -163,7 +176,38 @@ export default function CustomerOrderDetailView() {
                         <p className="text-xs text-gray-500">Phí GHN hiện tại có thể khác phí đã chốt khi đặt hàng; tổng tiền đơn không thay đổi.</p>
                     )}
                     <div className="flex justify-between font-bold text-base"><span>Tổng cộng:</span><span className="text-brand-500">{formatPrice(order.totalAmount)}</span></div>
+                    {paidAmount(order) > 0 && paidAmount(order) < Number(order.totalAmount) && (
+                        <div className="flex justify-between text-gray-600 dark:text-gray-300"><span>Đã cọc / còn lại (trả khi nhận hàng):</span><span>{formatPrice(paidAmount(order))} / {formatPrice(Number(order.totalAmount) - paidAmount(order))}</span></div>
+                    )}
                 </div>
+
+                {paidAmount(order) >= Number(order.totalAmount) && (
+                    <Link to={`/orders/${order.id}/invoice`} className="mt-4 inline-flex rounded-lg border border-brand-500 px-3 py-2 text-sm font-medium text-brand-600 hover:bg-brand-50 dark:text-brand-400">
+                        Xem hóa đơn
+                    </Link>
+                )}
+
+                {order.refunds?.length > 0 && (
+                    <section className="mt-6 rounded-lg border border-gray-200 p-4 dark:border-white/10" aria-label="Hoàn tiền">
+                        <h2 className="mb-3 font-semibold">Hoàn tiền</h2>
+                        <ul className="space-y-3">
+                            {order.refunds.map((r, i) => (
+                                <li key={i} className="text-sm">
+                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                        <strong>{formatPrice(r.amount)}</strong>
+                                        <Badge color={refundStatusColors[r.status] || 'primary'}>{refundStatusLabels[r.status] || r.status}</Badge>
+                                    </div>
+                                    {r.reason && <p className="mt-1 text-gray-600 dark:text-gray-300">{r.reason}</p>}
+                                    <p className="mt-1 text-xs text-gray-500">
+                                        Tạo lúc {new Date(r.createdDate).toLocaleString('vi-VN')}
+                                        {r.status !== 'REQUESTED' && r.updatedDate && ` · Cập nhật ${new Date(r.updatedDate).toLocaleString('vi-VN')}`}
+                                    </p>
+                                </li>
+                            ))}
+                        </ul>
+                        <p className="mt-3 text-xs text-gray-500">Nhân viên cửa hàng sẽ gọi cho bạn để hoàn tiền. Bạn sẽ nhận thông báo khi tiền đã được hoàn.</p>
+                    </section>
+                )}
 
                 {order.delivery && <div className="mt-4 p-3 rounded-lg bg-gray-50 dark:bg-white/5 text-sm">
                     <p><strong>Vận đơn:</strong> {order.delivery.trackingCode}</p>

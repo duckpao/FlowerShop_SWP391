@@ -39,7 +39,18 @@ public class CustomerOrderService {
     public record OrderDetailResponse(String id, String shopId, String shopName, String status,
                                       BigDecimal subTotal, BigDecimal shippingFee, BigDecimal totalAmount,
                                       java.time.LocalDateTime createdDate, String note,
-                                      List<OrderItemResponse> items, DeliveryInfo delivery) {}
+                                      List<OrderItemResponse> items, DeliveryInfo delivery,
+                                      String orderType, BigDecimal discountAmount, String recipientName,
+                                      String recipientPhone, String deliveryAddress,
+                                      List<PaymentLine> payments, List<RefundLine> refunds) {}
+
+    /** Một lần thanh toán của đơn (cọc / phần còn lại / toàn bộ), dùng cho hóa đơn. */
+    public record PaymentLine(String paymentType, String paymentMethod, BigDecimal amount, String status,
+                              String invoiceNumber, String gatewayTransactionNo, java.time.LocalDateTime paidAt) {}
+
+    /** Khoản hoàn tiền của đơn để khách theo dõi: REQUESTED → APPROVED → PROCESSED, hoặc REJECTED. */
+    public record RefundLine(BigDecimal amount, String reason, String status,
+                             java.time.LocalDateTime createdDate, java.time.LocalDateTime updatedDate) {}
 
         public record ShippingFeeResponse(BigDecimal shippingFee) {}
 
@@ -59,6 +70,7 @@ public class CustomerOrderService {
     private final GhnService ghn;
     private final ProductImageRepository productImages;
     private final DeliverySync deliverySync;
+    private final RefundRepository refunds;
     private final org.springframework.context.ApplicationEventPublisher events;
 
     public CustomerOrderService(ProductRepository products, AddressRepository addresses,
@@ -66,8 +78,9 @@ public class CustomerOrderService {
                                 PaymentRepository payments, DeliveryRepository deliveries,
                                 UserRepository users, GhnService ghn,
                                 ProductImageRepository productImages, DeliverySync deliverySync,
-                                org.springframework.context.ApplicationEventPublisher events) {
+                                org.springframework.context.ApplicationEventPublisher events, RefundRepository refunds) {
         this.events = events;
+        this.refunds = refunds;
         this.products = products;
         this.addresses = addresses;
         this.orders = orders;
@@ -246,9 +259,23 @@ private static ResponseStatusException notFound() {
         DeliveryInfo delivery = deliveries.findByOrderId(orderId)
                 .map(d -> new DeliveryInfo(d.getTrackingCode(), d.getDeliveryPartnerId(), d.getStatus().name(), d.getGhnStatus()))
                 .orElse(null);
+        Address a = order.getDeliveryAddress();
+        String address = a == null ? null : String.join(", ", java.util.stream.Stream.of(
+                a.getAddressLine(), a.getWard(), a.getDistrict(), a.getCity()).filter(s -> s != null && !s.isBlank()).toList());
+        var paymentLines = payments.findByOrderId(orderId).stream()
+                .sorted(Comparator.comparing(Payment::getCreatedDate, Comparator.nullsFirst(Comparator.naturalOrder())))
+                .map(p -> new PaymentLine(p.getPaymentType().name(), p.getPaymentMethod().name(), p.getAmount(),
+                        p.getStatus().name(), p.getInvoiceNumber(), p.getGatewayTransactionNo(),
+                        p.getStatus() == PaymentStatus.SUCCESS ? p.getLastModifyDate() : null))
+                .toList();
+        var refundLines = refunds.findByOrderIdOrderByCreatedDateAsc(orderId).stream()
+                .map(r -> new RefundLine(r.getAmount(), r.getReason(), r.getStatus().name(), r.getCreatedDate(), r.getLastModifyDate()))
+                .toList();
         return new OrderDetailResponse(order.getId(), order.getShop().getId(), order.getShop().getName(),
                 order.getStatus().name(), order.getSubTotal(), order.getShippingFee(), order.getTotalAmount(),
-                order.getCreatedDate(), null, items, delivery);
+                order.getCreatedDate(), order.getCustomerNote(), items, delivery,
+                order.getOrderType() == null ? null : order.getOrderType().name(), order.getDiscountAmount(),
+                order.getRecipientName(), order.getRecipientPhone(), address, paymentLines, refundLines);
     }
 
         public BigDecimal calculateShippingFeeForOrder(String customerId, String orderId) {

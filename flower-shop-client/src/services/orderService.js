@@ -8,6 +8,10 @@ const orderService = {
   /** Tạo nhiều đơn cùng lúc (giỏ có sản phẩm của nhiều shop -> mỗi shop 1 đơn). */
   makeOrders: (userId, data) => axiosClient.post(`/orders/${userId}/batch`, data),
 
+  /** Tạo đơn đặt cọc từ yêu cầu hoa tùy chỉnh đã được shop báo giá ({ deliveryAddressId }). */
+  makeCustomOrder: (userId, requestId, data) =>
+    axiosClient.post(`/orders/${userId}/custom/${encodeURIComponent(requestId)}`, data),
+
   /**
    * Lấy lịch sử đơn hàng của user
    * @param {string} userId

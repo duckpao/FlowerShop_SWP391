@@ -40,6 +40,19 @@ public class OrderController {
     }
 
     /**
+     * Tạo đơn đặt cọc từ yêu cầu hoa tùy chỉnh đã được shop báo giá; sau đó frontend mở SePay với paymentType DEPOSIT.
+     * POST /api/orders/{userId}/custom/{requestId}
+     */
+    @PostMapping("/{userId}/custom/{requestId}")
+    public ResponseEntity<OrderResponse> makeCustomOrder(
+            @PathVariable String userId, @PathVariable String requestId,
+            @Valid @RequestBody com.example.flowershop.dto.order.MakeCustomOrderRequest request,
+            @AuthenticationPrincipal CurrentUser currentUser) {
+        requireOwner(userId, currentUser);
+        return ResponseEntity.status(HttpStatus.CREATED).body(orderService.makeCustomOrder(userId, requestId, request));
+    }
+
+    /**
      * Ước tính phí giao hàng GHN cho checkout (bản GET, trả {"shippingFee": số tiền}).
      * GET /api/orders/{userId}/shipping-fee?shopId=...&addressId=...
      */

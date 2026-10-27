@@ -309,6 +309,7 @@ CREATE TABLE Orders (
     cancel_reason TEXT,
     shop_note TEXT,
     checkout_group VARCHAR(36), -- chung cho các đơn (mỗi shop một đơn) tạo trong cùng một lần thanh toán giỏ; NULL với đơn lẻ
+    custom_request_id VARCHAR(36), -- đơn đặt cọc (CUSTOM) sinh từ Custom_Order_Requests; NULL với đơn thường
     status ENUM('PENDING', 'AWAITING_DEPOSIT', 'DEPOSIT_PAID', 'PROCESSING', 'DELIVERING', 'COMPLETED', 'CANCELLED', 'REFUNDED') DEFAULT 'PENDING',
     created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_by VARCHAR(36),
@@ -318,7 +319,8 @@ CREATE TABLE Orders (
     FOREIGN KEY (shop_id) REFERENCES Shops(id),
     FOREIGN KEY (delivery_address_id) REFERENCES Addresses(id),
     FOREIGN KEY (coupon_id) REFERENCES Coupons(id),
-    INDEX idx_orders_checkout_group (checkout_group)
+    INDEX idx_orders_checkout_group (checkout_group),
+    INDEX idx_orders_custom_request (custom_request_id)
 );
 
 CREATE TABLE Order_Details (

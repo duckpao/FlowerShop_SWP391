@@ -80,21 +80,8 @@ export default function PaymentSuccessPage() {
       fetchCart();
     }
   }, [isConfirmed, fetchCart]);
-  // Đơn đặt cọc: lần này mới trả DEPOSIT, còn phải trả FINAL trước khi giao
+  // Đơn đặt cọc: lần này trả DEPOSIT, phần còn lại GHN thu hộ khi giao (COD)
   const isDeposit = paymentData?.paymentType === 'DEPOSIT';
-  const [payingFinal, setPayingFinal] = useState(false);
-  const [finalError, setFinalError] = useState('');
-  // Tạo giao dịch FINAL cho phần còn lại và chuyển sang cổng SePay
-  const payRemaining = async () => {
-    setPayingFinal(true);
-    setFinalError('');
-    try {
-      await paymentService.startSePayCheckout(paymentData.orderId, 'FINAL');
-    } catch (err) {
-      setFinalError(err.message || 'Không thể tạo thanh toán. Vui lòng thử lại.');
-      setPayingFinal(false);
-    }
-  };
   // Định dạng số tiền VND
   const formatPrice = (amount) =>
     new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount || 0);
@@ -129,7 +116,7 @@ export default function PaymentSuccessPage() {
               </h1>
               <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
                 {isDeposit
-                  ? 'Cửa hàng đã nhận tiền cọc của bạn. Phần còn lại cần được thanh toán trước khi giao hoa.'
+                  ? 'Cửa hàng đã nhận tiền cọc và bắt đầu làm hoa. Phần còn lại bạn thanh toán khi nhận hàng (COD).'
                   : 'Đơn hàng của bạn đã được ghi nhận và thanh toán thành công. Cửa hàng sẽ chuẩn bị hoa tươi và giao sớm nhất!'}
               </p>
             </div>
@@ -158,7 +145,7 @@ export default function PaymentSuccessPage() {
               )}
               {isDeposit && (
                 <div className="flex justify-between items-baseline">
-                  <span className="text-gray-500 dark:text-gray-400">Còn lại cần thanh toán:</span>
+                  <span className="text-gray-500 dark:text-gray-400">Còn lại (trả khi nhận hàng):</span>
                   <span className="font-semibold text-gray-900 dark:text-white">
                     {formatPrice(paymentData.remainingAmount)}
                   </span>
@@ -166,14 +153,7 @@ export default function PaymentSuccessPage() {
               )}
             </div>
 
-            {finalError && <p className="text-sm text-error-600">{finalError}</p>}
-
             <div className="flex flex-col sm:flex-row justify-center gap-3 pt-2">
-              {paymentData?.nextPaymentType === 'FINAL' && (
-                <Button onClick={payRemaining} disabled={payingFinal} className="w-full sm:w-auto px-8 py-3">
-                  {payingFinal ? 'Đang chuyển đến cổng thanh toán...' : 'Thanh toán phần còn lại'}
-                </Button>
-              )}
               <Link to="/" className="w-full sm:w-auto">
                 <Button className="w-full sm:w-auto px-8 py-3">
                   Tiếp tục mua sắm

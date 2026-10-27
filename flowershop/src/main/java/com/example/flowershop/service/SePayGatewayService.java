@@ -494,10 +494,10 @@ public class SePayGatewayService {
                 ? order.getStatus() == OrderStatus.DEPOSIT_PAID
                 : order.getStatus() == OrderStatus.PENDING || order.getStatus() == OrderStatus.AWAITING_DEPOSIT;
         if (!expected) {
-            // Đơn đã hủy (hết hạn) hoặc đã được trả bằng invoice khác → tạo yêu cầu hoàn tiền cho admin xử lý.
+            // Đơn đã hủy (hết hạn) hoặc đã được trả bằng invoice khác → tạo yêu cầu hoàn tiền, báo staff của shop liên hệ khách.
             log.error("Nhận tiền cho đơn {} ở trạng thái {} (invoice {}, {}đ) → tạo yêu cầu hoàn tiền.",
                     order.getId(), order.getStatus(), invoiceNumber, paidAmount);
-            refundRepository.save(Refund.builder()
+            Refund refund = Refund.builder()
                     .id(UUID.randomUUID().toString())
                     .order(order)
                     .amount(paidAmount)
@@ -506,7 +506,9 @@ public class SePayGatewayService {
                     .gatewayResponse(gatewayResponse)
                     .createdBy(actor)
                     .lastModifyBy(actor)
-                    .build());
+                    .build();
+            refundRepository.save(refund);
+            notificationService.notifyRefundRequested(refund);
             return PaidOutcome.REFUND_REQUIRED;
         }
 
@@ -527,7 +529,8 @@ public class SePayGatewayService {
 
     /**
      * Chủ động đối soát với Cổng SePay qua REST API (nguồn xác nhận thanh toán duy nhất).
-     * Gọi GET /v1/order/detail/{invoice}; chỉ khi order_status = CAPTURED và invoice khớp mới ghi nhận
+     * Gọi GET /v1/order/detail/{invoice}; chỉ khi order_status = CAPTURED và invoice khớp mới ghi nhậ
+
      * (giao dịch gộp qua applyGroupPaid, giao dịch đơn qua applyPaid).
      * Gọi HTTP bên ngoài transaction, chỉ mở transaction ngắn để ghi kết quả.
      * @return true nếu đơn thực sự được xác nhận đã thanh toán

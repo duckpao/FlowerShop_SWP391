@@ -15,7 +15,7 @@ const statusColors = {
 }
 const statusLabels = {
     PENDING: 'Chờ xác nhận', AWAITING_DEPOSIT: 'Chờ đặt cọc', DEPOSIT_PAID: 'Đã đặt cọc', PROCESSING: 'Đang chuẩn bị',
-    DELIVERING: 'Đang giao', COMPLETED: 'Hoàn thành', CANCELLED: 'Đã hủy', REFUNDED: 'Đã hoàn tiền',
+    DELIVERING: 'Đang giao', COMPLETED: 'Hoàn thành', CANCELLED: 'Đã hủy', REFUNDED: 'Hoàn hàng',
 }
 const tabs = [
     ['', 'Tất cả'], ['PENDING', 'Chờ thanh toán'], ['PROCESSING', 'Đang chuẩn bị'],
@@ -24,6 +24,8 @@ const tabs = [
 
 const statusLabel = o => o.status === 'PENDING' && o.paymentMethod === 'ONLINE' ? 'Chờ thanh toán' : statusLabels[o.status] || o.status
 const paymentLabel = o => {
+    if (o.status === 'AWAITING_DEPOSIT') return 'Online · Chờ đặt cọc'
+    if (o.status === 'DEPOSIT_PAID') return 'Đã đặt cọc online · Phần còn lại trả khi nhận hàng'
     if (o.paymentMethod === 'COD') return 'Thanh toán khi nhận hàng (COD)'
     if (o.paymentMethod === 'ONLINE') return o.paymentStatus === 'SUCCESS' ? 'Online · Đã thanh toán' : 'Online · Chưa thanh toán'
     return 'Chưa chọn phương thức'
@@ -81,6 +83,17 @@ export default function CustomerOrdersView() {
         try {
             if (group.ids.length === 1) await paymentService.startSePayCheckout(group.ids[0], 'FULL')
             else await paymentService.startSePayGroupCheckout(group.ids)
+        } catch (e) {
+            setError(e.message || 'Không thể tạo thanh toán. Vui lòng thử lại.')
+            setPayingId('')
+        }
+    }
+    // Đơn hoa theo yêu cầu: trả cọc online (AWAITING_DEPOSIT); phần còn lại GHN thu hộ khi giao. Số tiền do server tính.
+    const payStep = async (order, type) => {
+        setPayingId(order.id)
+        setError('')
+        try {
+            await paymentService.startSePayCheckout(order.id, type)
         } catch (e) {
             setError(e.message || 'Không thể tạo thanh toán. Vui lòng thử lại.')
             setPayingId('')
@@ -147,7 +160,7 @@ export default function CustomerOrdersView() {
                                             {item.imageUrl ? <img src={item.imageUrl} alt={item.productName} className="h-full w-full object-cover" /> : <span className="text-2xl">💐</span>}
                                         </div>
                                         <div className="min-w-0 flex-1">
-                                            <p className="line-clamp-1 text-sm font-semibold text-gray-900 dark:text-white">{item.productName || 'Sản phẩm'}</p>
+                                            <p className="line-clamp-1 text-sm font-semibold text-gray-900 dark:text-white">{item.productName || (item.productId ? 'Sản phẩm' : 'Hoa đặt theo yêu cầu')}</p>
                                             <p className="text-xs text-gray-500">x{item.quantity}</p>
                                         </div>
                                         <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{formatPrice(item.price)}</span>
@@ -168,6 +181,9 @@ export default function CustomerOrdersView() {
                                 {secondsLeft != null && (
                                     <PayAction order={{ id: g.key, paymentSecondsLeft: secondsLeft, ids: payable.map(o => o.id) }}
                                         paying={payingId === g.key} onPay={payGroup} onExpire={refreshSoon} />
+                                )}
+                                {!multi && first.status === 'AWAITING_DEPOSIT' && (
+                                    <Button size="sm" disabled={payingId === first.id} onClick={() => payStep(first, 'DEPOSIT')}>{payingId === first.id ? 'Đang chuyển…' : 'Đặt cọc'}</Button>
                                 )}
                             </span>
                         </div>
