@@ -87,6 +87,9 @@ export default function ManagerDashboardView({
   const current = quickActions.find((item) => item.href === path && item.section !== "chat");
   const profile = path === "/shop-admin/profile";
   const orderQueue = path === "/shop-admin/order-queue";
+  if (user?.role === 'SHOP_STAFF') {
+    return <ManagerShopsView role="SHOP_STAFF" />;
+  }
   
   return (
     <div className="w-full">
