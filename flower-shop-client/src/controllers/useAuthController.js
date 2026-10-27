@@ -136,6 +136,21 @@ export function useAuthController() {
     } catch (failure) { await failed(failure) }
     finally { setBusy(false) }
   }
+  async function googleLogin(credential) {
+    if (busy || !credential) return
+    setBusy(true); setError(''); setNotice('')
+    try {
+      const current = await authService.loginWithGoogle(credential)
+      setUser(current); setPage('account'); setNotice('Đăng nhập thành công.')
+      const nextUrl = new URLSearchParams(window.location.search).get('next')
+      if (invitationReturn) routerNavigate(invitationReturn)
+      else if (current.role === 'ADMIN') routerNavigate('/admin')
+      else if (current.role === 'SHOP' || current.role === 'SHOP_STAFF') routerNavigate('/shop-admin')
+      else if (nextUrl) routerNavigate(nextUrl)
+      else routerNavigate('/')
+    } catch (failure) { setError(failure.message) }
+    finally { setBusy(false) }
+  }
   async function resend() {
     if (busy) return
     setBusy(true); setError(''); setNotice('')
@@ -168,5 +183,5 @@ export function useAuthController() {
     setter(value)
     setFieldErrors(current => { const next = {...current}; delete next[name]; return next })
   }
-  return { registrationRole, setRegistrationRole, fieldErrors, captchaRequired, captcha, captchaAnswer, setCaptchaAnswer, reloadCaptcha, page, email, fullName, password, confirmation, otp, busy: busy || initializing, error, notice, seconds, user, logout, checkSession, setEmail: edit('email', setEmail), setFullName: edit('fullName', setFullName), setPassword: edit('password', setPassword), setConfirmation: edit('confirmation', setConfirmation), setOtp: edit('otp', setOtp), submit, resend, navigate }
+  return { registrationRole, setRegistrationRole, fieldErrors, captchaRequired, captcha, captchaAnswer, setCaptchaAnswer, reloadCaptcha, page, email, fullName, password, confirmation, otp, busy: busy || initializing, error, notice, seconds, user, logout, checkSession, setEmail: edit('email', setEmail), setFullName: edit('fullName', setFullName), setPassword: edit('password', setPassword), setConfirmation: edit('confirmation', setConfirmation), setOtp: edit('otp', setOtp), submit, resend, navigate, googleLogin }
 }

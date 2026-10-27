@@ -2,6 +2,7 @@ import PasswordInput from '../components/form/PasswordInput';
 import { useState } from 'react';
 import { validateAuth } from '../models/authValidation';
 import AccountView from "./AccountView";
+import GoogleSignInButton from '../components/auth/GoogleSignInButton';
 export default function AuthView({
   registrationRole, setRegistrationRole,
   fieldErrors = {}, captchaRequired, captcha, captchaAnswer, setCaptchaAnswer, reloadCaptcha,
@@ -26,6 +27,7 @@ export default function AuthView({
   submit,
   resend,
   navigate,
+  googleLogin,
 }) {
   const [touched, setTouched] = useState({})
   const errors = validateAuth(page, {email, fullName, password, confirmation, otp})
@@ -246,7 +248,9 @@ export default function AuthView({
               </button>
             </fieldset>
           </form>
-          
+
+          {page === "signin" && <GoogleSignInButton onCredential={googleLogin} disabled={busy} />}
+
           <div className="flex flex-col items-center space-y-4">
             {(page === "otp" || page === "reset") && (
               <>
