@@ -88,6 +88,10 @@ public class ManagerProductService {
     private final ShopRepository shops;
     private final ProductRepository products;
     private final CategoryRepository categories;
+                         String name, String description, BigDecimal price, Integer stock,
+                         List<String> images, List<VideoInfo> videos) {}
+    public record Results(List<Result> content, int page, int totalPages, long totalElements) {}
+    private final ShopRepository shops;private final ProductRepository products;private final CategoryRepository categories;
     private final ProductImageRepository images;
     private final ProductVideoRepository videos;
     private final CloudinaryService cloudinary;

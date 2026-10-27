@@ -56,7 +56,6 @@ public class AuthService {
                 org.springframework.http.HttpStatus.TOO_MANY_REQUESTS,
                 "Bạn đã yêu cầu quá nhiều mã OTP. Vui lòng chờ 60 giây giữa các lần đăng ký, tối đa 3 mã trong 15 phút.");
         // Replace submitted details only when issuing a new code: old codes cannot
-        // activate a different password/name from a subsequent registration request.
         registration.setFullName(request.fullName().strip());
         registration.setShopName(shopName);
         registration.setShopDescription(description);
@@ -101,7 +100,8 @@ public class AuthService {
     }
 
     @Transactional(noRollbackFor = InvalidOtpException.class)
-    public void verify(String email, String code) { verify(email,code,null,null); }
+    public void verify(String email, String code) 
+    { verify(email,code,null,null); }
 
     @Transactional(noRollbackFor = InvalidOtpException.class)
     public void verify(String email, String code, String captchaId, String captchaAnswer) {

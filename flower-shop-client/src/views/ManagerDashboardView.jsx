@@ -120,6 +120,11 @@ export default function ManagerDashboardView({
     </div>
   );
 
+  const orderQueue = path === "/shop-admin/order-queue";
+  if (user?.role === 'SHOP_STAFF') {
+    return <ManagerShopsView role="SHOP_STAFF" />;
+  }
+  
   return (
     <div className="w-full">
       {error && (
