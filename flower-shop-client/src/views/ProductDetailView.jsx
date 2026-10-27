@@ -276,6 +276,12 @@ export default function ProductDetailView({ auth, productId, id }) {
                 >
                   {p.shopName}
                 </a>
+                <a
+                  href={`/chat?shopId=${encodeURIComponent(p.shopId)}&productId=${encodeURIComponent(p.id)}`}
+                  className="ml-2 inline-flex min-h-11 items-center rounded-lg px-4 text-sm font-medium text-gray-700 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 dark:text-gray-300 dark:ring-gray-700 dark:hover:bg-white/5"
+                >
+                  Chat với shop
+                </a>
               </div>
 
               {/* Price & Stock Banner */}

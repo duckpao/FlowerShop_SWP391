@@ -360,12 +360,18 @@ CREATE TABLE Chat_Sessions (
     id VARCHAR(36) PRIMARY KEY,
     customer_id VARCHAR(36) NOT NULL,
     shop_id VARCHAR(36) NOT NULL,
+    last_message_at DATETIME(6) NULL,
+    last_message_preview VARCHAR(255) NULL,
+    customer_unread_count INT NOT NULL DEFAULT 0, -- tin shop gửi mà khách chưa đọc
+    shop_unread_count INT NOT NULL DEFAULT 0, -- tin khách gửi mà shop chưa đọc
     created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_by VARCHAR(36),
     last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     last_modify_by VARCHAR(36),
     FOREIGN KEY (customer_id) REFERENCES Users(id),
-    FOREIGN KEY (shop_id) REFERENCES Shops(id)
+    FOREIGN KEY (shop_id) REFERENCES Shops(id),
+    UNIQUE KEY uq_chat_customer_shop (customer_id, shop_id),
+    INDEX idx_chat_shop_last (shop_id, last_message_at)
 );
 
 CREATE TABLE Chat_Messages (
@@ -375,13 +381,17 @@ CREATE TABLE Chat_Messages (
     sender_type ENUM('CUSTOMER', 'SHOP') NOT NULL,
     message TEXT,
     media JSON, -- Hình ảnh, video, voucher đính kèm
+    context_type ENUM('NONE', 'CUSTOM_ORDER', 'PRODUCT') NOT NULL DEFAULT 'NONE', -- thẻ đính kèm: đơn custom hoặc sản phẩm
+    context_id VARCHAR(36) NULL,
+    context_snapshot JSON NULL, -- tên, giá, ảnh, trạng thái tại lúc gửi
     is_read BOOLEAN DEFAULT FALSE,
     created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_by VARCHAR(36),
     last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     last_modify_by VARCHAR(36),
     FOREIGN KEY (session_id) REFERENCES Chat_Sessions(id),
-    FOREIGN KEY (sender_id) REFERENCES Users(id)
+    FOREIGN KEY (sender_id) REFERENCES Users(id),
+    INDEX idx_chat_messages_session (session_id, created_date)
 );
 
 -- ==========================================
@@ -501,7 +511,9 @@ CREATE TABLE Blogs (
     created_by VARCHAR(36),
     last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     last_modify_by VARCHAR(36),
-    FOREIGN KEY (shop_id) REFERENCES Shops(id)
+    FOREIGN KEY (shop_id) REFERENCES Shops(id),
+    INDEX idx_blogs_public_feed (status, created_date),
+    INDEX idx_blogs_shop_feed (shop_id, created_date)
 );
 
 CREATE TABLE Blog_Images (
@@ -549,12 +561,17 @@ CREATE TABLE Customer_Occasions (
     customer_id VARCHAR(36) NOT NULL,
     title VARCHAR(255) NOT NULL,
     occasion_date DATE NOT NULL,
-    reminder_sent BOOLEAN DEFAULT FALSE,
+    reminder_sent BOOLEAN DEFAULT FALSE, -- dịp một lần: đã nhắc xong
+    recurring_yearly BOOLEAN NOT NULL DEFAULT FALSE, -- lặp lại hằng năm (sinh nhật, kỷ niệm)
+    notify_days_before INT NOT NULL DEFAULT 7, -- nhắc trước ngày dịp bao nhiêu ngày (mặc định 1 tuần)
+    notify_time TIME NOT NULL DEFAULT '08:00:00', -- giờ gửi nhắc
+    last_reminded_for DATE NULL, -- ngày diễn ra của lần dịp đã nhắc gần nhất, tránh nhắc lặp
     created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_by VARCHAR(36),
     last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     last_modify_by VARCHAR(36),
-    FOREIGN KEY (customer_id) REFERENCES Users(id)
+    FOREIGN KEY (customer_id) REFERENCES Users(id),
+    INDEX idx_occasions_customer (customer_id)
 );
 
 -- Thông báo trong ứng dụng (chuông thông báo)
@@ -720,8 +737,8 @@ INSERT INTO Blog_Comments (id, blog_id, user_id, parent_comment_id, content, cre
 INSERT INTO Favorite_Products (user_id, product_id, created_by) VALUES
 ('user-customer-01', 'prod-01', 'user-customer-01');
 
-INSERT INTO Customer_Occasions (id, customer_id, title, occasion_date, reminder_sent, created_by) VALUES
-('occ-01', 'user-customer-01', 'Kỷ niệm ngày cưới', '2026-10-15', FALSE, 'user-customer-01');
+INSERT INTO Customer_Occasions (id, customer_id, title, occasion_date, reminder_sent, recurring_yearly, notify_days_before, notify_time, created_by) VALUES
+('occ-01', 'user-customer-01', 'Kỷ niệm ngày cưới', '2026-10-15', FALSE, TRUE, 7, '08:00:00', 'user-customer-01');
 
 -- 17. AUTH & SHOP/STAFF ONBOARDING
 INSERT INTO Otp_Challenges (id, user_id, purpose, code_hash, issued_at, expires_at, window_start, failed_attempts, send_count) VALUES

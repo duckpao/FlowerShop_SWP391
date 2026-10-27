@@ -1,9 +1,11 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router";
+import { managerShopService } from "../services/managerShopService";
 import ManagerShopsView from "./ManagerShopsView";
-import ManagerOrdersView from "./ManagerOrdersView";
 import ManagerCustomOrdersView from "./ManagerCustomOrdersView";
+import ManagerChatView from "./ManagerChatView";
+import ManagerBlogsView from "./ManagerBlogsView";
 import OrderQueueView from "./OrderQueueView";
-import ManagerOrderStatusView from "./ManagerOrderStatusView";
 import AdminProfileView from "./AdminProfileView";
 import ComponentCard from "../components/common/ComponentCard";
 import PageMeta from "../components/common/PageMeta";
@@ -47,16 +49,16 @@ const quickActions = [
     description: "Đăng, cập nhật, xóa và ẩn các sản phẩm của cửa hàng.",
   },
   {
-    href: "/shop-admin/order-queue",
-    title: "Hàng chờ xử lý",
-    section: "order-queue",
-    color: "bg-error-50 text-error-600 dark:bg-error-500/10 dark:text-error-400",
+    href: "/shop-admin/blogs",
+    title: "Bài chăm sóc hoa",
+    section: "blogs",
+    color: "bg-pink-50 text-pink-600 dark:bg-pink-500/10 dark:text-pink-400",
     icon: (
       <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h9l5 5v11a2 2 0 01-2 2zM8 13h8M8 17h5M14 3v5h5" />
       </svg>
     ),
-    description: "Xử lý nhanh các đơn hàng mới, đang chờ gửi đơn vị vận chuyển.",
+    description: "Đăng hướng dẫn chăm sóc hoa và nội dung quảng bá của cửa hàng.",
   },
   {
     href: "/shop-admin/orders",
@@ -68,7 +70,7 @@ const quickActions = [
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
       </svg>
     ),
-    description: "Xem danh sách toàn bộ đơn hàng và kiểm tra trạng thái.",
+    description: "Hàng chờ xử lý, chi tiết đơn, vận đơn GHN và cập nhật trạng thái đơn hàng.",
   },
 ];
 
@@ -81,16 +83,42 @@ const statCards = [
 
 export default function ManagerDashboardView({
   user,
-  logout,
-  busy,
   error,
   path,
 }) {
   const current = quickActions.find((item) => item.href === path && item.section !== "chat");
   const profile = path === "/shop-admin/profile";
-  const orderQueue = path === "/shop-admin/order-queue";
   const customOrders = path === "/shop-admin/custom-orders";
-  const orderStatus = path === "/shop-admin/order-status";
+  const chat = path === "/shop-admin/chat";
+  const needsShop = customOrders || chat || current?.section === "orders" || current?.section === "blogs";
+
+  // Tải shop của Manager một lần, rồi truyền xuống các view con qua prop `shop`
+  // (tương tự `user` do App truyền xuống). Mỗi Manager chỉ quản lý một shop.
+  const [shop, setShop] = useState(null);
+  const [shopError, setShopError] = useState("");
+  const [shopLoading, setShopLoading] = useState(true);
+  useEffect(() => {
+    if (user?.role !== "SHOP") return;
+    let active = true;
+    setShopLoading(true);
+    managerShopService.list("SHOP")
+      .then((shops) => {
+        if (!active) return;
+        setShop(shops[0] || null);
+        setShopError("");
+      })
+      .catch((e) => { if (active) setShopError(e.message); })
+      .finally(() => { if (active) setShopLoading(false); });
+    return () => { active = false; };
+  }, [user?.id, user?.role]);
+
+  const shopGate = !needsShop || shop ? null : (
+    <div className="p-8">
+      <p className="text-gray-500">
+        {shopLoading ? "Đang tải thông tin shop…" : shopError || "Bạn chưa có cửa hàng nào."}
+      </p>
+    </div>
+  );
 
   return (
     <div className="w-full">
@@ -100,7 +128,7 @@ export default function ManagerDashboardView({
         </div>
       )}
       
-      {!current && !profile && !orderQueue && !customOrders && !orderStatus && (
+      {!current && !profile && !customOrders && !chat && (
         <>
           <PageMeta title="Tổng quan Quản lý | Hệ thống" description="Bảng điều khiển dành cho Shop Manager" />
           <PageBreadCrumb pageTitle="Tổng quan cửa hàng" />
@@ -154,10 +182,10 @@ export default function ManagerDashboardView({
         </>
       )}
       
-      {customOrders ? <ManagerCustomOrdersView user={user} /> : orderStatus ? <ManagerOrderStatusView /> : orderQueue ? (
-        <OrderQueueView shop={null} />
+      {shopGate ? shopGate : chat ? <ManagerChatView user={user} shop={shop} /> : customOrders ? <ManagerCustomOrdersView user={user} shop={shop} /> : current && current.section === "blogs" ? (
+        <ManagerBlogsView shop={shop} />
       ) : current && current.section === "orders" ? (
-        <ManagerOrdersView shop={null} onBack={() => {}} />
+        <OrderQueueView shop={shop} />
       ) : current ? (
         <ManagerShopsView
           key={current.section}

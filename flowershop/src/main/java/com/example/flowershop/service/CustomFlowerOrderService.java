@@ -114,6 +114,9 @@ public class CustomFlowerOrderService {
     public Results shopRequests(String shopId,String actor,CustomOrderStatus status,int page){
         ownedShop(shopId,actor);return results(status==null?requests.findByShopId(shopId,page(page)):requests.findByShopIdAndStatus(shopId,status,page(page)));
     }
+    public Result shopRequest(String shopId,String actor,String id){
+        ownedShop(shopId,actor);return result(requests.findById(id).filter(r->r.getShop().getId().equals(shopId)).orElseThrow(CustomFlowerOrderService::missing));
+    }
     @Transactional
     public Result decide(String shopId,String actor,String id,Decision input){
         var shop=ownedShop(shopId,actor);

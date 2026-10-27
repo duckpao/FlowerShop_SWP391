@@ -47,6 +47,7 @@ public class OrderService {
     private final ShopRepository shopRepository;
     private final GhnService ghn;
     private final NotificationService notificationService;
+    private final org.springframework.context.ApplicationEventPublisher events;
     @jakarta.persistence.PersistenceContext private jakarta.persistence.EntityManager entityManager;
 
     /** Ước tính phí giao hàng cho trang checkout: tìm shop, kiểm tra địa chỉ nhận của khách rồi hỏi GHN. */
@@ -90,6 +91,8 @@ public class OrderService {
             }
             orders.add(created);
         }
+        // Một biên lai gộp cho cả lần checkout; mail gửi sau khi transaction commit
+        events.publishEvent(new com.example.flowershop.event.OrderPlacedEvent(orders.stream().map(OrderResponse::getId).toList()));
         return orders;
     }
 

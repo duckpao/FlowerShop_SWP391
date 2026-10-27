@@ -43,7 +43,9 @@ export default function PublicShopView({ auth }) {
         <h1>{shop.name}</h1>
         <div className="catalog-actions my-4">
           <Link className="rounded-lg bg-brand-500 px-4 py-3 text-white" to={`/custom-orders/new?shopId=${encodeURIComponent(shop.id)}`}>Đặt hoa theo yêu cầu</Link>
+          <Link className="rounded-lg border px-4 py-3" to={`/chat?shopId=${encodeURIComponent(shop.id)}`}>Chat với shop</Link>
           <Link className="rounded-lg border px-4 py-3" to={`/budget-flowers?shopId=${encodeURIComponent(shop.id)}`}>Chọn hoa theo ngân sách</Link>
+          <Link className="rounded-lg border px-4 py-3" to={`/floral-care?shopId=${encodeURIComponent(shop.id)}`}>Bài viết của shop</Link>
         </div>
         {shop.logoUrl && <img src={shop.logoUrl} alt={shop.name} className="my-4 h-24 w-24 rounded-xl object-cover" />}
 

@@ -133,7 +133,7 @@ export default function CartPage({ cart, loading, error, fetchCart, updateItem, 
                   </div>
                   <div className="divide-y divide-gray-100 dark:divide-white/5">
                     {group.items.map((item) => {
-                      const isSelected = selectedItemIds?.includes(item.id);
+                      const isSelected = Boolean(selectedItemIds?.includes(item.id));
                       const product = item.product || {};
                       const imageUrl = product.images?.[0] || product.image;
 

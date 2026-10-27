@@ -310,7 +310,8 @@ class PaymentBusinessTests {
                 mock(com.example.flowershop.repository.ProductRepository.class), payments,
                 mock(com.example.flowershop.repository.CouponRepository.class), mock(com.example.flowershop.repository.ShopRepository.class),
                 mock(com.example.flowershop.service.GhnService.class),
-                notifications);
+                notifications,
+                mock(org.springframework.context.ApplicationEventPublisher.class));
         ReflectionTestUtils.setField(service, "entityManager", mock(EntityManager.class));
         Order order = customOrder(OrderStatus.AWAITING_DEPOSIT, "400000", "0", LocalDateTime.now().minusHours(25));
         when(orderRepo.findById(order.getId())).thenReturn(Optional.of(order));
