@@ -268,7 +268,8 @@ public class ChatService {
 
     private SessionDto toSession(ChatSession s, SenderType viewer) {
         return new SessionDto(s.getId(), s.getShop().getId(), s.getShop().getName(), s.getShop().getLogoUrl(),
-                s.getCustomer().getId(), s.getCustomer().getFullName(), s.getLastMessageAt(), s.getLastMessagePreview(),
+                s.getShop().getOwner().getAvatarUrl(), s.getCustomer().getId(), s.getCustomer().getFullName(),
+                s.getCustomer().getAvatarUrl(), s.getLastMessageAt(), s.getLastMessagePreview(),
                 viewer == SenderType.CUSTOMER ? s.getCustomerUnreadCount() : s.getShopUnreadCount());
     }
 

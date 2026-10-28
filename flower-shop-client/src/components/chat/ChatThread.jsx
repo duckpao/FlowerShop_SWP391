@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import ContextCard from './ContextCard'
+import Avatar from './Avatar'
 
 const MAX_LENGTH = 2000
 const MAX_IMAGES = 4
@@ -125,6 +126,7 @@ export default function ChatThread({ c, side, partnerName, onBack }) {
             <header className="flex items-center gap-2 border-b border-gray-200 px-3 py-2.5 dark:border-gray-800">
                 <button type="button" onClick={onBack} aria-label="Quay lại danh sách"
                     className="flex h-11 w-11 items-center justify-center rounded-lg text-gray-700 hover:bg-gray-100 focus-visible:outline-2 focus-visible:outline-brand-600 lg:hidden dark:text-gray-300 dark:hover:bg-white/5">←</button>
+                <Avatar urls={side === 'CUSTOMER' ? [c.active?.shopLogoUrl, c.active?.ownerAvatarUrl] : [c.active?.customerAvatarUrl]} name={partnerName} className="h-9 w-9" />
                 <h2 className="truncate text-theme-sm font-semibold text-gray-900 dark:text-white">{partnerName}</h2>
             </header>
             {c.pinned && (
