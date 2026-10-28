@@ -33,8 +33,9 @@ public final class ChatDtos {
                              Map<String, Object> context, LocalDateTime createdDate, boolean read) {
     }
 
-    public record SessionDto(String id, String shopId, String shopName, String shopLogoUrl, String customerId,
-                             String customerName, LocalDateTime lastMessageAt, String lastMessagePreview, int unread) {
+    public record SessionDto(String id, String shopId, String shopName, String shopLogoUrl, String ownerAvatarUrl,
+                             String customerId, String customerName, String customerAvatarUrl,
+                             LocalDateTime lastMessageAt, String lastMessagePreview, int unread) {
     }
 
     /** Đẩy tới hộp thư của một người khi có tin mới hoặc khi đã đọc, để danh sách và huy hiệu cập nhật. */

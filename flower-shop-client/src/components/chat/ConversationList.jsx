@@ -1,3 +1,5 @@
+import Avatar from './Avatar'
+
 const time = iso => {
     if (!iso) return ''
     const date = new Date(iso)
@@ -15,7 +17,7 @@ export default function ConversationList({ sessions, activeId, onSelect, viewer,
         <ul className="divide-y divide-gray-100 dark:divide-white/5">
             {sessions.map(s => {
                 const name = viewer === 'CUSTOMER' ? s.shopName : s.customerName
-                const logo = viewer === 'CUSTOMER' ? s.shopLogoUrl : null
+                const avatars = viewer === 'CUSTOMER' ? [s.shopLogoUrl, s.ownerAvatarUrl] : [s.customerAvatarUrl]
                 return (
                     <li key={s.id}>
                         <button
@@ -24,9 +26,7 @@ export default function ConversationList({ sessions, activeId, onSelect, viewer,
                             aria-current={s.id === activeId ? 'true' : undefined}
                             className={`flex min-h-16 w-full items-center gap-3 px-4 py-3 text-left focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-600 ${s.id === activeId ? 'bg-brand-50 dark:bg-brand-500/10' : 'hover:bg-gray-50 dark:hover:bg-white/5'}`}
                         >
-                            {logo
-                                ? <img src={logo} alt="" className="h-11 w-11 shrink-0 rounded-full object-cover" />
-                                : <span aria-hidden="true" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gray-100 text-theme-sm font-medium text-gray-700 dark:bg-white/10 dark:text-gray-300">{(name || '?').trim().charAt(0).toUpperCase()}</span>}
+                            <Avatar urls={avatars} name={name} />
                             <span className="min-w-0 flex-1">
                                 <span className="flex items-baseline justify-between gap-2">
                                     <span className="truncate text-theme-sm font-medium text-gray-900 dark:text-white">{name}</span>
