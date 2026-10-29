@@ -1,6 +1,6 @@
 import { Toaster } from 'react-hot-toast';
 import AccountView from './views/AccountView';
-import { Navigate, Route, BrowserRouter as Router, Routes, useLocation, useParams } from "react-router";
+import { Navigate, Route, BrowserRouter as Router, Routes, useLocation } from "react-router";
 import AppLayout from "./layout/AppLayout";
 import AuthView from "./views/AuthView";
 import HomeView from "./views/HomeView";
@@ -12,16 +12,27 @@ import PublicShopView from "./views/PublicShopView";
 import FavoritesView from "./views/FavoritesView";
 import AcceptInvitationView from "./views/AcceptInvitationView";
 import CartPage from "./pages/CartPage";
+import CheckoutPage from "./pages/CheckoutPage";
 import PaymentSuccessPage from "./pages/PaymentSuccessPage";
 import PaymentErrorPage from "./pages/PaymentErrorPage";
 import PaymentCancelPage from "./pages/PaymentCancelPage";
-import CheckoutView from "./views/CheckoutView";
+import PaymentPendingPage from "./pages/PaymentPendingPage";
+import CodSuccessPage from "./pages/CodSuccessPage";
+import DevDepositTestPage from "./pages/DevDepositTestPage";
 import CustomerOrdersView from "./views/CustomerOrdersView";
 import CustomerOrderDetailView from "./views/CustomerOrderDetailView";
 import { useAuthController } from "./controllers/useAuthController";
 import { AuthProvider } from "./context/AuthContext";
 import { CartProvider, useCartContext } from "./context/CartContext";
 import FavoriteShopsView from './views/FavoriteShopsView'
+import OccasionsView from './views/OccasionsView'
+import ChatView from './views/ChatView'
+import ShopDirectoryView from './views/ShopDirectoryView'
+import BudgetFlowersView from './views/BudgetFlowersView'
+import CustomFlowerOrderView from './views/CustomFlowerOrderView'
+import CustomerCustomOrdersView from './views/CustomerCustomOrdersView'
+import FloralCareView from './views/FloralCareView'
+import FloralCareDetailView from './views/FloralCareDetailView'
 
 export default function AppRouter() {
   return (
@@ -48,6 +59,15 @@ function AppRouterContent() {
             <Route path="/" element={<HomeView auth={controller} />} />
             <Route path="/account" element={<AccountViewRoute auth={controller} />} />
             <Route path="/products" element={<ProductCatalogView auth={controller} />} />
+            <Route path="/shops" element={<ShopDirectoryView auth={controller} />} />
+            <Route path="/budget-flowers" element={<BudgetFlowersView />} />
+            <Route path="/custom-orders/new" element={<CustomFlowerOrderView auth={controller} />} />
+            <Route path="/custom-orders" element={<CustomerCustomOrdersView auth={controller} />} />
+            <Route path="/following-shops" element={<FavoriteShopsView auth={controller} />} />
+            <Route path="/occasions" element={<OccasionsView auth={controller} />} />
+            <Route path="/chat" element={<ChatView auth={controller} />} />
+            <Route path="/floral-care" element={<FloralCareView />} />
+            <Route path="/floral-care/:id" element={<FloralCareDetailView />} />
             <Route path="/products/:id" element={<ProductDetailViewWrapper auth={controller} />} />
 
             <Route
@@ -66,12 +86,17 @@ function AppRouterContent() {
             />
 
             <Route path="/cart" element={<CartPageWrapper />} />
-            <Route path="/checkout" element={<CheckoutView />} />
+            <Route path="/checkout" element={controller.busy ? <p role="status">Đang kiểm tra đăng nhập…</p> : <CheckoutPage />} />
             <Route path="/orders" element={<CustomerOrdersView />} />
             <Route path="/orders/:id" element={<CustomerOrderDetailView />} />
             <Route path="/payment/success" element={<PaymentSuccessPage />} />
             <Route path="/payment/error" element={<PaymentErrorPage />} />
             <Route path="/payment/cancel" element={<PaymentCancelPage />} />
+            <Route path="/payment/pending" element={<PaymentPendingPage />} />
+            <Route path="/payment/cod-success" element={<CodSuccessPage />} />
+            {import.meta.env.DEV && <Route path="/dev-deposit" element={<DevDepositTestPage />} />}
+            <Route path="/admin/profile" element={<Navigate to="/account" replace />} />
+            <Route path="/shop-admin/profile" element={<Navigate to="/account" replace />} />
             <Route path="/admin/*" element={<AdminDashboardView user={controller.user} logout={controller.logout} busy={controller.busy} error={controller.error} path={location.pathname} />} />
             <Route path="/shop-admin/*" element={<ManagerDashboardView user={controller.user} logout={controller.logout} busy={controller.busy} error={controller.error} path={location.pathname} />} />
           </Route>
@@ -108,6 +133,7 @@ function ProductDetailViewWrapper({ auth }) {
   return <ProductDetailView auth={auth} productId={match ? decodeURIComponent(match[1]) : ""} />;
 }
 
+// CartPage nhận state/hành động giỏ qua props (lấy từ CartContext) nên cần wrapper để dùng được hook
 function CartPageWrapper() {
   const cartHook = useCartContext();
   return (
@@ -120,7 +146,6 @@ function CartPageWrapper() {
       removeItem={cartHook.removeItem}
       userId={cartHook.userId}
       user={cartHook.user}
-      isGuest={cartHook.isGuest}
     />
   );
 }

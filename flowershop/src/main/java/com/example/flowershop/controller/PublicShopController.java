@@ -8,13 +8,13 @@ import java.util.List;
 public class PublicShopController {
     private final ShopRepository shops;
     public PublicShopController(ShopRepository shops) {this.shops=shops;}
-    public record ShopCard(String id,String name,String description) {}
+    public record ShopCard(String id,String name,String description,String logoUrl) {}
     @GetMapping("/{id}") public ShopCard detail(@PathVariable String id) {
         var shop=shops.findById(id).filter(s->s.getStatus()==ShopStatus.ACTIVE).orElseThrow(()->new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.NOT_FOUND,"Không tìm thấy shop đang hoạt động."));
-        return new ShopCard(shop.getId(),shop.getName(),shop.getDescription());
+        return new ShopCard(shop.getId(),shop.getName(),shop.getDescription(),shop.getLogoUrl());
     }
     @GetMapping public List<ShopCard> search(@RequestParam(defaultValue="") String q) {
         String term=q.strip(); if(term.length()>100) throw new IllegalArgumentException("Từ khóa tối đa 100 ký tự.");
-        return shops.findByStatusAndNameContainingIgnoreCaseOrderByNameAsc(ShopStatus.ACTIVE,term,PageRequest.of(0,50)).stream().map(s->new ShopCard(s.getId(),s.getName(),s.getDescription())).toList();
+        return shops.findByStatusAndNameContainingIgnoreCaseOrderByNameAsc(ShopStatus.ACTIVE,term,PageRequest.of(0,50)).stream().map(s->new ShopCard(s.getId(),s.getName(),s.getDescription(),s.getLogoUrl())).toList();
     }
 }

@@ -7,6 +7,7 @@ import { managerShopService } from "../services/managerShopService";
 import { managerOrderService } from "../services/managerOrderService";
 import {
   BoxCubeIcon,
+  CalenderIcon,
   ChevronDownIcon,
   GridIcon,
   HorizontaLDots,
@@ -16,6 +17,7 @@ import {
   UserCircleIcon,
 } from "../icons";
 import { cn } from "../utils";
+import { useChatUnread } from "../controllers/useChatUnread";
 
 type NavItem = {
   name: string;
@@ -39,27 +41,35 @@ const adminNavItems: NavItem[] = [
   { name: 'Tổng quan', path: '/admin', icon: <GridIcon fontSize={24} /> },
   { name: 'Quản lý người dùng', path: '/admin/users', icon: <UserCircleIcon fontSize={24} /> },
   { name: 'Quản lý các shop', path: '/admin/shops', icon: <BoxCubeIcon fontSize={24} /> },
+  { name: 'Danh mục & kiểm duyệt', path: '/admin/categories', icon: <TableIcon fontSize={24} /> },
   { name: 'Xem khiếu nại', path: '#', icon: <ListIcon fontSize={24} /> }
 ];
 
 const managerNavItems: NavItem[] = [
+  { name: 'Bài chăm sóc hoa', path: '/shop-admin/blogs', icon: <PageIcon fontSize={24} /> },
+  { name: 'Yêu cầu đặt hoa riêng', path: '/shop-admin/custom-orders', icon: <ListIcon fontSize={24} /> },
   { name: 'Tổng quan', path: '/shop-admin', icon: <GridIcon fontSize={24} /> },
   { name: 'Quản lý shop', path: '/shop-admin/shop', icon: <PageIcon fontSize={24} /> },
   { name: 'Quản lý mặt hàng', path: '/shop-admin/products', icon: <BoxCubeIcon fontSize={24} /> },
-  { name: 'Hàng chờ xử lý', path: '/shop-admin/order-queue', icon: <ListIcon fontSize={24} /> },
   { name: 'Quản lý đơn hàng', path: '/shop-admin/orders', icon: <TableIcon fontSize={24} /> },
   { name: 'Quản lý nhân sự', path: '/shop-admin/staff', icon: <UserCircleIcon fontSize={24} /> },
-  { name: 'Nhắn tin nhanh', path: '#', icon: <ListIcon fontSize={24} /> }
+  { name: 'Tin nhắn khách hàng', path: '/shop-admin/chat', icon: <ListIcon fontSize={24} /> }
 ];
 
 const publicNavItems: NavItem[] = [
+  { name: 'Cẩm nang chăm hoa', path: '/floral-care', icon: <PageIcon fontSize={24} /> },
+  { name: 'Hoa theo ngân sách', path: '/budget-flowers', icon: <BoxCubeIcon fontSize={24} /> },
   { name: 'Trang chủ', path: '/', icon: <GridIcon fontSize={24} /> },
-  { name: 'Cửa hàng', path: '/#shops', icon: <ListIcon fontSize={24} /> },
+  { name: 'Cửa hàng', path: '/shops', icon: <ListIcon fontSize={24} /> },
   { name: 'Sản phẩm', path: '/#products', icon: <BoxCubeIcon fontSize={24} /> },
 ];
 
 const customerNavItems: NavItem[] = [
+  { name: 'Đặt hoa theo yêu cầu', path: '/custom-orders', icon: <ListIcon fontSize={24} /> },
   ...publicNavItems,
+  { name: 'Cửa hàng đang theo dõi', path: '/following-shops', icon: <ListIcon fontSize={24} /> },
+  { name: 'Tin nhắn', path: '/chat', icon: <ListIcon fontSize={24} /> },
+  { name: 'Dịp đặc biệt', path: '/occasions', icon: <CalenderIcon fontSize={24} /> },
   { name: 'Theo dõi đơn hàng', path: '/orders', icon: <TableIcon fontSize={24} /> },
 ];
 
@@ -78,14 +88,20 @@ const AppSidebar: React.FC = () => {
   );
   const subMenuRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [queueCount, setQueueCount] = useState<number>(0);
+  const [managerShopId, setManagerShopId] = useState<string | undefined>(undefined);
   const isAdmin = location.pathname.startsWith('/admin') && !location.pathname.startsWith('/shop-admin');
   const isManager = location.pathname.startsWith('/shop-admin');
+  const chatScope = isManager
+    ? { kind: 'shop', shopId: managerShopId }
+    : user?.role === 'CUSTOMER' ? { kind: 'customer' } : null;
+  const chatUnread = useChatUnread(chatScope, user?.role === 'SHOP' || user?.role === 'CUSTOMER' ? user?.id : undefined);
   const navItems = isAdmin
     ? adminNavItems
     : isManager
-      ? managerNavItems.map(item => item.path === '/shop-admin/order-queue' ? { ...item, badge: queueCount } : item)
+      ? managerNavItems.map(item => item.path === '/shop-admin/orders' ? { ...item, badge: queueCount }
+        : item.path === '/shop-admin/chat' ? { ...item, badge: chatUnread } : item)
       : user?.role === 'CUSTOMER'
-        ? customerNavItems
+        ? customerNavItems.map(item => item.path === '/chat' ? { ...item, badge: chatUnread } : item)
         : publicNavItems;
 
   useEffect(() => {
@@ -93,6 +109,7 @@ const AppSidebar: React.FC = () => {
       let active = true;
       managerShopService.list("SHOP").then(shops => {
         if (active && shops.length > 0) {
+          setManagerShopId(shops[0].id);
           managerOrderService.getQueueCount(shops[0].id).then(res => {
             if (active) setQueueCount(res.pendingCount);
           }).catch(() => {});

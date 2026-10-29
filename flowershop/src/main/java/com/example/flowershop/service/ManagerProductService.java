@@ -28,8 +28,8 @@ public class ManagerProductService {
 
     public record ImageInput(
             @NotBlank @Size(max = 500) @Pattern(regexp = "https://[^\\s]+", message = "Ảnh phải là URL HTTPS") String url,
-            boolean primary
-    ) {}
+            boolean primary) {
+    }
 
     public record Input(
             @NotBlank @Size(max = 255) String name,
@@ -39,8 +39,8 @@ public class ManagerProductService {
             @NotNull @Min(0) @Max(1000000) Integer stock,
             @NotNull ProductStatus status,
             ProductType type,
-            @Valid @Size(max = 10) List<ImageInput> images
-    ) {}
+            @Valid @Size(max = 10) List<ImageInput> images) {
+    }
 
     public record SaveProductInput(
             @NotBlank @Size(max = 255) String name,
@@ -50,8 +50,8 @@ public class ManagerProductService {
             @NotNull @Min(0) @Max(1000000) Integer stock,
             @NotNull ProductStatus status,
             ProductType type,
-            @Size(max = 36) String primaryImageId
-    ) {}
+            @Size(max = 36) String primaryImageId) {
+    }
 
     public record Result(
             String id,
@@ -65,31 +65,58 @@ public class ManagerProductService {
             ProductStatus status,
             ProductType type,
             boolean adminHidden,
-            List<String> images
-    ) {}
+            List<String> images) {
+    }
 
-    public record CategoryOption(String id, String name) {}
+    public record Results(List<Result> content, int page, int totalPages, long totalElements) {
+    }
 
-    public record ImageItem(String id, String imageUrl, boolean isPrimary, Integer displayOrder) {}
+    public record CategoryOption(String id, String name) {
+    }
 
-    public record VideoInfo(String videoUrl, String title, String description) {}
+    public record ImageItem(String id, String imageUrl, boolean isPrimary, Integer displayOrder) {
+    }
+
+    public record VideoInfo(String videoUrl, String title, String description) {
+    }
+
     public record Detail(String id, String shopId, String shopName, String categoryId, String categoryName,
-                         String name, String description, BigDecimal price, Integer stock,
-                         List<String> images, List<VideoInfo> videos) {}
-    public record Results(List<Result> content, int page, int totalPages, long totalElements) {}
-    private final ShopRepository shops;private final ProductRepository products;private final CategoryRepository categories;
+            String name, String description, BigDecimal price, Integer stock,
+            List<String> images, List<VideoInfo> videos) {
+    }
+
+    private final ShopRepository shops;
+    private final ProductRepository products;
+    private final CategoryRepository categories;
     private final ProductImageRepository images;
     private final ProductVideoRepository videos;
     private final CloudinaryService cloudinary;
-    public ManagerProductService(ShopRepository s,ProductRepository p,CategoryRepository c,ProductImageRepository i,
-                                 ProductVideoRepository v,CloudinaryService cloud) {
-        shops=s;products=p;categories=c;images=i;videos=v;cloudinary=cloud;
+    private final ShopProductNotificationService notifications;
+
+    public ManagerProductService(ShopRepository s, ProductRepository p, CategoryRepository c,
+            ProductImageRepository i, ProductVideoRepository v, CloudinaryService cloud,
+            ShopProductNotificationService notifications) {
+        shops = s;
+        products = p;
+        categories = c;
+        images = i;
+        videos = v;
+        cloudinary = cloud;
+        this.notifications = notifications;
     }
-    private static ResponseStatusException missing() {return new ResponseStatusException(HttpStatus.NOT_FOUND,"Không tìm thấy shop hoặc sản phẩm.");}
-    private Shop owned(String id,String actor,boolean write) {
-        var shop=(write?shops.findForUpdate(id):shops.findById(id)).orElseThrow(ManagerProductService::missing);
-        if(!shop.getOwner().getId().equals(actor)) throw missing();
-        if(write && (shop.getStatus()!=ShopStatus.ACTIVE || shop.getOwner().getRole()!=UserRole.SHOP || shop.getOwner().getStatus()!=UserStatus.ACTIVE)) throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Shop phải được duyệt và đang hoạt động để quản lý mặt hàng.");
+
+    private static ResponseStatusException missing() {
+        return new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy shop hoặc sản phẩm.");
+    }
+
+    private Shop owned(String id, String actor, boolean write) {
+        var shop = (write ? shops.findForUpdate(id) : shops.findById(id)).orElseThrow(ManagerProductService::missing);
+        if (!shop.getOwner().getId().equals(actor))
+            throw missing();
+        if (write && (shop.getStatus() != ShopStatus.ACTIVE || shop.getOwner().getRole() != UserRole.SHOP
+                || shop.getOwner().getStatus() != UserStatus.ACTIVE))
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Shop phải được duyệt và đang hoạt động để quản lý mặt hàng.");
         return shop;
     }
 
@@ -120,12 +147,12 @@ public class ManagerProductService {
                 product.getStatus(),
                 product.getType(),
                 product.isAdminHidden(),
-                imageUrls
-        );
+                imageUrls);
     }
 
     private Results response(Page<Product> page) {
-        return new Results(page.getContent().stream().map(this::result).toList(), page.getNumber(), page.getTotalPages(), page.getTotalElements());
+        return new Results(page.getContent().stream().map(this::result).toList(), page.getNumber(),
+                page.getTotalPages(), page.getTotalElements());
     }
 
     public Results list(String shopId, String actor, int page) {
@@ -141,43 +168,72 @@ public class ManagerProductService {
 
     @Transactional
     public Result save(String shopId, String id, String actor, Input input) {
-        var imageUrls = input.images() == null ? List.<String>of() : input.images().stream()
-                .map(ImageInput::url)
-                .toList();
-        return saveProduct(shopId, id, actor, input.name(), input.description(), input.categoryId(), input.price(), input.stock(), input.status(), input.type(), imageUrls, null);
+        var imageUrls = input.images() == null ? List.<String>of()
+                : input.images().stream()
+                        .map(ImageInput::url)
+                        .toList();
+        return saveProduct(shopId, id, actor, input.name(), input.description(), input.categoryId(), input.price(),
+                input.stock(), input.status(), input.type(), imageUrls, null, List.of());
     }
 
     @Transactional
     public Result save(String shopId, String id, String actor, SaveProductInput input, List<MultipartFile> images) {
+        return save(shopId, id, actor, input, images, null);
+    }
+
+    @Transactional
+    public Result save(String shopId, String id, String actor, SaveProductInput input, List<MultipartFile> images,
+            List<MultipartFile> videos) {
         var imageFiles = images == null ? List.<MultipartFile>of() : images;
         if (imageFiles.size() > 10) {
             throw new IllegalArgumentException("Không được chọn quá 10 ảnh.");
         }
         imageFiles.forEach(this::validateImageFile);
-        if (imageFiles.isEmpty()) {
-            return saveProduct(shopId, id, actor, input.name(), input.description(), input.categoryId(), input.price(), input.stock(), input.status(), input.type(), List.of(), input.primaryImageId());
+
+        var videoFiles = videos == null ? List.<MultipartFile>of() : videos;
+        if (videoFiles.size() > 5) {
+            throw new IllegalArgumentException("Không được chọn quá 5 video.");
         }
+        videoFiles.forEach(this::validateVideoFile);
 
         var uploadedImages = new ArrayList<String>();
         for (MultipartFile file : imageFiles) {
             try {
-                uploadedImages.add(cloudinary.upload(file.getBytes(), file.getOriginalFilename(), file.getContentType()));
+                uploadedImages
+                        .add(cloudinary.upload(file.getBytes(), file.getOriginalFilename(), file.getContentType()));
             } catch (java.io.IOException e) {
-                throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Không thể đọc dữ liệu ảnh. Vui lòng thử lại.", e);
+                throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                        "Không thể đọc dữ liệu ảnh. Vui lòng thử lại.", e);
             }
         }
 
-        return saveProduct(shopId, id, actor, input.name(), input.description(), input.categoryId(), input.price(), input.stock(), input.status(), input.type(), uploadedImages, input.primaryImageId());
+        var uploadedVideos = new ArrayList<String>();
+        for (MultipartFile file : videoFiles) {
+            try {
+                uploadedVideos.add(
+                        cloudinary.uploadVideo(file.getBytes(), file.getOriginalFilename(), file.getContentType()));
+            } catch (java.io.IOException e) {
+                throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                        "Không thể đọc dữ liệu video. Vui lòng thử lại.", e);
+            }
+        }
+
+        return saveProduct(shopId, id, actor, input.name(), input.description(), input.categoryId(), input.price(),
+                input.stock(), input.status(), input.type(), uploadedImages, input.primaryImageId(), uploadedVideos);
     }
 
-    private Result saveProduct(String shopId, String id, String actor, String name, String description, String categoryId,
-                               BigDecimal price, Integer stock, ProductStatus status, ProductType type, List<String> uploadedImages, String primaryImageId) {
+    private Result saveProduct(String shopId, String id, String actor, String name, String description,
+            String categoryId,
+            BigDecimal price, Integer stock, ProductStatus status, ProductType type, List<String> uploadedImages,
+            String primaryImageId, List<String> uploadedVideos) {
         var shop = owned(shopId, actor, true);
-        var product = id == null ? new Product() : products.findByIdAndShopId(id, shopId).orElseThrow(ManagerProductService::missing);
+        var product = id == null ? new Product()
+                : products.findByIdAndShopId(id, shopId).orElseThrow(ManagerProductService::missing);
         var existingImages = id == null || (primaryImageId == null && uploadedImages.isEmpty())
                 ? List.<ProductImage>of()
                 : images.findByProductIdOrderByDisplayOrderAscIdAsc(product.getId());
-        if (primaryImageId != null && existingImages.stream().noneMatch(image -> image.getId().equals(primaryImageId))) {
+        if (primaryImageId != null
+                && existingImages.stream().noneMatch(image -> image.getId().equals(primaryImageId))) {
             throw new IllegalArgumentException("Ảnh chính không hợp lệ.");
         }
         if (primaryImageId != null || !uploadedImages.isEmpty()) {
@@ -215,6 +271,25 @@ public class ManagerProductService {
                     .build());
         }
         images.flush();
+
+        long currentVideoCount = id == null ? 0 : this.videos.countByProductId(stored.getId());
+        for (int i = 0; i < uploadedVideos.size(); i++) {
+            this.videos.save(ProductVideo.builder()
+                    .id(UUID.randomUUID().toString())
+                    .product(stored)
+                    .videoUrl(uploadedVideos.get(i).strip())
+                    .displayOrder((int) currentVideoCount + i)
+                    .createdBy(actor)
+                    .lastModifyBy(actor)
+                    .build());
+        }
+        if (!uploadedVideos.isEmpty()) {
+            this.videos.flush();
+        }
+
+        // Product save and mail queue commit together; SMTP runs later, outside this
+        // request.
+        notifications.published(stored);
         return result(stored);
     }
 
@@ -230,12 +305,33 @@ public class ManagerProductService {
         }
     }
 
+    private void validateVideoFile(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new IllegalArgumentException("Vui lòng chọn video để tải lên.");
+        }
+        if (file.getSize() > MAX_VIDEO_BYTES) {
+            throw new IllegalArgumentException("Video không được vượt quá 50MB.");
+        }
+        if (!ALLOWED_VIDEO_TYPES.contains(file.getContentType())) {
+            throw new IllegalArgumentException("Chỉ nhận video MP4, WebM hoặc MOV.");
+        }
+    }
+
     @Transactional
     public void hide(String shopId, String id, String actor) {
         owned(shopId, actor, true);
         var product = products.findByIdAndShopId(id, shopId).orElseThrow(ManagerProductService::missing);
         product.setStatus(ProductStatus.INACTIVE);
         product.setLastModifyBy(actor);
+    }
+
+    @Transactional
+    public void unhide(String shopId, String id, String actor) {
+        owned(shopId, actor, true);
+        var product = products.findByIdAndShopId(id, shopId).orElseThrow(ManagerProductService::missing);
+        product.setStatus(ProductStatus.ACTIVE);
+        product.setLastModifyBy(actor);
+        notifications.published(product);
     }
 
     public List<ImageItem> listImages(String shopId, String productId, String actor) {
@@ -247,7 +343,8 @@ public class ManagerProductService {
     }
 
     private ImageItem imageItem(ProductImage image) {
-        return new ImageItem(image.getId(), image.getImageUrl(), Boolean.TRUE.equals(image.getIsPrimary()), image.getDisplayOrder());
+        return new ImageItem(image.getId(), image.getImageUrl(), Boolean.TRUE.equals(image.getIsPrimary()),
+                image.getDisplayOrder());
     }
 
     @Transactional
@@ -264,7 +361,8 @@ public class ManagerProductService {
         }
     }
 
-    public record VideoItem(String id, String videoUrl, String title, String description, Integer displayOrder) {}
+    public record VideoItem(String id, String videoUrl, String title, String description, Integer displayOrder) {
+    }
 
     public List<VideoItem> listVideos(String shopId, String productId, String actor) {
         owned(shopId, actor, false);
@@ -273,11 +371,13 @@ public class ManagerProductService {
     }
 
     private VideoItem videoItem(ProductVideo video) {
-        return new VideoItem(video.getId(), video.getVideoUrl(), video.getTitle(), video.getDescription(), video.getDisplayOrder());
+        return new VideoItem(video.getId(), video.getVideoUrl(), video.getTitle(), video.getDescription(),
+                video.getDisplayOrder());
     }
 
     @Transactional
-    public List<VideoItem> uploadVideo(String shopId, String productId, String actor, MultipartFile file, String title, String description) {
+    public List<VideoItem> uploadVideo(String shopId, String productId, String actor, MultipartFile file, String title,
+            String description) {
         owned(shopId, actor, true);
         var product = products.findByIdAndShopId(productId, shopId).orElseThrow(ManagerProductService::missing);
         if (file == null || file.isEmpty()) {

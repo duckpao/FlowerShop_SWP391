@@ -35,8 +35,16 @@ public class CustomerOrderController {
 
     @GetMapping
     public CustomerOrderService.Results list(@AuthenticationPrincipal CurrentUser user,
-                                             @RequestParam(defaultValue = "0") int page) {
-        return service.list(user.id(), page);
+                                             @RequestParam(defaultValue = "0") int page,
+                                             @RequestParam(required = false) String status) {
+        return service.list(user.id(), page, status);
+    }
+
+    /** Tóm tắt các đơn theo id (màn chờ thanh toán / đặt hàng thành công). GET /api/customer/orders/by-ids?ids=a,b */
+    @GetMapping("/by-ids")
+    public java.util.List<CustomerOrderService.OrderSummary> byIds(@AuthenticationPrincipal CurrentUser user,
+                                                         @RequestParam java.util.List<String> ids) {
+        return service.byIds(user.id(), ids);
     }
 
     @GetMapping("/{id}")

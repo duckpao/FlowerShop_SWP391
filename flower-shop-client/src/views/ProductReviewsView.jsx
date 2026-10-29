@@ -11,7 +11,7 @@ export default function ProductReviewsView({ product, auth }) {
     <h3>Đánh giá sản phẩm</h3>
     {c.error && <p role="alert" className="message error">{c.error}</p>}
     {c.notice && <p role="status" className="message success">{c.notice}</p>}
-    <button disabled={c.busy} onClick={c.reload}>Tải lại đánh giá</button>
+    {/* <button disabled={c.busy} onClick={c.reload}>Tải lại đánh giá</button> */}
 
     {isCustomer && <form onSubmit={c.submit}>
       <h4>{c.own ? 'Sửa đánh giá của bạn' : 'Viết đánh giá'}</h4>

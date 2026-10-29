@@ -26,11 +26,15 @@ import java.util.*;
 @Transactional(readOnly = true)
 public class AdminCatalogService {
 
+    /** groupName: nhóm hiển thị trên menu (Chủ đề, Hoa tươi...); để trống nghĩa là chưa phân nhóm. */
     public record CategoryInput(@NotBlank @Size(max = 100) String name,
-            @NotNull @Size(max = 1000) String description, @NotNull CategoryStatus status) {}
+            @NotNull @Size(max = 1000) String description, @NotNull CategoryStatus status,
+            @Size(max = 50) String groupName) {}
 
-    public record CategoryResult(String id, String name, String description,
+    public record CategoryResult(String id, String name, String description, String groupName,
             CategoryStatus status, long productCount) {}
+
+    public record GroupRenameInput(@NotNull @Size(max = 50) String from, @NotNull @Size(max = 50) String to) {}
 
     public record HiddenInput(@NotNull Boolean hidden) {}
 
@@ -59,29 +63,59 @@ public class AdminCatalogService {
     public List<CategoryResult> categories() {
         Map<String, Long> counts = counts();
         return categories.findAll(Sort.by(Sort.Order.asc("name"))).stream()
-                .map(c -> new CategoryResult(c.getId(), c.getName(), c.getDescription(),
+                .map(c -> new CategoryResult(c.getId(), c.getName(), c.getDescription(), c.getGroupName(),
                         c.getStatus(), counts.getOrDefault(c.getId(), 0L))).toList();
+    }
+
+    private static String cleanGroup(String group) {
+        String value = group == null ? "" : group.strip();
+        return value.isEmpty() ? null : value;
     }
 
     @Transactional
     public CategoryResult createCategory(String actor, CategoryInput input) {
         Category saved = categories.saveAndFlush(Category.builder().id(UUID.randomUUID().toString())
                 .name(input.name().strip()).description(input.description().strip())
+                .groupName(cleanGroup(input.groupName()))
                 .status(input.status()).createdBy(actor).build());
-        return new CategoryResult(saved.getId(), saved.getName(), saved.getDescription(), saved.getStatus(), 0L);
+        return new CategoryResult(saved.getId(), saved.getName(), saved.getDescription(), saved.getGroupName(),
+                saved.getStatus(), 0L);
     }
 
-    /** Không có lệnh xoá: danh mục chỉ chuyển INACTIVE để giữ tham chiếu của sản phẩm đang dùng. */
     @Transactional
     public CategoryResult updateCategory(String id, String actor, CategoryInput input) {
         Category category = categories.findById(id).orElseThrow(AdminCatalogService::missing);
         category.setName(input.name().strip());
         category.setDescription(input.description().strip());
+        category.setGroupName(cleanGroup(input.groupName()));
         category.setStatus(input.status());
         category.setLastModifyBy(actor);
         Category saved = categories.saveAndFlush(category);
-        return new CategoryResult(saved.getId(), saved.getName(), saved.getDescription(),
+        return new CategoryResult(saved.getId(), saved.getName(), saved.getDescription(), saved.getGroupName(),
                 saved.getStatus(), counts().getOrDefault(saved.getId(), 0L));
+    }
+
+    /** Chỉ xóa được danh mục chưa có sản phẩm nào (kể cả đã ẩn); nếu đã có sản phẩm thì chuyển sang Ngừng dùng. */
+    @Transactional
+    public void deleteCategory(String id) {
+        Category category = categories.findById(id).orElseThrow(AdminCatalogService::missing);
+        if (products.existsByCategoryId(id))
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Danh mục đang có sản phẩm nên không thể xóa. Hãy chuyển sang \"Ngừng dùng\" để ẩn khỏi menu.");
+        categories.delete(category);
+        categories.flush();
+    }
+
+    /** Đổi tên một nhóm menu cho mọi danh mục thuộc nhóm đó; tên mới để trống nghĩa là bỏ phân nhóm. */
+    @Transactional
+    public int renameGroup(String actor, GroupRenameInput input) {
+        String from = cleanGroup(input.from());
+        if (from == null) throw new IllegalArgumentException("Chưa chọn nhóm cần đổi tên.");
+        String to = cleanGroup(input.to());
+        List<Category> affected = categories.findByGroupName(from);
+        for (Category c : affected) { c.setGroupName(to); c.setLastModifyBy(actor); }
+        categories.saveAllAndFlush(affected);
+        return affected.size();
     }
 
     public CatalogService.Results products(String q, String shopId, String status, int page) {

@@ -10,4 +10,6 @@ public interface FavoriteShopRepository
         extends JpaRepository<FavoriteShop, FavoriteShopId> {
 
     List<FavoriteShop> findByIdUserIdOrderByCreatedDateDesc(String userId);
+    @org.springframework.data.jpa.repository.EntityGraph(attributePaths = "user")
+    List<FavoriteShop> findByIdShopId(String shopId);
 }

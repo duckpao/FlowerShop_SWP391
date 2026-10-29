@@ -12,7 +12,6 @@ import Button from '../components/ui/button/Button'
 import ComponentCard from '../components/common/ComponentCard'
 import PageMeta from '../components/common/PageMeta'
 import PageBreadCrumb from '../components/common/PageBreadCrumb'
-import GhnAddressPicker from '../components/GhnAddressPicker'
 
 export default function CheckoutView() {
     const { user } = useAuth()
@@ -23,8 +22,9 @@ export default function CheckoutView() {
     const [product, setProduct] = useState(null)
     const [addresses, setAddresses] = useState([])
     const [addressId, setAddressId] = useState('')
-    const [ghnAddress, setGhnAddress] = useState({ city: '', district: '', ward: '', ghnDistrictId: null, ghnWardCode: '' })
-    const [shippingFee, setShippingFee] = useState(0)
+    const [shippingFee, setShippingFee] = useState(null)
+    const [feeBusy, setFeeBusy] = useState(false)
+    const [feeError, setFeeError] = useState('')
     const [quantity, setQuantity] = useState(1)
     const [busy, setBusy] = useState(true)
     const [error, setError] = useState('')
@@ -52,37 +52,40 @@ export default function CheckoutView() {
         return () => { active = false }
     }, [productId, user])
 
-    // Calc fee effect
+    // Mỗi khi đổi địa chỉ/số lượng, hỏi phí ship GHN: customerOrderService.fee -> POST /api/customer/orders/fee. null = chưa biết.
     useEffect(() => {
-        if (!productId || !addressId) { setShippingFee(0); return }
+        setShippingFee(null); setFeeError('')
+        if (!productId || !addressId) return
         const addr = addresses.find(a => a.id === addressId)
         if (!addr) return
-        
-        let districtId = ghnAddress.ghnDistrictId || addr.ghnDistrictId
-        let wardCode = ghnAddress.ghnWardCode || addr.ghnWardCode
-        if (!districtId || !wardCode) { setShippingFee(0); return }
-        
-        let active = true
-        customerOrderService.fee({ addressId, productId, quantity: 1, note: '', ghnDistrictId: districtId, ghnWardCode: wardCode })
-            .then(res => active && setShippingFee(res.shippingFee))
-            .catch(e => active && setError(e.message))
-        return () => { active = false }
-    }, [addressId, productId, ghnAddress.ghnDistrictId, ghnAddress.ghnWardCode, addresses])
+        if (!addr.ghnDistrictId || !addr.ghnWardCode) return
 
+        let active = true
+        setFeeBusy(true)
+        customerOrderService.fee({ addressId, productId, quantity, note: '' })
+            .then(res => { if (active) setShippingFee(Number(res.shippingFee)) })
+            .catch(e => { if (active) setFeeError(e.message) })
+            .finally(() => { if (active) setFeeBusy(false) })
+        return () => { active = false }
+    }, [addressId, productId, quantity, addresses])
+
+    // Đặt hàng: customerOrderService.checkout -> POST /api/customer/orders/checkout, xong chuyển sang trang chi tiết đơn
     const handleCheckout = async e => {
         e.preventDefault()
         if (!addressId) { setError('Vui lòng chọn địa chỉ.'); return }
+        if (shippingFee === null) { setError('Chưa có phí vận chuyển từ GHN cho địa chỉ này.'); return }
         setBusy(true); setError(''); setNotice('')
         try {
             const result = await customerOrderService.checkout({ 
                 addressId, productId, quantity, note: '',
-                ghnDistrictId: ghnAddress.ghnDistrictId, ghnWardCode: ghnAddress.ghnWardCode,
-                city: ghnAddress.city, district: ghnAddress.district, ward: ghnAddress.ward
             })
             setNotice(`Đặt hàng thành công! Mã đơn: ${result.orderId}. Phí ship: ${formatPrice(result.shippingFee)}`)
             setTimeout(() => navigate(`/orders/${result.orderId}`), 2000)
         } catch (e) { setError(e.message) } finally { setBusy(false) }
     }
+
+    const subTotal = product ? product.price * quantity : 0
+    const total = shippingFee !== null ? subTotal + shippingFee : null
 
     if (!user) return <div className="max-w-3xl mx-auto p-8"><h1 className="text-xl font-bold">Đặt hàng</h1><p className="text-gray-500">Vui lòng <a href="/login" className="text-brand-500">đăng nhập</a> để đặt hàng.</p></div>
     if (!product && !busy && error) return <div className="max-w-3xl mx-auto p-8"><h1 className="text-xl font-bold">Đặt hàng</h1><p className="text-error-500">{error}</p></div>
@@ -109,12 +112,11 @@ export default function CheckoutView() {
                             <Select options={addresses.map(a => ({ value: a.id,
                                 label: `${a.addressLine}, ${a.ward}, ${a.district}, ${a.city}${a.isDefault?' (MĐ)':''}` }))}
                                 placeholder="Chọn địa chỉ" defaultValue={addressId} onChange={setAddressId} />
-                            {addressId && addresses.find(a => a.id === addressId) && 
-                             (!addresses.find(a => a.id === addressId).ghnDistrictId || !addresses.find(a => a.id === addressId).ghnWardCode) && (
-                                <div className="mt-4 p-4 bg-yellow-50 rounded-lg border border-yellow-100">
-                                    <p className="text-sm text-yellow-800 mb-3 font-medium">⚠️ Địa chỉ này chưa có thông tin Phường/Xã chuẩn GHN. Vui lòng chọn lại khu vực:</p>
-                                    <GhnAddressPicker value={ghnAddress} onChange={setGhnAddress} />
-                                </div>
+                            {addressId && !(addresses.find(a => a.id === addressId)?.ghnDistrictId && addresses.find(a => a.id === addressId)?.ghnWardCode) && (
+                                <p className="mt-3 rounded-lg border border-yellow-100 bg-yellow-50 p-3 text-sm text-yellow-800">
+                                    Địa chỉ này chưa có mã Quận/Huyện và Phường/Xã của GHN nên chưa tính được phí vận chuyển.{' '}
+                                    <a href="/account" className="underline">Cập nhật địa chỉ trong hồ sơ</a>.
+                                </p>
                             )}
                         </>}
                     </div>
@@ -122,13 +124,25 @@ export default function CheckoutView() {
                         <div className="flex-1"><Label>Số lượng</Label>
                             <Input type="number" min={1} max={product?.stock||1} value={quantity} onChange={e => setQuantity(parseInt(e.target.value)||1)} />
                         </div>
-                        <div><Label>Tạm tính</Label>
-                            <p className="text-lg font-bold">{formatPrice(product.price * quantity)}</p>
-                            <p className="text-sm text-gray-500 mt-1">Phí ship: {shippingFee ? formatPrice(shippingFee) : "---"}</p>
+                        <div><Label>Đơn giá</Label>
+                            <p className="text-lg font-bold">{formatPrice(product.price)}</p>
                         </div>
                     </div>
-                    <Button type="submit" disabled={busy || !addressId} className="w-full">
-                        {busy ? 'Đang xử lý…' : `Đặt hàng (COD) — ${formatPrice(product.price * quantity)}`}
+                    <dl className="space-y-1 border-t border-gray-200 pt-4 text-sm dark:border-white/10" aria-live="polite">
+                        <div className="flex justify-between"><dt>Tiền hàng</dt><dd>{formatPrice(subTotal)}</dd></div>
+                        <div className="flex justify-between"><dt>Phí vận chuyển (GHN)</dt>
+                            <dd>{feeBusy ? 'Đang tính…' : shippingFee !== null ? formatPrice(shippingFee) : 'Chưa có'}</dd></div>
+                        {feeError && <p className="text-error-500" role="alert">{feeError}</p>}
+                        {!feeBusy && !feeError && shippingFee === null && addressId && (
+                            <p className="text-gray-500">Chọn Phường/Xã chuẩn GHN để tính phí vận chuyển.</p>
+                        )}
+                        <div className="flex justify-between pt-2 text-base font-bold">
+                            <dt>Tổng thanh toán</dt>
+                            <dd className="text-brand-500">{total !== null ? formatPrice(total) : '---'}</dd>
+                        </div>
+                    </dl>
+                    <Button type="submit" disabled={busy || feeBusy || !addressId || shippingFee === null} className="w-full">
+                        {busy ? 'Đang xử lý…' : total !== null ? `Đặt hàng (COD) — ${formatPrice(total)}` : 'Đặt hàng (chờ tính phí ship)'}
                     </Button>
                 </form>
             </div>}

@@ -39,7 +39,7 @@ public class CatalogService {
 
     public record VideoInfo(String videoUrl, String title, String description) {}
 
-    public record CategoryCard(String id, String name, String description, long productCount) {}
+    public record CategoryCard(String id, String name, String description, String group, long productCount) {}
 
     private final ProductRepository products;
     private final ProductCardAssembler assembler;
@@ -134,7 +134,7 @@ public class CatalogService {
         for (Object[] row : products.countVisibleByCategory())
             counts.put((String) row[0], ((Number) row[1]).longValue());
         return categories.findByStatusOrderByNameAsc(CategoryStatus.ACTIVE).stream()
-                .map(c -> new CategoryCard(c.getId(), c.getName(), c.getDescription(),
+                .map(c -> new CategoryCard(c.getId(), c.getName(), c.getDescription(), c.getGroupName(),
                         counts.getOrDefault(c.getId(), 0L))).toList();
     }
 

@@ -2,9 +2,11 @@ package com.example.flowershop.controller;
 
 import com.example.flowershop.dto.auth.CurrentUser;
 import com.example.flowershop.service.ManagerOrderService;
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.enums.ParameterIn;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -18,6 +20,7 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/shop/mine/{shopId}/orders")
 @PreAuthorize("hasRole('SHOP')")
 @SecurityRequirement(name = "bearerAuth")
+@Tag(name = "Shop quản lý và xử lý đơn hàng", description = "Chủ shop xem, xác nhận, hủy đơn và tạo/theo dõi vận đơn GHN")
 public class ManagerOrderController {
     private final ManagerOrderService service;
 
@@ -33,6 +36,7 @@ public class ManagerOrderController {
      * @param status Trạng thái đơn hàng cần lọc (PENDING, PROCESSING, DELIVERING, COMPLETED, CANCELLED...)
      * @return Danh sách đơn hàng phân trang
      */
+    @Operation(summary = "Danh sách đơn hàng của shop")
     @GetMapping
     public ManagerOrderService.Results list(@PathVariable String shopId, @AuthenticationPrincipal CurrentUser u,
                                             @RequestParam(defaultValue = "0") int page,
@@ -44,6 +48,7 @@ public class ManagerOrderController {
      * Xem thông tin chi tiết một đơn hàng cụ thể của shop.
      * Bao gồm: danh sách sản phẩm, địa chỉ giao hàng, địa chỉ shop, vận đơn GHN, trạng thái thanh toán.
      */
+    @Operation(summary = "Xem chi tiết đơn")
     @GetMapping("/{id}")
     public ManagerOrderService.OrderDetailResponse detail(@PathVariable String shopId, @PathVariable String id,
                                                           @AuthenticationPrincipal CurrentUser u) {
@@ -54,6 +59,7 @@ public class ManagerOrderController {
      * Xác nhận đơn hàng (Chuyển trạng thái từ PENDING sang PROCESSING).
      * Lúc này shop chuẩn bị hoa, chưa tạo vận đơn GHN ngay.
      */
+    @Operation(summary = "Xác nhận đơn (PENDING -> PROCESSING)")
     @PostMapping("/{id}/confirm")
     @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
     public void confirm(@PathVariable String shopId, @PathVariable String id,
@@ -65,6 +71,7 @@ public class ManagerOrderController {
      * Tạo mã vận đơn trên hệ thống Giao Hàng Nhanh (GHN) và chuyển đơn sang DELIVERING (Đang giao).
      * Chỉ áp dụng cho đơn hàng đang ở trạng thái PROCESSING (Đang chuẩn bị).
      */
+    @Operation(summary = "Tạo vận đơn GHN và chuyển sang đang giao")
     @PostMapping("/{id}/ship")
     @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
     public ManagerOrderService.ShipResult ship(@PathVariable String shopId, @PathVariable String id,
@@ -72,31 +79,39 @@ public class ManagerOrderController {
         return service.ship(shopId, u.id(), id);
     }
 
-    /**
-     * Đồng bộ / Cập nhật trạng thái giao hàng thực tế từ GHN về hệ thống.
-     * Gọi API tra cứu của GHN theo tracking code; nếu GHN báo 'delivered', đơn tự chuyển sang COMPLETED.
-     */
+    /** Lấy trạng thái vận đơn mới nhất từ GHN rồi đồng bộ vào Delivery và Order. */
+    @Operation(summary = "Đồng bộ trạng thái vận đơn từ GHN")
     @PostMapping("/{id}/refresh-status")
     @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
-    public String refreshStatus(@PathVariable String shopId, @PathVariable String id,
-                                 @AuthenticationPrincipal CurrentUser u) {
-        return service.refreshStatus(shopId, u.id(), id).name();
+    public ManagerOrderService.DeliveryInfo refreshStatus(@PathVariable String shopId, @PathVariable String id,
+                                                          @AuthenticationPrincipal CurrentUser u) {
+        return service.refreshStatus(shopId, u.id(), id);
     }
 
-    /**
-     * Giả lập GHN giao hàng thành công (dành cho môi trường test/sandbox).
-     * Chuyển trạng thái vận đơn sang DELIVERED, đơn hàng sang COMPLETED, và thanh toán sang SUCCESS.
-     */
-    @PostMapping("/{id}/simulate-delivered")
+    /** Gửi thao tác (cancel/return/storing) sang GHN staging, trả về trạng thái GHN báo lại. */
+    @Operation(summary = "Gửi thao tác trạng thái sang GHN (hủy, trả hàng, giao lại)")
+    @PostMapping("/{id}/ghn-status")
     @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
-    public String simulateDelivered(@PathVariable String shopId, @PathVariable String id,
-                                    @AuthenticationPrincipal CurrentUser u) {
-        return service.simulateDelivered(shopId, u.id(), id).name();
+    public ManagerOrderService.DeliveryInfo pushGhnStatus(@PathVariable String shopId, @PathVariable String id,
+                                                          @RequestBody java.util.Map<String, String> body,
+                                                          @AuthenticationPrincipal CurrentUser u) {
+        return service.pushGhnStatus(shopId, u.id(), id, body.get("status"));
+    }
+
+    /** Đổi trạng thái đơn trực tiếp trong DB (không gọi GHN), body: { "status": "COMPLETED" }. */
+    @Operation(summary = "Đổi trạng thái đơn thủ công, không gọi GHN")
+    @PostMapping("/{id}/set-status")
+    @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
+    public ManagerOrderService.StatusResult setStatus(@PathVariable String shopId, @PathVariable String id,
+                                                      @RequestBody java.util.Map<String, String> body,
+                                                      @AuthenticationPrincipal CurrentUser u) {
+        return service.changeStatus(shopId, u.id(), id, body.get("status"));
     }
 
     /**
      * Lấy danh sách hàng đợi các đơn hàng cần xử lý gấp (PENDING, AWAITING_DEPOSIT, PROCESSING).
      */
+    @Operation(summary = "Danh sách đơn đang chờ xử lý")
     @GetMapping("/queue")
     public ManagerOrderService.Results queue(@PathVariable String shopId, @AuthenticationPrincipal CurrentUser u,
                                             @RequestParam(defaultValue = "0") int page,
@@ -107,6 +122,7 @@ public class ManagerOrderController {
     /**
      * Lấy số lượng đơn hàng đang chờ xác nhận (dùng để hiển thị badge thông báo đỏ trên thanh menu).
      */
+    @Operation(summary = "Đếm số đơn đang chờ xử lý")
     @GetMapping("/queue/count")
     public ManagerOrderService.QueueCount queueCount(@PathVariable String shopId, @AuthenticationPrincipal CurrentUser u) {
         return service.queueCount(shopId, u.id());
@@ -116,6 +132,7 @@ public class ManagerOrderController {
      * Hủy đơn hàng bởi chủ shop (chỉ cho phép khi đơn chưa chuyển sang trạng thái đang giao).
      * @param body Chứa lý do hủy đơn (reason)
      */
+    @Operation(summary = "Hủy đơn hàng")
     @PostMapping("/{id}/cancel")
     @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
     public void cancel(@PathVariable String shopId, @PathVariable String id,
@@ -128,6 +145,7 @@ public class ManagerOrderController {
      * Cập nhật thông tin vận đơn trên GHN (chỉ dành cho các đơn hàng đã tạo vận đơn).
      * @param body Các trường cần cập nhật (ví dụ: note, weight, to_name, to_phone).
      */
+    @Operation(summary = "Cập nhật thông tin vận đơn GHN")
     @PostMapping("/{id}/update-ghn")
     @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
     public void updateGhn(@PathVariable String shopId, @PathVariable String id,

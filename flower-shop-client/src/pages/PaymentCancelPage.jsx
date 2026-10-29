@@ -1,52 +1,82 @@
-import { useSearchParams, Link } from 'react-router';
+﻿import { useEffect, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router';
 import PageMeta from '../components/common/PageMeta';
-import Button from '../components/ui/button/Button';
+import paymentApi from '../api/paymentApi';
+import { useCartContext } from '../context/CartContext';
+import { useAuth } from '../context/AuthContext';
 
+// SePay redirect về đây khi khách bấm hủy trên cổng. Trang này gọi backend hủy giao dịch rồi chuyển sang /payment/error.
+// Không hiển thị kết quả trực tiếp vì khách có thể đã trả tiền nhưng bấm hủy/quay lại muộn (result.paid).
 export default function PaymentCancelPage() {
   const [searchParams] = useSearchParams();
-  const orderId = searchParams.get('order_invoice_number') || searchParams.get('orderId');
+  // Chốt mã hóa đơn 1 lần; ưu tiên query của SePay, dự phòng mã đã lưu lúc tạo giao dịch (redirectToSePay)
+  const [invoiceNumber] = useState(() => searchParams.get('invoice_number')
+    || searchParams.get('order_invoice_number') || sessionStorage.getItem('flower_pending_invoice'));
+  const navigate = useNavigate();
+  const { userId, fetchCart } = useCartContext();
+  const { busy } = useAuth();
+  const [waiting, setWaiting] = useState(false);
+
+  useEffect(() => {
+    if (busy) return;
+    // Cần đăng nhập để hủy giao dịch; đăng nhập xong quay lại đúng trang này
+    if (!userId) {
+      const next = invoiceNumber
+        ? `/payment/cancel?invoice_number=${encodeURIComponent(invoiceNumber)}`
+        : '/payment/error';
+      navigate(`/login?next=${encodeURIComponent(next)}`, { replace: true });
+      return;
+    }
+    if (!invoiceNumber) {
+      navigate('/payment/error', { replace: true });
+      return;
+    }
+    let active = true;
+    let timer;
+    let retries = 0;
+    // Gọi hủy; lỗi thì thử lại mỗi 2 giây, tối đa 5 lần rồi sang trang lỗi (tránh lặp vô hạn khi sai invoice/không có quyền)
+    const cancelAndReturn = async () => {
+      try {
+        const result = await paymentApi.cancelCheckout(invoiceNumber);
+        if (!active) return;
+        // Webhook báo đã trả tiền trước khi hủy kịp -> coi như thành công, không hủy
+        if (result?.paid) {
+          navigate(`/payment/success?invoice_number=${encodeURIComponent(invoiceNumber)}`, { replace: true });
+          return;
+        }
+        // Thanh toán cọc/phần còn lại: hủy ở cổng không hủy đơn, chỉ bỏ lần thanh toán này.
+        let deposit = false;
+        try {
+          const res = await paymentApi.getPaymentStatusByInvoice(invoiceNumber);
+          const type = (res?.data || res)?.paymentType;
+          deposit = type === 'DEPOSIT' || type === 'FINAL';
+        } catch { /* không lấy được trạng thái thì coi như đơn thường */ }
+        await fetchCart(); // đơn bị hủy -> sản phẩm được trả về giỏ
+        if (!active) return;
+        sessionStorage.removeItem('flower_pending_invoice');
+        navigate(`/payment/error?cancelled=1${deposit ? '&deposit=1' : ''}&invoice_number=${encodeURIComponent(invoiceNumber)}`, { replace: true });
+      } catch {
+        if (!active) return;
+        if (++retries > 5) {
+          navigate('/payment/error', { replace: true });
+          return;
+        }
+        setWaiting(true);
+        timer = setTimeout(cancelAndReturn, 2000);
+      }
+    };
+    cancelAndReturn();
+    return () => { active = false; clearTimeout(timer); };
+  }, [invoiceNumber, userId, busy, fetchCart, navigate]);
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 w-full max-w-xl mx-auto my-12">
-      <PageMeta title="Đã hủy thanh toán | Cửa hàng hoa" description="Thông báo hủy thanh toán" />
-
-      <div className="rounded-2xl border border-gray-200 bg-white p-8 sm:p-10 shadow-sm dark:border-white/5 dark:bg-white/3 text-center space-y-6">
-        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-gray-400 text-white text-3xl">
-          ✕
-        </div>
-
-        <div>
-          <span className="inline-block px-3 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800 dark:bg-white/10 dark:text-gray-300 mb-2">
-            Đã hủy giao dịch
-          </span>
-          <h1 className="text-3xl font-extrabold text-gray-900 dark:text-white">
-            Thanh toán đã bị hủy
-          </h1>
-          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-            Bạn đã hủy phiên thanh toán. Sản phẩm của bạn vẫn được lưu trong giỏ hàng để bạn có thể tiếp tục mua sắm bất cứ lúc nào.
-          </p>
-        </div>
-
-        {orderId && (
-          <div className="rounded-xl border border-gray-100 bg-gray-50 p-4 dark:border-white/5 dark:bg-gray-800/40 text-sm flex justify-between items-center">
-            <span className="text-gray-500 dark:text-gray-400">Mã đơn hàng:</span>
-            <span className="font-mono font-semibold text-gray-900 dark:text-white">{orderId}</span>
-          </div>
-        )}
-
-        <div className="flex flex-col sm:flex-row justify-center gap-3 pt-2">
-          <Link to="/cart" className="w-full sm:w-auto">
-            <Button className="w-full sm:w-auto px-6 py-2.5">
-              Quay lại giỏ hàng
-            </Button>
-          </Link>
-          <Link to="/" className="w-full sm:w-auto">
-            <Button variant="outline" className="w-full sm:w-auto px-6 py-2.5">
-              Về trang chủ
-            </Button>
-          </Link>
-        </div>
-      </div>
+    <div className="mx-auto max-w-xl p-6 py-16 text-center" role="status" aria-live="polite">
+      <PageMeta title="Đang hủy thanh toán | Cửa hàng hoa" description="Kiểm tra giao dịch trước khi hiển thị kết quả" />
+      <div className="mx-auto mb-5 h-10 w-10 animate-spin rounded-full border-4 border-brand-500 border-t-transparent" />
+      <h1 className="text-xl font-semibold text-gray-900 dark:text-white">Đang kiểm tra trạng thái giao dịch</h1>
+      <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+        {waiting ? 'Đang chờ kết nối để hoàn tất hủy giao dịch…' : 'Sản phẩm đã chọn sẽ được giữ lại trong giỏ.'}
+      </p>
     </div>
   );
 }

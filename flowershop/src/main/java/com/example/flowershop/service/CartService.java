@@ -9,8 +9,10 @@ import com.example.flowershop.entity.Product;
 import com.example.flowershop.entity.User;
 import com.example.flowershop.exception.ApiException;
 import com.example.flowershop.entity.enums.ProductStatus;
+import com.example.flowershop.entity.enums.ProductType;
 import com.example.flowershop.entity.ProductImage;
 import com.example.flowershop.repository.CartItemRepository;
+import com.example.flowershop.repository.OrderDetailRepository;
 import com.example.flowershop.repository.ProductImageRepository;
 import com.example.flowershop.repository.ProductRepository;
 import com.example.flowershop.repository.UserRepository;
@@ -32,10 +34,19 @@ public class CartService {
     private final ProductRepository productRepository;
     private final ProductImageRepository productImageRepository;
     private final UserRepository userRepository;
+    private final OrderDetailRepository orderDetailRepository;
+
+    /** Kho khách này có thể đặt: kho còn lại cộng phần chính họ đang giữ trong đơn PENDING chưa thanh toán. */
+    private int availableStock(String userId, Product product) {
+        return product.getStock() + orderDetailRepository.sumPendingQuantity(userId, product.getId());
+    }
 
     /**
      * Thêm sản phẩm vào giỏ hàng.
-     * Nếu sản phẩm đã tồn tại trong giỏ → cộng dồn số lượng.
+     * Các bước: kiểm tra user -> kiểm tra sản phẩm tồn tại và không INACTIVE -> kiểm tra tồn kho
+     * (bỏ qua với hàng CUSTOM) -> nếu đã có trong giỏ thì cộng dồn (kiểm tra lại tồn kho với tổng mới),
+     * nếu chưa thì tạo CartItem mới.
+     * @throws ApiException 404 nếu không có user/sản phẩm; 400 nếu hết hàng hoặc vượt tồn kho
      */
     @Transactional
     public CartItemResponse addToCart(String userId, AddToCartRequest request) {
@@ -51,10 +62,11 @@ public class CartService {
             throw ApiException.badRequest("Sản phẩm này hiện không còn bán.");
         }
 
-        // 3. Kiểm tra stock
-        if (product.getStock() < request.getQuantity()) {
+        // 3. Kiểm tra stock (chỉ áp dụng với hoa có sẵn)
+        int available = availableStock(userId, product);
+        if (product.getType() != ProductType.CUSTOM && available < request.getQuantity()) {
             throw ApiException.badRequest(
-                    "Số lượng yêu cầu vượt quá tồn kho. Tồn kho hiện tại: " + product.getStock()
+                    "Số lượng yêu cầu vượt quá tồn kho. Tồn kho hiện tại: " + available
             );
         }
 
@@ -65,10 +77,10 @@ public class CartService {
         if (existingItem.isPresent()) {
             cartItem = existingItem.get();
             int newQuantity = cartItem.getQuantity() + request.getQuantity();
-            // Kiểm tra lại stock sau khi cộng dồn
-            if (product.getStock() < newQuantity) {
+            // Kiểm tra lại stock sau khi cộng dồn (chỉ áp dụng với hoa có sẵn)
+            if (product.getType() != ProductType.CUSTOM && available < newQuantity) {
                 throw ApiException.badRequest(
-                        "Tổng số lượng trong giỏ vượt quá tồn kho. Tồn kho: " + product.getStock()
+                        "Tổng số lượng trong giỏ vượt quá tồn kho. Tồn kho: " + available
                         + ", Hiện trong giỏ: " + cartItem.getQuantity()
                 );
             }
@@ -91,7 +103,8 @@ public class CartService {
     }
 
     /**
-     * Lấy toàn bộ giỏ hàng của user.
+     * Lấy toàn bộ giỏ hàng của user: map từng CartItem sang response (kèm ảnh, tồn kho, thành tiền)
+     * và tính totalItems (số dòng), totalQuantity (tổng số lượng), grandTotal (tổng tiền theo giá hiện tại).
      */
     @Transactional(readOnly = true)
     public CartResponse getCart(String userId) {
@@ -121,17 +134,19 @@ public class CartService {
     }
 
     /**
-     * Cập nhật số lượng của 1 cart item.
+     * Đặt lại số lượng của 1 cart item. Kiểm tra item thuộc về user, rồi kiểm tra số lượng mới
+     * không vượt tồn kho khả dụng (bỏ qua với hàng CUSTOM).
      */
     @Transactional
     public CartItemResponse updateCartItem(String userId, String cartItemId, UpdateCartItemRequest request) {
         CartItem cartItem = getCartItemOrThrow(cartItemId, userId);
 
-        // Kiểm tra stock
+        // Kiểm tra stock (chỉ áp dụng với hoa có sẵn)
         Product product = cartItem.getProduct();
-        if (product.getStock() < request.getQuantity()) {
+        int available = availableStock(userId, product);
+        if (product.getType() != ProductType.CUSTOM && available < request.getQuantity()) {
             throw ApiException.badRequest(
-                    "Số lượng yêu cầu vượt quá tồn kho. Tồn kho hiện tại: " + product.getStock()
+                    "Số lượng yêu cầu vượt quá tồn kho. Tồn kho hiện tại: " + available
             );
         }
 
@@ -141,29 +156,16 @@ public class CartService {
         return toCartItemResponse(cartItem);
     }
 
-    /**
-     * Xóa 1 sản phẩm khỏi giỏ hàng.
-     */
+    /** Xóa 1 cart item khỏi giỏ (sau khi xác nhận item thuộc về user). */
     @Transactional
     public void removeCartItem(String userId, String cartItemId) {
         CartItem cartItem = getCartItemOrThrow(cartItemId, userId);
         cartItemRepository.delete(cartItem);
     }
 
-    /**
-     * Xóa nhiều cart items theo danh sách ID (dùng sau khi đặt hàng thành công).
-     */
-    @Transactional
-    public void clearCartItems(String userId, List<String> cartItemIds) {
-        for (String id : cartItemIds) {
-            if (cartItemRepository.existsByIdAndUserId(id, userId)) {
-                cartItemRepository.deleteById(id);
-            }
-        }
-    }
-
     // ===================== HELPER METHODS =====================
 
+    /** Lấy CartItem theo id; 404 nếu không có, 403 nếu item thuộc user khác. */
     private CartItem getCartItemOrThrow(String cartItemId, String userId) {
         CartItem cartItem = cartItemRepository.findById(cartItemId)
                 .orElseThrow(() -> ApiException.notFound("Không tìm thấy cart item với id: " + cartItemId));
@@ -175,6 +177,10 @@ public class CartService {
         return cartItem;
     }
 
+    /**
+     * Chuyển CartItem sang DTO trả về frontend: tính thành tiền = giá hiện tại x số lượng,
+     * kèm danh sách ảnh (theo displayOrder), tồn kho khả dụng và thông tin shop để FE gom đơn theo shop.
+     */
     CartItemResponse toCartItemResponse(CartItem cartItem) {
         Product product = cartItem.getProduct();
         BigDecimal itemTotal = product.getPrice().multiply(BigDecimal.valueOf(cartItem.getQuantity()));
@@ -190,7 +196,7 @@ public class CartService {
                 .price(product.getPrice())
                 .images(imageUrls)
                 .image(imageUrls.isEmpty() ? null : imageUrls.get(0))
-                .stock(product.getStock())
+                .stock(availableStock(cartItem.getUser().getId(), product))
                 .shopId(product.getShop().getId())
                 .shopName(product.getShop().getName())
                 .build();

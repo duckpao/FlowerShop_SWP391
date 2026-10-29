@@ -1,3 +1,4 @@
+
 package com.example.flowershop.config;
 
 import jakarta.servlet.DispatcherType;
@@ -29,24 +30,22 @@ public class SecurityConfig {
 
         http
                 .cors(Customizer.withDefaults())
-                .csrf(csrf -> csrf.ignoringRequestMatchers("/api/payments/sepay/ipn", "/api/sepay/ipn", "/api/webhook/sepay"))
+                .csrf(csrf -> csrf.ignoringRequestMatchers("/api/webhook/sepay", "/ws/**"))
                 .sessionManagement(session -> session.sessionCreationPolicy(org.springframework.security.config.http.SessionCreationPolicy.STATELESS))
                 .addFilterBefore(new com.example.flowershop.security.JwtAuthenticationFilter(tokenAuth),
                         org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter.class)
 
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers(HttpMethod.GET, "/custom-orders", "/custom-orders/new", "/budget-flowers", "/api/public/custom-orders/suggestions").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/shops", "/following-shops", "/favorite-shops").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/public/products/*/reviews").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/", "/index.html", "/assets/**", "/vite.svg", "/favicon.svg", "/icons.svg",
-                                "/login", "/account", "/admin", "/admin/shops", "/admin/approvals", "/admin/users", "/admin/profile",
-                                "/shop-admin", "/shop-admin/staff", "/shop-admin/products", "/shop-admin/shop", "/shop-admin/profile", "/shops/*",
-                                "/products", "/products/*", "/favorites", "/admin/categories").permitAll()
-                        .requestMatchers(HttpMethod.GET,"/api/public/shops","/api/public/shops/*","/api/public/shops/*/products","/api/public/products","/api/public/products/*","/api/public/categories").permitAll()
                         .requestMatchers(HttpMethod.GET, "/", "/index.html", "/assets/**", "/images/**", "/vite.svg", "/favicon.svg", "/icons.svg",
                                 "/login", "/account", "/admin", "/admin/**", "/shop-admin", "/shop-admin/**",
-                                "/products", "/products/*", "/favorites", "/shops/*", "/checkout", "/orders", "/orders/*",
-                                "/cart", "/home", "/payment/**", "/invitations/accept").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/public/shops", "/api/public/shops/*", "/api/public/shops/*/products", "/api/public/products", "/api/public/products/*", "/api/public/categories", "/api/public/ghn/provinces", "/api/public/ghn/provinces/*/districts", "/api/public/ghn/districts/*/wards").permitAll()
+                                "/products", "/products/*", "/favorites", "/shops/*", "/floral-care", "/floral-care/*", "/checkout", "/orders", "/orders/*",
+                                "/cart", "/home", "/occasions", "/chat", "/payment/**", "/invitations/accept").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/public/shops", "/api/public/shops/*", "/api/public/shops/*/products", "/api/public/products", "/api/public/products/*", "/api/public/categories", "/api/public/blogs", "/api/public/blogs/*", "/api/public/ghn/provinces", "/api/public/ghn/provinces/*/districts", "/api/public/ghn/districts/*/wards").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/payments/sepay/ipn", "/api/sepay/ipn", "/api/webhook/sepay").permitAll()
+                        .requestMatchers("/ws/**").permitAll() // JWT được kiểm tra ở bước STOMP CONNECT
                         .requestMatchers("/api/cart/**", "/api/orders/**", "/api/payments/**", "/api/payment/**", "/api/sepay/checkout/**").hasRole("CUSTOMER")
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                         .requestMatchers(
