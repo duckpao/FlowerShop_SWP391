@@ -73,6 +73,18 @@ const quickActions = [
     ),
     description: "Hàng chờ xử lý, chi tiết đơn, vận đơn GHN và cập nhật trạng thái đơn hàng.",
   },
+  {
+    href: "/shop-admin/chat",
+    title: "Tin nhắn khách hàng",
+    section: "chat",
+    color: "bg-blue-light-50 text-blue-light-600 dark:bg-blue-light-500/10 dark:text-blue-light-400",
+    icon: (
+      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h8M8 14h5m-9 6l1.5-4A8 8 0 1121 12a8 8 0 01-8 8H4z" />
+      </svg>
+    ),
+    description: "Trả lời tin nhắn của khách về sản phẩm và yêu cầu hoa riêng.",
+  },
 ];
 
 const statCards = [
@@ -123,6 +135,11 @@ export default function ManagerDashboardView({
 
   if (path === "/shop-admin/refunds") return <StaffRefundsView />;
 
+  const orderQueue = path === "/shop-admin/order-queue";
+  if (user?.role === 'SHOP_STAFF') {
+    return <ManagerShopsView role="SHOP_STAFF" />;
+  }
+  
   return (
     <div className="w-full">
       {error && (

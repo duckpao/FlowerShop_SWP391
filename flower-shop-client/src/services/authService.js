@@ -93,6 +93,11 @@ export const authService = {
     authModel.setToken(data.accessToken)
     return data.user
   },
+  async loginWithGoogle(credential) {
+    const data = await request('google', { method: 'POST', body: { credential } })
+    authModel.setToken(data.accessToken)
+    return data.user
+  },
   async me() {
     if (!authModel.getToken()) return refresh()
     try { return await request('me', { bearer: true }) }

@@ -13,13 +13,14 @@ public class VerificationMailSender {
     private final JavaMailSender mailSender;
 
     @Value("${app.mail.from}") private String from;
+    @Value("${app.frontend-base-url:http://localhost:8080}") private String frontendBaseUrl;
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void send(AuthMailEvent event) {
         if (isOtp(event)) return;
         deliver(event);
     }
     @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
-    public void sendOtp(AuthMailEvent event) {
+public void sendOtp(AuthMailEvent event) {
         if (isOtp(event)) deliver(event);
     }
     private boolean isOtp(AuthMailEvent event) {
@@ -43,8 +44,13 @@ public class VerificationMailSender {
                 mail.setText("Cảm ơn bạn đã ứng tuyển tại " + event.code() + ". Shop chưa thể tiếp nhận bạn ở thời điểm này. Tài khoản của bạn vẫn là Customer.");
             }
             case STAFF_INVITATION -> {
+                String code = event.code().substring(event.code().lastIndexOf(": ") + 2);
+                String invitationUrl = frontendBaseUrl.replaceAll("/+$", "") + "/invitations/accept?code="
+                    + java.net.URLEncoder.encode(code, java.nio.charset.StandardCharsets.UTF_8)
+                    + "&email=" + java.net.URLEncoder.encode(event.email(), java.nio.charset.StandardCharsets.UTF_8);
                 mail.setSubject("FlowerShop - Lời mời làm nhân viên cửa hàng");
-                mail.setText("Bạn được mời tham gia cửa hàng: " + event.code()
+                mail.setText("Mở liên kết để tạo tài khoản hoặc đăng nhập và xác nhận lời mời:\n" + invitationUrl
+                    + "\n\nBạn được mời tham gia cửa hàng: " + event.code()
                     + "\nLời mời có hiệu lực 24 giờ. Mở ứng dụng FlowerShop, đăng ký và xác thực OTP nếu chưa có tài khoản."
                     + "\nĐăng nhập bằng chính email nhận thư, vào mục Lời mời nhân viên và nhập mã trên để đồng ý tham gia."
                     + "\nNếu tài khoản hiện là Customer, xác nhận sẽ chuyển sang Shop Staff. Không chia sẻ mã. Bỏ qua thư nếu không muốn tham gia.");

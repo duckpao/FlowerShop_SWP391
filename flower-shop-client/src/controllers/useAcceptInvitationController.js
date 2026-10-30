@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { authService } from '../services/authService'
 export function useAcceptInvitationController() {
-  const [code, setCode] = useState('')
+  const [code, setCode] = useState(() => new URLSearchParams(window.location.search).get('code') || '')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [done, setDone] = useState(false)
