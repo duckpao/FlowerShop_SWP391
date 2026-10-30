@@ -7,7 +7,6 @@ import { managerShopService } from "../services/managerShopService";
 import { managerOrderService } from "../services/managerOrderService";
 import {
   BoxCubeIcon,
-  CalenderIcon,
   ChevronDownIcon,
   GridIcon,
   HorizontaLDots,
@@ -56,22 +55,7 @@ const managerNavItems: NavItem[] = [
   { name: 'Tin nhắn khách hàng', path: '/shop-admin/chat', icon: <ListIcon fontSize={24} /> }
 ];
 
-const publicNavItems: NavItem[] = [
-  { name: 'Cẩm nang chăm hoa', path: '/floral-care', icon: <PageIcon fontSize={24} /> },
-  { name: 'Hoa theo ngân sách', path: '/budget-flowers', icon: <BoxCubeIcon fontSize={24} /> },
-  { name: 'Trang chủ', path: '/', icon: <GridIcon fontSize={24} /> },
-  { name: 'Cửa hàng', path: '/shops', icon: <ListIcon fontSize={24} /> },
-  { name: 'Sản phẩm', path: '/#products', icon: <BoxCubeIcon fontSize={24} /> },
-];
-
-const customerNavItems: NavItem[] = [
-  { name: 'Đặt hoa theo yêu cầu', path: '/custom-orders', icon: <ListIcon fontSize={24} /> },
-  ...publicNavItems,
-  { name: 'Cửa hàng đang theo dõi', path: '/following-shops', icon: <ListIcon fontSize={24} /> },
-  { name: 'Tin nhắn', path: '/chat', icon: <ListIcon fontSize={24} /> },
-  { name: 'Dịp đặc biệt', path: '/occasions', icon: <CalenderIcon fontSize={24} /> },
-  { name: 'Theo dõi đơn hàng', path: '/orders', icon: <TableIcon fontSize={24} /> },
-];
+// Phía khách không dùng sidebar nữa: menu nằm ở CategoryMenu (thanh ngang) và menu tài khoản.
 
 const AppSidebar: React.FC = () => {
   const { isExpanded, isMobileOpen, isHovered, setIsHovered, setIsMobileOpen } =
@@ -91,19 +75,13 @@ const AppSidebar: React.FC = () => {
   const [managerShopId, setManagerShopId] = useState<string | undefined>(undefined);
   const isAdmin = location.pathname.startsWith('/admin') && !location.pathname.startsWith('/shop-admin');
   const isManager = location.pathname.startsWith('/shop-admin');
-  const chatScope = isManager
-    ? { kind: 'shop', shopId: managerShopId }
-    : user?.role === 'CUSTOMER' ? { kind: 'customer' } : null;
-  const chatUnread = useChatUnread(chatScope, user?.role === 'SHOP' || user?.role === 'CUSTOMER' ? user?.id : undefined);
+  const chatScope = isManager ? { kind: 'shop', shopId: managerShopId } : null;
+  const chatUnread = useChatUnread(chatScope, user?.role === 'SHOP' ? user?.id : undefined);
   const navItems = isAdmin
     ? adminNavItems
-    : isManager
-      ? [...managerNavItems.map(item => item.path === '/shop-admin/orders' ? { ...item, badge: queueCount }
-           : item.path === '/shop-admin/chat' ? { ...item, badge: chatUnread } : item),
-         ...(user?.role === 'SHOP_STAFF' ? [{ name: 'Đơn hủy cần hoàn tiền', path: '/shop-admin/refunds', icon: <ListIcon fontSize={24} /> } as NavItem] : [])]
-      : user?.role === 'CUSTOMER'
-        ? customerNavItems.map(item => item.path === '/chat' ? { ...item, badge: chatUnread } : item)
-        : publicNavItems;
+    : [...managerNavItems.map(item => item.path === '/shop-admin/orders' ? { ...item, badge: queueCount }
+         : item.path === '/shop-admin/chat' ? { ...item, badge: chatUnread } : item),
+       ...(user?.role === 'SHOP_STAFF' ? [{ name: 'Đơn hủy cần hoàn tiền', path: '/shop-admin/refunds', icon: <ListIcon fontSize={24} /> } as NavItem] : [])];
 
   useEffect(() => {
     if (location.pathname.startsWith('/shop-admin')) {
@@ -332,10 +310,7 @@ const AppSidebar: React.FC = () => {
     </ul>
   );
 
-  const isPublic = !isAdmin && !isManager;
-  const sectionTitle = isPublic
-    ? user?.role === 'CUSTOMER' ? 'KHÁCH HÀNG' : 'CHUNG'
-    : 'QUẢN LÝ';
+  const sectionTitle = 'QUẢN LÝ';
 
   return (
     <aside

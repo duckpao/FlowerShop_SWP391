@@ -12,11 +12,9 @@ const orderService = {
   makeCustomOrder: (userId, requestId, data) =>
     axiosClient.post(`/orders/${userId}/custom/${encodeURIComponent(requestId)}`, data),
 
-  /**
-   * Lấy lịch sử đơn hàng của user
-   * @param {string} userId
-   */
-  getOrderHistory: (userId) => axiosClient.get(`/orders/${userId}`),
+  /** Khách tự hủy đơn chưa giao (lý do không bắt buộc); đơn đã trả tiền sẽ có yêu cầu hoàn tiền. */
+  cancelOrder: (userId, orderId, reason) =>
+    axiosClient.post(`/orders/${userId}/${encodeURIComponent(orderId)}/cancel`, { reason }),
 };
 
 export default orderService;

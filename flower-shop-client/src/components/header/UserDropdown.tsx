@@ -7,6 +7,13 @@ import { DropdownItem } from "../ui/dropdown/DropdownItem";
 import { useAuth } from "@/context/AuthContext";
 import AvatarEditDialog from "../UserProfile/AvatarEditDialog";
 
+// Trang cá nhân của khách (trước nằm ở sidebar): [đường dẫn, nhãn, path SVG]
+const CUSTOMER_LINKS: [string, string, string][] = [
+  ['/occasions', 'Dịp đặc biệt', 'M7 3v3M17 3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z'],
+  ['/following-shops', 'Cửa hàng đang theo dõi', 'M4 10v9a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-9M3 10l1.5-5h15L21 10M3 10h18M3 10a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0M10 20v-5h4v5'],
+  ['/favorites', 'Sản phẩm yêu thích', 'M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10Z'],
+];
+
 export default function UserDropdown() {
   const [isOpen, setIsOpen] = useState(false);
   const [avatarOpen, setAvatarOpen] = useState(false);
@@ -138,6 +145,21 @@ export default function UserDropdown() {
               </DropdownItem>
             </li>
           )}
+          {auth.user.role === 'CUSTOMER' && CUSTOMER_LINKS.map(([to, label, d]) => (
+            <li key={to}>
+              <DropdownItem
+                onItemClick={closeDropdown}
+                tag="a"
+                to={to}
+                className="group flex items-center gap-3 rounded-lg px-3 py-2 text-theme-sm font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-gray-300"
+              >
+                <svg className="stroke-gray-500 group-hover:stroke-gray-700 dark:stroke-gray-400 dark:group-hover:stroke-gray-300" width="24" height="24" viewBox="0 0 24 24" fill="none" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d={d} />
+                </svg>
+                {label}
+              </DropdownItem>
+            </li>
+          ))}
         </ul>
         <button
           onClick={handleLogout}

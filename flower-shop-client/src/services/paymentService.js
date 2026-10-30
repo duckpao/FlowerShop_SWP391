@@ -58,7 +58,7 @@ const paymentService = {
   /**
    * Tạo phiên thanh toán rồi chuyển khách sang cổng SePay.
    * @param {string} orderId
-   * @param {'FULL'|'DEPOSIT'|'FINAL'} paymentType - đơn thường dùng FULL; đơn đặt cọc dùng DEPOSIT rồi FINAL
+   * @param {'FULL'|'DEPOSIT'} paymentType - đơn thường dùng FULL; đơn đặt cọc dùng DEPOSIT (phần còn lại GHN thu COD)
    * @param {string} [paymentMethod] - CARD | BANK_TRANSFER | NAPAS_BANK_TRANSFER (bỏ trống để khách chọn trên cổng)
    */
   startSePayCheckout: async (orderId, paymentType = 'FULL', paymentMethod) => {

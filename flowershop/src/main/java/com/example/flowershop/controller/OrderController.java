@@ -53,6 +53,22 @@ public class OrderController {
     }
 
     /**
+     * Khách tự hủy đơn khi đơn chưa giao cho GHN; đã trả tiền thì tạo yêu cầu hoàn tiền.
+     * POST /api/orders/{userId}/{orderId}/cancel  body: {"reason": "..."} (không bắt buộc)
+     */
+    @PostMapping("/{userId}/{orderId}/cancel")
+    public ResponseEntity<Void> cancelOrder(
+            @PathVariable String userId, @PathVariable String orderId,
+            @RequestBody(required = false) java.util.Map<String, String> body,
+            @AuthenticationPrincipal CurrentUser currentUser) {
+        requireOwner(userId, currentUser);
+        String reason = body == null ? null : body.get("reason");
+        if (reason != null && reason.length() > 255) throw ApiException.badRequest("Lý do hủy tối đa 255 ký tự.");
+        orderService.cancelByCustomer(userId, orderId, reason);
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
      * Ước tính phí giao hàng GHN cho checkout (bản GET, trả {"shippingFee": số tiền}).
      * GET /api/orders/{userId}/shipping-fee?shopId=...&addressId=...
      */
@@ -62,16 +78,6 @@ public class OrderController {
             @AuthenticationPrincipal CurrentUser currentUser) {
         requireOwner(userId, currentUser);
         return ResponseEntity.ok(java.util.Map.of("shippingFee", orderService.estimateShippingFee(userId, shopId, addressId)));
-    }
-
-    /**
-     * Lịch sử đơn hàng của user, mới nhất trước.
-     * GET /api/orders/{userId}
-     */
-    @GetMapping("/{userId}")
-    public ResponseEntity<List<OrderResponse>> getOrderHistory(@PathVariable String userId, @AuthenticationPrincipal CurrentUser currentUser) {
-        requireOwner(userId, currentUser);
-        return ResponseEntity.ok(orderService.getOrderHistory(userId));
     }
 }
 

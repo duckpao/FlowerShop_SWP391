@@ -37,7 +37,8 @@ class CustomDepositOrderTests {
     private final OrderService service = new OrderService(orders, details, mock(CartItemRepository.class),
             mock(UserRepository.class), addresses, mock(ProductRepository.class), mock(PaymentRepository.class),
             mock(CouponRepository.class), mock(ShopRepository.class), ghn, mock(NotificationService.class),
-            mock(org.springframework.context.ApplicationEventPublisher.class));
+            mock(org.springframework.context.ApplicationEventPublisher.class),
+            mock(com.example.flowershop.repository.RefundRepository.class));
 
     private final User customer = User.builder().id("c-1").fullName("Lan").phone("0901").build();
     private final Shop shop = Shop.builder().id("s-1").status(ShopStatus.ACTIVE).build();

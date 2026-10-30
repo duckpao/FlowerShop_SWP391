@@ -10,24 +10,23 @@ import CategoryMenu from "@/components/common/CategoryMenu";
 const LayoutContent: React.FC = () => {
   const { isExpanded, isHovered, isMobileOpen } = useSidebar();
   const { pathname } = useLocation();
+  // Trang quản trị dùng sidebar; phía khách điều hướng bằng thanh ngang dưới header.
   const isBackOffice = pathname.startsWith("/admin") || pathname.startsWith("/shop-admin");
-  // Trang đơn hàng không cần thanh danh mục cửa hàng.
-  const showCategoryMenu = !isBackOffice && !pathname.startsWith("/orders");
 
   return (
     <div className="min-h-screen xl:flex">
-      <AppSidebar />
-      <Backdrop />
+      {isBackOffice && <AppSidebar />}
+      {isBackOffice && <Backdrop />}
 
       <div
         className={cn(
           "flex-1 flex flex-col min-h-screen transition-[margin] duration-300 ease-in-out",
-          isExpanded || isHovered ? "xl:ms-72.5" : "xl:ms-22.5",
+          isBackOffice && (isExpanded || isHovered ? "xl:ms-72.5" : "xl:ms-22.5"),
           isMobileOpen ? "ms-0" : "",
         )}
       >
         <AppHeader />
-        {showCategoryMenu && <CategoryMenu />}
+        {!isBackOffice && <CategoryMenu />}
         <main className="flex-grow mx-auto w-full max-w-(--breakpoint-2xl) p-4 md:p-6">
           <Outlet />
         </main>

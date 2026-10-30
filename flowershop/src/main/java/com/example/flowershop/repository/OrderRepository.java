@@ -30,17 +30,10 @@ public interface OrderRepository extends JpaRepository<Order, String> {
     Optional<Order> findByIdForUpdate(@Param("id") String id);
 
     /**
-     * Lấy toàn bộ danh sách đơn hàng của một khách hàng, sắp xếp theo ngày tạo mới nhất trước.
-     */
-    List<Order> findByCustomerIdOrderByCreatedDateDesc(String customerId);
-
-    /**
      * Lấy danh sách đơn hàng theo trạng thái được tạo trước mốc thời gian threshold.
      * Thường dùng cho các cron job tự động hủy đơn quá hạn thanh toán (expire orders).
      */
     List<Order> findByStatusAndCreatedDateBefore(OrderStatus status, LocalDateTime threshold);
-
-    List<Order> findByStatusAndIdStartingWith(com.example.flowershop.entity.enums.OrderStatus status, String idPrefix);
 
     /**
      * Kiểm tra xem địa chỉ nhận hàng có đang được liên kết với bất kỳ đơn hàng nào không.
@@ -48,11 +41,6 @@ public interface OrderRepository extends JpaRepository<Order, String> {
     boolean existsByDeliveryAddressId(String addressId);
 
     boolean existsByCustomRequestIdAndStatusNot(String customRequestId, OrderStatus status);
-
-    /**
-     * Lấy danh sách đơn hàng của shop theo tập hợp trạng thái (ví dụ: hàng đợi chờ xử lý PENDING, PROCESSING), có phân trang.
-     */
-    Page<Order> findByShopIdAndStatusIn(String shopId, Collection<OrderStatus> statuses, Pageable pageable);
 
     /**
      * Đếm tổng số đơn hàng của shop thuộc các trạng thái được chỉ định (dùng hiển thị badge số lượng đơn chờ).

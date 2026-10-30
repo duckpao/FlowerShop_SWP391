@@ -42,7 +42,7 @@ function DepositAction({ request, userId, addresses }) {
 export default function CustomerCustomOrdersView({ auth }) {
   const [params] = useSearchParams()
   const openId = params.get('open') || ''
-  const [data, setData] = useState(null), [page, setPage] = useState(0), [revision, setRevision] = useState(0)
+  const [data, setData] = useState(null), [page, setPage] = useState(0)
   const [opened, setOpened] = useState(null), [openError, setOpenError] = useState('')
   const [busy, setBusy] = useState(false), [error, setError] = useState('')
   const [addresses, setAddresses] = useState([])
@@ -57,7 +57,7 @@ export default function CustomerCustomOrdersView({ auth }) {
     let active = true; setBusy(true); setError('')
     customFlowerService.mine(page).then(v => { if (active) setData(v) }).catch(e => { if (active) setError(e.message) }).finally(() => { if (active) setBusy(false) })
     return () => { active = false }
-  }, [auth?.user?.id, auth?.user?.role, page, revision])
+  }, [auth?.user?.id, auth?.user?.role, page])
   // Thẻ chat dẫn tới ?open=: tải riêng yêu cầu đó để hiện ngay dù nó nằm ở trang khác của danh sách
   useEffect(() => {
     setOpened(null); setOpenError('')

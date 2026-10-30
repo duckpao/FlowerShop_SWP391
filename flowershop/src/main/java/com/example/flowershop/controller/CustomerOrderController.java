@@ -5,8 +5,6 @@ import com.example.flowershop.service.CustomerOrderService;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.enums.ParameterIn;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
-import jakarta.validation.Valid;
-import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -18,20 +16,6 @@ import org.springframework.web.bind.annotation.*;
 public class CustomerOrderController {
     private final CustomerOrderService service;
     public CustomerOrderController(CustomerOrderService service) { this.service = service; }
-
-    @PostMapping("/fee")
-    public java.util.Map<String, Object> fee(@AuthenticationPrincipal CurrentUser user,
-                                             @RequestBody CustomerOrderService.CheckoutRequest req) {
-        return java.util.Map.of("shippingFee", service.calculateFee(user.id(), req));
-    }
-
-    @PostMapping("/checkout")
-    @ResponseStatus(HttpStatus.CREATED)
-    @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
-    public CustomerOrderService.CheckoutResponse checkout(@AuthenticationPrincipal CurrentUser user,
-                                                          @Valid @RequestBody CustomerOrderService.CheckoutRequest req) {
-        return service.checkout(user.id(), req);
-    }
 
     @GetMapping
     public CustomerOrderService.Results list(@AuthenticationPrincipal CurrentUser user,

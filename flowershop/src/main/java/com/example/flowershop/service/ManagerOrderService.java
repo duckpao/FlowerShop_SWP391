@@ -334,34 +334,6 @@ public class ManagerOrderService {
     public record CancelRequest(String reason) {}
 
     /**
-     * Lấy danh sách hàng đợi xử lý của shop (chỉ bao gồm các đơn PENDING, AWAITING_DEPOSIT, DEPOSIT_PAID, PROCESSING).
-     */
-    public Results queue(String shopId, String actor, int page, String status) {
-        owned(shopId, actor);
-        Pageable pageable = PageRequest.of(page, 20, Sort.by(Sort.Order.desc("createdDate"), Sort.Order.asc("id")));
-        Page<Order> result;
-        List<OrderStatus> queueStatuses = List.of(OrderStatus.PENDING, OrderStatus.AWAITING_DEPOSIT, OrderStatus.DEPOSIT_PAID, OrderStatus.PROCESSING);
-        
-        if (status != null && !status.isBlank()) {
-            try {
-                OrderStatus st = OrderStatus.valueOf(status.toUpperCase());
-                if (!queueStatuses.contains(st)) {
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Trạng thái không thuộc danh sách chờ xử lý.");
-                }
-                result = orders.findByShopIdAndStatus(shopId, st, pageable);
-            } catch (IllegalArgumentException e) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Trạng thái không hợp lệ: " + status);
-            }
-        } else {
-            result = orders.findByShopIdAndStatusIn(shopId, queueStatuses, pageable);
-        }
-        var content = result.map(o -> new OrderSummary(o.getId(),
-                o.getCustomer().getFullName(), o.getCustomer().getPhone(),
-                o.getTotalAmount(), o.getStatus().name(), o.getCreatedDate())).toList();
-        return new Results(content, page, result.getTotalPages(), result.getTotalElements());
-    }
-
-    /**
      * Đếm tổng số đơn hàng đang chờ xác nhận hoặc chờ đặt cọc.
      */
     public QueueCount queueCount(String shopId, String actor) {

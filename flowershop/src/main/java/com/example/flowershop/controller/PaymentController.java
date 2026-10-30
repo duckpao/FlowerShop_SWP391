@@ -70,9 +70,9 @@ public class PaymentController {
 
     /**
      * Truy vấn trạng thái thanh toán theo orderId (có đối soát chủ động với SePay trước khi trả kết quả)
-     * GET /api/payments/status-by-order/{orderId} và GET /api/payment/status/{orderId}
+     * GET /api/payments/status-by-order/{orderId}
      */
-    @GetMapping({"/payments/status-by-order/{orderId}", "/payment/status/{orderId}"})
+    @GetMapping("/payments/status-by-order/{orderId}")
     public ResponseEntity<PaymentStatusResponse> getPaymentByOrder(@PathVariable String orderId, @AuthenticationPrincipal CurrentUser currentUser) {
         return ResponseEntity.ok(paymentService.checkPaymentStatus(orderId, currentUser.id()));
     }

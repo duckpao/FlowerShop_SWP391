@@ -20,5 +20,4 @@ public interface OrderDetailRepository extends JpaRepository<OrderDetail, String
     @Query("SELECT DISTINCT d.order.id FROM OrderDetail d WHERE d.order.customer.id = :userId "
             + "AND d.order.status = com.example.flowershop.entity.enums.OrderStatus.PENDING AND d.product.id IN :productIds")
     List<String> findPendingOrderIds(@Param("userId") String userId, @Param("productIds") Collection<String> productIds);
-    List<OrderDetail> findByOrderIdIn(Collection<String> orderIds);
 }

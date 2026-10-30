@@ -31,20 +31,6 @@ export const managerOrderService = {
     },
 
     /**
-     * Lấy danh sách đơn hàng trong hàng đợi cần xử lý (PENDING, AWAITING_DEPOSIT, PROCESSING).
-     * Gọi: GET /api/shop/mine/{shopId}/orders/queue?page=&status= -> ManagerOrderController.queue
-     * @param {string} shopId - ID của shop
-     * @param {number} page - Số trang
-     * @param {string|null} status - Trạng thái lọc
-     */
-    getQueue: (shopId, page = 0, status = null) => {
-        const params = new URLSearchParams()
-        if (page !== undefined && page !== null && page !== '') params.set('page', page)
-        if (status) params.set('status', status)
-        return authService.authenticatedRequest(`${base(shopId)}/queue?${params.toString()}`)
-    },
-
-    /**
      * Lấy số lượng đơn hàng đang chờ xác nhận để hiển thị badge thông báo đỏ.
      * Gọi: GET /api/shop/mine/{shopId}/orders/queue/count -> ManagerOrderController.queueCount
      * @param {string} shopId - ID của shop

@@ -18,7 +18,6 @@ import PaymentErrorPage from "./views/PaymentErrorPage";
 import PaymentCancelPage from "./views/PaymentCancelPage";
 import PaymentPendingPage from "./views/PaymentPendingPage";
 import CodSuccessPage from "./views/CodSuccessPage";
-import DevDepositTestPage from "./pages/DevDepositTestPage";
 import OrderInvoiceView from "./views/OrderInvoiceView";
 import CustomerOrdersView from "./views/CustomerOrdersView";
 import CustomerOrderDetailView from "./views/CustomerOrderDetailView";
@@ -97,7 +96,6 @@ function AppRouterContent() {
             <Route path="/payment/cancel" element={<PaymentCancelPage />} />
             <Route path="/payment/pending" element={<PaymentPendingPage />} />
             <Route path="/payment/cod-success" element={<CodSuccessPage />} />
-            {import.meta.env.DEV && <Route path="/dev-deposit" element={<DevDepositTestPage />} />}
             <Route path="/admin/profile" element={<Navigate to="/account" replace />} />
             <Route path="/shop-admin/profile" element={<Navigate to="/account" replace />} />
             <Route path="/admin/*" element={<AdminDashboardView user={controller.user} logout={controller.logout} busy={controller.busy} error={controller.error} path={location.pathname} />} />
