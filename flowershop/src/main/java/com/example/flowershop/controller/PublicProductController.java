@@ -8,6 +8,6 @@ public class PublicProductController {
     public PublicProductController(CatalogService catalog) { this.catalog = catalog; }
 
     @GetMapping("/api/public/shops/{shopId}/products")
-    public CatalogService.Results list(@PathVariable String shopId,
-            @RequestParam(defaultValue = "0") int page) { return catalog.published(shopId, page); }
+    public CatalogService.Results list(@PathVariable(name = "shopId") String shopId,
+            @RequestParam(name = "page", defaultValue = "0") int page) { return catalog.published(shopId, page); }
 }

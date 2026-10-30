@@ -35,27 +35,27 @@ public class CustomerOrderController {
 
     @GetMapping
     public CustomerOrderService.Results list(@AuthenticationPrincipal CurrentUser user,
-                                             @RequestParam(defaultValue = "0") int page,
-                                             @RequestParam(required = false) String status) {
+                                             @RequestParam(name = "page", defaultValue = "0") int page,
+                                             @RequestParam(name = "status", required = false) String status) {
         return service.list(user.id(), page, status);
     }
 
     @GetMapping("/{id}")
     public CustomerOrderService.OrderDetailResponse detail(@AuthenticationPrincipal CurrentUser user,
-                                                           @PathVariable String id) {
+                                                           @PathVariable(name = "id") String id) {
         return service.detail(user.id(), id);
     }
 
     @GetMapping("/{id}/shipping-fee")
     public CustomerOrderService.ShippingFeeResponse shippingFee(@AuthenticationPrincipal CurrentUser user,
-                                                                @PathVariable String id) {
+                                                                @PathVariable(name = "id") String id) {
         return new CustomerOrderService.ShippingFeeResponse(service.calculateShippingFeeForOrder(user.id(), id));
     }
 
     @PostMapping("/{id}/refresh-tracking")
     @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
     public CustomerOrderService.DeliveryInfo refreshTracking(@AuthenticationPrincipal CurrentUser user,
-                                                              @PathVariable String id) {
+                                                              @PathVariable(name = "id") String id) {
         return service.refreshTracking(user.id(), id);
     }
 }

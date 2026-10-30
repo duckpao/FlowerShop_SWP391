@@ -16,12 +16,12 @@ public class ManagerShopController {
     private final ManagerShopService service;
     public ManagerShopController(ManagerShopService service) { this.service=service; }
     @GetMapping public List<ShopResponse> mine(@AuthenticationPrincipal CurrentUser u) { return service.mine(u.id()); }
-    @GetMapping("/{id}/address") public List<com.example.flowershop.dto.account.AddressResponse> address(@PathVariable String id,@AuthenticationPrincipal CurrentUser u) { return service.address(id,u.id()); }
+    @GetMapping("/{id}/address") public List<com.example.flowershop.dto.account.AddressResponse> address(@PathVariable(name = "id") String id,@AuthenticationPrincipal CurrentUser u) { return service.address(id,u.id()); }
     @PutMapping("/{id}/address") @Parameter(name="X-CSRF-TOKEN",in=ParameterIn.HEADER,required=true)
-    public com.example.flowershop.dto.account.AddressResponse saveAddress(@PathVariable String id,@AuthenticationPrincipal CurrentUser u,@Valid @RequestBody com.example.flowershop.dto.account.ShopAddressRequest body) { return service.saveAddress(id,u.id(),body); }
+    public com.example.flowershop.dto.account.AddressResponse saveAddress(@PathVariable(name = "id") String id,@AuthenticationPrincipal CurrentUser u,@Valid @RequestBody com.example.flowershop.dto.account.ShopAddressRequest body) { return service.saveAddress(id,u.id(),body); }
     @PutMapping("/{id}") @Parameter(name="X-CSRF-TOKEN",in=ParameterIn.HEADER,required=true)
-    public ShopResponse update(@PathVariable String id,@AuthenticationPrincipal CurrentUser u,@Valid @RequestBody ManagerShopService.Profile body) { return service.update(id,u.id(),body); }
-    @GetMapping("/{id}/staff") public List<ManagerShopService.StaffResponse> staff(@PathVariable String id,@AuthenticationPrincipal CurrentUser u) { return service.staff(id,u.id()); }
+    public ShopResponse update(@PathVariable(name = "id") String id,@AuthenticationPrincipal CurrentUser u,@Valid @RequestBody ManagerShopService.Profile body) { return service.update(id,u.id(),body); }
+    @GetMapping("/{id}/staff") public List<ManagerShopService.StaffResponse> staff(@PathVariable(name = "id") String id,@AuthenticationPrincipal CurrentUser u) { return service.staff(id,u.id()); }
     @PutMapping("/{id}/staff/{userId}") @Parameter(name="X-CSRF-TOKEN",in=ParameterIn.HEADER,required=true)
-    public ManagerShopService.StaffResponse active(@PathVariable String id,@PathVariable String userId,@AuthenticationPrincipal CurrentUser u,@Valid @RequestBody ManagerShopService.ActiveInput body) { return service.active(id,u.id(),userId,body.active()); }
+    public ManagerShopService.StaffResponse active(@PathVariable(name = "id") String id,@PathVariable(name = "userId") String userId,@AuthenticationPrincipal CurrentUser u,@Valid @RequestBody ManagerShopService.ActiveInput body) { return service.active(id,u.id(),userId,body.active()); }
 }

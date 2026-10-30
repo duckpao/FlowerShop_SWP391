@@ -15,13 +15,13 @@ public class StaffInvitationController {
     private final StaffInvitationService service;
     public StaffInvitationController(StaffInvitationService service){this.service=service;}
     @GetMapping("/api/shop/mine/{id}/invitations") @PreAuthorize("hasRole('SHOP')")
-    public List<StaffInvitationService.InvitationResponse> list(@PathVariable String id,@AuthenticationPrincipal CurrentUser u){return service.list(id,u.id());}
+    public List<StaffInvitationService.InvitationResponse> list(@PathVariable(name = "id") String id,@AuthenticationPrincipal CurrentUser u){return service.list(id,u.id());}
     @PostMapping("/api/shop/mine/{id}/invitations") @PreAuthorize("hasRole('SHOP')") @ResponseStatus(org.springframework.http.HttpStatus.ACCEPTED)
     @Parameter(name="X-CSRF-TOKEN",in=ParameterIn.HEADER,required=true)
-    public StaffInvitationService.InvitationResponse send(@PathVariable String id,@AuthenticationPrincipal CurrentUser u,@Valid @RequestBody StaffInvitationService.SendRequest body){return service.send(id,u.id(),body.email());}
+    public StaffInvitationService.InvitationResponse send(@PathVariable(name = "id") String id,@AuthenticationPrincipal CurrentUser u,@Valid @RequestBody StaffInvitationService.SendRequest body){return service.send(id,u.id(),body.email());}
     @DeleteMapping("/api/shop/mine/{id}/invitations/{invitationId}") @PreAuthorize("hasRole('SHOP')") @ResponseStatus(org.springframework.http.HttpStatus.NO_CONTENT)
     @Parameter(name="X-CSRF-TOKEN",in=ParameterIn.HEADER,required=true)
-    public void cancel(@PathVariable String id,@PathVariable String invitationId,@AuthenticationPrincipal CurrentUser u){service.cancel(id,u.id(),invitationId);}
+    public void cancel(@PathVariable(name = "id") String id,@PathVariable(name = "invitationId") String invitationId,@AuthenticationPrincipal CurrentUser u){service.cancel(id,u.id(),invitationId);}
     @PostMapping("/api/account/staff-invitations/accept") @PreAuthorize("hasAnyRole('CUSTOMER','SHOP_STAFF')")
     @Parameter(name="X-CSRF-TOKEN",in=ParameterIn.HEADER,required=true)
     public MessageResponse accept(@AuthenticationPrincipal CurrentUser u,@Valid @RequestBody StaffInvitationService.AcceptRequest body){

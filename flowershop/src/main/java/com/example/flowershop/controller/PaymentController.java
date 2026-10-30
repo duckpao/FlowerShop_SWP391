@@ -38,7 +38,7 @@ public class PaymentController {
      * POST /api/sepay/checkout/{orderId}
      */
     @PostMapping("/sepay/checkout/{orderId}")
-    public ResponseEntity<SePayCheckoutFormResponse> initiateCheckout(@PathVariable String orderId, @AuthenticationPrincipal CurrentUser currentUser) {
+    public ResponseEntity<SePayCheckoutFormResponse> initiateCheckout(@PathVariable(name = "orderId") String orderId, @AuthenticationPrincipal CurrentUser currentUser) {
         return ResponseEntity.ok(sePayGatewayService.initiateCheckout(orderId, currentUser.id()));
     }
 
@@ -61,7 +61,7 @@ public class PaymentController {
      */
     @GetMapping("/payments/{paymentId}")
     public ResponseEntity<PaymentStatusResponse> getPaymentById(
-            @PathVariable String paymentId,
+            @PathVariable(name = "paymentId") String paymentId,
             @AuthenticationPrincipal CurrentUser currentUser
     ) {
         return ResponseEntity.ok(sePayGatewayService.getStatusById(paymentId, currentUser.id()));
@@ -73,7 +73,7 @@ public class PaymentController {
      */
     @GetMapping("/payments/status-by-invoice/{invoiceNumber}")
     public ResponseEntity<PaymentStatusResponse> getPaymentByInvoice(
-            @PathVariable String invoiceNumber,
+            @PathVariable(name = "invoiceNumber") String invoiceNumber,
             @AuthenticationPrincipal CurrentUser currentUser
     ) {
         return ResponseEntity.ok(sePayGatewayService.getStatusByInvoice(invoiceNumber, currentUser.id()));
@@ -84,7 +84,7 @@ public class PaymentController {
      * GET /api/payments/status-by-order/{orderId} và GET /api/payment/status/{orderId}
      */
     @GetMapping({"/payments/status-by-order/{orderId}", "/payment/status/{orderId}"})
-    public ResponseEntity<PaymentStatusResponse> getPaymentByOrder(@PathVariable String orderId, @AuthenticationPrincipal CurrentUser currentUser) {
+    public ResponseEntity<PaymentStatusResponse> getPaymentByOrder(@PathVariable(name = "orderId") String orderId, @AuthenticationPrincipal CurrentUser currentUser) {
         return ResponseEntity.ok(paymentService.checkPaymentStatus(orderId, currentUser.id()));
     }
 
@@ -93,7 +93,7 @@ public class PaymentController {
      * POST /api/payments/create-qr/{orderId} và POST /api/payment/create-qr/{orderId}
      */
     @PostMapping({"/payments/create-qr/{orderId}", "/payment/create-qr/{orderId}"})
-    public ResponseEntity<PaymentQrResponse> createQrPayment(@PathVariable String orderId, @AuthenticationPrincipal CurrentUser currentUser) {
+    public ResponseEntity<PaymentQrResponse> createQrPayment(@PathVariable(name = "orderId") String orderId, @AuthenticationPrincipal CurrentUser currentUser) {
         return ResponseEntity.ok(paymentService.generatePaymentQr(orderId, currentUser.id()));
     }
 

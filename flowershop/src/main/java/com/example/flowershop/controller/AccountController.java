@@ -42,16 +42,16 @@ public class AccountController {
     }
     @PutMapping("/addresses/{id}") 
     @Parameter(name="X-CSRF-TOKEN",in=ParameterIn.HEADER,required=true)
-    public AddressResponse updateAddress(@AuthenticationPrincipal CurrentUser user,@PathVariable String id,@Valid @RequestBody AddressRequest request) {
+    public AddressResponse updateAddress(@AuthenticationPrincipal CurrentUser user,@PathVariable(name = "id") String id,@Valid @RequestBody AddressRequest request) {
         return accounts.save(user.id(),id,request);
     }
     @PutMapping("/addresses/{id}/default") 
     @Parameter(name="X-CSRF-TOKEN",in=ParameterIn.HEADER,required=true)
-    public AddressResponse setDefault(@AuthenticationPrincipal CurrentUser user,@PathVariable String id) {
+    public AddressResponse setDefault(@AuthenticationPrincipal CurrentUser user,@PathVariable(name = "id") String id) {
         return accounts.setDefault(user.id(),id);
     }
     @DeleteMapping("/addresses/{id}") @ResponseStatus(org.springframework.http.HttpStatus.NO_CONTENT)
     
     @Parameter(name="X-CSRF-TOKEN",in=ParameterIn.HEADER,required=true)
-    public void delete(@AuthenticationPrincipal CurrentUser user,@PathVariable String id) { accounts.delete(user.id(),id); }
+    public void delete(@AuthenticationPrincipal CurrentUser user,@PathVariable(name = "id") String id) { accounts.delete(user.id(),id); }
 }

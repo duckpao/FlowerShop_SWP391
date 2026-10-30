@@ -34,9 +34,9 @@ public class ManagerOrderController {
      * @return Danh sách đơn hàng phân trang
      */
     @GetMapping
-    public ManagerOrderService.Results list(@PathVariable String shopId, @AuthenticationPrincipal CurrentUser u,
-                                            @RequestParam(defaultValue = "0") int page,
-                                            @RequestParam(required = false) String status) {
+    public ManagerOrderService.Results list(@PathVariable("shopId") String shopId, @AuthenticationPrincipal CurrentUser u,
+                                            @RequestParam(name = "page", defaultValue = "0") int page,
+                                            @RequestParam(name = "status", required = false) String status) {
         return service.list(shopId, u.id(), page, status);
     }
 
@@ -45,7 +45,7 @@ public class ManagerOrderController {
      * Bao gồm: danh sách sản phẩm, địa chỉ giao hàng, địa chỉ shop, vận đơn GHN, trạng thái thanh toán.
      */
     @GetMapping("/{id}")
-    public ManagerOrderService.OrderDetailResponse detail(@PathVariable String shopId, @PathVariable String id,
+    public ManagerOrderService.OrderDetailResponse detail(@PathVariable("shopId") String shopId, @PathVariable("id") String id,
                                                           @AuthenticationPrincipal CurrentUser u) {
         return service.detail(shopId, u.id(), id);
     }
@@ -56,7 +56,7 @@ public class ManagerOrderController {
      */
     @PostMapping("/{id}/confirm")
     @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
-    public void confirm(@PathVariable String shopId, @PathVariable String id,
+    public void confirm(@PathVariable("shopId") String shopId, @PathVariable("id") String id,
                         @AuthenticationPrincipal CurrentUser u) {
         service.confirm(shopId, u.id(), id);
     }
@@ -67,7 +67,7 @@ public class ManagerOrderController {
      */
     @PostMapping("/{id}/ship")
     @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
-    public ManagerOrderService.ShipResult ship(@PathVariable String shopId, @PathVariable String id,
+    public ManagerOrderService.ShipResult ship(@PathVariable("shopId") String shopId, @PathVariable("id") String id,
                                                @AuthenticationPrincipal CurrentUser u) {
         return service.ship(shopId, u.id(), id);
     }
@@ -75,7 +75,7 @@ public class ManagerOrderController {
     /** Pulls the live shipment status from GHN. */
     @PostMapping("/{id}/refresh-status")
     @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
-    public ManagerOrderService.DeliveryInfo refreshStatus(@PathVariable String shopId, @PathVariable String id,
+    public ManagerOrderService.DeliveryInfo refreshStatus(@PathVariable("shopId") String shopId, @PathVariable("id") String id,
                                                           @AuthenticationPrincipal CurrentUser u) {
         return service.refreshStatus(shopId, u.id(), id);
     }
@@ -83,7 +83,7 @@ public class ManagerOrderController {
     /** Sends a status change to GHN staging and returns the status GHN reports back. */
     @PostMapping("/{id}/ghn-status")
     @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
-    public ManagerOrderService.DeliveryInfo pushGhnStatus(@PathVariable String shopId, @PathVariable String id,
+    public ManagerOrderService.DeliveryInfo pushGhnStatus(@PathVariable("shopId") String shopId, @PathVariable("id") String id,
                                                           @RequestBody java.util.Map<String, String> body,
                                                           @AuthenticationPrincipal CurrentUser u) {
         return service.pushGhnStatus(shopId, u.id(), id, body.get("status"));
@@ -93,9 +93,9 @@ public class ManagerOrderController {
      * Lấy danh sách hàng đợi các đơn hàng cần xử lý gấp (PENDING, AWAITING_DEPOSIT, PROCESSING).
      */
     @GetMapping("/queue")
-    public ManagerOrderService.Results queue(@PathVariable String shopId, @AuthenticationPrincipal CurrentUser u,
-                                            @RequestParam(defaultValue = "0") int page,
-                                            @RequestParam(required = false) String status) {
+    public ManagerOrderService.Results queue(@PathVariable("shopId") String shopId, @AuthenticationPrincipal CurrentUser u,
+                                            @RequestParam(name = "page", defaultValue = "0") int page,
+                                            @RequestParam(name = "status", required = false) String status) {
         return service.queue(shopId, u.id(), page, status);
     }
 
@@ -103,7 +103,7 @@ public class ManagerOrderController {
      * Lấy số lượng đơn hàng đang chờ xác nhận (dùng để hiển thị badge thông báo đỏ trên thanh menu).
      */
     @GetMapping("/queue/count")
-    public ManagerOrderService.QueueCount queueCount(@PathVariable String shopId, @AuthenticationPrincipal CurrentUser u) {
+    public ManagerOrderService.QueueCount queueCount(@PathVariable("shopId") String shopId, @AuthenticationPrincipal CurrentUser u) {
         return service.queueCount(shopId, u.id());
     }
 
@@ -113,7 +113,7 @@ public class ManagerOrderController {
      */
     @PostMapping("/{id}/cancel")
     @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
-    public void cancel(@PathVariable String shopId, @PathVariable String id,
+    public void cancel(@PathVariable("shopId") String shopId, @PathVariable("id") String id,
                        @RequestBody java.util.Map<String, String> body,
                        @AuthenticationPrincipal CurrentUser u) {
         service.cancel(shopId, u.id(), id, body.get("reason"));
@@ -125,7 +125,7 @@ public class ManagerOrderController {
      */
     @PostMapping("/{id}/update-ghn")
     @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
-    public void updateGhn(@PathVariable String shopId, @PathVariable String id,
+    public void updateGhn(@PathVariable("shopId") String shopId, @PathVariable("id") String id,
                           @RequestBody java.util.Map<String, Object> body,
                           @AuthenticationPrincipal CurrentUser u) {
         service.updateGhn(shopId, u.id(), id, body);

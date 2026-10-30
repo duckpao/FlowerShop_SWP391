@@ -32,7 +32,7 @@ public class OrderController {
      */
     @PostMapping("/{userId}")
     public ResponseEntity<OrderResponse> makeOrder(
-            @PathVariable String userId,
+            @PathVariable(name = "userId") String userId,
             @Valid @RequestBody MakeOrderRequest request, @AuthenticationPrincipal CurrentUser currentUser
     ) {
         requireOwner(userId, currentUser);
@@ -46,7 +46,7 @@ public class OrderController {
      */
     @PostMapping("/{userId}/shipping-fee")
     public java.util.Map<String, Object> shippingFee(
-            @PathVariable String userId,
+            @PathVariable(name = "userId") String userId,
             @Valid @RequestBody ShippingFeeRequest request, @AuthenticationPrincipal CurrentUser currentUser
     ) {
         requireOwner(userId, currentUser);
@@ -58,7 +58,7 @@ public class OrderController {
      * GET /api/orders/{userId}
      */
     @GetMapping("/{userId}")
-    public ResponseEntity<List<OrderResponse>> getOrderHistory(@PathVariable String userId, @AuthenticationPrincipal CurrentUser currentUser) {
+    public ResponseEntity<List<OrderResponse>> getOrderHistory(@PathVariable(name = "userId") String userId, @AuthenticationPrincipal CurrentUser currentUser) {
         requireOwner(userId, currentUser);
         return ResponseEntity.ok(orderService.getOrderHistory(userId));
     }

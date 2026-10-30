@@ -31,7 +31,7 @@ public class CartController {
      */
     @PostMapping("/{userId}/add")
     public ResponseEntity<CartItemResponse> addToCart(
-            @PathVariable String userId,
+            @PathVariable(name = "userId") String userId,
             @Valid @RequestBody AddToCartRequest request, @AuthenticationPrincipal CurrentUser currentUser
     ) {
         requireOwner(userId, currentUser);
@@ -44,7 +44,7 @@ public class CartController {
      * GET /api/cart/{userId}
      */
     @GetMapping("/{userId}")
-    public ResponseEntity<CartResponse> getCart(@PathVariable String userId, @AuthenticationPrincipal CurrentUser currentUser) {
+    public ResponseEntity<CartResponse> getCart(@PathVariable(name = "userId") String userId, @AuthenticationPrincipal CurrentUser currentUser) {
         requireOwner(userId, currentUser);
         return ResponseEntity.ok(cartService.getCart(userId));
     }
@@ -55,8 +55,8 @@ public class CartController {
      */
     @PutMapping("/{userId}/items/{itemId}")
     public ResponseEntity<CartItemResponse> updateCartItem(
-            @PathVariable String userId,
-            @PathVariable String itemId,
+            @PathVariable(name = "userId") String userId,
+            @PathVariable(name = "itemId") String itemId,
             @Valid @RequestBody UpdateCartItemRequest request, @AuthenticationPrincipal CurrentUser currentUser
     ) {
         requireOwner(userId, currentUser);
@@ -69,8 +69,8 @@ public class CartController {
      */
     @DeleteMapping("/{userId}/items/{itemId}")
     public ResponseEntity<Void> removeCartItem(
-            @PathVariable String userId,
-            @PathVariable String itemId, @AuthenticationPrincipal CurrentUser currentUser
+            @PathVariable(name = "userId") String userId,
+            @PathVariable(name = "itemId") String itemId, @AuthenticationPrincipal CurrentUser currentUser
     ) {
         requireOwner(userId, currentUser);
         cartService.removeCartItem(userId, itemId);
