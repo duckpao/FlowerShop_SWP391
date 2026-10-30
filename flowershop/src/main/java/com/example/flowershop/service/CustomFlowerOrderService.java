@@ -27,7 +27,7 @@ public class CustomFlowerOrderService {
     public record RequestInput(@NotBlank @Size(max=36) String shopId,
             @NotNull @DecimalMin("1.00") @Digits(integer=10,fraction=2) BigDecimal budget,
             @NotNull @Min(1) @Max(100) Integer quantity,
-            @NotBlank @Size(min=10,max=3000) String description,
+            @Size(max=3000) String description,
             @NotNull @Valid Preferences preferences) {}
     public record Decision(@NotNull CustomOrderStatus status,
             @Size(max=2000) String note,
@@ -105,7 +105,7 @@ public class CustomFlowerOrderService {
         var shop=activeShop(input.shopId());
         var user=users.findById(actor).filter(u->u.getRole()==UserRole.CUSTOMER&&u.getStatus()==UserStatus.ACTIVE).orElseThrow(CustomFlowerOrderService::missing);
         var request=CustomOrderRequest.builder().id(UUID.randomUUID().toString()).customer(user).shop(shop)
-                .budget(input.budget()).description(input.description().strip()).desiredComponents(encode(design(input)))
+                .budget(input.budget()).description(input.description() == null ? "" : input.description().strip()).desiredComponents(encode(design(input)))
                 .status(CustomOrderStatus.REQUESTED).createdBy(actor).lastModifyBy(actor).build();
         return result(requests.saveAndFlush(request));
     }

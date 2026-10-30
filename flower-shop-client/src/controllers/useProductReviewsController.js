@@ -33,11 +33,12 @@ export function useProductReviewsController(productId, user) {
       .then(value => {
         if (!active) return
         setOwn(value)
-        setDraft(value ? { rating: value.rating, comment: value.comment || '' } : emptyDraft())
+        // Saved content is shown in the review list; the composer is a fresh draft.
+        setDraft(value ? { rating: value.rating, comment: '' } : emptyDraft())
       })
       .catch(() => { if (active) setOwn(null) })
     return () => { active = false }
-  }, [productId, user, revision])
+  }, [productId, user?.id, user?.role])
 
   async function run(action, message) {
     setBusy(true); setError(''); setNotice('')
@@ -47,10 +48,17 @@ export function useProductReviewsController(productId, user) {
 
   const submit = event => {
     event.preventDefault()
+    if (busy) return
     const body = { rating: Number(draft.rating), comment: draft.comment.trim() }
-    return own
-      ? run(() => reviewService.update(productId, body), 'Đã cập nhật đánh giá.')
-      : run(() => reviewService.write(productId, body), 'Cảm ơn bạn đã đánh giá.')
+    const updating = Boolean(own)
+    return run(async () => {
+      const saved = await (updating
+        ? reviewService.update(productId, body)
+        : reviewService.write(productId, body))
+      setOwn(saved)
+      setDraft({ rating: saved.rating, comment: '' })
+      if (!updating) setPage(0)
+    }, updating ? 'Đã cập nhật đánh giá.' : 'Cảm ơn bạn đã đánh giá.')
   }
 
   const remove = async () => {
