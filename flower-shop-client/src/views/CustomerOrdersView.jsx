@@ -68,7 +68,7 @@ export default function CustomerOrdersView() {
                         <TableBody>{orders.content.map(o => <TableRow key={o.id}>
                             <TableCell className="font-mono text-xs">{o.id.substring(0,8)}</TableCell>
                             <TableCell>{o.shopName}</TableCell>
-                            <TableCell>{formatPrice(o.totalAmount)}</TableCell>
+                            <TableCell>{o.status === 'AWAITING_QUOTE' ? 'Chờ báo giá' : formatPrice(o.totalAmount)}</TableCell>
                             <TableCell><Badge color={statusColors[o.status] || 'primary'}>{statusLabels[o.status] || o.status}</Badge></TableCell>
                             <TableCell className="text-sm text-gray-500">{new Date(o.createdDate).toLocaleDateString('vi-VN')}</TableCell>
                             <TableCell className="text-right"><Link to={`/orders/${o.id}`}><Button size="sm" variant="outline">Xem</Button></Link></TableCell>

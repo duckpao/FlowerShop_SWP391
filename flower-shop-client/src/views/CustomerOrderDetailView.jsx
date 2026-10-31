@@ -1,4 +1,7 @@
 import { useEffect, useState } from 'react'
+import { OrderDesignPanel } from '../components/customFlowers/OrderDesignPanel'
+import CustomerQuoteActions from '../components/customFlowers/CustomerQuoteActions'
+import CustomerCustomAddress from '../components/customFlowers/CustomerCustomAddress'
 import { useParams, Link } from 'react-router'
 import { useAuth } from '../context/AuthContext'
 import { customerOrderService } from '../services/customerOrderService'
@@ -26,6 +29,9 @@ function getTrackingStage(order) {
 }
 
 function getTrackingMessage(order) {
+    if (order.status === 'AWAITING_QUOTE') return 'Đơn hoa riêng đang chờ cửa hàng xem thiết kế và báo giá.'
+    if (order.status === 'QUOTED') return 'Cửa hàng đã báo giá. Vui lòng xem và chọn phương thức thanh toán.'
+    if (order.status === 'PENDING' && order.orderType === 'CUSTOM') return 'Bạn đã đồng ý báo giá, đơn đang chờ thanh toán trực tuyến.'
     if (order.status === 'CANCELLED') return 'Đơn hàng đã bị hủy.'
     if (order.status === 'REFUNDED') return 'Đơn vị vận chuyển đã hoàn đơn hàng về cửa hàng.'
     if (order.status === 'PENDING') return 'Đơn hàng đang chờ cửa hàng xác nhận.'
@@ -61,6 +67,7 @@ export default function CustomerOrderDetailView() {
                 setOrder(data)
                 setShippingFee(data.shippingFee)
                 setError('')
+                if (data.orderType === 'CUSTOM') return
                 customerOrderService.shippingFee(id)
                     .then(result => { if (active) setShippingFee(result.shippingFee) })
                     .catch(() => { if (active) setShippingFeeError('Không lấy được phí GHN hiện tại; đang hiển thị phí đã lưu của đơn.') })
@@ -106,6 +113,9 @@ export default function CustomerOrderDetailView() {
                 </div>
 
                 <section className="mb-6 rounded-lg border border-gray-200 p-4 dark:border-white/10" aria-label="Theo dõi giao hàng">
+                    <OrderDesignPanel order={order} />
+                    <CustomerCustomAddress order={order} onChanged={async () => setOrder(await customerOrderService.detail(id))} />
+                    <CustomerQuoteActions key={order.id} order={order} user={user} onChanged={async () => setOrder(await customerOrderService.detail(id))} />
                     <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                         <div>
                             <h2 className="font-semibold">Theo dõi đơn hàng</h2>
@@ -136,7 +146,7 @@ export default function CustomerOrderDetailView() {
                     </ol>
                 </section>
 
-                <div className="border rounded-lg overflow-hidden mb-4">
+                {order.status !== 'AWAITING_QUOTE' && <><div className="border rounded-lg overflow-hidden mb-4">
                     <table className="min-w-full">
                         <thead><tr className="bg-gray-50 dark:bg-white/5">
                             <th className="px-4 py-2 text-left text-sm">Sản phẩm</th>
@@ -163,6 +173,7 @@ export default function CustomerOrderDetailView() {
                     <div className="flex justify-between font-bold text-base"><span>Tổng cộng:</span><span className="text-brand-500">{formatPrice(order.totalAmount)}</span></div>
                 </div>
 
+                </>}
                 {order.delivery && <div className="mt-4 p-3 rounded-lg bg-gray-50 dark:bg-white/5 text-sm">
                     <p><strong>Vận đơn:</strong> {order.delivery.trackingCode}</p>
                     <p><strong>Đối tác:</strong> {order.delivery.deliveryPartnerId}</p>

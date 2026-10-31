@@ -1,3 +1,4 @@
+import { OrderDesignPanel, ShopCustomOrderActions } from '../components/customFlowers/OrderDesignPanel'
 import { useEffect, useState } from 'react'
 import { managerOrderService } from '../services/managerOrderService'
 import { managerShopService } from '../services/managerShopService'
@@ -43,7 +44,7 @@ export default function OrderQueueView({ shop: initialShop }) {
     const [shop, setShop] = useState(initialShop)
     const [data, setData] = useState(null)
     const [page, setPage] = useState(0)
-    const [statusFilter, setStatusFilter] = useState('PENDING') // Mở màn hình ở các đơn cần Manager xác nhận
+    const [statusFilter, setStatusFilter] = useState('') // Mở màn hình ở các đơn cần Manager xác nhận
     const [busy, setBusy] = useState(false)
     const [error, setError] = useState('')
     const [notice, setNotice] = useState('')
@@ -207,6 +208,7 @@ export default function OrderQueueView({ shop: initialShop }) {
 
     return (
         <div className="space-y-6">
+
             <ComponentCard title={
                 <div className="flex items-center gap-3">
                     {statusFilter === 'PENDING' ? 'Đơn hàng chờ xác nhận' : 'Quản lý đơn hàng'}
@@ -270,7 +272,7 @@ export default function OrderQueueView({ shop: initialShop }) {
                                                 <div className="font-medium text-gray-900 dark:text-white">{o.customerName || 'Khách ẩn danh'}</div>
                                                 <div className="text-xs text-gray-500">{o.customerPhone || ''}</div>
                                             </TableCell>
-                                            <TableCell className="font-medium">{formatPrice(o.totalAmount)}</TableCell>
+                                            <TableCell className="font-medium">{o.status === 'AWAITING_QUOTE' ? 'Chờ báo giá' : formatPrice(o.totalAmount)}</TableCell>
                                             <TableCell>
                                                 <div className="text-sm font-medium text-gray-900 dark:text-white">{timeAgo(o.createdDate)}</div>
                                                 <div className="text-xs text-gray-500">{new Date(o.createdDate).toLocaleString('vi-VN')}</div>
@@ -292,7 +294,7 @@ export default function OrderQueueView({ shop: initialShop }) {
                                                         Chi tiết
                                                     </Button>
                                                     
-                                                    {o.status === 'PENDING' && (
+                                                    {o.status === 'PENDING' && o.orderType !== 'CUSTOM' && (
                                                         <Button size="sm" onClick={() => confirmOrder(o.id)} disabled={busy}>
                                                             Xác nhận đơn hàng
                                                         </Button>
@@ -340,6 +342,7 @@ export default function OrderQueueView({ shop: initialShop }) {
                     <p className="text-gray-500">Đang tải chi tiết...</p>
                 ) : (
                     <div className="space-y-6">
+                        <OrderDesignPanel order={orderDetail} /><ShopCustomOrderActions key={orderDetail.id} order={orderDetail} shopId={shop.id} onChanged={async () => { setDetailModalOpen(false); await load(page, true) }} />
                         <div className="grid grid-cols-2 gap-4 text-sm bg-gray-50 dark:bg-gray-800/50 p-4 rounded-lg">
                             <div>
                                 <p className="text-gray-500 font-medium mb-1">Địa chỉ người gửi (Shop)</p>
@@ -395,7 +398,7 @@ export default function OrderQueueView({ shop: initialShop }) {
                             </div>
                             <div className="space-x-3">
                                 <Button variant="outline" onClick={() => setDetailModalOpen(false)}>Đóng</Button>
-                                {orderDetail.status === 'PENDING' && (
+                                {orderDetail.status === 'PENDING' && orderDetail.orderType !== 'CUSTOM' && (
                                     <Button onClick={() => { setDetailModalOpen(false); confirmOrder(orderDetail.id); }}>
                                         Xác nhận đơn hàng
                                     </Button>

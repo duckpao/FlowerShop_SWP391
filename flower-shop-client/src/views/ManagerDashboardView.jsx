@@ -1,7 +1,6 @@
 import { Link } from "react-router";
 import ManagerShopsView from "./ManagerShopsView";
 import ManagerOrdersView from "./ManagerOrdersView";
-import ManagerCustomOrdersView from "./ManagerCustomOrdersView";
 import OrderQueueView from "./OrderQueueView";
 import AdminProfileView from "./AdminProfileView";
 import ComponentCard from "../components/common/ComponentCard";
@@ -152,7 +151,7 @@ export default function ManagerDashboardView({
         </>
       )}
       
-      {customOrders ? <ManagerCustomOrdersView user={user} /> : orderQueue ? (
+      {customOrders ? <ManagerOrdersView shop={null} /> : orderQueue ? (
         <OrderQueueView shop={null} />
       ) : current && current.section === "orders" ? (
         <ManagerOrdersView shop={null} onBack={() => {}} />

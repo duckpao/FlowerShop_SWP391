@@ -92,8 +92,8 @@ public class SePayGatewayService {
         if (order.getStatus() == OrderStatus.CANCELLED) {
             throw ApiException.badRequest("Đơn hàng này đã bị hủy, không thể thanh toán.");
         }
-        if (order.getStatus() == OrderStatus.PENDING && order.getCreatedDate() != null
-                && order.getCreatedDate().plusMinutes(10).isBefore(java.time.LocalDateTime.now())) {
+        if (order.getStatus() == OrderStatus.PENDING && order.getPaymentWindowStart() != null
+                && order.getPaymentWindowStart().plusMinutes(10).isBefore(java.time.LocalDateTime.now())) {
             orderService.cancelExpiredOrder(order.getId(), "Quá hạn 10 phút không quét mã thanh toán");
             throw ApiException.badRequest("Đơn hàng đã hết hạn thanh toán (quá 10 phút) và đã tự động hủy.");
         }
@@ -107,6 +107,12 @@ public class SePayGatewayService {
 
         // PHASE 2 & 3: Xác định PaymentType (FULL, DEPOSIT, FINAL)
         PaymentType paymentType = request.getPaymentType() != null ? request.getPaymentType() : PaymentType.FULL;
+        if (order.getOrderType() == com.example.flowershop.entity.enums.OrderType.CUSTOM && paymentType != PaymentType.FULL) {
+            throw ApiException.badRequest("Đơn hoa riêng cần thanh toán toàn bộ báo giá đã được khách đồng ý.");
+        }
+        if (order.getOrderType() == com.example.flowershop.entity.enums.OrderType.CUSTOM && paymentType != PaymentType.FULL) {
+            throw ApiException.badRequest("Đơn hoa riêng cần thanh toán toàn bộ báo giá đã được khách đồng ý.");
+        }
         if (order.getOrderType() == com.example.flowershop.entity.enums.OrderType.STANDARD
                 && paymentType != PaymentType.FULL) {
             throw ApiException.badRequest("Đơn hàng thường chỉ hỗ trợ thanh toán toàn bộ.");
@@ -258,8 +264,8 @@ public class SePayGatewayService {
         if (payment.getOrder().getStatus() == OrderStatus.CANCELLED) {
             return Map.of("success", false, "message", "Order cancelled");
         }
-        if (payment.getOrder().getStatus() == OrderStatus.PENDING && payment.getOrder().getCreatedDate() != null
-                && payment.getOrder().getCreatedDate().plusMinutes(10).isBefore(java.time.LocalDateTime.now())) {
+        if (payment.getOrder().getStatus() == OrderStatus.PENDING && payment.getOrder().getPaymentWindowStart() != null
+                && payment.getOrder().getPaymentWindowStart().plusMinutes(10).isBefore(java.time.LocalDateTime.now())) {
             orderService.cancelExpiredOrder(payment.getOrder().getId(), "Quá hạn 10 phút không quét mã thanh toán");
             return Map.of("success", false, "message", "Order expired and cancelled");
         }
@@ -328,8 +334,8 @@ public class SePayGatewayService {
         if (payment.getStatus() == PaymentStatus.SUCCESS) return true;
         if (payment.getOrder() != null && payment.getOrder().getStatus() == OrderStatus.CANCELLED) return false;
         if (payment.getOrder() != null && payment.getOrder().getStatus() == OrderStatus.PENDING
-                && payment.getOrder().getCreatedDate() != null
-                && payment.getOrder().getCreatedDate().plusMinutes(10).isBefore(java.time.LocalDateTime.now())) {
+                && payment.getOrder().getPaymentWindowStart() != null
+                && payment.getOrder().getPaymentWindowStart().plusMinutes(10).isBefore(java.time.LocalDateTime.now())) {
             orderService.cancelExpiredOrder(payment.getOrder().getId(), "Quá hạn 10 phút không quét mã thanh toán");
             return false;
         }
@@ -423,8 +429,8 @@ public class SePayGatewayService {
 
         // Tự động hủy nếu đã quá hạn 10 phút
         if (payment.getOrder() != null && payment.getOrder().getStatus() == OrderStatus.PENDING
-                && payment.getOrder().getCreatedDate() != null
-                && payment.getOrder().getCreatedDate().plusMinutes(10).isBefore(java.time.LocalDateTime.now())) {
+                && payment.getOrder().getPaymentWindowStart() != null
+                && payment.getOrder().getPaymentWindowStart().plusMinutes(10).isBefore(java.time.LocalDateTime.now())) {
             orderService.cancelExpiredOrder(payment.getOrder().getId(), "Quá hạn 10 phút không quét mã thanh toán");
             payment = paymentRepository.findByInvoiceNumberForUpdate(invoiceNumber).orElse(payment);
         }
@@ -476,8 +482,8 @@ public class SePayGatewayService {
 
         // Tự động hủy nếu đã quá hạn 10 phút
         if (payment.getOrder() != null && payment.getOrder().getStatus() == OrderStatus.PENDING
-                && payment.getOrder().getCreatedDate() != null
-                && payment.getOrder().getCreatedDate().plusMinutes(10).isBefore(java.time.LocalDateTime.now())) {
+                && payment.getOrder().getPaymentWindowStart() != null
+                && payment.getOrder().getPaymentWindowStart().plusMinutes(10).isBefore(java.time.LocalDateTime.now())) {
             orderService.cancelExpiredOrder(payment.getOrder().getId(), "Quá hạn 10 phút không quét mã thanh toán");
             payment = paymentRepository.findById(paymentId).orElse(payment);
         }

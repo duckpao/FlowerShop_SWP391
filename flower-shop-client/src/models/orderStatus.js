@@ -1,4 +1,6 @@
 export const orderStatusLabels = {
+    AWAITING_QUOTE: 'Chờ shop báo giá',
+    QUOTED: 'Chờ khách đồng ý báo giá',
     PENDING: 'Chờ xác nhận',
     AWAITING_DEPOSIT: 'Chờ đặt cọc',
     DEPOSIT_PAID: 'Đã cọc',
@@ -10,6 +12,8 @@ export const orderStatusLabels = {
 }
 
 export const orderStatusColors = {
+    AWAITING_QUOTE: 'warning',
+    QUOTED: 'info',
     PENDING: 'warning',
     AWAITING_DEPOSIT: 'warning',
     DEPOSIT_PAID: 'info',
@@ -22,6 +26,8 @@ export const orderStatusColors = {
 
 export const orderTabs = [
     { id: '', label: 'Tất cả' },
+    { id: 'AWAITING_QUOTE', label: orderStatusLabels.AWAITING_QUOTE },
+    { id: 'QUOTED', label: orderStatusLabels.QUOTED },
     { id: 'PENDING', label: orderStatusLabels.PENDING },
     { id: 'PROCESSING', label: orderStatusLabels.PROCESSING },
     { id: 'DELIVERING', label: orderStatusLabels.DELIVERING },

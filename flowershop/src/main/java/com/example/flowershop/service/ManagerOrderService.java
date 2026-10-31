@@ -29,7 +29,7 @@ public class ManagerOrderService {
 
     /** Tóm tắt đơn hàng hiển thị trong danh sách bảng */
     public record OrderSummary(String id, String customerName, String customerPhone,
-                               BigDecimal totalAmount, String status, java.time.LocalDateTime createdDate) {}
+                               BigDecimal totalAmount, String status, java.time.LocalDateTime createdDate, String orderType) {}
 
     /** Chi tiết đầy đủ của đơn hàng hiển thị trong modal xem chi tiết */
     public record OrderDetailResponse(String id, String customerId, String customerName, String customerPhone,
@@ -37,7 +37,8 @@ public class ManagerOrderService {
                                       String shopAddress, String status, BigDecimal subTotal,
                                       BigDecimal shippingFee, BigDecimal totalAmount,
                                       java.time.LocalDateTime createdDate, String note,
-                                      List<OrderItemResponse> items, DeliveryInfo delivery, PaymentInfo payment) {}
+                                      List<OrderItemResponse> items, DeliveryInfo delivery, PaymentInfo payment,
+                                      String orderType, CustomOrderWorkflowService.Design customDesign, String shopNote, String cancelReason) {}
 
     /** Thông tin từng món hàng trong đơn */
     public record OrderItemResponse(String productId, String productName, BigDecimal price, Integer quantity) {}
@@ -62,11 +63,12 @@ public class ManagerOrderService {
     private final AddressRepository addresses;
     private final GhnService ghn;
     private final DeliverySync deliverySync;
+    private final CustomOrderWorkflowService customWorkflow;
 
     public ManagerOrderService(OrderRepository orders, OrderDetailRepository orderDetails,
                                DeliveryRepository deliveries, PaymentRepository payments,
                                ShopRepository shops, AddressRepository addresses, GhnService ghn,
-                               DeliverySync deliverySync) {
+                               DeliverySync deliverySync, CustomOrderWorkflowService customWorkflow) {
         this.orders = orders;
         this.orderDetails = orderDetails;
         this.deliveries = deliveries;
@@ -75,6 +77,7 @@ public class ManagerOrderService {
         this.addresses = addresses;
         this.ghn = ghn;
         this.deliverySync = deliverySync;
+        this.customWorkflow = customWorkflow;
     }
 
     private static String blankToEmpty(String value) {
@@ -117,7 +120,7 @@ public class ManagerOrderService {
         }
         var content = result.map(o -> new OrderSummary(o.getId(),
                 o.getCustomer().getFullName(), o.getCustomer().getPhone(),
-                o.getTotalAmount(), o.getStatus().name(), o.getCreatedDate())).toList();
+                    o.getTotalAmount(), o.getStatus().name(), o.getCreatedDate(), o.getOrderType().name())).toList();
         return new Results(content, page, result.getTotalPages(), result.getTotalElements());
     }
 
@@ -140,6 +143,8 @@ public class ManagerOrderService {
         Order o = orders.findByIdAndShopId(orderId, shopId).orElseThrow(ManagerOrderService::notFound);
         if (o.getStatus() != OrderStatus.PENDING)
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Chỉ đơn hàng PENDING mới có thể xác nhận.");
+        if (o.getOrderType() == OrderType.CUSTOM)
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Khách cần hoàn tất thanh toán trực tuyến trước khi chuẩn bị hoa.");
         o.setStatus(OrderStatus.PROCESSING);
         o.setLastModifyBy(actor);
     }
@@ -261,7 +266,7 @@ public class ManagerOrderService {
         owned(shopId, actor);
         Pageable pageable = PageRequest.of(page, 20, Sort.by(Sort.Order.desc("createdDate"), Sort.Order.asc("id")));
         Page<Order> result;
-        List<OrderStatus> queueStatuses = List.of(OrderStatus.PENDING, OrderStatus.AWAITING_DEPOSIT, OrderStatus.PROCESSING);
+        List<OrderStatus> queueStatuses = List.of(OrderStatus.PENDING, OrderStatus.AWAITING_DEPOSIT, OrderStatus.PROCESSING, OrderStatus.AWAITING_QUOTE, OrderStatus.QUOTED);
         
         if (status != null && !status.isBlank()) {
             try {
@@ -278,7 +283,7 @@ public class ManagerOrderService {
         }
         var content = result.map(o -> new OrderSummary(o.getId(),
                 o.getCustomer().getFullName(), o.getCustomer().getPhone(),
-                o.getTotalAmount(), o.getStatus().name(), o.getCreatedDate())).toList();
+                o.getTotalAmount(), o.getStatus().name(), o.getCreatedDate(), o.getOrderType().name())).toList();
         return new Results(content, page, result.getTotalPages(), result.getTotalElements());
     }
 
@@ -287,7 +292,7 @@ public class ManagerOrderService {
      */
     public QueueCount queueCount(String shopId, String actor) {
         owned(shopId, actor);
-        long count = orders.countByShopIdAndStatusIn(shopId, List.of(OrderStatus.PENDING, OrderStatus.AWAITING_DEPOSIT));
+        long count = orders.countByShopIdAndStatusIn(shopId, List.of(OrderStatus.PENDING, OrderStatus.AWAITING_DEPOSIT, OrderStatus.AWAITING_QUOTE));
         return new QueueCount(count);
     }
 
@@ -298,8 +303,9 @@ public class ManagerOrderService {
     @Transactional
     public void cancel(String shopId, String actor, String orderId, String reason) {
         owned(shopId, actor);
-        Order o = orders.findByIdAndShopId(orderId, shopId).orElseThrow(ManagerOrderService::notFound);
-        if (o.getStatus() != OrderStatus.PENDING && o.getStatus() != OrderStatus.AWAITING_DEPOSIT && o.getStatus() != OrderStatus.PROCESSING) {
+        Order o = orders.findByIdForUpdate(orderId).filter(order -> order.getShop().getId().equals(shopId)).orElseThrow(ManagerOrderService::notFound);
+        if (o.getStatus() != OrderStatus.PENDING && o.getStatus() != OrderStatus.AWAITING_DEPOSIT && o.getStatus() != OrderStatus.PROCESSING
+                && o.getStatus() != OrderStatus.AWAITING_QUOTE && o.getStatus() != OrderStatus.QUOTED) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Chỉ có thể hủy đơn hàng trước khi bắt đầu giao.");
         }
         o.setStatus(OrderStatus.CANCELLED);
@@ -337,7 +343,7 @@ public class ManagerOrderService {
     private OrderDetailResponse buildDetail(Order o) {
         var items = orderDetails.findByOrderId(o.getId()).stream()
                 .map(d -> new OrderItemResponse(d.getProduct() != null ? d.getProduct().getId() : null,
-                        d.getProduct() != null ? d.getProduct().getName() : null, d.getPrice(), d.getQuantity()))
+                        d.getProduct() != null ? d.getProduct().getName() : "Thiết kế hoa riêng (trọn bộ)", d.getPrice(), d.getQuantity()))
                 .toList();
         DeliveryInfo di = deliveries.findByOrderId(o.getId())
                 .map(d -> new DeliveryInfo(d.getTrackingCode(), d.getDeliveryPartnerId(), d.getStatus().name(), d.getGhnStatus())).orElse(null);
@@ -373,6 +379,6 @@ public class ManagerOrderService {
                 o.getCustomer() != null ? o.getCustomer().getPhone() : null,
                 toName, toPhone, toAddr, fromAddr, o.getStatus().name(), 
                 o.getSubTotal(), o.getShippingFee(), o.getTotalAmount(), 
-                o.getCreatedDate(), null, items, di, pi);
+                o.getCreatedDate(), o.getCustomerNote(), items, di, pi, o.getOrderType().name(), customWorkflow.design(o), o.getShopNote(), o.getCancelReason());
     }
 }

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { OrderDesignPanel, ShopCustomOrderActions } from '../components/customFlowers/OrderDesignPanel'
 import { managerOrderService } from '../services/managerOrderService'
 import { managerShopService } from '../services/managerShopService'
 import { formatPrice } from '../models/productModel'
@@ -19,6 +20,16 @@ export default function ManagerOrdersView({ shop: initialShop, onBack }) {
     const [busy, setBusy] = useState(false)
     const [error, setError] = useState('')
     const [notice, setNotice] = useState('')
+    const [detail, setDetail] = useState(null)
+    async function viewDetail(id) {
+        setError('')
+        try { setDetail(await managerOrderService.detail(shop.id, id)) } catch (e) { setError(e.message) }
+    }
+    async function customChanged() {
+        setDetail(null)
+        await load(page, true)
+        setNotice('Đã cập nhật đơn hoa riêng.')
+    }
 
     useEffect(() => {
         if (initialShop) return
@@ -87,6 +98,7 @@ if (!shop) return <div className="p-8"><p className="text-gray-500">Đang tải 
             {error && <div className="mb-4 rounded-lg bg-error-50 p-4 text-sm text-error-500">{error}</div>}
             {notice && <div className="mb-4 rounded-lg bg-success-50 p-4 text-sm text-success-600">{notice}</div>}
             {busy && !data && <p className="text-gray-500">Đang tải…</p>}
+            {detail && <section className="mb-5 rounded-xl border border-gray-200 p-4 dark:border-gray-700"><div className="flex justify-between"><h3 className="font-semibold">Chi tiết đơn #{detail.id.substring(0,8)}</h3><button onClick={() => setDetail(null)}>Đóng</button></div><OrderDesignPanel order={detail} /><p className="text-sm">{detail.recipientName} · {detail.recipientPhone} · {detail.deliveryAddress}</p><ShopCustomOrderActions key={detail.id} order={detail} shopId={shop.id} onChanged={customChanged} /></section>}
             {data && data.content.length === 0 && <p className="text-gray-500">Chưa có đơn hàng nào.</p>}
             {data && data.content.length > 0 && <>
                 <div className="overflow-hidden rounded-xl border border-gray-200 dark:border-white/5">
@@ -101,11 +113,12 @@ if (!shop) return <div className="p-8"><p className="text-gray-500">Đang tải 
                     <TableBody>{data.content.map(o => <TableRow key={o.id}>
                         <TableCell className="font-mono text-xs">{o.id.substring(0,8)}</TableCell>
                         <TableCell>{o.customerName || '-'}</TableCell>
-                        <TableCell>{formatPrice(o.totalAmount)}</TableCell>
+                        <TableCell>{o.status === 'AWAITING_QUOTE' ? 'Chờ báo giá' : formatPrice(o.totalAmount)}</TableCell>
                         <TableCell><Badge color={statusColors[o.status]||'primary'}>{statusLabels[o.status]||o.status}</Badge></TableCell>
                         <TableCell className="text-sm text-gray-500">{new Date(o.createdDate).toLocaleDateString('vi-VN')}</TableCell>
                         <TableCell className="text-right space-x-2">
-                            {o.status==='PENDING' && <Button size="sm" onClick={()=>confirmOrder(o.id)} disabled={busy}>Xác nhận đơn hàng</Button>}
+                            <Button size="sm" variant="outline" onClick={() => viewDetail(o.id)} disabled={busy}>Chi tiết / báo giá</Button>
+                            {o.status==='PENDING' && o.orderType !== 'CUSTOM' && <Button size="sm" onClick={()=>confirmOrder(o.id)} disabled={busy}>Xác nhận đơn hàng</Button>}
                             {o.status==='PROCESSING' && <Button size="sm" onClick={()=>ship(o.id)} disabled={busy}>Tạo vận đơn GHN</Button>}
                             {o.status==='DELIVERING' && <Button size="sm" variant="outline" onClick={()=>refresh(o.id)} disabled={busy}>Kiểm tra trạng thái</Button>}
                         </TableCell>

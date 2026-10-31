@@ -1,3 +1,5 @@
+> Historical design-request API documentation. The active order workflow is documented in [CUSTOM_ORDER_WORKFLOW.md](CUSTOM_ORDER_WORKFLOW.md).
+
 # M04 — Custom Flower Ordering
 
 ## Customer flow

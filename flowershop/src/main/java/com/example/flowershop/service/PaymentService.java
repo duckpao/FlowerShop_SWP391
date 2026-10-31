@@ -69,8 +69,8 @@ public class PaymentService {
                 .orElseThrow(() -> ApiException.notFound("Không tìm thấy đơn hàng với id: " + orderId));
         requireOwner(order, userId);
 
-        if (order.getStatus() == OrderStatus.PENDING && order.getCreatedDate() != null
-                && order.getCreatedDate().plusMinutes(10).isBefore(java.time.LocalDateTime.now())) {
+        if (order.getStatus() == OrderStatus.PENDING && order.getPaymentWindowStart() != null
+                && order.getPaymentWindowStart().plusMinutes(10).isBefore(java.time.LocalDateTime.now())) {
             orderService.cancelExpiredOrder(order.getId(), "Quá hạn 10 phút không quét mã thanh toán");
             throw ApiException.badRequest("Đơn hàng đã hết hạn thanh toán (quá 10 phút) và đã tự động hủy.");
         }
@@ -154,8 +154,8 @@ public class PaymentService {
         }
 
         // Kiểm tra nếu đơn hàng đã quá hạn 10 phút
-        if (matchedOrder.getStatus() == OrderStatus.PENDING && matchedOrder.getCreatedDate() != null
-                && matchedOrder.getCreatedDate().plusMinutes(10).isBefore(java.time.LocalDateTime.now())) {
+        if (matchedOrder.getStatus() == OrderStatus.PENDING && matchedOrder.getPaymentWindowStart() != null
+                && matchedOrder.getPaymentWindowStart().plusMinutes(10).isBefore(java.time.LocalDateTime.now())) {
             orderService.cancelExpiredOrder(matchedOrder.getId(), "Quá hạn 10 phút không quét mã thanh toán");
             log.warn("Đơn hàng #{} đã quá hạn 10 phút thanh toán trước khi nhận webhook.", matchedOrder.getId());
             return Map.of("success", false, "message", "Order expired and cancelled");
@@ -214,8 +214,8 @@ public class PaymentService {
         requireOwner(order, userId);
 
         // Kiểm tra xem đơn hàng PENDING đã quá 10 phút chưa -> tự động hủy nếu quá hạn
-        if (order.getStatus() == OrderStatus.PENDING && order.getCreatedDate() != null
-                && order.getCreatedDate().plusMinutes(10).isBefore(java.time.LocalDateTime.now())) {
+        if (order.getStatus() == OrderStatus.PENDING && order.getPaymentWindowStart() != null
+                && order.getPaymentWindowStart().plusMinutes(10).isBefore(java.time.LocalDateTime.now())) {
             orderService.cancelExpiredOrder(order.getId(), "Quá hạn 10 phút không quét mã thanh toán");
             order = orderRepository.findById(orderId).orElse(order);
         }

@@ -32,7 +32,8 @@ public class CustomerOrderService {
     public record OrderDetailResponse(String id, String shopId, String shopName, String status,
                                       BigDecimal subTotal, BigDecimal shippingFee, BigDecimal totalAmount,
                                       java.time.LocalDateTime createdDate, String note,
-                                      List<OrderItemResponse> items, DeliveryInfo delivery) {}
+                                      List<OrderItemResponse> items, DeliveryInfo delivery,
+                                      String orderType, CustomOrderWorkflowService.Design customDesign, String shopNote, String cancelReason, boolean needsDeliveryAddress) {}
 
         public record ShippingFeeResponse(BigDecimal shippingFee) {}
 
@@ -51,11 +52,12 @@ public class CustomerOrderService {
     private final UserRepository users;
     private final GhnService ghn;
     private final DeliverySync deliverySync;
+    private final CustomOrderWorkflowService customWorkflow;
 
     public CustomerOrderService(ProductRepository products, AddressRepository addresses,
                                 OrderRepository orders, OrderDetailRepository orderDetails,
                                 PaymentRepository payments, DeliveryRepository deliveries,
-                                UserRepository users, GhnService ghn, DeliverySync deliverySync) {
+                                UserRepository users, GhnService ghn, DeliverySync deliverySync, CustomOrderWorkflowService customWorkflow) {
         this.products = products;
         this.addresses = addresses;
         this.orders = orders;
@@ -65,6 +67,7 @@ public class CustomerOrderService {
         this.users = users;
         this.ghn = ghn;
         this.deliverySync = deliverySync;
+        this.customWorkflow = customWorkflow;
     }
 private static ResponseStatusException notFound() {
         return new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy dữ liệu.");
@@ -189,7 +192,7 @@ private static ResponseStatusException notFound() {
         var items = orderDetails.findByOrderId(orderId).stream()
                 .map(d -> new OrderItemResponse(
                         d.getProduct() != null ? d.getProduct().getId() : null,
-                        d.getProduct() != null ? d.getProduct().getName() : null,
+                        d.getProduct() != null ? d.getProduct().getName() : "Thiết kế hoa riêng (trọn bộ)",
                         d.getPrice(), d.getQuantity()))
                 .toList();
         DeliveryInfo delivery = deliveries.findByOrderId(orderId)
@@ -197,7 +200,7 @@ private static ResponseStatusException notFound() {
                 .orElse(null);
         return new OrderDetailResponse(order.getId(), order.getShop().getId(), order.getShop().getName(),
                 order.getStatus().name(), order.getSubTotal(), order.getShippingFee(), order.getTotalAmount(),
-                order.getCreatedDate(), null, items, delivery);
+                order.getCreatedDate(), order.getCustomerNote(), items, delivery, order.getOrderType().name(), customWorkflow.design(order), order.getShopNote(), order.getCancelReason(), order.getDeliveryAddress()==null);
     }
 
         public BigDecimal calculateShippingFeeForOrder(String customerId, String orderId) {

@@ -11,6 +11,7 @@ const base = shopId => `/api/shop/mine/${encodeURIComponent(shopId)}/orders`
  * Đính kèm JWT token và tự động xử lý CSRF token khi gửi request.
  */
 export const managerOrderService = {
+    quote: (shopId, id, body) => authService.authenticatedRequest(`${base(shopId)}/${encodeURIComponent(id)}/quote`, { method: 'POST', body }),
     /**
      * Lấy danh sách tất cả các đơn hàng của shop (hỗ trợ phân trang và lọc theo trạng thái).
      * @param {string} shopId - ID của shop

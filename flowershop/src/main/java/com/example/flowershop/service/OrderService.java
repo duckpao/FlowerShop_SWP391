@@ -322,7 +322,7 @@ public class OrderService {
                     .subTotal(order.getSubTotal())
                     .discountAmount(order.getDiscountAmount())
                     .totalAmount(order.getTotalAmount())
-                    .deliveryAddressId(order.getDeliveryAddress().getId())
+                    .deliveryAddressId(order.getDeliveryAddress()==null ? null : order.getDeliveryAddress().getId())
                     .recipientName(order.getRecipientName())
                     .recipientPhone(order.getRecipientPhone())
                     .items(items)
@@ -341,6 +341,7 @@ public class OrderService {
         if (order == null || order.getStatus() != OrderStatus.PENDING) {
             return;
         }
+        if (order.getPaymentWindowStart() != null && !order.getPaymentWindowStart().plusMinutes(10).isBefore(LocalDateTime.now())) return;
 
         log.info("Tự động hủy đơn hàng quá 10 phút chưa thanh toán: #{} (Lý do: {})", order.getId(), reason);
 

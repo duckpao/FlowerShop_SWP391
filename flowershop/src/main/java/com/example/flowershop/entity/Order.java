@@ -32,7 +32,7 @@ public class Order {
     private Shop shop;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "delivery_address_id", nullable = false)
+    @JoinColumn(name = "delivery_address_id")
     private Address deliveryAddress;
 
     @Column(name = "recipient_name", length = 255)
@@ -75,6 +75,14 @@ public class Order {
 
     @Column(name = "shop_note", columnDefinition = "TEXT")
     private String shopNote;
+
+    @Column(name = "payment_started_at")
+    private LocalDateTime paymentStartedAt;
+
+    @Transient
+    public LocalDateTime getPaymentWindowStart() {
+        return paymentStartedAt != null ? paymentStartedAt : createdDate;
+    }
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status")

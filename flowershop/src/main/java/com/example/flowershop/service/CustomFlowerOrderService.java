@@ -64,7 +64,7 @@ public class CustomFlowerOrderService {
         if(quantity<1||quantity>100)throw new IllegalArgumentException("Số lượng từ 1 đến 100.");
     }
     private String encode(Design value){try{return json.writeValueAsString(value);}catch(JsonProcessingException e){throw new IllegalStateException("Không thể lưu thiết kế.",e);}}
-    private Design decode(String value){
+    Design decode(String value){
         if(value==null||value.isBlank())return new Design(1,null,null,null,null,null,null,null,null,null,null);
         // Earlier fixtures may contain arbitrary JSON; tolerate unknown keys.
         try{
@@ -83,7 +83,7 @@ public class CustomFlowerOrderService {
     }
     private Result result(CustomOrderRequest r){return new Result(r.getId(),r.getShop().getId(),r.getShop().getName(),r.getCustomer().getFullName(),r.getBudget(),r.getDescription(),r.getStatus(),decode(r.getDesiredComponents()),r.getCreatedDate(),r.getLastModifyDate());}
     private Results results(Page<CustomOrderRequest> p){return new Results(p.getContent().stream().map(this::result).toList(),p.getNumber(),p.getTotalPages(),p.getTotalElements());}
-    private Design design(RequestInput input){
+    Design design(RequestInput input){
         validateMoney(input.budget(),input.quantity());var p=input.preferences();
         if(p.deliveryDate()!=null&&!p.deliveryDate().isBlank()){
             LocalDate date;try{date=LocalDate.parse(p.deliveryDate());}catch(java.time.format.DateTimeParseException e){throw new IllegalArgumentException("Ngày nhận hoa không hợp lệ.");}
