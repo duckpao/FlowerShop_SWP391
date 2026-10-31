@@ -28,7 +28,7 @@ public class PaymentService {
 
     /**
      * 3. Kiểm tra trạng thái đơn hàng cho Frontend Polling (kèm đối soát chủ động thời gian thực).
-     * Nếu Payment ONLINE gần nhất chưa SUCCESS và đơn chưa hủy thì hỏi lại SePay (phòng webhook đến chậm),
+     * Nếu Payment ONLINE gần nhất chưa SUCCESS và đơn chưa hủy thì hỏi lại SePay (không có webhook, đây là cách duy nhất biết tiền đã về),
      * rồi trả isPaid, số tiền đã trả, mã giao dịch, thông báo và tiến trình đơn.
      * Không @Transactional: đối soát gọi HTTP sang SePay, không giữ khóa DB. Việc hủy đơn quá hạn do scheduler làm.
      */

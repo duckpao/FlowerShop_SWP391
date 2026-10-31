@@ -84,7 +84,11 @@ public class ManagerOrderService {
 
     /** Tổng tiền khách đã trả thật (các Payment SUCCESS) cho đơn. */
     private BigDecimal paidAmount(String orderId) {
-        return payments.findByOrderId(orderId).stream()
+        return paidAmount(payments.findByOrderId(orderId));
+    }
+
+    private static BigDecimal paidAmount(List<Payment> orderPayments) {
+        return orderPayments.stream()
                 .filter(payment -> payment.getStatus() == PaymentStatus.SUCCESS)
                 .map(Payment::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -216,9 +220,10 @@ public class ManagerOrderService {
         var fromPlace = new GhnService.Place(blankToEmpty(shopAddr.getAddressLine()), blankToEmpty(shopAddr.getWard()),
                 blankToEmpty(shopAddr.getDistrict()), blankToEmpty(shopAddr.getCity()));
 
-        BigDecimal codAmount = o.getTotalAmount().subtract(paidAmount(orderId)).max(BigDecimal.ZERO);
+        List<Payment> orderPayments = payments.findByOrderId(orderId);
+        BigDecimal codAmount = o.getTotalAmount().subtract(paidAmount(orderPayments)).max(BigDecimal.ZERO);
         // Đơn đã cọc chưa có phiếu COD: ghi phần còn lại GHN thu hộ, giao thành công thì DeliverySync đánh dấu SUCCESS.
-        if (codAmount.signum() > 0 && payments.findByOrderId(orderId).stream().noneMatch(p -> p.getPaymentMethod() == PaymentMethod.COD)) {
+        if (codAmount.signum() > 0 && orderPayments.stream().noneMatch(p -> p.getPaymentMethod() == PaymentMethod.COD)) {
             payments.save(Payment.builder().id(UUID.randomUUID().toString()).order(o)
                     .paymentType(PaymentType.FINAL).paymentMethod(PaymentMethod.COD).amount(codAmount)
                     .invoiceNumber("COD-" + orderId.replace("-", "").substring(0, 8).toUpperCase())

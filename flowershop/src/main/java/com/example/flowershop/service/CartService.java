@@ -99,7 +99,7 @@ public class CartService {
         }
 
         cartItem = cartItemRepository.save(cartItem);
-        return toCartItemResponse(cartItem);
+        return toCartItemResponse(cartItem, available);
     }
 
     /**
@@ -153,7 +153,7 @@ public class CartService {
         cartItem.setQuantity(request.getQuantity());
         cartItem.setLastModifyBy(userId);
         cartItem = cartItemRepository.save(cartItem);
-        return toCartItemResponse(cartItem);
+        return toCartItemResponse(cartItem, available);
     }
 
     /** Xóa 1 cart item khỏi giỏ (sau khi xác nhận item thuộc về user). */
@@ -182,6 +182,11 @@ public class CartService {
      * kèm danh sách ảnh (theo displayOrder), tồn kho khả dụng và thông tin shop để FE gom đơn theo shop.
      */
     CartItemResponse toCartItemResponse(CartItem cartItem) {
+        return toCartItemResponse(cartItem, availableStock(cartItem.getUser().getId(), cartItem.getProduct()));
+    }
+
+    /** Như trên nhưng dùng tồn kho khả dụng nơi gọi đã tính sẵn, khỏi query SUM lần nữa. */
+    private CartItemResponse toCartItemResponse(CartItem cartItem, int available) {
         Product product = cartItem.getProduct();
         BigDecimal itemTotal = product.getPrice().multiply(BigDecimal.valueOf(cartItem.getQuantity()));
 
@@ -196,7 +201,7 @@ public class CartService {
                 .price(product.getPrice())
                 .images(imageUrls)
                 .image(imageUrls.isEmpty() ? null : imageUrls.get(0))
-                .stock(availableStock(cartItem.getUser().getId(), product))
+                .stock(available)
                 .shopId(product.getShop().getId())
                 .shopName(product.getShop().getName())
                 .build();

@@ -15,7 +15,7 @@ const paymentService = {
 
   /**
    * PHASE 11: Kiểm tra trạng thái thanh toán theo mã hóa đơn invoiceNumber (cho Polling kết quả).
-   * Các trang success/pending gọi lặp lại hàm này cho tới khi webhook SePay cập nhật trạng thái PAID.
+   * Các trang success/pending gọi lặp lại hàm này; mỗi lần backend tự hỏi API SePay (không có webhook) tới khi isPaid = true.
    */
   getPaymentStatusByInvoice: (invoiceNumber) => {
     return axiosClient.get(`/payments/status-by-invoice/${invoiceNumber}`);

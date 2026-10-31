@@ -229,15 +229,14 @@ export function useCart(userId) {
   }), [userId, fetchCart]);
 
   // Tải giỏ khi mount/đổi user và khi quay lại tab/cửa sổ (vd: đã thanh toán ở tab khác nên giỏ server đã bị xóa)
+  // 'focus' bắt cả quay lại tab lẫn quay lại cửa sổ; không nghe thêm 'visibilitychange' vì quay lại tab sẽ bị gọi 2 lần (và cả lúc ẩn tab)
   useEffect(() => {
     fetchCart();
     window.addEventListener('pageshow', fetchCart);
     window.addEventListener('focus', fetchCart);
-    document.addEventListener('visibilitychange', fetchCart);
     return () => {
       window.removeEventListener('pageshow', fetchCart);
       window.removeEventListener('focus', fetchCart);
-      document.removeEventListener('visibilitychange', fetchCart);
     };
   }, [fetchCart]);
 

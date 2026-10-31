@@ -402,14 +402,15 @@ public class OrderService {
      */
     @Transactional
     public void restoreCancelledOrderItems(Order order) {
-        restoreCancelledOrderItems(order, List.of());
+        if (order == null) return;
+        restoreCancelledOrderItems(order, orderDetailRepository.findByOrderId(order.getId()), List.of());
     }
 
-    /** Như trên nhưng bỏ qua các sản phẩm trong skipProductIds (vd: món khách đang đặt lại). */
-    private void restoreCancelledOrderItems(Order order, java.util.Collection<String> skipProductIds) {
+    /** Như trên nhưng dùng chi tiết đơn đã đọc sẵn và bỏ qua các sản phẩm trong skipProductIds (vd: món khách đang đặt lại). */
+    private void restoreCancelledOrderItems(Order order, List<OrderDetail> details, java.util.Collection<String> skipProductIds) {
         if (order == null || order.getStatus() != OrderStatus.CANCELLED || order.getCustomer() == null) return;
         String userId = order.getCustomer().getId();
-        for (OrderDetail detail : orderDetailRepository.findByOrderId(order.getId())) {
+        for (OrderDetail detail : details) {
             if (detail.getProduct() == null) continue;
             String productId = detail.getProduct().getId();
             if (skipProductIds.contains(productId)) continue;
@@ -484,14 +485,14 @@ public class OrderService {
     }
 
     /**
-     * Lõi hủy đơn PENDING/AWAITING_DEPOSIT: khóa đơn và đọc lại từ DB (tránh race với webhook thanh toán),
+     * Lõi hủy đơn PENDING/AWAITING_DEPOSIT: khóa đơn và đọc lại từ DB (tránh race với lần đối soát SePay ghi nhận tiền),
      * đặt CANCELLED, hoàn kho, hoàn lượt coupon, đánh fail các Payment PENDING, và khôi phục giỏ (trừ các sản phẩm trong skipRestoreProductIds).
      * @return false nếu không có đơn hoặc đơn đã sang trạng thái khác (đã thanh toán...)
      */
     private boolean cancelPending(String orderId, String reason, String actor, java.util.Collection<String> skipRestoreProductIds) {
         Order order = orderRepository.findById(orderId).orElse(null);
         if (order == null) return false;
-        // Khóa và đọc lại từ DB: entity trong persistence context có thể đã cũ so với IPN vừa commit.
+        // Khóa và đọc lại từ DB: entity trong persistence context có thể đã cũ so với lần đối soát vừa commit.
         entityManager.refresh(order, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
         if (order.getStatus() != OrderStatus.PENDING && order.getStatus() != OrderStatus.AWAITING_DEPOSIT) {
             return false;
@@ -504,11 +505,11 @@ public class OrderService {
         order.setLastModifyBy(actor);
         orderRepository.save(order);
 
-        releaseStockAndCoupon(order, actor);
+        List<OrderDetail> details = releaseStockAndCoupon(order, actor);
 
         // 4. Hủy các payment PENDING của đơn hàng
         paymentRepository.failPendingByOrderId(order.getId(), actor);
-        restoreCancelledOrderItems(order, skipRestoreProductIds);
+        restoreCancelledOrderItems(order, details, skipRestoreProductIds);
         return true;
     }
 
@@ -518,7 +519,7 @@ public class OrderService {
 
     /**
      * Khách tự hủy đơn trước khi giao cho GHN.
-     *  1. Khóa đơn (FOR UPDATE) để không chạy đua với webhook thanh toán / shop gửi GHN
+     *  1. Khóa đơn (FOR UPDATE) để không chạy đua với đối soát thanh toán / shop gửi GHN
      *  2. Chỉ chủ đơn được hủy (đơn người khác → 404), chỉ hủy khi chưa giao
      *  3. Trả kho + lượt coupon, hủy các payment còn PENDING
      *  4. Đã trả tiền (cọc hoặc đủ) → tạo Refund REQUESTED và báo staff hoàn tiền
@@ -552,8 +553,8 @@ public class OrderService {
         }
     }
 
-    /** Trả lại kho cho các món có sẵn trong đơn và trả lại 1 lượt dùng coupon. */
-    private void releaseStockAndCoupon(Order order, String actor) {
+    /** Trả lại kho cho các món có sẵn trong đơn và trả lại 1 lượt dùng coupon. Trả về chi tiết đơn đã đọc để nơi gọi dùng lại. */
+    private List<OrderDetail> releaseStockAndCoupon(Order order, String actor) {
         // 2. Hoàn lại stock cho các sản phẩm trong đơn
         List<OrderDetail> details = orderDetailRepository.findByOrderId(order.getId());
         for (OrderDetail item : details) {
@@ -576,6 +577,7 @@ public class OrderService {
                 log.info("Hoàn lại coupon: {}", coupon.getCode());
             });
         }
+        return details;
     }
 }
 

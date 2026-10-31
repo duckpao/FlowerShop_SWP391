@@ -3,12 +3,10 @@ import { useSearchParams, Link } from 'react-router';
 import paymentService from '../services/paymentService';
 import PageMeta from '../components/common/PageMeta';
 import Button from '../components/ui/button/Button';
-import { useCartContext } from '../context/CartContext';
 
 // Trang SePay redirect về sau khi thanh toán. Không tin việc redirect là đã trả tiền:
-// poll backend (xác nhận qua webhook/IPN của SePay) tới khi isPaid = true hoặc hết số lần thử.
+// poll backend (mỗi lần backend tự hỏi API SePay, không có webhook) tới khi isPaid = true hoặc hết số lần thử.
 export default function PaymentSuccessPage() {
-  const { fetchCart } = useCartContext();
   const [searchParams] = useSearchParams();
   // SePay có thể trả mã hóa đơn bằng 1 trong 2 tên query; orderId là đường dự phòng khi không có hóa đơn
   const invoiceNumber = searchParams.get('invoice_number') || searchParams.get('order_invoice_number');
@@ -18,7 +16,7 @@ export default function PaymentSuccessPage() {
   const [paymentData, setPaymentData] = useState(null);
   const [pollCount, setPollCount] = useState(0);
 
-  // Poll tối đa 10 lần x 2,5s ≈ 25s; quá hạn thì hiện "đang xác nhận" thay vì báo lỗi (webhook có thể đến trễ)
+  // Poll tối đa 10 lần x 2,5s ≈ 25s; quá hạn thì hiện "đang xác nhận" thay vì báo lỗi (SePay có thể ghi nhận trễ; scheduler vẫn đối soát tiếp)
   const maxAttempts = 10;
   const pollIntervalMs = 2500;
   const timerRef = useRef(null);
@@ -73,13 +71,10 @@ export default function PaymentSuccessPage() {
   }, [invoiceNumber, orderId]);
 
   const isConfirmed = paymentData?.isPaid === true;
-  // Đã trả xong: bỏ mã hóa đơn đang chờ và tải lại giỏ (backend đã xóa các món đã đặt)
+  // Đã trả xong: bỏ mã hóa đơn đang chờ. Không cần tải lại giỏ: giỏ đã bị xóa lúc tạo đơn và trang này được tải mới khi SePay chuyển về.
   useEffect(() => {
-    if (isConfirmed) {
-      sessionStorage.removeItem('flower_pending_invoice');
-      fetchCart();
-    }
-  }, [isConfirmed, fetchCart]);
+    if (isConfirmed) sessionStorage.removeItem('flower_pending_invoice');
+  }, [isConfirmed]);
   // Đơn đặt cọc: lần này trả DEPOSIT, phần còn lại GHN thu hộ khi giao (COD)
   const isDeposit = paymentData?.paymentType === 'DEPOSIT';
   // Định dạng số tiền VND

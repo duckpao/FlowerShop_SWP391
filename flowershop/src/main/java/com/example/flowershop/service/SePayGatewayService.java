@@ -306,6 +306,7 @@ public class SePayGatewayService {
         // Khóa theo thứ tự id để hai request đồng thời không khóa chéo nhau.
         List<String> ids = request.getOrderIds().stream().distinct().sorted().toList();
         List<Order> orders = new ArrayList<>();
+        Map<String, List<Payment>> paymentsByOrder = new HashMap<>();
         for (String id : ids) {
             Order order = orderRepository.findByIdForUpdate(id)
                     .orElseThrow(() -> ApiException.notFound("Không tìm thấy đơn hàng với id: " + id));
@@ -318,9 +319,11 @@ public class SePayGatewayService {
             if (isExpired(order)) {
                 throw ApiException.badRequest("Đơn " + getShortOrderCode(id) + " đã hết hạn thanh toán (quá 10 phút).");
             }
-            if (paymentRepository.findByOrderId(id).stream().anyMatch(p -> p.getPaymentMethod() == PaymentMethod.COD)) {
+            List<Payment> orderPayments = paymentRepository.findByOrderId(id);
+            if (orderPayments.stream().anyMatch(p -> p.getPaymentMethod() == PaymentMethod.COD)) {
                 throw ApiException.badRequest("Đơn COD không thể thanh toán trực tuyến.");
             }
+            paymentsByOrder.put(id, orderPayments);
             orders.add(order);
         }
 
@@ -328,7 +331,7 @@ public class SePayGatewayService {
         BigDecimal total = BigDecimal.ZERO;
         for (Order order : orders) {
             // Như createPayment: invoice cũ chưa trả được đánh FAILED, scheduler vẫn hủy phía SePay khi đơn hết hạn.
-            for (Payment old : paymentRepository.findByOrderId(order.getId())) {
+            for (Payment old : paymentsByOrder.get(order.getId())) {
                 if (old.getPaymentMethod() == PaymentMethod.ONLINE && old.getStatus() == PaymentStatus.PENDING) {
                     old.setStatus(PaymentStatus.FAILED);
                     old.setLastModifyBy(userId);
@@ -424,10 +427,11 @@ public class SePayGatewayService {
      */
     public void expireUnpaidOrder(String orderId) {
         // Đơn COD (kể cả đơn "mua ngay" của CustomerOrderService) không có bước thanh toán online → không hết hạn sau 10 phút.
-        if (paymentRepository.findByOrderId(orderId).stream().anyMatch(p -> p.getPaymentMethod() == PaymentMethod.COD)) {
+        List<Payment> orderPayments = paymentRepository.findByOrderId(orderId);
+        if (orderPayments.stream().anyMatch(p -> p.getPaymentMethod() == PaymentMethod.COD)) {
             return;
         }
-        List<String> invoices = paymentRepository.findByOrderId(orderId).stream()
+        List<String> invoices = orderPayments.stream()
                 .filter(p -> p.getPaymentMethod() == PaymentMethod.ONLINE && p.getInvoiceNumber() != null
                         && p.getStatus() != PaymentStatus.SUCCESS)
                 // Thanh toán gộp: SePay chỉ biết groupInvoice.
