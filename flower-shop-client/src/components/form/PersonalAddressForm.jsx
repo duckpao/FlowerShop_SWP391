@@ -26,7 +26,7 @@ export default function PersonalAddressForm({ controller: c, busy }) {
           onChange={e => { e.target.setCustomValidity(e.target.value.trim() ? '' : 'Vui lòng nhập địa chỉ chi tiết.'); set('addressLine', e.target.value) }} />
       </div>
       <div className="rounded-xl bg-white px-4 dark:bg-gray-800">
-        {[['isDefault', 'Đặt làm địa chỉ mặc định'], ['isPickup', 'Đặt làm địa chỉ lấy hàng'], ['isReturn', 'Đặt làm địa chỉ trả hàng']].map(([key, label]) =>
+        {[['isDefault', 'Đặt làm địa chỉ mặc định']].map(([key, label]) =>
           <div key={key} className="flex items-center justify-between border-b border-gray-100 py-3 dark:border-gray-700">
             <span id={`label-${key}`} className="text-sm">{label}</span>
             <button type="button" role="switch" aria-checked={!!a[key]} aria-labelledby={`label-${key}`} onClick={() => set(key, !a[key])}

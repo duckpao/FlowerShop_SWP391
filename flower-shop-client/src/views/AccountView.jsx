@@ -136,8 +136,6 @@ export default function AccountView({ user, logout, checkSession, busy: authBusy
                             </TableCell>
                             <TableCell>
                               {item.isDefault ? <Badge color="primary">Mặc định</Badge> : null}
-                              {item.isPickup ? <Badge color="success">Lấy hàng</Badge> : null}
-                              {item.isReturn ? <Badge color="warning">Trả hàng</Badge> : null}
                             </TableCell>
                             <TableCell className="text-right">
                               <div className="flex justify-end gap-2">

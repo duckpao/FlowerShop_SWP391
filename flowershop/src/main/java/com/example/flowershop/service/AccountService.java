@@ -99,6 +99,7 @@ public class AccountService {
         address.setIsPickup(Boolean.TRUE.equals(request.isPickup()));
         address.setIsReturn(Boolean.TRUE.equals(request.isReturn()));
         address.setLastModifyBy(userId);
+        
         boolean makeDefault = request.isDefault() || list.isEmpty() || Boolean.TRUE.equals(address.getIsDefault())
                 || list.stream().noneMatch(a -> Boolean.TRUE.equals(a.getIsDefault()));
         if (makeDefault)
