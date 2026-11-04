@@ -3,7 +3,6 @@ package com.example.flowershop.service;
 import com.example.flowershop.entity.*;
 import com.example.flowershop.entity.enums.*;
 import com.example.flowershop.repository.*;
-import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import org.springframework.data.domain.*;
 import org.springframework.http.HttpStatus;
@@ -25,22 +24,6 @@ public class ManagerProductService {
     private static final long MAX_VIDEO_BYTES = 50L * 1024 * 1024;
     private static final Set<String> ALLOWED_IMAGE_TYPES = Set.of("image/jpeg", "image/png", "image/webp");
     private static final Set<String> ALLOWED_VIDEO_TYPES = Set.of("video/mp4", "video/webm", "video/quicktime");
-
-    public record ImageInput(
-            @NotBlank @Size(max = 500) @Pattern(regexp = "https://[^\\s]+", message = "Ảnh phải là URL HTTPS") String url,
-            boolean primary
-    ) {}
-
-    public record Input(
-            @NotBlank @Size(max = 255) String name,
-            @NotNull @Size(max = 5000) String description,
-            @NotBlank @Size(max = 36) String categoryId,
-            @NotNull @DecimalMin("0.01") @Digits(integer = 10, fraction = 2) BigDecimal price,
-            @NotNull @Min(0) @Max(1000000) Integer stock,
-            @NotNull ProductStatus status,
-            ProductType type,
-            @Valid @Size(max = 10) List<ImageInput> images
-    ) {}
 
     public record SaveProductInput(
             @NotBlank @Size(max = 255) String name,
@@ -137,14 +120,6 @@ public class ManagerProductService {
         return categories.findByStatusOrderByNameAsc(CategoryStatus.ACTIVE).stream()
                 .map(c -> new CategoryOption(c.getId(), c.getName()))
                 .toList();
-    }
-
-    @Transactional
-    public Result save(String shopId, String id, String actor, Input input) {
-        var imageUrls = input.images() == null ? List.<String>of() : input.images().stream()
-                .map(ImageInput::url)
-                .toList();
-        return saveProduct(shopId, id, actor, input.name(), input.description(), input.categoryId(), input.price(), input.stock(), input.status(), input.type(), imageUrls, null);
     }
 
     @Transactional
