@@ -369,10 +369,7 @@ public class OrderService {
                     .build();
             paymentRepository.save(codPayment);
 
-            // Đơn COD chuyển sang PROCESSING ngay (đã xác nhận, chờ giao hàng)
-            order.setStatus(OrderStatus.PROCESSING);
-            order.setLastModifyBy(userId);
-            order = orderRepository.save(order);
+            // Đơn COD ở lại PENDING cho tới khi shop xác nhận; bộ quét hết hạn bỏ qua đơn có payment COD.
             notificationService.notifyOrderPlaced(order);
         } else {
             notificationService.notifyPaymentPending(order);

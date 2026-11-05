@@ -1,17 +1,22 @@
 package com.example.flowershop.service;
 
+import com.example.flowershop.entity.Address;
 import com.example.flowershop.entity.Order;
 import com.example.flowershop.entity.OrderDetail;
 import com.example.flowershop.entity.Payment;
+import com.example.flowershop.entity.Product;
 import com.example.flowershop.entity.User;
+import com.example.flowershop.entity.enums.OrderStatus;
 import com.example.flowershop.entity.enums.PaymentMethod;
 import com.example.flowershop.entity.enums.PaymentStatus;
 import com.example.flowershop.event.OrderPlacedEvent;
 import com.example.flowershop.event.OrderStatusChangedEvent;
+import com.example.flowershop.repository.AddressRepository;
 import com.example.flowershop.repository.DeliveryRepository;
 import com.example.flowershop.repository.OrderDetailRepository;
 import com.example.flowershop.repository.OrderRepository;
 import com.example.flowershop.repository.PaymentRepository;
+import com.example.flowershop.repository.ProductReviewRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Async;
@@ -23,8 +28,11 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Stream;
 
 import static com.example.flowershop.service.HtmlMailSender.esc;
 import static com.example.flowershop.service.HtmlMailSender.money;
@@ -44,15 +52,20 @@ public class OrderMailSender {
     private final OrderDetailRepository details;
     private final PaymentRepository payments;
     private final DeliveryRepository deliveries;
+    private final AddressRepository addresses;
+    private final ProductReviewRepository reviews;
     private final HtmlMailSender mail;
     private final TransactionTemplate readOnlyTx;
 
     public OrderMailSender(OrderRepository orders, OrderDetailRepository details, PaymentRepository payments,
-                           DeliveryRepository deliveries, HtmlMailSender mail, PlatformTransactionManager tm) {
+                           DeliveryRepository deliveries, AddressRepository addresses, ProductReviewRepository reviews,
+                           HtmlMailSender mail, PlatformTransactionManager tm) {
         this.orders = orders;
         this.details = details;
         this.payments = payments;
         this.deliveries = deliveries;
+        this.addresses = addresses;
+        this.reviews = reviews;
         this.mail = mail;
         this.readOnlyTx = new TransactionTemplate(tm);
         this.readOnlyTx.setReadOnly(true);
@@ -171,6 +184,55 @@ public class OrderMailSender {
                 + (phone == null ? "" : " · " + esc(phone)) + "<br>" + esc(address) + "</p>";
     }
 
+    // ---- Địa chỉ và nhắc đánh giá ----
+
+    private static String joinParts(String... parts) {
+        return Stream.of(parts).filter(s -> s != null && !s.isBlank()).collect(java.util.stream.Collectors.joining(", "));
+    }
+
+    /** Nơi nhận và nơi gửi; cố ý không in số điện thoại của khách lẫn của shop. */
+    private String placesSection(Order order) {
+        Address to = order.getDeliveryAddress();
+        String name = order.getRecipientName() != null && !order.getRecipientName().isBlank()
+                ? order.getRecipientName() : order.getCustomer().getFullName();
+        StringBuilder sb = new StringBuilder();
+        if (to != null) {
+            sb.append("<p style=\"margin:16px 0 0;font-size:14px\"><strong>Nhận tại</strong><br>").append(esc(name))
+                    .append("<br>").append(esc(joinParts(to.getAddressLine(), to.getWard(), to.getDistrict(), to.getCity())))
+                    .append("</p>");
+        }
+        String area = shopArea(order.getShop().getId());
+        sb.append("<p style=\"margin:12px 0 0;font-size:14px\"><strong>Gửi từ</strong><br>")
+                .append(esc(order.getShop().getName()));
+        if (!area.isEmpty()) sb.append("<br>").append(esc(area));
+        return sb.append("</p>").toString();
+    }
+
+    /** Chỉ quận/huyện và tỉnh của kho gửi; chọn kho giống lúc tạo vận đơn GHN (mặc định, rồi kho đầu tiên). */
+    private String shopArea(String shopId) {
+        List<Address> list = addresses.findByShopIdAndUserIsNullOrderByCreatedDateAscIdAsc(shopId);
+        Address from = list.stream().filter(a -> Boolean.TRUE.equals(a.getIsDefault())).findFirst()
+                .orElse(list.isEmpty() ? null : list.get(0));
+        return from == null ? "" : joinParts(from.getDistrict(), from.getCity());
+    }
+
+    /** Một link cho mỗi sản phẩm chưa được khách đánh giá; hệ thống chỉ cho đánh giá khi đơn đã COMPLETED. */
+    private String reviewSection(Order order) {
+        User customer = order.getCustomer();
+        Set<String> seen = new HashSet<>();
+        StringBuilder links = new StringBuilder();
+        for (OrderDetail d : details.findByOrderId(order.getId())) {
+            Product p = d.getProduct();
+            if (p == null || !seen.add(p.getId())) continue;
+            if (reviews.findByProductIdAndUserId(p.getId(), customer.getId()).isPresent()) continue;
+            links.append("<p style=\"margin:6px 0\"><a href=\"").append(esc(mail.url("/products/" + p.getId())))
+                    .append("\" style=\"color:#be123c;font-size:14px\">Đánh giá ").append(esc(p.getName())).append("</a></p>");
+        }
+        if (links.length() == 0) return "";
+        return "<p style=\"margin:20px 0 4px;font-size:14px\"><strong>Hoa có như bạn mong đợi không?</strong><br>"
+                + "Đánh giá của bạn giúp shop cải thiện và giúp khách sau chọn hoa.</p>" + links;
+    }
+
     // ---- Đổi trạng thái ----
 
     private Optional<Mail> buildStatusMail(OrderStatusChangedEvent event) {
@@ -201,6 +263,9 @@ public class OrderMailSender {
         if (event.to() == com.example.flowershop.entity.enums.OrderStatus.CANCELLED
                 && order.getCancelReason() != null && !order.getCancelReason().isBlank())
             body.append("<p>Lý do: ").append(esc(order.getCancelReason())).append("</p>");
+        if (event.to() == OrderStatus.PROCESSING || event.to() == OrderStatus.COMPLETED)
+            body.append(placesSection(order));
+        if (event.to() == OrderStatus.COMPLETED) body.append(reviewSection(order));
         body.append("<p style=\"font-size:14px;color:#6b7280\">Tổng giá trị đơn: ").append(esc(money(order.getTotalAmount())))
                 .append("</p>");
 
