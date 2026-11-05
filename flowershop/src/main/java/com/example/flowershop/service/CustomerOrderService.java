@@ -21,18 +21,20 @@ public class CustomerOrderService {
             @NotBlank String addressId,
             @NotBlank String productId,
             @NotNull @Min(1) @Max(1000) Integer quantity,
-            @Size(max=500) String note,
-            Integer ghnDistrictId,
-            String ghnWardCode,
-            String city,
-            String district,
-            String ward) {}
+            @Size(max=500) String note) {}
 
     public record CheckoutResponse(String orderId, BigDecimal subTotal, BigDecimal shippingFee,
                                    BigDecimal totalAmount, String status) {}
 
+    public record OrderLine(String productId, String productName, String imageUrl, BigDecimal price, Integer quantity) {}
+
+    /** paymentMethod: COD | ONLINE | null; paymentStatus: SUCCESS nếu đã trả, ngược lại trạng thái giao dịch gần nhất.
+     *  paymentSecondsLeft: số giây còn lại để thanh toán đơn online chưa trả (null nếu không áp dụng); tính ở server để khỏi lệch múi giờ. */
     public record OrderSummary(String id, String shopName, BigDecimal totalAmount, String status,
-                               java.time.LocalDateTime createdDate, Long itemCount) {}
+                               java.time.LocalDateTime createdDate, Long itemCount,
+                               String shopId, BigDecimal subTotal, BigDecimal shippingFee,
+                               String paymentMethod, String paymentStatus, List<OrderLine> items,
+                               Long paymentSecondsLeft, String checkoutGroup) {}
 
     public record OrderDetailResponse(String id, String shopId, String shopName, String status,
                                       BigDecimal subTotal, BigDecimal shippingFee, BigDecimal totalAmount,
@@ -43,7 +45,7 @@ public class CustomerOrderService {
 
     public record OrderItemResponse(String productId, String productName, BigDecimal price, Integer quantity) {}
 
-    public record DeliveryInfo(String trackingCode, String deliveryPartnerId, String status) {}
+    public record DeliveryInfo(String trackingCode, String deliveryPartnerId, String status, String ghnStatus) {}
 
     public record Results(List<OrderSummary> content, int page, int totalPages, long totalElements) {}
 
@@ -55,11 +57,17 @@ public class CustomerOrderService {
     private final DeliveryRepository deliveries;
     private final UserRepository users;
     private final GhnService ghn;
+    private final ProductImageRepository productImages;
+    private final DeliverySync deliverySync;
+    private final org.springframework.context.ApplicationEventPublisher events;
 
     public CustomerOrderService(ProductRepository products, AddressRepository addresses,
                                 OrderRepository orders, OrderDetailRepository orderDetails,
                                 PaymentRepository payments, DeliveryRepository deliveries,
-                                UserRepository users, GhnService ghn) {
+                                UserRepository users, GhnService ghn,
+                                ProductImageRepository productImages, DeliverySync deliverySync,
+                                org.springframework.context.ApplicationEventPublisher events) {
+        this.events = events;
         this.products = products;
         this.addresses = addresses;
         this.orders = orders;
@@ -68,6 +76,8 @@ public class CustomerOrderService {
         this.deliveries = deliveries;
         this.users = users;
         this.ghn = ghn;
+        this.productImages = productImages;
+        this.deliverySync = deliverySync;
     }
 private static ResponseStatusException notFound() {
         return new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy dữ liệu.");
@@ -78,23 +88,34 @@ private static ResponseStatusException notFound() {
         Product product = products.findById(req.productId())
                 .filter(p -> p.getStatus() == ProductStatus.ACTIVE)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Sản phẩm không bán nữa."));
-        Shop shop = product.getShop();
-        List<Address> shopAddrs = addresses.findByShopIdAndUserIsNullOrderByCreatedDateAscIdAsc(shop.getId());
-        Address shopAddr = shopAddrs.stream().filter(a -> Boolean.TRUE.equals(a.getIsDefault())).findFirst()
-                .orElse(shopAddrs.isEmpty() ? null : shopAddrs.get(0));
-        if (shopAddr == null || shopAddr.getGhnDistrictId() == null)
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Shop thiếu địa chỉ GHN.");
-        
-        Address customerAddr = addresses.findById(req.addressId())
+        return quote(product.getShop(), destination(customerId, req.addressId()));
+    }
+
+    /** Fee from the shop's pickup address to the customer's address. */
+    private BigDecimal quote(Shop shop, Address to) {
+        Address from = pickupAddress(shop);
+        return ghn.calculateFee(from.getGhnDistrictId(), from.getGhnWardCode(),
+                to.getGhnDistrictId(), to.getGhnWardCode(), GhnService.DEFAULT_WEIGHT_GRAM);
+    }
+
+    /** The shop's default (or first) address; it must carry GHN codes to be a pickup point. */
+    private Address pickupAddress(Shop shop) {
+        List<Address> list = addresses.findByShopIdAndUserIsNullOrderByCreatedDateAscIdAsc(shop.getId());
+        Address address = list.stream().filter(a -> Boolean.TRUE.equals(a.getIsDefault())).findFirst()
+                .orElse(list.isEmpty() ? null : list.get(0));
+        if (address == null || address.getGhnDistrictId() == null || address.getGhnWardCode() == null)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cửa hàng chưa có địa chỉ lấy hàng theo danh mục GHN.");
+        return address;
+    }
+
+    /** The customer's saved address; it must carry the GHN district id and ward code a fee quote needs. */
+    private Address destination(String customerId, String addressId) {
+        Address address = addresses.findById(addressId)
                 .filter(a -> a.getUser() != null && a.getUser().getId().equals(customerId))
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Không tìm thấy địa chỉ."));
-                
-        int toDistrict = req.ghnDistrictId() != null ? req.ghnDistrictId() : customerAddr.getGhnDistrictId() != null ? customerAddr.getGhnDistrictId() : 0;
-        String toWard = req.ghnWardCode() != null && !req.ghnWardCode().isBlank() ? req.ghnWardCode() : customerAddr.getGhnWardCode();
-        if (toDistrict == 0 || toWard == null || toWard.isBlank())
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Vui lòng chọn địa chỉ GHN.");
-            
-        return ghn.calculateFee(shopAddr.getGhnDistrictId(), toDistrict, toWard, GhnService.DEFAULT_WEIGHT_GRAM);
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Địa chỉ không tồn tại hoặc không thuộc về bạn."));
+        if (address.getGhnDistrictId() == null || address.getGhnWardCode() == null)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Địa chỉ chưa có mã quận/huyện và phường/xã GHN. Hãy lưu lại địa chỉ trong hồ sơ.");
+        return address;
     }
 
     @Transactional
@@ -106,43 +127,23 @@ private static ResponseStatusException notFound() {
         Shop shop = product.getShop();
         if (shop.getStatus() != ShopStatus.ACTIVE)
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cửa hàng hiện không hoạt động.");
-        if (product.getStock() < req.quantity())
+        if (product.getType() != ProductType.CUSTOM && product.getStock() < req.quantity())
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Sản phẩm không đủ số lượng. Hiện còn " + product.getStock() + " sản phẩm.");
 
-        // Load customer address + validate GHN codes
-        Address customerAddr = addresses.findById(req.addressId())
-                .filter(a -> a.getUser() != null && a.getUser().getId().equals(customerId))
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Địa chỉ không tồn tại hoặc không thuộc về bạn."));
-        if (req.ghnDistrictId() != null && req.ghnWardCode() != null && !req.ghnWardCode().isBlank()) {
-            customerAddr.setGhnDistrictId(req.ghnDistrictId());
-            customerAddr.setGhnWardCode(req.ghnWardCode());
-            if (req.city() != null) customerAddr.setCity(req.city());
-            if (req.district() != null) customerAddr.setDistrict(req.district());
-            if (req.ward() != null) customerAddr.setWard(req.ward());
-            addresses.save(customerAddr);
-        } else if (customerAddr.getGhnDistrictId() == null || customerAddr.getGhnWardCode() == null || customerAddr.getGhnWardCode().isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Địa chỉ chưa có mã GHN, vui lòng chọn lại Tỉnh/Huyện/Xã.");
-        }
-
-        // Load shop default address + validate GHN codes
-        var shopAddrs = addresses.findByShopIdAndUserIsNullOrderByCreatedDateAscIdAsc(shop.getId());
-        Address shopAddr = shopAddrs.stream().filter(a -> Boolean.TRUE.equals(a.getIsDefault())).findFirst()
-                .orElse(shopAddrs.isEmpty() ? null : shopAddrs.get(0));
-        if (shopAddr == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cửa hàng chưa thiết lập địa chỉ giao hàng.");
-        if (shopAddr.getGhnDistrictId() == null || shopAddr.getGhnWardCode() == null || shopAddr.getGhnWardCode().isBlank())
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cửa hàng chưa có mã GHN, vui lòng chọn lại Tỉnh/Huyện/Xã cho địa chỉ shop.");
+        Address customerAddr = destination(customerId, req.addressId());
 
         // Calculate fees
         BigDecimal subTotal = product.getPrice().multiply(BigDecimal.valueOf(req.quantity()));
-        BigDecimal shippingFee = ghn.calculateFee(shopAddr.getGhnDistrictId(), customerAddr.getGhnDistrictId(),
-                customerAddr.getGhnWardCode(), GhnService.DEFAULT_WEIGHT_GRAM);
+        BigDecimal shippingFee = quote(shop, customerAddr);
         BigDecimal totalAmount = subTotal.add(shippingFee);
 
-        // Lock product and decrement stock
+        // Lock product and decrement stock (chỉ áp dụng với hoa có sẵn)
         Product locked = products.findByIdForUpdate(product.getId()).orElseThrow(CustomerOrderService::notFound);
-        if (locked.getStock() < req.quantity())
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Sản phẩm vừa hết hàng. Vui lòng thử lại.");
-        locked.setStock(locked.getStock() - req.quantity());
+        if (locked.getType() != ProductType.CUSTOM) {
+            if (locked.getStock() < req.quantity())
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Sản phẩm vừa hết hàng. Vui lòng thử lại.");
+            locked.setStock(locked.getStock() - req.quantity());
+        }
 
         // Build entities
         String orderId = UUID.randomUUID().toString();
@@ -170,18 +171,66 @@ private static ResponseStatusException notFound() {
         orders.save(order);
         orderDetails.save(detail);
         payments.save(payment);
+        events.publishEvent(new com.example.flowershop.event.OrderPlacedEvent(List.of(orderId)));
         return new CheckoutResponse(orderId, subTotal, shippingFee, totalAmount, OrderStatus.PENDING.name());
     }
 
-    public Results list(String customerId, int page) {
+    /** @param status lọc theo trạng thái đơn (null hoặc rỗng = tất cả). */
+    public Results list(String customerId, int page, String status) {
         Pageable pageable = PageRequest.of(page, 20, Sort.by(Sort.Order.desc("createdDate"), Sort.Order.asc("id")));
-        Page<Order> result = orders.findByCustomerIdOrderByCreatedDateDesc(customerId, pageable);
-        var content = result.getContent().stream().map(o -> {
-            long itemCount = orderDetails.findByOrderId(o.getId()).size();
-            return new OrderSummary(o.getId(), o.getShop().getName(), o.getTotalAmount(),
-                    o.getStatus().name(), o.getCreatedDate(), itemCount);
-        }).toList();
+        Page<Order> result;
+        if (status == null || status.isBlank()) {
+            result = orders.findByCustomerIdOrderByCreatedDateDesc(customerId, pageable);
+        } else {
+            OrderStatus st;
+            try {
+                st = OrderStatus.valueOf(status.trim().toUpperCase());
+            } catch (IllegalArgumentException e) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Trạng thái không hợp lệ: " + status);
+            }
+            result = orders.findByCustomerIdAndStatusOrderByCreatedDateDesc(customerId, st, pageable);
+        }
+        var content = result.getContent().stream().map(this::summary).toList();
         return new Results(content, page, result.getTotalPages(), result.getTotalElements());
+    }
+
+    /** Các đơn của khách theo danh sách id (bỏ qua id không tồn tại hoặc không thuộc khách), theo thứ tự id truyền vào. */
+    public List<OrderSummary> byIds(String customerId, List<String> ids) {
+        return ids.stream().distinct().limit(20)
+                .map(id -> orders.findById(id).filter(o -> o.getCustomer().getId().equals(customerId)))
+                .flatMap(Optional::stream).map(this::summary).toList();
+    }
+
+    private OrderSummary summary(Order o) {
+        var details = orderDetails.findByOrderId(o.getId());
+        var productIds = details.stream().filter(d -> d.getProduct() != null).map(d -> d.getProduct().getId()).distinct().toList();
+        Map<String, String> imageByProduct = new HashMap<>();
+        if (!productIds.isEmpty()) {
+            productImages.findByProductIdInOrderByDisplayOrderAscIdAsc(productIds)
+                    .forEach(img -> imageByProduct.putIfAbsent(img.getProduct().getId(), img.getImageUrl()));
+        }
+        var lines = details.stream().map(d -> new OrderLine(
+                d.getProduct() != null ? d.getProduct().getId() : null,
+                d.getProduct() != null ? d.getProduct().getName() : null,
+                d.getProduct() != null ? imageByProduct.get(d.getProduct().getId()) : null,
+                d.getPrice(), d.getQuantity())).toList();
+        var orderPayments = payments.findByOrderId(o.getId());
+        String method = orderPayments.stream().anyMatch(p -> p.getPaymentMethod() == PaymentMethod.COD) ? "COD"
+                : orderPayments.stream().anyMatch(p -> p.getPaymentMethod() == PaymentMethod.ONLINE) ? "ONLINE"
+                // Đơn online vừa tạo chưa có bản ghi thanh toán nào (chỉ đơn COD luôn có sẵn); coi là online đang chờ trả.
+                : o.getStatus() == OrderStatus.PENDING ? "ONLINE" : null;
+        String paymentStatus = orderPayments.stream().anyMatch(p -> p.getStatus() == PaymentStatus.SUCCESS) ? "SUCCESS"
+                : orderPayments.stream().max(Comparator.comparing(Payment::getCreatedDate, Comparator.nullsFirst(Comparator.naturalOrder())))
+                        .map(p -> p.getStatus().name()).orElse(null);
+        Long secondsLeft = null;
+        if (o.getStatus() == OrderStatus.PENDING && "ONLINE".equals(method) && !"SUCCESS".equals(paymentStatus)
+                && o.getCreatedDate() != null) {
+            long elapsed = java.time.Duration.between(o.getCreatedDate(), java.time.LocalDateTime.now()).getSeconds();
+            secondsLeft = Math.max(0, SePayGatewayService.PAYMENT_WINDOW_MINUTES * 60 - elapsed);
+        }
+        return new OrderSummary(o.getId(), o.getShop().getName(), o.getTotalAmount(), o.getStatus().name(),
+                o.getCreatedDate(), (long) lines.size(), o.getShop().getId(), o.getSubTotal(), o.getShippingFee(),
+                method, paymentStatus, lines, secondsLeft, o.getCheckoutGroup());
     }
 
     public OrderDetailResponse detail(String customerId, String orderId) {
@@ -195,7 +244,7 @@ private static ResponseStatusException notFound() {
                         d.getPrice(), d.getQuantity()))
                 .toList();
         DeliveryInfo delivery = deliveries.findByOrderId(orderId)
-                .map(d -> new DeliveryInfo(d.getTrackingCode(), d.getDeliveryPartnerId(), d.getStatus().name()))
+                .map(d -> new DeliveryInfo(d.getTrackingCode(), d.getDeliveryPartnerId(), d.getStatus().name(), d.getGhnStatus()))
                 .orElse(null);
         return new OrderDetailResponse(order.getId(), order.getShop().getId(), order.getShop().getName(),
                 order.getStatus().name(), order.getSubTotal(), order.getShippingFee(), order.getTotalAmount(),
@@ -206,23 +255,11 @@ private static ResponseStatusException notFound() {
                 Order order = orders.findById(orderId)
                                 .filter(o -> o.getCustomer().getId().equals(customerId))
                                 .orElseThrow(CustomerOrderService::notFound);
-                List<Address> shopAddresses = addresses.findByShopIdAndUserIsNullOrderByCreatedDateAscIdAsc(order.getShop().getId());
-                Address shopAddress = shopAddresses.stream()
-                                .filter(address -> Boolean.TRUE.equals(address.getIsDefault()))
-                                .findFirst()
-                                .orElse(shopAddresses.isEmpty() ? null : shopAddresses.get(0));
                 Address destination = order.getDeliveryAddress();
-
-                if (shopAddress == null || shopAddress.getGhnDistrictId() == null) {
-                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Shop chưa có địa chỉ GHN hợp lệ.");
-                }
-                if (destination == null || destination.getGhnDistrictId() == null
-                                || destination.getGhnWardCode() == null || destination.getGhnWardCode().isBlank()) {
+                if (destination == null || destination.getGhnDistrictId() == null || destination.getGhnWardCode() == null) {
                         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Địa chỉ nhận hàng chưa có thông tin GHN hợp lệ.");
                 }
-
-                return ghn.calculateFee(shopAddress.getGhnDistrictId(), destination.getGhnDistrictId(),
-                                destination.getGhnWardCode(), GhnService.DEFAULT_WEIGHT_GRAM);
+                return quote(order.getShop(), destination);
         }
 
         @Transactional
@@ -230,25 +267,15 @@ private static ResponseStatusException notFound() {
                 Order order = orders.findById(orderId)
                                 .filter(o -> o.getCustomer().getId().equals(customerId))
                                 .orElseThrow(CustomerOrderService::notFound);
-                if (order.getStatus() != OrderStatus.DELIVERING && order.getStatus() != OrderStatus.COMPLETED) {
+                if (order.getStatus() != OrderStatus.DELIVERING && order.getStatus() != OrderStatus.COMPLETED
+                                && order.getStatus() != OrderStatus.REFUNDED) {
                         throw new ResponseStatusException(HttpStatus.CONFLICT, "Đơn hàng chưa được bàn giao cho đơn vị vận chuyển.");
                 }
 
                 Delivery delivery = deliveries.findByOrderId(orderId)
                                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Đơn hàng chưa có vận đơn."));
-                DeliveryStatus status = ghn.checkStatus(delivery.getTrackingCode());
-                delivery.setStatus(status);
-                delivery.setLastModifyBy(customerId);
-
-                if (status == DeliveryStatus.DELIVERED) {
-                        order.setStatus(OrderStatus.COMPLETED);
-                        order.setLastModifyBy(customerId);
-                        payments.findByOrderId(orderId).forEach(payment -> {
-                                payment.setStatus(PaymentStatus.SUCCESS);
-                                payment.setLastModifyBy(customerId);
-                        });
-                }
-
-                return new DeliveryInfo(delivery.getTrackingCode(), delivery.getDeliveryPartnerId(), status.name());
+                deliverySync.apply(order, delivery, ghn.track(delivery.getTrackingCode()), customerId);
+                return new DeliveryInfo(delivery.getTrackingCode(), delivery.getDeliveryPartnerId(),
+                                delivery.getStatus().name(), delivery.getGhnStatus());
         }
 }

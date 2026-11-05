@@ -1,17 +1,23 @@
 import axiosClient from './axiosClient';
 
 const orderApi = {
+  /** Phí vận chuyển GHN (bản GET, truyền shopId + addressId qua query). */
+  shippingFee: (userId, shopId, addressId) =>
+    axiosClient.get(`/orders/${userId}/shipping-fee`, { params: { shopId, addressId } }),
+
   /**
-   * Tạo đơn hàng từ các cart items đã chọn
+   * Đặt nhiều đơn một lúc (mỗi shop một đơn), dùng ở CheckoutPage.
+   * Gọi: POST /api/orders/{userId}/batch -> OrderController.makeOrders -> OrderService.makeOrders.
    * @param {string} userId
    * @param {{
-   *   shopId: string,
-   *   cartItemIds: string[],
    *   deliveryAddressId: string,
-   *   couponId?: string
+   *   recipientName: string,
+   *   phone: string,
+   *   paymentMethod: 'COD' | 'ONLINE',
+   *   shops: { shopId: string, cartItemIds: string[], couponId?: string }[]
    * }} data
    */
-  makeOrder: (userId, data) => axiosClient.post(`/orders/${userId}`, data),
+  makeOrders: (userId, data) => axiosClient.post(`/orders/${userId}/batch`, data),
 
   /**
    * Lấy lịch sử đơn hàng của user

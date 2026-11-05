@@ -36,11 +36,6 @@
       "description": "URL chuyển hướng khi khách hủy thanh toán"
     },
     {
-      "name": "sepay.ipn-secret",
-      "type": "java.lang.String",
-      "description": "Khóa bí mật xác thực webhook IPN"
-    },
-    {
       "name": "sepay.bank-id",
       "type": "java.lang.String",
       "description": "Mã ngân hàng (ví dụ: MBBank)"

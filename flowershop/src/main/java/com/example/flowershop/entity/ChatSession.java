@@ -28,6 +28,20 @@ public class ChatSession {
     @JoinColumn(name = "shop_id", nullable = false)
     private Shop shop;
 
+    @Column(name = "last_message_at")
+    private LocalDateTime lastMessageAt;
+
+    @Column(name = "last_message_preview", length = 255)
+    private String lastMessagePreview;
+
+    @Builder.Default
+    @Column(name = "customer_unread_count", nullable = false)
+    private int customerUnreadCount = 0;
+
+    @Builder.Default
+    @Column(name = "shop_unread_count", nullable = false)
+    private int shopUnreadCount = 0;
+
     @CreationTimestamp
     @Column(name = "created_date", updatable = false)
     private LocalDateTime createdDate;

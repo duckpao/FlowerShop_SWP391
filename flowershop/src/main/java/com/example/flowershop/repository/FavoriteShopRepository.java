@@ -10,4 +10,9 @@ public interface FavoriteShopRepository
         extends JpaRepository<FavoriteShop, FavoriteShopId> {
 
     List<FavoriteShop> findByIdUserIdOrderByCreatedDateDesc(String userId);
+    @org.springframework.data.jpa.repository.EntityGraph(attributePaths = "user")
+    List<FavoriteShop> findByIdShopId(String shopId);
+    long countByIdShopId(String shopId);
+    long countByIdShopIdAndCreatedDateGreaterThanEqualAndCreatedDateLessThan(
+            String shopId, java.time.LocalDateTime start, java.time.LocalDateTime end);
 }

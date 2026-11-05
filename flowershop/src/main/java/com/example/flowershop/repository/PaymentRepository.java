@@ -3,12 +3,15 @@ package com.example.flowershop.repository;
 import com.example.flowershop.entity.Payment;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import jakarta.persistence.LockModeType;
 
 import java.util.List;
 import java.util.Optional;
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 public interface PaymentRepository extends JpaRepository<Payment, String> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
@@ -25,5 +28,19 @@ public interface PaymentRepository extends JpaRepository<Payment, String> {
 
     Optional<Payment> findByInvoiceNumber(String invoiceNumber);
 
+    List<Payment> findByGroupInvoice(String groupInvoice);
+
     boolean existsByInvoiceNumber(String invoiceNumber);
+
+    /** Cập nhật thẳng trong DB để không ghi đè SUCCESS mà IPN vừa commit. */
+    @Modifying
+    @Query("UPDATE Payment p SET p.status = com.example.flowershop.entity.enums.PaymentStatus.FAILED, p.lastModifyBy = :actor "
+            + "WHERE p.order.id = :orderId AND p.status = com.example.flowershop.entity.enums.PaymentStatus.PENDING")
+    int failPendingByOrderId(@Param("orderId") String orderId, @Param("actor") String actor);
+
+    @Query("SELECT COALESCE(SUM(p.amount), 0) FROM Payment p WHERE p.order.shop.id = :shopId "
+            + "AND p.status = com.example.flowershop.entity.enums.PaymentStatus.SUCCESS "
+            + "AND p.lastModifyDate >= :start AND p.lastModifyDate < :end")
+    BigDecimal sumSuccessfulAmountForReport(@Param("shopId") String shopId,
+            @Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
 }

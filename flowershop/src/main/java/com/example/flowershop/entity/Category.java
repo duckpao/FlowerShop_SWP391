@@ -27,6 +27,10 @@ public class Category {
     @Column(name = "description", columnDefinition = "TEXT")
     private String description;
 
+    /** Menu group the category is listed under (Chủ đề, Hoa tươi, Kiểu dáng); null means ungrouped. */
+    @Column(name = "group_name", length = 50)
+    private String groupName;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status")
     @Builder.Default

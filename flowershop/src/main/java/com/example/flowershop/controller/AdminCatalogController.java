@@ -42,6 +42,19 @@ public class AdminCatalogController {
         return service.updateCategory(id, admin.id(), body);
     }
 
+    /** Xóa danh mục chưa có sản phẩm nào; trả 409 nếu đã có sản phẩm. */
+    @DeleteMapping("/categories/{id}") @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
+    public void delete(@PathVariable String id) { service.deleteCategory(id); }
+
+    /** Đổi tên một nhóm menu cho tất cả danh mục trong nhóm; trả số danh mục đã đổi. */
+    @PutMapping("/category-groups")
+    @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
+    public java.util.Map<String, Integer> renameGroup(@AuthenticationPrincipal CurrentUser admin,
+            @Valid @RequestBody AdminCatalogService.GroupRenameInput body) {
+        return java.util.Map.of("updated", service.renameGroup(admin.id(), body));
+    }
+
     @GetMapping("/products")
     public CatalogService.Results products(@RequestParam(defaultValue = "") String q,
             @RequestParam(required = false) String shopId,

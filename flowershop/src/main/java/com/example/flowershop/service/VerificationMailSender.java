@@ -7,9 +7,11 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.*;
 
-@Component @RequiredArgsConstructor @Slf4j
+@Component @RequiredArgsConstructor
 public class VerificationMailSender {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(VerificationMailSender.class);
     private final JavaMailSender mailSender;
+
     @Value("${app.mail.from}") private String from;
     @Value("${app.frontend-base-url:http://localhost:8080}") private String frontendBaseUrl;
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)

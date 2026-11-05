@@ -11,6 +11,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
+@EntityListeners(com.example.flowershop.event.OrderStatusListener.class)
 @Table(name = "Orders")
 @Getter
 @Setter
@@ -60,6 +61,10 @@ public class Order {
     @Column(name = "shipping_fee", nullable = false, precision = 12, scale = 2)
     private BigDecimal shippingFee = BigDecimal.ZERO;
 
+    /** Các đơn cùng một lần thanh toán giỏ hàng (mỗi shop một đơn) có chung mã; null với đơn đặt lẻ. */
+    @Column(name = "checkout_group", length = 36)
+    private String checkoutGroup;
+
     @Column(name = "total_amount", nullable = false, precision = 12, scale = 2)
     private BigDecimal totalAmount;
 
@@ -94,4 +99,8 @@ public class Order {
 
     @Column(name = "last_modify_by", length = 36)
     private String lastModifyBy;
+
+    /** Trạng thái lúc nạp từ DB, để OrderStatusListener biết đơn vừa đổi trạng thái; không lưu xuống DB. */
+    @Transient
+    private OrderStatus statusSnapshot;
 }

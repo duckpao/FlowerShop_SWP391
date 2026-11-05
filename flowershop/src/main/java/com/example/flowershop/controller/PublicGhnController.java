@@ -11,12 +11,15 @@ public class PublicGhnController {
     private final GhnService ghn;
     public PublicGhnController(GhnService ghn) { this.ghn = ghn; }
 
+    /** Step 1: all provinces. */
     @GetMapping("/provinces")
     public List<GhnService.Option> provinces() { return ghn.provinces(); }
 
+    /** Step 2: districts of a province. */
     @GetMapping("/provinces/{id}/districts")
     public List<GhnService.Option> districts(@PathVariable int id) { return ghn.districts(id); }
 
+    /** Step 3: wards of a district; the id is a ward code. */
     @GetMapping("/districts/{id}/wards")
     public List<GhnService.Option> wards(@PathVariable int id) { return ghn.wards(id); }
 }

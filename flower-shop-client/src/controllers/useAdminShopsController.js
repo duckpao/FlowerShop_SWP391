@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import { adminShopService as api } from '../services/adminShopService'
 import { shopActions } from '../models/shopModel'
+import { useConfirm } from '../components/ui/confirm/ConfirmProvider'
 
 export function useAdminShopsController() {
+  const { confirm } = useConfirm()
   const [q, setQ] = useState('')
   const [status, setStatus] = useState('')
   const [params, setParams] = useState({ q: '', status: '', page: 0, size: 10 })
@@ -28,7 +30,7 @@ export function useAdminShopsController() {
   }
   async function transition(shop) {
     const [action, label] = shopActions[shop.status] || []
-    if (!action || !window.confirm(`${label}: ${shop.name}?`)) return
+    if (!action || !await confirm({ title: label, message: `${label}: ${shop.name}?` })) return
     setBusy(true); setError(''); setNotice('')
     try {
       const result = await api.transition(shop.id, action)

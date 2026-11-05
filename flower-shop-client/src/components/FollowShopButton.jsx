@@ -16,13 +16,15 @@ export default function FollowShopButton({
         shopId
     )
 
+    if (user && user.role !== 'CUSTOMER') return null
+
     if (!user) {
         return (
             <div>
                 <button
                     type="button"
                     onClick={() => {
-                        window.location.href = '/login'
+                        window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`
                     }}
                 >
                     ♡ Theo dõi cửa hàng
@@ -44,6 +46,10 @@ export default function FollowShopButton({
                         ? '♥ Đang theo dõi'
                         : '♡ Theo dõi cửa hàng'}
             </button>
+
+            <p className="muted text-sm">{favorite
+                ? 'Bạn sẽ nhận email khi cửa hàng đăng sản phẩm mới. Bỏ theo dõi để ngừng nhận.'
+                : 'Theo dõi để nhận email thông báo sản phẩm mới.'}</p>
 
             {error && (
                 <p role="alert">

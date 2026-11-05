@@ -6,13 +6,16 @@ import { LanguageProvider } from './context/LanguageContext'
 import './i18n' // <-- Initialize i18n
 import './index.css'
 import AppRouter from './AppRouter.jsx'
+import { ConfirmProvider } from './components/ui/confirm/ConfirmProvider'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <HelmetProvider>
       <LanguageProvider>
         <ThemeProvider>
-          <AppRouter />
+          <ConfirmProvider>
+            <AppRouter />
+          </ConfirmProvider>
         </ThemeProvider>
       </LanguageProvider>
     </HelmetProvider>

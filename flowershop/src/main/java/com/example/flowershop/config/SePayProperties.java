@@ -16,7 +16,6 @@ public class SePayProperties {
     private String successUrl;
     private String errorUrl;
     private String cancelUrl;
-    private String ipnSecret;
     private String bankId;
     private String accountNumber;
     private String accountName;

@@ -1,16 +1,43 @@
-import React from 'react';
+import React, { useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router';
 import { useCatalogController } from '../controllers/useCatalogController';
 import { useFavoriteToggle } from '../controllers/useFavoritesController';
-import { formatPrice, sortOptions } from '../models/productModel';
+import { formatPrice, sortOptions, productTypeOptions } from '../models/productModel';
 import { CartIcon } from '../icons';
 import { useCartContext } from '../context/CartContext';
 import { toast } from 'react-hot-toast';
 
 export default function ProductCatalogView({ auth, shops, isEmbedded = false }) {
   const c = useCatalogController(shops);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // On /products the category and sort live in the URL so menu links and the filter bar agree.
+  const urlCategory = searchParams.get('categoryId') || '';
+  const urlSort = searchParams.get('sort') || 'newest';
+  useEffect(() => {
+    if (!isEmbedded) c.applyUrl(urlCategory, urlSort);
+  }, [isEmbedded, urlCategory, urlSort]);
+
+  const changeFilter = (key, value) => {
+    if (isEmbedded) return key === 'categoryId' ? c.setCategory(value) : c.setSort(value);
+    const next = new URLSearchParams(searchParams);
+    if (value && !(key === 'sort' && value === 'newest')) next.set(key, value); else next.delete(key);
+    setSearchParams(next);
+  };
+
+  const groupedCategories = useMemo(() => {
+    const groups = new Map();
+    for (const x of c.categories) {
+      const key = x.group || 'Khác';
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(x);
+    }
+    return [...groups.entries()];
+  }, [c.categories]);
   const favorites = useFavoriteToggle(auth?.user);
   const cartContext = useCartContext();
 
+  // Nút giỏ trên thẻ sản phẩm: thêm 1 cái; chặn click lan ra thẻ <Link> bao ngoài để không chuyển sang trang chi tiết
   const handleQuickAdd = async (e, product) => {
     e.preventDefault();
     e.stopPropagation();
@@ -60,64 +87,130 @@ export default function ProductCatalogView({ auth, shops, isEmbedded = false }) 
       </div>
 
       {/* Filter Bar */}
-      <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-xs dark:border-white/10 dark:bg-gray-800">
-        <form onSubmit={c.search} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
-          <div>
-            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-              Tên sản phẩm
-            </label>
-            <input
-              type="search"
-              maxLength={100}
-              value={c.draft}
-              onChange={e => c.setDraft(e.target.value)}
-              placeholder="Nhập tên hoa..."
-              className="w-full rounded-xl border border-gray-300 bg-gray-50 px-4 py-2.5 text-sm text-gray-900 outline-none transition-all focus:border-brand-500 focus:bg-white focus:ring-2 focus:ring-brand-500/20 dark:border-white/10 dark:bg-gray-900 dark:text-white dark:focus:border-brand-500"
-            />
+      <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-xs dark:border-white/10 dark:bg-gray-800 space-y-4">
+        <form onSubmit={c.search} className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                Tên sản phẩm
+              </label>
+              <input
+                type="search"
+                maxLength={100}
+                value={c.draft}
+                onChange={e => c.setDraft(e.target.value)}
+                placeholder="Nhập tên hoa..."
+                className="w-full rounded-xl border border-gray-300 bg-gray-50 px-4 py-2.5 text-sm text-gray-900 outline-none transition-all focus:border-brand-500 focus:bg-white focus:ring-2 focus:ring-brand-500/20 dark:border-white/10 dark:bg-gray-900 dark:text-white dark:focus:border-brand-500"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                Danh mục
+              </label>
+              <select
+                value={c.filter.categoryId}
+                onChange={e => changeFilter('categoryId', e.target.value)}
+                className="w-full rounded-xl border border-gray-300 bg-gray-50 px-4 py-2.5 text-sm text-gray-900 outline-none transition-all focus:border-brand-500 focus:bg-white focus:ring-2 focus:ring-brand-500/20 dark:border-white/10 dark:bg-gray-900 dark:text-white dark:focus:border-brand-500"
+              >
+                <option value="">Tất cả danh mục</option>
+                {groupedCategories.map(([group, items]) => (
+                  <optgroup key={group} label={group}>
+                    {items.map(x => (
+                      <option key={x.id} value={x.id}>
+                        {x.name} ({x.productCount})
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                Loại hoa
+              </label>
+              <select
+                value={c.filter.type || ''}
+                onChange={e => c.setType(e.target.value)}
+                className="w-full rounded-xl border border-gray-300 bg-gray-50 px-4 py-2.5 text-sm text-gray-900 outline-none transition-all focus:border-brand-500 focus:bg-white focus:ring-2 focus:ring-brand-500/20 dark:border-white/10 dark:bg-gray-900 dark:text-white dark:focus:border-brand-500"
+              >
+                {productTypeOptions.map(([val, label]) => (
+                  <option key={val} value={val}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                Sắp xếp
+              </label>
+              <select
+                value={c.filter.sort}
+                onChange={e => changeFilter('sort', e.target.value)}
+                className="w-full rounded-xl border border-gray-300 bg-gray-50 px-4 py-2.5 text-sm text-gray-900 outline-none transition-all focus:border-brand-500 focus:bg-white focus:ring-2 focus:ring-brand-500/20 dark:border-white/10 dark:bg-gray-900 dark:text-white dark:focus:border-brand-500"
+              >
+                {sortOptions.map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
-          <div>
-            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-              Danh mục
-            </label>
-            <select
-              value={c.filter.categoryId}
-              onChange={e => c.setCategory(e.target.value)}
-              className="w-full rounded-xl border border-gray-300 bg-gray-50 px-4 py-2.5 text-sm text-gray-900 outline-none transition-all focus:border-brand-500 focus:bg-white focus:ring-2 focus:ring-brand-500/20 dark:border-white/10 dark:bg-gray-900 dark:text-white dark:focus:border-brand-500"
-            >
-              <option value="">Tất cả danh mục</option>
-              {c.categories.map(x => (
-                <option key={x.id} value={x.id}>
-                  {x.name} ({x.productCount})
-                </option>
-              ))}
-            </select>
-          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end pt-3 border-t border-gray-100 dark:border-white/5">
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                Giá từ (₫)
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="1000"
+                placeholder="Ví dụ: 100000"
+                value={c.priceDraft.minPrice}
+                onChange={e => c.setPriceDraft(prev => ({ ...prev, minPrice: e.target.value }))}
+                className="w-full rounded-xl border border-gray-300 bg-gray-50 px-4 py-2.5 text-sm text-gray-900 outline-none transition-all focus:border-brand-500 focus:bg-white focus:ring-2 focus:ring-brand-500/20 dark:border-white/10 dark:bg-gray-900 dark:text-white dark:focus:border-brand-500"
+              />
+            </div>
 
-          <div>
-            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-              Sắp xếp
-            </label>
-            <select
-              value={c.filter.sort}
-              onChange={e => c.setSort(e.target.value)}
-              className="w-full rounded-xl border border-gray-300 bg-gray-50 px-4 py-2.5 text-sm text-gray-900 outline-none transition-all focus:border-brand-500 focus:bg-white focus:ring-2 focus:ring-brand-500/20 dark:border-white/10 dark:bg-gray-900 dark:text-white dark:focus:border-brand-500"
-            >
-              {sortOptions.map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                Đến giá (₫)
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="1000"
+                placeholder="Ví dụ: 1000000"
+                value={c.priceDraft.maxPrice}
+                onChange={e => c.setPriceDraft(prev => ({ ...prev, maxPrice: e.target.value }))}
+                className="w-full rounded-xl border border-gray-300 bg-gray-50 px-4 py-2.5 text-sm text-gray-900 outline-none transition-all focus:border-brand-500 focus:bg-white focus:ring-2 focus:ring-brand-500/20 dark:border-white/10 dark:bg-gray-900 dark:text-white dark:focus:border-brand-500"
+              />
+            </div>
 
-          <button
-            type="submit"
-            disabled={c.busy}
-            className="w-full rounded-xl bg-brand-500 py-2.5 px-6 font-semibold text-white shadow-xs transition-all hover:bg-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-50"
-          >
-            {c.busy ? 'Đang tìm...' : 'Tìm kiếm'}
-          </button>
+            <div className="sm:col-span-2 flex gap-3">
+              <button
+                type="submit"
+                disabled={c.busy}
+                className="flex-1 rounded-xl bg-brand-500 py-2.5 px-6 font-semibold text-white shadow-xs transition-all hover:bg-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-50 cursor-pointer"
+              >
+                {c.busy ? 'Đang tìm...' : 'Tìm kiếm & Lọc'}
+              </button>
+              <button
+                type="button"
+                onClick={c.resetFilters}
+                disabled={c.busy}
+                className="rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 shadow-xs hover:bg-gray-50 dark:border-white/10 dark:bg-gray-800 dark:text-gray-300 transition-colors cursor-pointer"
+                title="Xóa bộ lọc"
+              >
+                Đặt lại
+              </button>
+            </div>
+          </div>
         </form>
       </div>
 
@@ -243,12 +336,22 @@ export default function ProductCatalogView({ auth, shops, isEmbedded = false }) 
                           <div className="text-lg font-black text-brand-600 dark:text-brand-400">
                             {formatPrice(p.price)}
                           </div>
-                          <div className="text-xs text-gray-500 dark:text-gray-400">
-                            {p.stock > 0 ? `Còn ${p.stock}` : <span className="text-rose-500 font-medium">Hết hàng</span>}
+                          <div className="text-xs">
+                            {p.type === 'CUSTOM' ? (
+                              <span className="inline-flex items-center font-bold text-amber-600 dark:text-amber-400">
+                                Hàng đặt trước
+                              </span>
+                            ) : p.stock > 0 ? (
+                              <span className="text-gray-500 dark:text-gray-400">
+                                Còn {p.stock}
+                              </span>
+                            ) : (
+                              <span className="text-rose-500 font-medium">Hết hàng</span>
+                            )}
                           </div>
                         </div>
 
-                        {p.stock > 0 && (
+                        {(p.type === 'CUSTOM' || p.stock > 0) && (
                           <button
                             type="button"
                             onClick={(e) => handleQuickAdd(e, p)}

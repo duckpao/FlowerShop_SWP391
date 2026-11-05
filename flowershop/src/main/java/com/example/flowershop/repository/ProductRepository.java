@@ -22,6 +22,7 @@ public interface ProductRepository extends JpaRepository<Product, String>, JpaSp
     Page<Product> findByShopId(String shopId, Pageable pageable);
     Page<Product> findByShopIdAndStatus(String shopId, ProductStatus status, Pageable pageable);
     Optional<Product> findByIdAndShopId(String id, String shopId);
+    boolean existsByCategoryId(String categoryId);
 
     /** Đếm sản phẩm đang hiển thị công khai theo từng danh mục. */
     @Query("select p.category.id, count(p) from Product p "

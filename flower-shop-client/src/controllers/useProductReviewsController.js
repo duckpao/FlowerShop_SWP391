@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { reviewService } from '../services/reviewService'
+import { useConfirm } from '../components/ui/confirm/ConfirmProvider'
 
 const emptyDraft = () => ({ rating: 5, comment: '' })
 
 export function useProductReviewsController(productId, user) {
+  const { confirm } = useConfirm()
   const [data, setData] = useState(null)
   const [own, setOwn] = useState(null)
   const [draft, setDraft] = useState(emptyDraft)
@@ -51,8 +53,8 @@ export function useProductReviewsController(productId, user) {
       : run(() => reviewService.write(productId, body), 'Cảm ơn bạn đã đánh giá.')
   }
 
-  const remove = () => {
-    if (!window.confirm('Xóa đánh giá của bạn?')) return
+  const remove = async () => {
+    if (!await confirm({ title: 'Xóa đánh giá', message: 'Xóa đánh giá của bạn?', confirmLabel: 'Xóa', tone: 'danger' })) return
     return run(async () => { await reviewService.remove(productId); setOwn(null); setDraft(emptyDraft()) },
       'Đã xóa đánh giá.')
   }

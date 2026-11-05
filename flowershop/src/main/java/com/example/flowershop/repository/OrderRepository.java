@@ -40,6 +40,8 @@ public interface OrderRepository extends JpaRepository<Order, String> {
      */
     List<Order> findByStatusAndCreatedDateBefore(OrderStatus status, LocalDateTime threshold);
 
+    List<Order> findByStatusAndIdStartingWith(com.example.flowershop.entity.enums.OrderStatus status, String idPrefix);
+
     /**
      * Kiểm tra xem địa chỉ nhận hàng có đang được liên kết với bất kỳ đơn hàng nào không.
      */
@@ -75,9 +77,16 @@ public interface OrderRepository extends JpaRepository<Order, String> {
      */
     Page<Order> findByCustomerIdOrderByCreatedDateDesc(String customerId, Pageable pageable);
 
+    Page<Order> findByCustomerIdAndStatusOrderByCreatedDateDesc(String customerId, OrderStatus status, Pageable pageable);
+
     List<Order> findByCustomerIdAndStatusOrderByCreatedDateDesc(
         String customerId,
         OrderStatus status
 );
+
+    @Query("SELECT o.status, COUNT(o) FROM Order o WHERE o.shop.id = :shopId "
+            + "AND o.createdDate >= :start AND o.createdDate < :end GROUP BY o.status")
+    List<Object[]> countStatusesForReport(@Param("shopId") String shopId,
+            @Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
 }
 

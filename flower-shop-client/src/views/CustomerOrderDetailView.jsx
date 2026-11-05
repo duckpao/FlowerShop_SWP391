@@ -8,12 +8,8 @@ import ComponentCard from '../components/common/ComponentCard'
 import PageMeta from '../components/common/PageMeta'
 import PageBreadCrumb from '../components/common/PageBreadCrumb'
 
-const statusColors = {
-    PENDING:'warning', PROCESSING:'info', DELIVERING:'info', COMPLETED:'success', CANCELLED:'error', REFUNDED:'error'
-}
-const statusLabels = {
-    PENDING:'Chờ xác nhận', PROCESSING:'Đang chuẩn bị', DELIVERING:'Đang giao', COMPLETED:'Đã giao', CANCELLED:'Đã hủy', REFUNDED:'Đã hoàn tiền'
-}
+import { ghnStatusLabels, orderStatusColors as statusColors, orderStatusLabels as statusLabels } from '../models/orderStatus'
+
 const trackingSteps = [
     'Cửa hàng đang chuẩn bị đơn hàng',
     'Cửa hàng đã giao hàng cho đơn vị vận chuyển',
@@ -31,11 +27,12 @@ function getTrackingStage(order) {
 
 function getTrackingMessage(order) {
     if (order.status === 'CANCELLED') return 'Đơn hàng đã bị hủy.'
-    if (order.status === 'REFUNDED') return 'Đơn hàng đã được hoàn tiền.'
+    if (order.status === 'REFUNDED') return 'Đơn vị vận chuyển đã hoàn đơn hàng về cửa hàng.'
     if (order.status === 'PENDING') return 'Đơn hàng đang chờ cửa hàng xác nhận.'
     if (order.delivery?.status === 'DELIVERED') return 'Đơn vị vận chuyển đã giao hàng thành công.'
     if (order.delivery?.status === 'ON_THE_WAY') return 'Đơn vị vận chuyển đang giao hàng đến bạn.'
     if (order.delivery?.status === 'PICKED_UP') return 'Cửa hàng đã bàn giao đơn hàng cho đơn vị vận chuyển.'
+    if (order.delivery?.status === 'RETURNING') return 'Đơn hàng đang được hoàn về cửa hàng.'
     if (order.delivery?.status === 'FAILED') return 'Đơn vị vận chuyển chưa thể giao đơn hàng.'
     if (order.status === 'DELIVERING') return 'Đã tạo vận đơn, đang chờ đơn vị vận chuyển tiếp nhận.'
     if (order.status === 'PROCESSING') return 'Cửa hàng đang chuẩn bị đơn hàng.'
@@ -53,6 +50,7 @@ export default function CustomerOrderDetailView() {
     const [trackingBusy, setTrackingBusy] = useState(false)
     const [trackingError, setTrackingError] = useState('')
 
+    // Tải chi tiết đơn (customerOrderService.detail), rồi hỏi lại phí GHN hiện tại (customerOrderService.shippingFee)
     useEffect(() => {
         if (!user || !id) return
         let active = true
@@ -73,6 +71,7 @@ export default function CustomerOrderDetailView() {
         return () => { active = false }
     }, [user, id])
 
+    // Cập nhật trạng thái giao hàng: customerOrderService.refreshTracking -> POST /api/customer/orders/{id}/refresh-tracking -> GHN
     const refreshTracking = async () => {
         setTrackingBusy(true)
         setTrackingError('')
@@ -82,6 +81,7 @@ export default function CustomerOrderDetailView() {
                 ...current,
                 delivery,
                 ...(delivery.status === 'DELIVERED' ? { status: 'COMPLETED' } : {}),
+                ...(delivery.status === 'RETURNED' ? { status: 'REFUNDED' } : {}),
             }))
         } catch (e) {
             setTrackingError(e.message || 'Không thể cập nhật trạng thái giao hàng.')
@@ -168,6 +168,7 @@ export default function CustomerOrderDetailView() {
                 {order.delivery && <div className="mt-4 p-3 rounded-lg bg-gray-50 dark:bg-white/5 text-sm">
                     <p><strong>Vận đơn:</strong> {order.delivery.trackingCode}</p>
                     <p><strong>Đối tác:</strong> {order.delivery.deliveryPartnerId}</p>
+                    {order.delivery.ghnStatus && <p><strong>Trạng thái GHN:</strong> {ghnStatusLabels[order.delivery.ghnStatus] || order.delivery.ghnStatus}</p>}
                 </div>}
             </ComponentCard>
             <Link to="/orders" className="text-brand-500 text-sm">&larr; Danh sách đơn hàng</Link>

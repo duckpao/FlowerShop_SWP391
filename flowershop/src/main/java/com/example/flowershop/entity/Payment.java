@@ -45,6 +45,10 @@ public class Payment {
     @Column(name = "invoice_number", length = 100, unique = true)
     private String invoiceNumber;
 
+    /** Mã invoice gửi sang SePay khi thanh toán gộp nhiều đơn; null với thanh toán đơn lẻ. */
+    @Column(name = "group_invoice", length = 100)
+    private String groupInvoice;
+
     @Column(name = "gateway_response", columnDefinition = "json")
     private String gatewayResponse;
 

@@ -34,17 +34,18 @@ public class Address {
     @Column(name = "ward", length = 100)
     private String ward;
 
-    @Column(name = "district", length = 100)
-    private String district;
-
     @Column(name = "city", length = 100)
     private String city;
 
-    @Column(name = "ghn_ward_code", length = 20)
-    private String ghnWardCode;
+    @Column(name = "district", length = 100)
+    private String district;
 
+    /** GHN ids the address was picked from: the district id and the ward code (a string, may start with 0). */
     @Column(name = "ghn_district_id")
     private Integer ghnDistrictId;
+
+    @Column(name = "ghn_ward_code", length = 20)
+    private String ghnWardCode;
 
     @Builder.Default
     @Column(name = "is_default")

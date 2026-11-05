@@ -17,7 +17,7 @@ Dự án được chia thành hai phần độc lập:
 ## Sản phẩm, đánh giá và yêu thích
 
 Danh sách sản phẩm toàn sàn, chi tiết kèm đánh giá, quản lý ảnh của Manager, sản phẩm yêu thích
-và quản lý danh mục của Admin. Cần chạy migration `flowershop/sql/011_product_catalog.sql` trước khi dùng.
+và quản lý danh mục của Admin. Cần chạy migration `flowershop/sql/016_product_catalog.sql` trước khi dùng.
 
 * [PRODUCT_CATALOG_GUIDE.md](PRODUCT_CATALOG_GUIDE.md) — cách dùng và các bước test thủ công.
 * [PRODUCT_CATALOG_IMPLEMENTATION.md](PRODUCT_CATALOG_IMPLEMENTATION.md) — danh sách file, nghiệp vụ
@@ -25,7 +25,7 @@ và quản lý danh mục của Admin. Cần chạy migration `flowershop/sql/01
 
 ## Database cho các chức năng trên nhánh Quangdv
 
-Sau khi khởi tạo database mới, cần chạy các migration trong `flowershop/sql/` theo thứ tự `001` đến `012` trên database `flower_shop_db`. Migration `011_online_cod_payment_methods.sql` quy chuẩn dữ liệu cũ về hai phương thức `ONLINE` và `COD`. Migration `012_order_recipient.sql` bổ sung thông tin người nhận đơn hàng.
+Sau khi khởi tạo database mới, cần chạy các migration trong `flowershop/sql/` theo thứ tự `001` đến `021` (mỗi số một file duy nhất) trên database `flower_shop_db`. Migration `011_online_cod_payment_methods.sql` quy chuẩn dữ liệu cũ về hai phương thức `ONLINE` và `COD`. Migration `012_order_recipient.sql` bổ sung thông tin người nhận đơn hàng.
 
 ### Lỗi font tiếng Việt trong dữ liệu mẫu
 
@@ -34,7 +34,7 @@ Sau khi khởi tạo database mới, cần chạy các migration trong `flowersh
 Lỗi này còn làm địa chỉ mẫu lưu thành "HÃ  Ná»™i", không khớp danh sách khu vực giao hàng.
 
 Hai file đã được vá nên **database tạo mới không còn dính lỗi**. Với database đang chạy, chạy
-`flowershop/sql/012_fix_utf8_mojibake.sql` để sửa dữ liệu tại chỗ mà không phải tạo lại;
+`flowershop/sql/017_fix_utf8_mojibake.sql` để sửa dữ liệu tại chỗ mà không phải tạo lại;
 script có điều kiện bảo vệ nên chạy lại nhiều lần vẫn an toàn và không đụng vào dữ liệu vốn đã đúng.
 
 Với database đã chạy các migration này, không chạy lại toàn bộ: một số migration thêm cột hoặc ràng buộc chỉ được chạy một lần. Không chạy lại script khởi tạo trên database có dữ liệu cần giữ. Cập nhật code không tự động chạy migration.
@@ -60,7 +60,7 @@ Backend kết nối tới MySQL tại `localhost:3306`, database `flower_shop_db
 Đảm bảo MySQL đã chạy và database `flower_shop_db` đã được tạo trước khi khởi động backend. Cấu hình kết nối nằm trong `flowershop/src/main/resources/application.properties`.
 
 ---
-
+ 
 ## 🚀 Hướng dẫn chạy Backend (Spring Boot)
 
 Backend cung cấp các **RESTful API** và kết nối tới MySQL local.
@@ -300,7 +300,7 @@ Copy-Item application-sepay-local.properties.example application-sepay-local.pro
 .\gradlew.bat bootRun
 ```
 
-File `application-sepay-local.properties` đã được Git ignore. File mẫu chọn Checkout và API đối soát của Sandbox, nên có thể thử đặt hàng và thanh toán giả lập mà không dùng tiền thật. Khi thử IPN, cấu hình thêm `sepay.ipn-secret` và URL callback công khai trong SePay; `localhost` không nhận được IPN từ Internet. Nếu không có khóa Sandbox, luồng thanh toán trực tuyến sẽ không khởi tạo được.
+File `application-sepay-local.properties` đã được Git ignore. File mẫu chọn Checkout và API đối soát của Sandbox, nên có thể thử đặt hàng và thanh toán giả lập mà không dùng tiền thật. Hệ thống không dùng IPN: trạng thái thanh toán được xác nhận bằng cách chủ động đối soát với API SePay (khi khách quay về trang kết quả và khi scheduler xử lý đơn quá hạn). Nếu không có khóa Sandbox, luồng thanh toán trực tuyến sẽ không khởi tạo được.
 
 Khóa Production từng được commit cần được thu hồi và cấp lại; xóa khóa khỏi bản hiện tại không xóa được lịch sử Git.
 

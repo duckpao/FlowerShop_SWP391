@@ -1,30 +1,41 @@
 package com.example.flowershop.service;
 
+import com.example.flowershop.dto.payment.CreateGroupPaymentRequest;
 import com.example.flowershop.dto.payment.CreatePaymentRequest;
 import com.example.flowershop.dto.payment.CreatePaymentResponse;
 import com.example.flowershop.dto.payment.PaymentStatusResponse;
-import com.example.flowershop.dto.payment.SePayCheckoutFormResponse;
-import com.example.flowershop.dto.payment.SePayIpnPayload;
 import com.example.flowershop.entity.Order;
 import com.example.flowershop.entity.Payment;
+import com.example.flowershop.entity.Refund;
 import com.example.flowershop.entity.enums.OrderStatus;
+import com.example.flowershop.entity.enums.OrderType;
 import com.example.flowershop.entity.enums.PaymentMethod;
 import com.example.flowershop.entity.enums.PaymentStatus;
 import com.example.flowershop.entity.enums.PaymentType;
 import com.example.flowershop.exception.ApiException;
 import com.example.flowershop.repository.OrderRepository;
 import com.example.flowershop.repository.PaymentRepository;
+import com.example.flowershop.repository.RefundRepository;
 import com.example.flowershop.util.SePaySignatureUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
+import jakarta.persistence.PersistenceContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.*;
 
 @Slf4j
@@ -32,10 +43,25 @@ import java.util.*;
 @RequiredArgsConstructor
 public class SePayGatewayService {
 
+    /** Giá trị payment_method SePay chấp nhận (null = để khách chọn trên cổng). */
+    private static final Set<String> SEPAY_PAYMENT_METHODS = Set.of("CARD", "BANK_TRANSFER", "NAPAS_BANK_TRANSFER");
+    private static final String EXPIRED_REASON = "Quá hạn 10 phút không quét mã thanh toán";
+    private static final String DEPOSIT_EXPIRED_REASON = "Quá hạn 24 giờ không thanh toán tiền cọc";
+    /** Thời hạn thanh toán tiền cọc kể từ lúc tạo đơn AWAITING_DEPOSIT. */
+    public static final long DEPOSIT_DEADLINE_HOURS = 24;
+    /** Thời hạn thanh toán đơn thường kể từ lúc tạo đơn (kiểu Shopee: hủy giao dịch vẫn giữ đơn tới hết hạn). */
+    public static final long PAYMENT_WINDOW_MINUTES = 10;
+
     private final OrderRepository orderRepository;
     private final PaymentRepository paymentRepository;
+    private final RefundRepository refundRepository;
     private final OrderService orderService;
+    private final TransactionTemplate transactionTemplate;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
+
+    @PersistenceContext
+    private EntityManager entityManager;
 
     @Value("${sepay.merchant-id:SP-TEST-001}")
     private String merchantId;
@@ -58,22 +84,74 @@ public class SePayGatewayService {
     @Value("${sepay.cancel-url:http://localhost:8080/payment/cancel}")
     private String cancelUrl;
 
-    @Value("${sepay.ipn-secret:}")
-    private String ipnSecret;
-
+    /** Mã đơn rút gọn: 8 ký tự hex đầu của UUID viết hoa, dùng đặt tên invoice và mô tả giao dịch. */
     private String getShortOrderCode(String orderId) {
         if (orderId == null) return "DH000000";
         String clean = orderId.replace("-", "").toUpperCase();
         return clean.length() >= 8 ? clean.substring(0, 8) : clean;
     }
 
+    /** Đơn đã quá hạn thanh toán chưa: AWAITING_DEPOSIT quá 24 giờ, PENDING quá 10 phút kể từ lúc tạo. */
+    private static boolean isExpired(Order order) {
+        if (order.getCreatedDate() == null) return false;
+        java.time.LocalDateTime now = java.time.LocalDateTime.now();
+        if (order.getStatus() == OrderStatus.AWAITING_DEPOSIT) {
+            return order.getCreatedDate().plusHours(DEPOSIT_DEADLINE_HOURS).isBefore(now);
+        }
+        return order.getStatus() == OrderStatus.PENDING && order.getCreatedDate().plusMinutes(PAYMENT_WINDOW_MINUTES).isBefore(now);
+    }
+
+    /** Thời hạn hiển thị cho người dùng: đơn custom (đặt cọc) 24 giờ, đơn thường 10 phút. */
+    static String expiryText(Order order) {
+        return order.getOrderType() == OrderType.CUSTOM ? DEPOSIT_DEADLINE_HOURS + " giờ" : "10 phút";
+    }
+
+    /** Tiền cọc yêu cầu: depositAmount nếu > 0, ngược lại 50% tổng. Dùng chung cho createPayment và status. */
+    static BigDecimal requiredDeposit(Order order) {
+        return order.getDepositAmount() != null && order.getDepositAmount().compareTo(BigDecimal.ZERO) > 0
+                ? order.getDepositAmount()
+                : order.getTotalAmount().multiply(new BigDecimal("0.5"));
+    }
+
+    /** Điền các field tiến độ thanh toán (cọc/còn lại/bước tiếp theo) vào response trạng thái. */
+    static void addOrderProgress(PaymentStatusResponse.PaymentStatusResponseBuilder status, Order order,
+                                 List<Payment> orderPayments) {
+        BigDecimal totalPaid = orderPayments.stream()
+                .filter(p -> p.getStatus() == PaymentStatus.SUCCESS)
+                .map(Payment::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal total = order.getTotalAmount();
+        String next = null;
+        if (order.getStatus() == OrderStatus.AWAITING_DEPOSIT
+                || (order.getOrderType() == OrderType.CUSTOM && order.getStatus() == OrderStatus.PENDING)) {
+            next = "DEPOSIT";
+        } else if (order.getStatus() == OrderStatus.DEPOSIT_PAID) {
+            next = "FINAL";
+        }
+        status.orderType(order.getOrderType() != null ? order.getOrderType().name() : null)
+                .totalAmount(total)
+                .depositAmount(total != null ? requiredDeposit(order) : null)
+                .totalPaid(totalPaid)
+                .remainingAmount(total != null ? total.subtract(totalPaid).max(BigDecimal.ZERO) : null)
+                .nextPaymentType(next);
+    }
+
     /**
-     * PHASE 5: Khởi tạo thanh toán SePay với tính toán số tiền bảo mật từ Server
+     * PHASE 5: Khởi tạo thanh toán SePay với tính toán số tiền bảo mật từ Server.
+     * Các bước: kiểm tra cấu hình cổng + phương thức -> khóa đơn (SELECT FOR UPDATE) -> kiểm tra chủ đơn,
+     * trạng thái, hạn thanh toán, không phải COD -> xác định loại thanh toán FULL/DEPOSIT/FINAL hợp lệ với đơn
+     * -> tính số tiền phải trả ở server -> đánh FAILED các Payment ONLINE PENDING cũ cùng loại
+     * -> tạo Payment PENDING với invoice mới -> ký HMAC các field gửi cổng.
      */
     @Transactional
     public CreatePaymentResponse createPayment(CreatePaymentRequest request, String authenticatedUserId) {
         if (secretKey == null || secretKey.isBlank() || merchantId == null || merchantId.isBlank()) {
             throw ApiException.badRequest("Cổng thanh toán chưa được cấu hình.");
+        }
+        String paymentMethod = request.getPaymentMethod() == null || request.getPaymentMethod().isBlank()
+                ? null : request.getPaymentMethod().trim().toUpperCase();
+        if (paymentMethod != null && !SEPAY_PAYMENT_METHODS.contains(paymentMethod)) {
+            throw ApiException.badRequest("Phương thức thanh toán không hợp lệ.");
         }
         String orderId = request.getOrderId();
         Order order = orderRepository.findByIdForUpdate(orderId)
@@ -92,22 +170,24 @@ public class SePayGatewayService {
         if (order.getStatus() == OrderStatus.CANCELLED) {
             throw ApiException.badRequest("Đơn hàng này đã bị hủy, không thể thanh toán.");
         }
-        if (order.getStatus() == OrderStatus.PENDING && order.getCreatedDate() != null
-                && order.getCreatedDate().plusMinutes(10).isBefore(java.time.LocalDateTime.now())) {
-            orderService.cancelExpiredOrder(order.getId(), "Quá hạn 10 phút không quét mã thanh toán");
-            throw ApiException.badRequest("Đơn hàng đã hết hạn thanh toán (quá 10 phút) và đã tự động hủy.");
+        // Không hủy tại đây: scheduler sẽ hủy phía SePay trước rồi mới nhả hàng.
+        if (isExpired(order)) {
+            throw ApiException.badRequest(order.getStatus() == OrderStatus.AWAITING_DEPOSIT
+                    ? "Đơn hàng đã hết hạn đặt cọc (quá " + DEPOSIT_DEADLINE_HOURS + " giờ)."
+                    : "Đơn hàng đã hết hạn thanh toán (quá 10 phút).");
         }
         if (order.getStatus() != OrderStatus.PENDING && order.getStatus() != OrderStatus.DEPOSIT_PAID
                 && order.getStatus() != OrderStatus.AWAITING_DEPOSIT) {
             throw ApiException.badRequest("Đơn hàng không còn chờ thanh toán.");
         }
-        if (paymentRepository.findByOrderId(orderId).stream().anyMatch(p -> p.getPaymentMethod() == PaymentMethod.COD)) {
+        List<Payment> orderPayments = paymentRepository.findByOrderId(orderId);
+        if (orderPayments.stream().anyMatch(p -> p.getPaymentMethod() == PaymentMethod.COD)) {
             throw ApiException.badRequest("Đơn COD không thể thanh toán trực tuyến.");
         }
 
         // PHASE 2 & 3: Xác định PaymentType (FULL, DEPOSIT, FINAL)
         PaymentType paymentType = request.getPaymentType() != null ? request.getPaymentType() : PaymentType.FULL;
-        if (order.getOrderType() == com.example.flowershop.entity.enums.OrderType.STANDARD
+        if (order.getOrderType() == OrderType.STANDARD
                 && paymentType != PaymentType.FULL) {
             throw ApiException.badRequest("Đơn hàng thường chỉ hỗ trợ thanh toán toàn bộ.");
         }
@@ -124,11 +204,8 @@ public class SePayGatewayService {
         // PHASE 13: Server-side tính toán số tiền thanh toán (TUYỆT ĐỐI không tin amount từ React)
         BigDecimal payableAmount;
         if (paymentType == PaymentType.DEPOSIT) {
-            payableAmount = (order.getDepositAmount() != null && order.getDepositAmount().compareTo(BigDecimal.ZERO) > 0)
-                    ? order.getDepositAmount()
-                    : order.getTotalAmount().multiply(new BigDecimal("0.5")); // Mặc định cọc 50% nếu chưa đặt
+            payableAmount = requiredDeposit(order);
         } else if (paymentType == PaymentType.FINAL) {
-            List<Payment> orderPayments = paymentRepository.findByOrderId(orderId);
             BigDecimal totalPaid = orderPayments.stream()
                     .filter(p -> p.getStatus() == PaymentStatus.SUCCESS)
                     .map(Payment::getAmount)
@@ -142,48 +219,33 @@ public class SePayGatewayService {
             payableAmount = order.getTotalAmount();
         }
 
-        Payment payment = paymentRepository.findByOrderId(orderId).stream()
-                .filter(p -> p.getPaymentMethod() == PaymentMethod.ONLINE
-                        && p.getPaymentType() == paymentType && p.getStatus() == PaymentStatus.PENDING)
-                .findFirst().orElse(null);
-        if (payment == null) {
-            payment = Payment.builder()
-                    .id(UUID.randomUUID().toString())
-                    .order(order)
-                    .paymentType(paymentType)
-                    .paymentMethod(PaymentMethod.ONLINE)
-                    .amount(payableAmount)
-                    .invoiceNumber("INV-" + getShortOrderCode(orderId) + "-" + paymentType + "-" + UUID.randomUUID().toString().substring(0, 8))
-                    .status(PaymentStatus.PENDING)
-                    .createdBy(order.getCustomer().getId())
-                    .build();
-            paymentRepository.save(payment);
+        // Mỗi lần thử tạo invoice mới (SePay có thể từ chối invoice trùng). Invoice cũ vẫn có thể được trả:
+        // đối soát vẫn xác nhận được đơn, và scheduler sẽ hủy nó phía SePay khi đơn hết hạn.
+        for (Payment old : orderPayments) {
+            if (old.getPaymentMethod() == PaymentMethod.ONLINE && old.getPaymentType() == paymentType
+                    && old.getStatus() == PaymentStatus.PENDING) {
+                old.setStatus(PaymentStatus.FAILED);
+                old.setLastModifyBy(authenticatedUserId);
+                paymentRepository.save(old);
+            }
         }
+        Payment payment = Payment.builder()
+                .id(UUID.randomUUID().toString())
+                .order(order)
+                .paymentType(paymentType)
+                .paymentMethod(PaymentMethod.ONLINE)
+                .amount(payableAmount)
+                .invoiceNumber("INV-" + getShortOrderCode(orderId) + "-" + paymentType + "-" + UUID.randomUUID().toString().substring(0, 8))
+                .status(PaymentStatus.PENDING)
+                .createdBy(order.getCustomer().getId())
+                .build();
+        paymentRepository.save(payment);
         String invoiceNumber = payment.getInvoiceNumber();
 
-        // PHASE 6: Xây dựng các fields thanh toán và chữ ký HMAC-SHA256 theo chuẩn tài liệu SePay
         long amountLong = payableAmount.longValue();
-        Map<String, String> fields = new LinkedHashMap<>();
-        fields.put("merchant", merchantId);
-        fields.put("currency", "VND");
-        fields.put("order_amount", String.valueOf(amountLong));
-        fields.put("operation", "PURCHASE");
-        fields.put("order_description", "Thanh toan don hoa #" + getShortOrderCode(orderId) + " (" + paymentType + ")");
-        fields.put("order_invoice_number", invoiceNumber);
-        if (order.getCustomer() != null) {
-            fields.put("customer_id", order.getCustomer().getId());
-        }
-        fields.put("success_url", successUrl + "?invoice_number=" + invoiceNumber);
-        fields.put("error_url", errorUrl + "?invoice_number=" + invoiceNumber);
-        fields.put("cancel_url", cancelUrl + "?invoice_number=" + invoiceNumber);
-
-        if (request.getPaymentMethod() != null && !request.getPaymentMethod().isBlank()) {
-            fields.put("payment_method", request.getPaymentMethod());
-        }
-
-        // Tạo chữ ký HMAC-SHA256
-        String signature = SePaySignatureUtil.generateSignature(fields, secretKey);
-        fields.put("signature", signature);
+        Map<String, String> fields = signedCheckoutFields(invoiceNumber, amountLong,
+                "Thanh toan don hoa #" + getShortOrderCode(orderId) + " (" + paymentType + ")",
+                order.getCustomer() != null ? order.getCustomer().getId() : null, paymentMethod);
 
         // PHASE 18: Ghi log an toàn (KHÔNG log secretKey)
         log.info("Tạo yêu cầu thanh toán SePay thành công: invoiceNumber={}, orderId={}, amount={}đ, type={}",
@@ -200,86 +262,216 @@ public class SePayGatewayService {
     }
 
     /**
-     * Backward-compatible: Khởi tạo cho controller cũ
+     * PHASE 6: Dựng các field form checkout gửi sang SePay và ký chữ ký ở cuối.
+     * Thứ tự field gửi đi phải trùng thứ tự ký (SDK SePay ký theo thứ tự field của form), nên dùng LinkedHashMap.
+     * success/error/cancel URL kèm invoice_number để các trang kết quả FE biết poll giao dịch nào.
+     */
+    private Map<String, String> signedCheckoutFields(String invoiceNumber, long amount, String description,
+                                                     String customerId, String paymentMethod) {
+        Map<String, String> fields = new LinkedHashMap<>();
+        fields.put("merchant", merchantId);
+        fields.put("operation", "PURCHASE");
+        if (paymentMethod != null) {
+            fields.put("payment_method", paymentMethod);
+        }
+        fields.put("order_amount", String.valueOf(amount));
+        fields.put("currency", "VND");
+        fields.put("order_invoice_number", invoiceNumber);
+        fields.put("order_description", description);
+        if (customerId != null) {
+            fields.put("customer_id", customerId);
+        }
+        fields.put("success_url", successUrl + "?invoice_number=" + invoiceNumber);
+        fields.put("error_url", errorUrl + "?invoice_number=" + invoiceNumber);
+        fields.put("cancel_url", cancelUrl + "?invoice_number=" + invoiceNumber);
+        fields.put("signature", SePaySignatureUtil.generateSignature(fields, secretKey));
+        return fields;
+    }
+
+    /**
+     * Thanh toán gộp nhiều đơn thường (mỗi shop một đơn) trong MỘT giao dịch SePay.
+     * Mỗi đơn có Payment riêng (số tiền = tổng đơn) cùng groupInvoice; SePay chỉ biết groupInvoice với tổng tiền.
      */
     @Transactional
-    public SePayCheckoutFormResponse initiateCheckout(String orderId, String authenticatedUserId) {
-        CreatePaymentResponse res = createPayment(
-                CreatePaymentRequest.builder().orderId(orderId).paymentType(PaymentType.FULL).build(),
-                authenticatedUserId
-        );
-        return SePayCheckoutFormResponse.builder()
-                .checkoutUrl(res.getCheckoutUrl())
-                .fields(res.getFields())
+    public CreatePaymentResponse createGroupPayment(CreateGroupPaymentRequest request, String userId) {
+        if (secretKey == null || secretKey.isBlank() || merchantId == null || merchantId.isBlank()) {
+            throw ApiException.badRequest("Cổng thanh toán chưa được cấu hình.");
+        }
+        String paymentMethod = request.getPaymentMethod() == null || request.getPaymentMethod().isBlank()
+                ? null : request.getPaymentMethod().trim().toUpperCase();
+        if (paymentMethod != null && !SEPAY_PAYMENT_METHODS.contains(paymentMethod)) {
+            throw ApiException.badRequest("Phương thức thanh toán không hợp lệ.");
+        }
+        // Khóa theo thứ tự id để hai request đồng thời không khóa chéo nhau.
+        List<String> ids = request.getOrderIds().stream().distinct().sorted().toList();
+        List<Order> orders = new ArrayList<>();
+        for (String id : ids) {
+            Order order = orderRepository.findByIdForUpdate(id)
+                    .orElseThrow(() -> ApiException.notFound("Không tìm thấy đơn hàng với id: " + id));
+            if (userId == null || order.getCustomer() == null || !order.getCustomer().getId().equals(userId)) {
+                throw ApiException.forbidden("Bạn không có quyền thanh toán cho đơn hàng này.");
+            }
+            if (order.getOrderType() != OrderType.STANDARD || order.getStatus() != OrderStatus.PENDING) {
+                throw ApiException.badRequest("Đơn " + getShortOrderCode(id) + " không còn chờ thanh toán.");
+            }
+            if (isExpired(order)) {
+                throw ApiException.badRequest("Đơn " + getShortOrderCode(id) + " đã hết hạn thanh toán (quá 10 phút).");
+            }
+            if (paymentRepository.findByOrderId(id).stream().anyMatch(p -> p.getPaymentMethod() == PaymentMethod.COD)) {
+                throw ApiException.badRequest("Đơn COD không thể thanh toán trực tuyến.");
+            }
+            orders.add(order);
+        }
+
+        String groupInvoice = "GRP-" + UUID.randomUUID().toString().replace("-", "").substring(0, 16).toUpperCase();
+        BigDecimal total = BigDecimal.ZERO;
+        for (Order order : orders) {
+            // Như createPayment: invoice cũ chưa trả được đánh FAILED, scheduler vẫn hủy phía SePay khi đơn hết hạn.
+            for (Payment old : paymentRepository.findByOrderId(order.getId())) {
+                if (old.getPaymentMethod() == PaymentMethod.ONLINE && old.getStatus() == PaymentStatus.PENDING) {
+                    old.setStatus(PaymentStatus.FAILED);
+                    old.setLastModifyBy(userId);
+                    paymentRepository.save(old);
+                }
+            }
+            paymentRepository.save(Payment.builder()
+                    .id(UUID.randomUUID().toString())
+                    .order(order)
+                    .paymentType(PaymentType.FULL)
+                    .paymentMethod(PaymentMethod.ONLINE)
+                    .amount(order.getTotalAmount())
+                    .invoiceNumber("INV-" + getShortOrderCode(order.getId()) + "-FULL-" + UUID.randomUUID().toString().substring(0, 8))
+                    .groupInvoice(groupInvoice)
+                    .status(PaymentStatus.PENDING)
+                    .createdBy(userId)
+                    .build());
+            total = total.add(order.getTotalAmount());
+        }
+
+        Map<String, String> fields = signedCheckoutFields(groupInvoice, total.longValue(),
+                "Thanh toan " + orders.size() + " don hoa", userId, paymentMethod);
+        log.info("Tạo thanh toán gộp SePay: invoice={}, {} đơn, amount={}đ", groupInvoice, orders.size(), total.longValue());
+        return CreatePaymentResponse.builder()
+                .checkoutUrl(checkoutUrl)
+                .invoiceNumber(groupInvoice)
+                .orderId(orders.get(0).getId())
+                .amount(total)
+                .fields(fields)
                 .build();
     }
 
     /**
-     * PHASE 8 & 9: Xử lý IPN (Instant Payment Notification) từ SePay Gateway đảm bảo Idempotent & Atomic
+     * Hủy đơn đang chờ khi khách quay về từ nút hủy của SePay.
+     * Giao dịch gộp thì chuyển sang cancelGroupCheckout. Giao dịch đơn: kiểm tra chủ đơn + là giao dịch ONLINE;
+     * nếu đã trả thì không hủy; nếu đơn đã hủy thì chỉ khôi phục giỏ; nếu đang PENDING thì hủy phía SePay,
+     * đối soát lần cuối rồi mới hủy đơn.
+     * @return true nếu đơn thực tế đã được thanh toán (không hủy), false nếu đã hủy/không còn chờ
+     * Không @Transactional: gọi HTTP sang SePay không được giữ khóa DB.
      */
-    @Transactional
-    public Map<String, Object> handleIpn(SePayIpnPayload payload, String xSecretKeyHeader) {
-        log.info("Nhận IPN callback từ SePay Gateway: {}", payload);
-
-        // Kiểm tra bí mật xác thực nếu có cấu hình
-        if (ipnSecret == null || ipnSecret.isBlank()) throw ApiException.forbidden("IPN chưa được cấu hình.");
-        if (!ipnSecret.equals(xSecretKeyHeader)) {
-            log.warn("SePay IPN: Sai bí mật xác thực X-Secret-Key!");
-            throw ApiException.forbidden("Invalid IPN secret key");
+    public boolean cancelCheckout(String invoiceNumber, String authenticatedUserId) {
+        List<Payment> members = paymentRepository.findByGroupInvoice(invoiceNumber);
+        if (!members.isEmpty()) {
+            return cancelGroupCheckout(invoiceNumber, members, authenticatedUserId);
         }
-
-        if (payload == null || !"ORDER_PAID".equalsIgnoreCase(payload.getNotificationType())) {
-            log.info("Bỏ qua IPN sự kiện không phải ORDER_PAID: {}", payload != null ? payload.getNotificationType() : "null");
-            return Map.of("success", true, "message", "Ignored non-ORDER_PAID event");
+        Payment payment = paymentRepository.findByInvoiceNumber(invoiceNumber)
+                .orElseThrow(() -> ApiException.notFound("Không tìm thấy giao dịch cần hủy."));
+        Order order = payment.getOrder();
+        if (authenticatedUserId == null || order == null || order.getCustomer() == null
+                || !authenticatedUserId.equals(order.getCustomer().getId())) {
+            throw ApiException.forbidden("Bạn không có quyền hủy giao dịch này.");
         }
-
-        SePayIpnPayload.IpnOrder ipnOrder = payload.getOrder();
-        if (ipnOrder == null || ipnOrder.getOrderInvoiceNumber() == null) {
-            log.warn("IPN: Thiếu order_invoice_number trong payload");
-            return Map.of("success", false, "message", "Missing order_invoice_number");
+        if (payment.getPaymentMethod() != PaymentMethod.ONLINE) {
+            throw ApiException.badRequest("Giao dịch này không thuộc cổng SePay.");
         }
+        if (payment.getStatus() == PaymentStatus.SUCCESS || order.getStatus() == OrderStatus.PROCESSING) {
+            return true;
+        }
+        if (order.getStatus() == OrderStatus.CANCELLED) {
+            orderService.restoreCancelledOrderItems(order);
+            return false;
+        }
+        if (order.getStatus() != OrderStatus.PENDING) return false;
 
-        String invoiceNumber = ipnOrder.getOrderInvoiceNumber();
+        // Khách chủ động bấm Hủy ở SePay: đóng giao dịch trước, kiểm tra lại phòng trường hợp vừa trả xong, rồi hủy đơn.
+        // Các sự cố không gọi về trang hủy (back trình duyệt, mất mạng, đóng tab) thì đơn vẫn được giữ tới hết 10 phút.
+        cancelAtSePay(invoiceNumber);
+        if (reconcileWithSePayGateway(invoiceNumber)) return true;
+        return !orderService.cancelPendingOrder(order.getId(), "Khách hàng hủy giao dịch tại cổng SePay", authenticatedUserId);
+    }
 
-        // Tìm kiếm Payment theo invoiceNumber
-        Payment payment = paymentRepository.findByInvoiceNumberForUpdate(invoiceNumber)
-                .orElse(null);
+    /** Khách bấm hủy ở cổng SePay cho giao dịch gộp: đóng giao dịch, đối soát, rồi hủy mọi đơn còn chờ. */
+    private boolean cancelGroupCheckout(String groupInvoice, List<Payment> members, String userId) {
+        for (Payment member : members) {
+            Order order = member.getOrder();
+            if (userId == null || order == null || order.getCustomer() == null
+                    || !userId.equals(order.getCustomer().getId())) {
+                throw ApiException.forbidden("Bạn không có quyền hủy giao dịch này.");
+            }
+        }
+        cancelAtSePay(groupInvoice);
+        if (reconcileWithSePayGateway(groupInvoice)) return true;
+        for (Payment member : members) {
+            orderService.cancelPendingOrder(member.getOrder().getId(),
+                    "Khách hàng hủy giao dịch tại cổng SePay", userId);
+        }
+        return false;
+    }
 
+    /**
+     * Hủy đơn PENDING quá hạn (gọi từ scheduler): hủy phía SePay → đối soát → mới nhả hàng.
+     * Không @Transactional vì có gọi HTTP.
+     */
+    public void expireUnpaidOrder(String orderId) {
+        // Đơn COD (kể cả đơn "mua ngay" của CustomerOrderService) không có bước thanh toán online → không hết hạn sau 10 phút.
+        if (paymentRepository.findByOrderId(orderId).stream().anyMatch(p -> p.getPaymentMethod() == PaymentMethod.COD)) {
+            return;
+        }
+        List<String> invoices = paymentRepository.findByOrderId(orderId).stream()
+                .filter(p -> p.getPaymentMethod() == PaymentMethod.ONLINE && p.getInvoiceNumber() != null
+                        && p.getStatus() != PaymentStatus.SUCCESS)
+                // Thanh toán gộp: SePay chỉ biết groupInvoice.
+                .map(p -> p.getGroupInvoice() != null ? p.getGroupInvoice() : p.getInvoiceNumber())
+                .distinct()
+                .toList();
+        for (String invoice : invoices) {
+            cancelAtSePay(invoice);
+        }
+        for (String invoice : invoices) {
+            if (reconcileWithSePayGateway(invoice)) {
+                log.info("Đơn {} đã được thanh toán qua invoice {} trước khi hết hạn, không hủy.", orderId, invoice);
+                return;
+            }
+        }
+        boolean awaitingDeposit = orderRepository.findById(orderId)
+                .map(o -> o.getStatus() == OrderStatus.AWAITING_DEPOSIT).orElse(false);
+        orderService.cancelExpiredOrder(orderId, awaitingDeposit ? DEPOSIT_EXPIRED_REASON : EXPIRED_REASON);
+    }
+
+    /** Kết quả ghi nhận một khoản tiền về: thành công, đã ghi trước đó, cần hoàn tiền, không thấy invoice, hoặc lệch tiền. */
+    private enum PaidOutcome { PAID, ALREADY_PAID, REFUND_REQUIRED, NOT_FOUND, AMOUNT_MISMATCH }
+
+    /**
+     * Ghi nhận tiền đã về cho 1 invoice (từ kết quả đối soát). Phải chạy trong transaction.
+     * Khóa Order trước rồi Payment (cùng thứ tự với cancelPendingOrder) và đọc lại từ DB
+     * để không quyết định dựa trên dữ liệu cũ.
+     */
+    private PaidOutcome applyPaid(String invoiceNumber, BigDecimal paidAmount, String transactionNo,
+                                  String gatewayResponse, String actor) {
+        Payment payment = paymentRepository.findByInvoiceNumber(invoiceNumber).orElse(null);
         if (payment == null) {
-            log.warn("IPN: Không tìm thấy Payment tương ứng với invoiceNumber: {}", invoiceNumber);
-            return Map.of("success", false, "message", "Payment not found for invoice " + invoiceNumber);
+            log.warn("Không tìm thấy Payment tương ứng với invoiceNumber: {}", invoiceNumber);
+            return PaidOutcome.NOT_FOUND;
         }
+        Order order = payment.getOrder();
+        entityManager.refresh(order, LockModeType.PESSIMISTIC_WRITE);
+        entityManager.refresh(payment, LockModeType.PESSIMISTIC_WRITE);
 
         // PHASE 9: Chống trùng lặp (Idempotency)
         if (payment.getStatus() == PaymentStatus.SUCCESS) {
-            log.info("Giao dịch cho invoice {} đã được cập nhật thành công trước đó (Idempotent bypass).", invoiceNumber);
-            return Map.of("success", true, "message", "Payment already processed");
+            return PaidOutcome.ALREADY_PAID;
         }
-        if (payment.getOrder().getStatus() == OrderStatus.CANCELLED) {
-            return Map.of("success", false, "message", "Order cancelled");
-        }
-        if (payment.getOrder().getStatus() == OrderStatus.PENDING && payment.getOrder().getCreatedDate() != null
-                && payment.getOrder().getCreatedDate().plusMinutes(10).isBefore(java.time.LocalDateTime.now())) {
-            orderService.cancelExpiredOrder(payment.getOrder().getId(), "Quá hạn 10 phút không quét mã thanh toán");
-            return Map.of("success", false, "message", "Order expired and cancelled");
-        }
-
-        // Lấy thông tin giao dịch từ SePay
-        SePayIpnPayload.IpnTransaction transaction = payload.getTransaction();
-        if (transaction == null || !"APPROVED".equalsIgnoreCase(transaction.getTransactionStatus())) {
-            return Map.of("success", false, "message", "Transaction not approved");
-        }
-        String transactionId = transaction != null && transaction.getTransactionId() != null
-                ? transaction.getTransactionId()
-                : UUID.randomUUID().toString();
-
-        BigDecimal paidAmount = transaction != null && transaction.getTransactionAmount() != null
-                ? transaction.getTransactionAmount()
-                : (ipnOrder.getOrderAmount() != null ? ipnOrder.getOrderAmount() : BigDecimal.ZERO);
-
         // PHASE 13: Kiểm tra khớp số tiền (Amount Validation)
-        if (payment.getAmount().compareTo(paidAmount) != 0
-                || (ipnOrder.getOrderAmount() != null && payment.getAmount().compareTo(ipnOrder.getOrderAmount()) != 0)) {
+        if (payment.getAmount().compareTo(paidAmount) != 0) {
             log.error("PHÁT HIỆN LỆCH TIỀN: invoice={}, Yêu cầu={}đ, SePay báo={}đ",
                     invoiceNumber, payment.getAmount(), paidAmount);
             payment.setStatus(PaymentStatus.FAILED);
@@ -287,217 +479,246 @@ public class SePayGatewayService {
                     "{\"error\":\"AMOUNT_MISMATCH\",\"expected\":%s,\"received\":%s}",
                     payment.getAmount(), paidAmount));
             paymentRepository.save(payment);
-            return Map.of("success", false, "message", "Amount mismatch error");
+            return PaidOutcome.AMOUNT_MISMATCH;
         }
 
-        // Cập nhật trạng thái Payment -> SUCCESS
+        // Tiền đã về thật: luôn ghi nhận, kể cả khi đơn không còn chờ khoản này.
         payment.setStatus(PaymentStatus.SUCCESS);
-        payment.setGatewayTransactionNo(transactionId);
-        payment.setGatewayResponse(String.format(
-                "{\"notification_type\":\"ORDER_PAID\",\"transactionId\":\"%s\",\"amount\":%s,\"invoiceNumber\":\"%s\"}",
-                transactionId, paidAmount, invoiceNumber));
-        payment.setLastModifyBy("SEPAY_IPN");
+        payment.setGatewayTransactionNo(transactionNo);
+        payment.setGatewayResponse(gatewayResponse);
+        payment.setLastModifyBy(actor);
         paymentRepository.save(payment);
 
-        // Cập nhật trạng thái Order tương ứng
-        Order order = payment.getOrder();
-        if (payment.getPaymentType() == PaymentType.FULL) {
-            order.setStatus(OrderStatus.PROCESSING);
-            order.setDepositAmount(paidAmount);
-        } else if (payment.getPaymentType() == PaymentType.DEPOSIT) {
+        boolean expected = payment.getPaymentType() == PaymentType.FINAL
+                ? order.getStatus() == OrderStatus.DEPOSIT_PAID
+                : order.getStatus() == OrderStatus.PENDING || order.getStatus() == OrderStatus.AWAITING_DEPOSIT;
+        if (!expected) {
+            // Đơn đã hủy (hết hạn) hoặc đã được trả bằng invoice khác → tạo yêu cầu hoàn tiền cho admin xử lý.
+            log.error("Nhận tiền cho đơn {} ở trạng thái {} (invoice {}, {}đ) → tạo yêu cầu hoàn tiền.",
+                    order.getId(), order.getStatus(), invoiceNumber, paidAmount);
+            refundRepository.save(Refund.builder()
+                    .id(UUID.randomUUID().toString())
+                    .order(order)
+                    .amount(paidAmount)
+                    .reason("Khách thanh toán invoice " + invoiceNumber + " khi đơn đang ở trạng thái "
+                            + order.getStatus() + ". Cần hoàn tiền.")
+                    .gatewayResponse(gatewayResponse)
+                    .createdBy(actor)
+                    .lastModifyBy(actor)
+                    .build());
+            return PaidOutcome.REFUND_REQUIRED;
+        }
+
+        if (payment.getPaymentType() == PaymentType.DEPOSIT) {
             order.setStatus(OrderStatus.DEPOSIT_PAID);
-            order.setDepositAmount(paidAmount);
-        } else if (payment.getPaymentType() == PaymentType.FINAL) {
+        } else {
+            // FINAL hoặc FULL: đủ tiền, chuyển sang xử lý. depositAmount chỉ là "tiền cọc yêu cầu", không ghi đè.
             order.setStatus(OrderStatus.PROCESSING);
         }
+        order.setLastModifyBy(actor);
         orderRepository.save(order);
 
         log.info("Xác nhận thanh toán thành công cho đơn hàng: {}, invoice: {}, số tiền: {}đ",
                 order.getId(), invoiceNumber, paidAmount);
-
-        return Map.of("success", true, "message", "Payment confirmed successfully");
+        return PaidOutcome.PAID;
     }
 
     /**
-     * Tự động chủ động đối soát trực tiếp với Cổng SePay qua REST API
-     * (Khắc phục hạn chế khi chạy localhost không nhận được Webhook từ Internet)
+     * Chủ động đối soát với Cổng SePay qua REST API (nguồn xác nhận thanh toán duy nhất).
+     * Gọi GET /v1/order/detail/{invoice}; chỉ khi order_status = CAPTURED và invoice khớp mới ghi nhận
+     * (giao dịch gộp qua applyGroupPaid, giao dịch đơn qua applyPaid).
+     * Gọi HTTP bên ngoài transaction, chỉ mở transaction ngắn để ghi kết quả.
+     * @return true nếu đơn thực sự được xác nhận đã thanh toán
      */
-    @Transactional
-    public boolean reconcileWithSePayGateway(Payment payment) {
-        if (payment == null || payment.getPaymentMethod() != PaymentMethod.ONLINE || payment.getInvoiceNumber() == null) return false;
-        if (payment.getStatus() == PaymentStatus.SUCCESS) return true;
-        if (payment.getOrder() != null && payment.getOrder().getStatus() == OrderStatus.CANCELLED) return false;
-        if (payment.getOrder() != null && payment.getOrder().getStatus() == OrderStatus.PENDING
-                && payment.getOrder().getCreatedDate() != null
-                && payment.getOrder().getCreatedDate().plusMinutes(10).isBefore(java.time.LocalDateTime.now())) {
-            orderService.cancelExpiredOrder(payment.getOrder().getId(), "Quá hạn 10 phút không quét mã thanh toán");
+    public boolean reconcileWithSePayGateway(String invoiceNumber) {
+        if (invoiceNumber == null) return false;
+        String body = callSePayApi("GET", "/v1/order/detail/" + invoiceNumber, null);
+        if (body == null) return false;
+        try {
+            JsonNode root = objectMapper.readTree(body);
+            JsonNode details = root.has("data") && root.get("data").isObject() ? root.get("data") : root;
+            if (!"CAPTURED".equalsIgnoreCase(details.path("order_status").asText())) return false;
+            String transactionNo = details.path("order_id").asText(null);
+            String amountText = details.path("order_amount").asText(null);
+            String returnedInvoice = details.path("order_invoice_number").asText(null);
+            if (amountText == null || (returnedInvoice != null && !invoiceNumber.equals(returnedInvoice))) return false;
+            BigDecimal paidAmount = new BigDecimal(amountText);
+            List<Payment> members = paymentRepository.findByGroupInvoice(invoiceNumber);
+            if (!members.isEmpty()) {
+                return applyGroupPaid(invoiceNumber, members, paidAmount,
+                        transactionNo != null ? transactionNo : "SEPAY-CAPTURED", body);
+            }
+            PaidOutcome outcome = transactionTemplate.execute(status -> applyPaid(invoiceNumber, paidAmount,
+                    transactionNo != null ? transactionNo : "SEPAY-CAPTURED", body, "SEPAY_AUTO_RECONCILE"));
+            // Chỉ coi là "đã thanh toán" khi đơn thực sự được xác nhận (không tính trường hợp phải hoàn tiền).
+            return outcome == PaidOutcome.PAID || (outcome == PaidOutcome.ALREADY_PAID && isOrderPaidBy(invoiceNumber));
+        } catch (Exception e) {
+            log.warn("Không thể đối soát invoice {} với SePay: {}", invoiceNumber, e.getMessage());
             return false;
         }
+    }
 
+    /**
+     * Giao dịch gộp đã CAPTURED: tổng tiền phải khớp tổng các Payment, rồi ghi nhận từng đơn bằng applyPaid
+     * (đơn nào đã hủy/hết hạn sẽ tự sinh yêu cầu hoàn tiền riêng cho đơn đó).
+     * @return true nếu có ít nhất một đơn thực sự được xác nhận thanh toán.
+     */
+    private boolean applyGroupPaid(String groupInvoice, List<Payment> members, BigDecimal paidAmount,
+                                   String transactionNo, String gatewayResponse) {
+        BigDecimal expected = members.stream().map(Payment::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (expected.compareTo(paidAmount) != 0) {
+            log.error("PHÁT HIỆN LỆCH TIỀN (thanh toán gộp): invoice={}, Yêu cầu={}đ, SePay báo={}đ",
+                    groupInvoice, expected, paidAmount);
+            return false;
+        }
+        List<PaidOutcome> outcomes = transactionTemplate.execute(status -> members.stream()
+                .map(m -> applyPaid(m.getInvoiceNumber(), m.getAmount(), transactionNo, gatewayResponse,
+                        "SEPAY_AUTO_RECONCILE"))
+                .toList());
+        return outcomes != null && outcomes.stream()
+                .anyMatch(o -> o == PaidOutcome.PAID || o == PaidOutcome.ALREADY_PAID);
+    }
+
+    /** Invoice đã SUCCESS và đơn của nó chưa bị hủy (tức khoản tiền còn hiệu lực). */
+    private boolean isOrderPaidBy(String invoiceNumber) {
+        return paymentRepository.findByInvoiceNumber(invoiceNumber)
+                .map(p -> p.getOrder().getStatus() != OrderStatus.CANCELLED)
+                .orElse(false);
+    }
+
+    /** Đóng đơn phía SePay để khách không thể trả tiền sau khi mình đã hủy. Lỗi chỉ ghi log. */
+    private void cancelAtSePay(String invoiceNumber) {
         try {
-            String invoiceNumber = payment.getInvoiceNumber();
-            String auth = Base64.getEncoder().encodeToString(
-                    (merchantId + ":" + secretKey).getBytes(StandardCharsets.UTF_8)
-            );
-
-            // API Endpoint kiểm tra đơn hàng theo chuẩn tài liệu SePay Gateway
-            String pgApiUrl = apiBaseUrl.replaceAll("/$", "") + "/v1/order/detail/" + invoiceNumber;
-
-            java.net.http.HttpRequest req = java.net.http.HttpRequest.newBuilder()
-                    .uri(java.net.URI.create(pgApiUrl))
-                    .header("Authorization", "Basic " + auth)
-                    .header("Accept", "application/json")
-                    .timeout(java.time.Duration.ofSeconds(6))
-                    .GET()
-                    .build();
-
-            java.net.http.HttpResponse<String> resp = java.net.http.HttpClient.newHttpClient()
-                    .send(req, java.net.http.HttpResponse.BodyHandlers.ofString());
-
-            if (resp.statusCode() == 200 && resp.body() != null) {
-                String body = resp.body();
-                log.info("Kết quả đối soát từ SePay pgapi cho invoice {}: {}", invoiceNumber, body);
-
-                JsonNode root = objectMapper.readTree(body);
-                JsonNode details = root.has("data") && root.get("data").isObject() ? root.get("data") : root;
-                String sepayStatus = details.path("order_status").asText();
-                if (!sepayStatus.isBlank()) {
-                    if ("CAPTURED".equalsIgnoreCase(sepayStatus)) {
-                        String transactionNo = details.path("order_id").asText(null);
-                        String amountText = details.path("order_amount").asText(null);
-                        String returnedInvoice = details.path("order_invoice_number").asText(null);
-                        if (amountText == null || (returnedInvoice != null && !invoiceNumber.equals(returnedInvoice))) return false;
-                        BigDecimal paidAmount = new BigDecimal(amountText);
-                        if (payment.getAmount().compareTo(paidAmount) != 0 || payment.getOrder().getStatus() == OrderStatus.CANCELLED) {
-                            log.warn("SePay amount, invoice or order status mismatch for invoice {}", invoiceNumber);
-                            return false;
-                        }
-
-                        // Cập nhật Payment -> SUCCESS
-                        payment.setStatus(PaymentStatus.SUCCESS);
-                        payment.setGatewayTransactionNo(transactionNo != null ? transactionNo : "SEPAY-CAPTURED");
-                        payment.setGatewayResponse(body);
-                        payment.setLastModifyBy("SEPAY_AUTO_RECONCILE");
-                        paymentRepository.save(payment);
-
-                        // Cập nhật Order tương ứng
-                        Order order = payment.getOrder();
-                        if (order != null) {
-                            if (payment.getPaymentType() == PaymentType.FULL) {
-                                order.setStatus(OrderStatus.PROCESSING);
-                                order.setDepositAmount(paidAmount);
-                            } else if (payment.getPaymentType() == PaymentType.DEPOSIT) {
-                                order.setStatus(OrderStatus.DEPOSIT_PAID);
-                                order.setDepositAmount(paidAmount);
-                            } else if (payment.getPaymentType() == PaymentType.FINAL) {
-                                order.setStatus(OrderStatus.PROCESSING);
-                            }
-                            orderRepository.save(order);
-                        }
-
-                        log.info("Đối soát thành công! Đơn hàng {} đã được xác nhận thanh toán qua SePay.", order != null ? order.getId() : "null");
-                        return true;
-                    }
-                }
+            String json = objectMapper.writeValueAsString(Map.of("order_invoice_number", invoiceNumber));
+            if (callSePayApi("POST", "/v1/order/cancel", json) != null) {
+                log.info("Đã hủy invoice {} phía SePay.", invoiceNumber);
             }
         } catch (Exception e) {
-            log.warn("Không thể kết nối đối soát trực tiếp với SePay pgapi: {}", e.getMessage());
+            log.warn("Không thể hủy invoice {} phía SePay: {}", invoiceNumber, e.getMessage());
         }
-        return false;
     }
 
     /**
-     * PHASE 11: Truy vấn trạng thái thanh toán theo invoiceNumber (kèm đối soát chủ động thời gian thực)
+     * Gọi REST API SePay với Basic auth (merchantId:secretKey), timeout 6 giây. Lỗi mạng/HTTP chỉ ghi log.
+     * @return body khi HTTP 2xx, ngược lại null.
      */
-    @Transactional
+    private String callSePayApi(String method, String path, String jsonBody) {
+        if (secretKey == null || secretKey.isBlank()) return null;
+        try {
+            String auth = Base64.getEncoder().encodeToString(
+                    (merchantId + ":" + secretKey).getBytes(StandardCharsets.UTF_8));
+            HttpRequest req = HttpRequest.newBuilder()
+                    .uri(URI.create(apiBaseUrl.replaceAll("/$", "") + path))
+                    .header("Authorization", "Basic " + auth)
+                    .header("Accept", "application/json")
+                    .header("Content-Type", "application/json")
+                    .timeout(Duration.ofSeconds(6))
+                    .method(method, jsonBody == null ? HttpRequest.BodyPublishers.noBody()
+                            : HttpRequest.BodyPublishers.ofString(jsonBody))
+                    .build();
+            HttpResponse<String> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
+            if (resp.statusCode() / 100 == 2) return resp.body();
+            log.warn("SePay API {} {} trả về HTTP {}: {}", method, path, resp.statusCode(), resp.body());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } catch (Exception e) {
+            log.warn("Không thể gọi SePay API {} {}: {}", method, path, e.getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * PHASE 11: Truy vấn trạng thái thanh toán theo invoiceNumber (kèm đối soát chủ động thời gian thực).
+     * Là API mà các trang success/pending của FE poll; invoice gộp (GRP-...) trả trạng thái tổng hợp.
+     */
     public PaymentStatusResponse getStatusByInvoice(String invoiceNumber, String authenticatedUserId) {
-        Payment payment = paymentRepository.findByInvoiceNumberForUpdate(invoiceNumber)
+        List<Payment> members = paymentRepository.findByGroupInvoice(invoiceNumber);
+        if (!members.isEmpty()) {
+            return buildGroupStatus(invoiceNumber, members, authenticatedUserId);
+        }
+        Payment payment = paymentRepository.findByInvoiceNumber(invoiceNumber)
                 .orElseThrow(() -> ApiException.notFound("Không tìm thấy thông tin thanh toán với mã hóa đơn: " + invoiceNumber));
+        return buildStatus(payment, authenticatedUserId);
+    }
 
-        // Kiểm tra quyền truy cập nếu có authenticatedUserId
-        if (authenticatedUserId == null || payment.getOrder() == null
-                || payment.getOrder().getCustomer() == null
-                || !payment.getOrder().getCustomer().getId().equals(authenticatedUserId)) {
-            throw ApiException.forbidden("Bạn không có quyền xem thông tin giao dịch này.");
+    /** Trạng thái tổng hợp của giao dịch gộp: isPaid khi mọi đơn đã nhận tiền và không đơn nào bị hủy. */
+    private PaymentStatusResponse buildGroupStatus(String groupInvoice, List<Payment> initial, String userId) {
+        for (Payment member : initial) {
+            Order order = member.getOrder();
+            if (userId == null || order == null || order.getCustomer() == null
+                    || !order.getCustomer().getId().equals(userId)) {
+                throw ApiException.forbidden("Bạn không có quyền xem thông tin giao dịch này.");
+            }
         }
-
-        // Tự động hủy nếu đã quá hạn 10 phút
-        if (payment.getOrder() != null && payment.getOrder().getStatus() == OrderStatus.PENDING
-                && payment.getOrder().getCreatedDate() != null
-                && payment.getOrder().getCreatedDate().plusMinutes(10).isBefore(java.time.LocalDateTime.now())) {
-            orderService.cancelExpiredOrder(payment.getOrder().getId(), "Quá hạn 10 phút không quét mã thanh toán");
-            payment = paymentRepository.findByInvoiceNumberForUpdate(invoiceNumber).orElse(payment);
-        }
-
-        // Tự động đối soát trực tiếp với SePay pgapi nếu trạng thái chưa là SUCCESS và đơn chưa bị hủy
-        if (payment.getStatus() != PaymentStatus.SUCCESS && payment.getOrder().getStatus() != OrderStatus.CANCELLED) {
-            reconcileWithSePayGateway(payment);
-        }
-
-        boolean isPaid = payment.getStatus() == PaymentStatus.SUCCESS;
-        String message;
-        if (isPaid) {
-            message = "Thanh toán thành công qua SePay Gateway!";
-        } else if (payment.getOrder() != null && payment.getOrder().getStatus() == OrderStatus.CANCELLED) {
-            message = "Đơn hàng đã bị hủy do quá thời gian thanh toán (10 phút).";
-        } else {
-            message = "Đang chờ thanh toán...";
-        }
-
+        boolean open = initial.stream().anyMatch(m -> m.getStatus() != PaymentStatus.SUCCESS
+                && m.getOrder().getStatus() != OrderStatus.CANCELLED);
+        if (open) reconcileWithSePayGateway(groupInvoice);
+        List<Payment> members = open ? paymentRepository.findByGroupInvoice(groupInvoice) : initial;
+        boolean allPaid = members.stream().allMatch(m -> m.getStatus() == PaymentStatus.SUCCESS
+                && m.getOrder().getStatus() != OrderStatus.CANCELLED);
+        boolean allCancelled = members.stream().allMatch(m -> m.getOrder().getStatus() == OrderStatus.CANCELLED);
+        BigDecimal total = members.stream().map(Payment::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal paid = members.stream()
+                .filter(m -> m.getStatus() == PaymentStatus.SUCCESS && m.getOrder().getStatus() != OrderStatus.CANCELLED)
+                .map(Payment::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        String message = allPaid ? "Thanh toán thành công qua SePay Gateway!"
+                : allCancelled ? "Các đơn hàng đã bị hủy do quá thời gian thanh toán (10 phút)."
+                : "Đang chờ thanh toán...";
+        Payment first = members.get(0);
         return PaymentStatusResponse.builder()
-                .paymentId(payment.getId())
-                .orderId(payment.getOrder().getId())
-                .invoiceNumber(payment.getInvoiceNumber())
-                .orderStatus(payment.getOrder().getStatus().name())
-                .paymentStatus(payment.getStatus().name())
-                .isPaid(isPaid)
-                .amount(payment.getAmount())
-                .paidAmount(isPaid ? payment.getAmount() : BigDecimal.ZERO)
-                .paymentType(payment.getPaymentType() != null ? payment.getPaymentType().name() : "FULL")
-                .transactionNo(payment.getGatewayTransactionNo())
+                .paymentId(first.getId())
+                .orderId(first.getOrder().getId())
+                .orderIds(members.stream().map(m -> m.getOrder().getId()).toList())
+                .invoiceNumber(groupInvoice)
+                .orderStatus(allPaid ? OrderStatus.PROCESSING.name()
+                        : allCancelled ? OrderStatus.CANCELLED.name() : OrderStatus.PENDING.name())
+                .paymentStatus(allPaid ? PaymentStatus.SUCCESS.name() : PaymentStatus.PENDING.name())
+                .isPaid(allPaid)
+                .amount(total)
+                .paidAmount(paid)
+                .totalAmount(total)
+                .paymentType(PaymentType.FULL.name())
                 .message(message)
-                .paidAt(payment.getLastModifyDate())
+                .paidAt(first.getLastModifyDate())
                 .build();
     }
 
     /**
-     * Truy vấn trạng thái theo paymentId (kèm đối soát chủ động thời gian thực)
+     * Dựng response trạng thái cho 1 Payment: kiểm tra quyền xem, đối soát với SePay nếu còn chờ,
+     * rồi suy ra isPaid (SUCCESS và đơn chưa hủy) cùng thông báo phù hợp (đã cọc / đã trả / bị hủy / đang chờ).
      */
-    @Transactional
-    public PaymentStatusResponse getStatusById(String paymentId, String authenticatedUserId) {
-        Payment payment = paymentRepository.findById(paymentId)
-                .orElseThrow(() -> ApiException.notFound("Không tìm thấy thông tin thanh toán với id: " + paymentId));
-
+    private PaymentStatusResponse buildStatus(Payment payment, String authenticatedUserId) {
         if (authenticatedUserId == null || payment.getOrder() == null
                 || payment.getOrder().getCustomer() == null
                 || !payment.getOrder().getCustomer().getId().equals(authenticatedUserId)) {
             throw ApiException.forbidden("Bạn không có quyền xem thông tin giao dịch này.");
         }
 
-        // Tự động hủy nếu đã quá hạn 10 phút
-        if (payment.getOrder() != null && payment.getOrder().getStatus() == OrderStatus.PENDING
-                && payment.getOrder().getCreatedDate() != null
-                && payment.getOrder().getCreatedDate().plusMinutes(10).isBefore(java.time.LocalDateTime.now())) {
-            orderService.cancelExpiredOrder(payment.getOrder().getId(), "Quá hạn 10 phút không quét mã thanh toán");
-            payment = paymentRepository.findById(paymentId).orElse(payment);
+        // Đối soát trực tiếp với SePay nếu chưa SUCCESS và đơn chưa bị hủy (việc hủy do scheduler đảm nhiệm)
+        if (payment.getPaymentMethod() == PaymentMethod.ONLINE && payment.getStatus() != PaymentStatus.SUCCESS
+                && payment.getOrder().getStatus() != OrderStatus.CANCELLED) {
+            reconcileWithSePayGateway(payment.getInvoiceNumber());
+            payment = paymentRepository.findById(payment.getId()).orElse(payment);
         }
 
-        // Tự động đối soát trực tiếp với SePay pgapi nếu trạng thái chưa là SUCCESS và đơn chưa bị hủy
-        if (payment.getStatus() != PaymentStatus.SUCCESS && payment.getOrder().getStatus() != OrderStatus.CANCELLED) {
-            reconcileWithSePayGateway(payment);
-        }
-
-        boolean isPaid = payment.getStatus() == PaymentStatus.SUCCESS;
+        boolean cancelled = payment.getOrder().getStatus() == OrderStatus.CANCELLED;
+        boolean isPaid = payment.getStatus() == PaymentStatus.SUCCESS && !cancelled;
         String message;
         if (isPaid) {
-            message = "Thanh toán thành công qua SePay Gateway!";
-        } else if (payment.getOrder() != null && payment.getOrder().getStatus() == OrderStatus.CANCELLED) {
-            message = "Đơn hàng đã bị hủy do quá thời gian thanh toán (10 phút).";
+            message = payment.getPaymentType() == PaymentType.DEPOSIT
+                    ? String.format("Đã nhận tiền cọc %,.0f đ. Còn lại %,.0f đ thanh toán trước khi giao.",
+                            payment.getAmount(),
+                            payment.getOrder().getTotalAmount().subtract(payment.getAmount()).max(BigDecimal.ZERO))
+                    : "Thanh toán thành công qua SePay Gateway!";
+        } else if (cancelled && payment.getStatus() == PaymentStatus.SUCCESS) {
+            message = "Đơn hàng đã bị hủy trước khi nhận được tiền. Cửa hàng sẽ hoàn tiền cho bạn.";
+        } else if (cancelled) {
+            message = "Đơn hàng đã bị hủy do quá thời gian thanh toán (" + expiryText(payment.getOrder()) + ").";
         } else {
             message = "Đang chờ thanh toán...";
         }
 
-        return PaymentStatusResponse.builder()
+        PaymentStatusResponse.PaymentStatusResponseBuilder status = PaymentStatusResponse.builder()
                 .paymentId(payment.getId())
                 .orderId(payment.getOrder().getId())
                 .invoiceNumber(payment.getInvoiceNumber())
@@ -509,7 +730,8 @@ public class SePayGatewayService {
                 .paymentType(payment.getPaymentType() != null ? payment.getPaymentType().name() : "FULL")
                 .transactionNo(payment.getGatewayTransactionNo())
                 .message(message)
-                .paidAt(payment.getLastModifyDate())
-                .build();
+                .paidAt(payment.getLastModifyDate());
+        addOrderProgress(status, payment.getOrder(), paymentRepository.findByOrderId(payment.getOrder().getId()));
+        return status.build();
     }
 }

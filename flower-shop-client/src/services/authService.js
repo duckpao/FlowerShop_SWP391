@@ -74,7 +74,7 @@ export const authService = {
     if (!authModel.getToken()) {
       const user = await refresh()
       if (!user) {
-        const error = new Error('lòng đăng nhập để tiếp tục.')
+        const error = new Error('Vui lòng đăng nhập để tiếp tục.')
         error.status = 401
         throw error
       }
