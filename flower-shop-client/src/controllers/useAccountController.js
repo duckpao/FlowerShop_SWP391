@@ -99,9 +99,7 @@ export function useAccountController(user) {
     setError(''); setNotice('')
   }
   return {
-    profile, form, setForm: next => { setServerPhoneError(''); setForm(next) }, phoneError, addresses, cities, address, setAddress, editing, busy, error, notice,
-    saveProfile, saveAddress, uploadAvatar, removeAvatar, remove, makeDefault, edit, cancel, retry: () => setReload(x => x + 1)
     profile, form, setForm: next => { setServerPhoneError(''); setForm(next) }, phoneError, addresses, addressesLoaded, address, setAddress, editing, busy, error, notice,
-    saveProfile, saveAddress, uploadAvatar, remove, makeDefault, edit, cancel, retry: () => setReload(x => x + 1)
+    saveProfile, saveAddress, uploadAvatar, removeAvatar, remove, makeDefault, edit, cancel, retry: () => setReload(x => x + 1)
   }
 }

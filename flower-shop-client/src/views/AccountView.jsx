@@ -59,9 +59,6 @@ export default function AccountView({ user, logout, checkSession, busy: authBusy
             <ComponentCard title="Hồ sơ cá nhân" desc="Thông tin dùng để liên hệ khi giao hoa." className="shadow-sm">
               <div className="space-y-6">
                 <AvatarUpload profile={c.profile} busy={busy} upload={c.uploadAvatar} remove={c.removeAvatar} />
-                <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                  <span className="font-medium text-gray-900 dark:text-white">{c.profile.email}</span>
-                <AvatarUpload profile={c.profile} busy={busy} upload={c.uploadAvatar} />
                 <div className="flex flex-wrap items-center gap-2 rounded-xl bg-gray-50 p-3 dark:bg-gray-800/70 text-sm text-gray-600 dark:text-gray-400">
                   <span className="min-w-0 break-all font-medium text-gray-900 dark:text-white">{c.profile.email}</span>
                   {c.profile.emailVerified && (
@@ -117,60 +114,6 @@ export default function AccountView({ user, logout, checkSession, busy: authBusy
                 {!c.addresses.length ? (
                   <p className="text-gray-500 dark:text-gray-400 text-center py-4">Bạn chưa có địa chỉ cá nhân.</p>
                 ) : (
-                  <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-white/10">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableCell isHeader>Địa chỉ</TableCell>
-                          <TableCell isHeader>Khu vực</TableCell>
-                          <TableCell isHeader>Trạng thái</TableCell>
-                          <TableCell isHeader className="text-right">Thao tác</TableCell>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {c.addresses.map(item => (
-                          <TableRow key={item.id}>
-                            <TableCell>
-                              <span className="font-medium text-gray-900 dark:text-white">{item.addressLine}</span><p className="text-xs text-gray-500">{item.recipientName} · {item.recipientPhone}</p>
-                            </TableCell>
-                            <TableCell>
-                              {[item.ward, item.city].filter(Boolean).join(', ')}
-                            </TableCell>
-                            <TableCell>
-                              {item.isDefault ? <Badge color="primary">Mặc định</Badge> : null}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <div className="flex justify-end gap-2">
-                                {!item.isDefault && (
-                                  <button 
-                                    disabled={busy} 
-                                    onClick={() => c.makeDefault(item.id)}
-                                    className="text-sm font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white disabled:opacity-50"
-                                  >
-                                    Đặt mặc định
-                                  </button>
-                                )}
-                                <button 
-                                  disabled={busy} 
-                                  onClick={() => c.edit(item)}
-                                  className="text-sm font-medium text-brand-500 hover:text-brand-600 disabled:opacity-50"
-                                >
-                                  Sửa
-                                </button>
-                                
-                                <button 
-                                  disabled={busy} 
-                                  onClick={() => c.remove(item)}
-                                  className="text-sm font-medium text-error-500 hover:text-error-600 disabled:opacity-50"
-                                >
-                                  Xóa
-                                </button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
                   <div className="space-y-3">
                     {c.addresses.map(item => (
                       <div key={item.id} className="rounded-xl border border-gray-200 bg-gray-50/70 p-4 dark:border-gray-700 dark:bg-gray-800/40">
