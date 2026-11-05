@@ -65,6 +65,10 @@ public class Order {
     @Column(name = "checkout_group", length = 36)
     private String checkoutGroup;
 
+    /** Đơn đặt cọc (CUSTOM) sinh từ yêu cầu hoa tùy chỉnh nào; null với đơn thường. */
+    @Column(name = "custom_request_id", length = 36)
+    private String customRequestId;
+
     @Column(name = "total_amount", nullable = false, precision = 12, scale = 2)
     private BigDecimal totalAmount;
 

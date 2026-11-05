@@ -109,17 +109,6 @@ public class ManagerOrderController {
     }
 
     /**
-     * Lấy danh sách hàng đợi các đơn hàng cần xử lý gấp (PENDING, AWAITING_DEPOSIT, PROCESSING).
-     */
-    @Operation(summary = "Danh sách đơn đang chờ xử lý")
-    @GetMapping("/queue")
-    public ManagerOrderService.Results queue(@PathVariable String shopId, @AuthenticationPrincipal CurrentUser u,
-                                            @RequestParam(defaultValue = "0") int page,
-                                            @RequestParam(required = false) String status) {
-        return service.queue(shopId, u.id(), page, status);
-    }
-
-    /**
      * Lấy số lượng đơn hàng đang chờ xác nhận (dùng để hiển thị badge thông báo đỏ trên thanh menu).
      */
     @Operation(summary = "Đếm số đơn đang chờ xử lý")

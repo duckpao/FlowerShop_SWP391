@@ -26,6 +26,8 @@ import org.springframework.web.server.ResponseStatusException;
 import com.example.flowershop.entity.Order;
 import com.example.flowershop.entity.OrderDetail;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
 
@@ -42,7 +44,7 @@ public class ProductReviewService {
     }
 
     public record ReviewResult(String id, String productId, String reviewerName, int rating,
-            String comment, String shopReply, LocalDateTime createdAt) {
+            String comment, String shopReply, OffsetDateTime createdAt, OffsetDateTime updatedAt) {
     }
 
     public record Results(List<ReviewResult> content, int page, long totalElements, int totalPages) {
@@ -105,7 +107,12 @@ public class ProductReviewService {
         String name = r.getUser().getFullName();
         return new ReviewResult(r.getId(), r.getProduct().getId(),
                 name == null || name.isBlank() ? "Khách hàng" : name,
-                r.getRating(), r.getComment(), r.getShopReply(), r.getCreatedDate());
+                r.getRating(), r.getComment(), r.getShopReply(), timestamp(r.getCreatedDate()), timestamp(r.getLastModifyDate()));
+    }
+
+    // Hibernate's JVM-generated LocalDateTime timestamps use the server's default zone.
+    private static OffsetDateTime timestamp(LocalDateTime value) {
+        return value == null ? null : value.atZone(ZoneId.systemDefault()).toOffsetDateTime();
     }
 
     private Product visibleProduct(String productId) {

@@ -27,6 +27,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 class CustomFlowerOrderTests {
     @MockitoBean JavaMailSender mail;
+    @MockitoBean com.example.flowershop.service.TokenAuthService tokenAuth;
     @Autowired CustomFlowerOrderService service;
     @Autowired UserRepository users;
     @Autowired ShopRepository shops;
@@ -34,6 +35,7 @@ class CustomFlowerOrderTests {
     @Autowired ProductRepository products;
     @Autowired CustomOrderRequestRepository requests;
     @Autowired MockMvc mvc;
+    @Autowired jakarta.validation.Validator validator;
     User owner,customer; Shop shop; Category category; Product rose;
     String id(){return UUID.randomUUID().toString();}
     User user(UserRole role){return users.saveAndFlush(User.builder().id(id()).email(id()+"@example.test").fullName("Test user").role(role).status(UserStatus.ACTIVE).isEmailVerified(true).build());}
@@ -54,6 +56,21 @@ class CustomFlowerOrderTests {
         assertThat(service.mine(other.getId(),0).content()).isEmpty();
         assertThatThrownBy(()->service.detail(other.getId(),r.id())).isInstanceOf(ResponseStatusException.class);
         assertThat(rose.getStock()).isEqualTo(10);
+    }
+    @Test void optionalDescriptionAndMultipleAccessoriesPersist(){
+        for (String description : new String[]{null, "", "   ", "Đẹp"}) {
+            var input = new RequestInput(shop.getId(), new BigDecimal("300000"), 1, description,
+                    new Preferences(null, null, "Khác", "Giấy kraft, Ruy băng, Thiệp chúc mừng", null, null));
+            assertThat(validator.validate(input)).isEmpty();
+            var created = service.create(customer.getId(), input);
+            var saved = service.detail(customer.getId(), created.id());
+            assertThat(saved.description()).isEqualTo(description == null ? "" : description.strip());
+            assertThat(saved.design().wrapping()).isEqualTo(input.preferences().wrapping());
+            assertThat(saved.design().occasion()).isEqualTo("Khác");
+        }
+        var tooLong = new RequestInput(shop.getId(), new BigDecimal("300000"), 1, "a".repeat(3001),
+                new Preferences(null, null, null, null, null, null));
+        assertThat(validator.validate(tooLong)).anyMatch(v -> v.getPropertyPath().toString().equals("description"));
     }
     @Test void filtersSuggestionsByBudgetQuantityVisibilityAndStock(){
         product("Too expensive",200000,10);product("No stock",90000,1);
@@ -102,6 +119,22 @@ class CustomFlowerOrderTests {
         mvc.perform(get("/api/public/custom-orders/suggestions").param("budget","-1")).andExpect(status().isBadRequest());
         mvc.perform(get("/api/customer/custom-orders")).andExpect(status().isUnauthorized());
         mvc.perform(get("/api/shop/mine/"+shop.getId()+"/custom-orders")).andExpect(status().isUnauthorized());
+    }
+    @Test void customerCanReadSubmittedRequestsAndShopCanListThem() throws Exception {
+        var r = service.create(customer.getId(), input(null));
+        org.mockito.Mockito.when(tokenAuth.authenticate("customer-test"))
+                .thenReturn(com.example.flowershop.dto.auth.CurrentUser.from(customer));
+        org.mockito.Mockito.when(tokenAuth.authenticate("shop-test"))
+                .thenReturn(com.example.flowershop.dto.auth.CurrentUser.from(owner));
+        mvc.perform(get("/api/customer/custom-orders").header("Authorization", "Bearer customer-test"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.content[0].id").value(r.id()));
+        mvc.perform(get("/api/customer/custom-orders").param("page", "0").header("Authorization", "Bearer customer-test"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(1));
+        mvc.perform(get("/api/customer/custom-orders/" + r.id()).header("Authorization", "Bearer customer-test"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.id").value(r.id()));
+        mvc.perform(get("/api/shop/mine/" + shop.getId() + "/custom-orders")
+                        .param("page", "0").param("status", "REQUESTED").header("Authorization", "Bearer shop-test"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.content[0].id").value(r.id()));
     }
     @Test void rejectsPastDateAndOtherShopsReference(){
         var past=new RequestInput(shop.getId(),new BigDecimal("300000"),1,"Birthday bouquet please",new Preferences(null,null,null,null,"2000-01-01",null));

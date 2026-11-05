@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { useAuth } from '../context/AuthContext'
 import { customerOrderService } from '../services/customerOrderService'
-import paymentApi from '../api/paymentApi'
+import paymentService from '../services/paymentService'
 import { formatPrice } from '../models/productModel'
 import PageMeta from '../components/common/PageMeta'
 import PageBreadCrumb from '../components/common/PageBreadCrumb'
@@ -58,8 +58,8 @@ export default function PaymentPendingPage() {
     setError('')
     try {
       const orderIds = payable.map(o => o.id)
-      if (orderIds.length === 1) await paymentApi.startSePayCheckout(orderIds[0], 'FULL')
-      else await paymentApi.startSePayGroupCheckout(orderIds)
+      if (orderIds.length === 1) await paymentService.startSePayCheckout(orderIds[0], 'FULL')
+      else await paymentService.startSePayGroupCheckout(orderIds)
     } catch (e) {
       setError(e.message || 'Không thể tạo thanh toán. Vui lòng thử lại.')
       setPaying(false)

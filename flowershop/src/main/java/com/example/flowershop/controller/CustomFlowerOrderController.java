@@ -15,19 +15,19 @@ public class CustomFlowerOrderController {
     private final CustomFlowerOrderService service;
     public CustomFlowerOrderController(CustomFlowerOrderService service){this.service=service;}
     @GetMapping("/api/public/custom-orders/suggestions")
-    public CustomFlowerOrderService.Suggestions suggestions(@RequestParam BigDecimal budget,
-            @RequestParam(defaultValue="1") int quantity,@RequestParam(required=false) String shopId,
-            @RequestParam(defaultValue="") String q,@RequestParam(defaultValue="0") int page){return service.suggestions(budget,quantity,shopId,q,page);}
+    public CustomFlowerOrderService.Suggestions suggestions(@RequestParam("budget") BigDecimal budget,
+            @RequestParam(name="quantity", defaultValue="1") int quantity,@RequestParam(name="shopId", required=false) String shopId,
+            @RequestParam(name="q", defaultValue="") String q,@RequestParam(name="page", defaultValue="0") int page){return service.suggestions(budget,quantity,shopId,q,page);}
     @PostMapping("/api/customer/custom-orders") @PreAuthorize("hasRole('CUSTOMER')") @ResponseStatus(HttpStatus.CREATED)
     public CustomFlowerOrderService.Result create(@AuthenticationPrincipal CurrentUser user,@Valid @RequestBody CustomFlowerOrderService.RequestInput input){return service.create(user.id(),input);}
     @GetMapping("/api/customer/custom-orders") @PreAuthorize("hasRole('CUSTOMER')")
-    public CustomFlowerOrderService.Results mine(@AuthenticationPrincipal CurrentUser user,@RequestParam(defaultValue="0") int page){return service.mine(user.id(),page);}
+    public CustomFlowerOrderService.Results mine(@AuthenticationPrincipal CurrentUser user,@RequestParam(name="page", defaultValue="0") int page){return service.mine(user.id(),page);}
     @GetMapping("/api/customer/custom-orders/{id}") @PreAuthorize("hasRole('CUSTOMER')")
-    public CustomFlowerOrderService.Result detail(@AuthenticationPrincipal CurrentUser user,@PathVariable String id){return service.detail(user.id(),id);}
+    public CustomFlowerOrderService.Result detail(@AuthenticationPrincipal CurrentUser user,@PathVariable("id") String id){return service.detail(user.id(),id);}
     @GetMapping("/api/shop/mine/{shopId}/custom-orders") @PreAuthorize("hasRole('SHOP')")
-    public CustomFlowerOrderService.Results list(@PathVariable String shopId,@AuthenticationPrincipal CurrentUser user,@RequestParam(required=false) CustomOrderStatus status,@RequestParam(defaultValue="0") int page){return service.shopRequests(shopId,user.id(),status,page);}
+    public CustomFlowerOrderService.Results list(@PathVariable("shopId") String shopId,@AuthenticationPrincipal CurrentUser user,@RequestParam(name="status", required=false) CustomOrderStatus status,@RequestParam(name="page", defaultValue="0") int page){return service.shopRequests(shopId,user.id(),status,page);}
     @GetMapping("/api/shop/mine/{shopId}/custom-orders/{id}") @PreAuthorize("hasRole('SHOP')")
-    public CustomFlowerOrderService.Result shopDetail(@PathVariable String shopId,@PathVariable String id,@AuthenticationPrincipal CurrentUser user){return service.shopRequest(shopId,user.id(),id);}
+    public CustomFlowerOrderService.Result shopDetail(@PathVariable("shopId") String shopId,@PathVariable("id") String id,@AuthenticationPrincipal CurrentUser user){return service.shopRequest(shopId,user.id(),id);}
     @PutMapping("/api/shop/mine/{shopId}/custom-orders/{id}") @PreAuthorize("hasRole('SHOP')")
-    public CustomFlowerOrderService.Result decide(@PathVariable String shopId,@PathVariable String id,@AuthenticationPrincipal CurrentUser user,@Valid @RequestBody CustomFlowerOrderService.Decision input){return service.decide(shopId,user.id(),id,input);}
+    public CustomFlowerOrderService.Result decide(@PathVariable("shopId") String shopId,@PathVariable("id") String id,@AuthenticationPrincipal CurrentUser user,@Valid @RequestBody CustomFlowerOrderService.Decision input){return service.decide(shopId,user.id(),id,input);}
 }

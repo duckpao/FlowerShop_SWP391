@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router'
 import { useAuth } from '../context/AuthContext'
 import { customerOrderService } from '../services/customerOrderService'
+import orderService from '../services/orderService'
 import { formatPrice } from '../models/productModel'
 import Badge from '../components/ui/badge/Badge'
 import ComponentCard from '../components/common/ComponentCard'
@@ -9,6 +10,22 @@ import PageMeta from '../components/common/PageMeta'
 import PageBreadCrumb from '../components/common/PageBreadCrumb'
 
 import { ghnStatusLabels, orderStatusColors as statusColors, orderStatusLabels as statusLabels } from '../models/orderStatus'
+
+const refundStatusLabels = {
+    REQUESTED: 'Chờ cửa hàng liên hệ',
+    APPROVED: 'Cửa hàng đã liên hệ, đang hoàn tiền',
+    PROCESSED: 'Đã hoàn tiền',
+    REJECTED: 'Bị từ chối',
+}
+const refundStatusColors = { REQUESTED: 'warning', APPROVED: 'info', PROCESSED: 'success', REJECTED: 'error' }
+
+/** Tổng đã trả thành công (cọc + phần còn lại, hoặc toàn bộ); dùng để biết đơn đã có hóa đơn chưa. */
+const paidAmount = order => (order.payments || [])
+    .filter(p => p.status === 'SUCCESS')
+    .reduce((sum, p) => sum + Number(p.amount || 0), 0)
+
+/** Chưa giao cho GHN thì khách còn hủy được (backend kiểm tra lại). */
+const cancellableStatuses = ['PENDING', 'AWAITING_DEPOSIT', 'DEPOSIT_PAID', 'PROCESSING']
 
 const trackingSteps = [
     'Cửa hàng đang chuẩn bị đơn hàng',
@@ -49,6 +66,10 @@ export default function CustomerOrderDetailView() {
     const [shippingFeeError, setShippingFeeError] = useState('')
     const [trackingBusy, setTrackingBusy] = useState(false)
     const [trackingError, setTrackingError] = useState('')
+    const [cancelOpen, setCancelOpen] = useState(false)
+    const [cancelReason, setCancelReason] = useState('')
+    const [cancelBusy, setCancelBusy] = useState(false)
+    const [cancelError, setCancelError] = useState('')
 
     // Tải chi tiết đơn (customerOrderService.detail), rồi hỏi lại phí GHN hiện tại (customerOrderService.shippingFee)
     useEffect(() => {
@@ -87,6 +108,21 @@ export default function CustomerOrderDetailView() {
             setTrackingError(e.message || 'Không thể cập nhật trạng thái giao hàng.')
         } finally {
             setTrackingBusy(false)
+        }
+    }
+
+    // Hủy đơn: orderService.cancelOrder -> POST /api/orders/{userId}/{id}/cancel, rồi tải lại để thấy trạng thái + mục hoàn tiền
+    const cancelOrder = async () => {
+        setCancelBusy(true)
+        setCancelError('')
+        try {
+            await orderService.cancelOrder(user.id, id, cancelReason.trim())
+            setOrder(await customerOrderService.detail(id))
+            setCancelOpen(false)
+        } catch (e) {
+            setCancelError(e.message || 'Không thể hủy đơn hàng.')
+        } finally {
+            setCancelBusy(false)
         }
     }
 
@@ -147,7 +183,7 @@ export default function CustomerOrderDetailView() {
                             <th className="px-4 py-2 text-right text-sm">Thành tiền</th>
                         </tr></thead>
                         <tbody>{order.items?.map((item, i) => <tr key={i} className="border-t">
-                            <td className="px-4 py-2">{item.productName || '-'}</td>
+                            <td className="px-4 py-2">{item.productName || (item.productId ? '-' : 'Hoa đặt theo yêu cầu')}</td>
                             <td className="px-4 py-2 text-right">{formatPrice(item.price)}</td>
                             <td className="px-4 py-2 text-right">{item.quantity}</td>
                             <td className="px-4 py-2 text-right font-medium">{formatPrice(item.price * item.quantity)}</td>
@@ -163,7 +199,72 @@ export default function CustomerOrderDetailView() {
                         <p className="text-xs text-gray-500">Phí GHN hiện tại có thể khác phí đã chốt khi đặt hàng; tổng tiền đơn không thay đổi.</p>
                     )}
                     <div className="flex justify-between font-bold text-base"><span>Tổng cộng:</span><span className="text-brand-500">{formatPrice(order.totalAmount)}</span></div>
+                    {paidAmount(order) > 0 && paidAmount(order) < Number(order.totalAmount) && (
+                        <div className="flex justify-between text-gray-600 dark:text-gray-300"><span>Đã cọc / còn lại (trả khi nhận hàng):</span><span>{formatPrice(paidAmount(order))} / {formatPrice(Number(order.totalAmount) - paidAmount(order))}</span></div>
+                    )}
                 </div>
+
+                {order.status !== 'CANCELLED' && paidAmount(order) >= Number(order.totalAmount) && (
+                    <Link to={`/orders/${order.id}/invoice`} className="mt-4 inline-flex rounded-lg border border-brand-500 px-3 py-2 text-sm font-medium text-brand-600 hover:bg-brand-50 dark:text-brand-400">
+                        Xem hóa đơn
+                    </Link>
+                )}
+
+                {cancellableStatuses.includes(order.status) && (
+                    <section className="mt-6 rounded-lg border border-gray-200 p-4 dark:border-white/10" aria-label="Hủy đơn hàng">
+                        {!cancelOpen ? (
+                            <button type="button" onClick={() => setCancelOpen(true)}
+                                className="rounded-lg border border-error-500 px-3 py-2 text-sm font-medium text-error-600 hover:bg-error-50 dark:text-error-400">
+                                Hủy đơn hàng
+                            </button>
+                        ) : (
+                            <div className="space-y-3">
+                                <label htmlFor="cancel-reason" className="block text-sm font-medium">Lý do hủy (không bắt buộc)</label>
+                                <textarea id="cancel-reason" rows={2} maxLength={255} value={cancelReason}
+                                    onChange={e => setCancelReason(e.target.value)}
+                                    className="w-full rounded-lg border border-gray-300 p-2 text-sm dark:border-white/10 dark:bg-transparent" />
+                                {paidAmount(order) > 0 && (
+                                    <p className="text-sm text-gray-600 dark:text-gray-300">
+                                        Bạn đã thanh toán {formatPrice(paidAmount(order))}. Sau khi hủy, cửa hàng sẽ liên hệ để hoàn tiền.
+                                    </p>
+                                )}
+                                {cancelError && <p className="text-sm text-error-500" role="alert">{cancelError}</p>}
+                                <div className="flex flex-wrap gap-2">
+                                    <button type="button" onClick={cancelOrder} disabled={cancelBusy}
+                                        className="rounded-lg bg-error-500 px-3 py-2 text-sm font-medium text-white hover:bg-error-600 disabled:opacity-50">
+                                        {cancelBusy ? 'Đang hủy…' : 'Xác nhận hủy'}
+                                    </button>
+                                    <button type="button" onClick={() => setCancelOpen(false)} disabled={cancelBusy}
+                                        className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium dark:border-white/10">
+                                        Giữ đơn
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </section>
+                )}
+
+                {order.refunds?.length > 0 && (
+                    <section className="mt-6 rounded-lg border border-gray-200 p-4 dark:border-white/10" aria-label="Hoàn tiền">
+                        <h2 className="mb-3 font-semibold">Hoàn tiền</h2>
+                        <ul className="space-y-3">
+                            {order.refunds.map((r, i) => (
+                                <li key={i} className="text-sm">
+                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                        <strong>{formatPrice(r.amount)}</strong>
+                                        <Badge color={refundStatusColors[r.status] || 'primary'}>{refundStatusLabels[r.status] || r.status}</Badge>
+                                    </div>
+                                    {r.reason && <p className="mt-1 text-gray-600 dark:text-gray-300">{r.reason}</p>}
+                                    <p className="mt-1 text-xs text-gray-500">
+                                        Tạo lúc {new Date(r.createdDate).toLocaleString('vi-VN')}
+                                        {r.status !== 'REQUESTED' && r.updatedDate && ` · Cập nhật ${new Date(r.updatedDate).toLocaleString('vi-VN')}`}
+                                    </p>
+                                </li>
+                            ))}
+                        </ul>
+                        <p className="mt-3 text-xs text-gray-500">Nhân viên cửa hàng sẽ gọi cho bạn để hoàn tiền. Bạn sẽ nhận thông báo khi tiền đã được hoàn.</p>
+                    </section>
+                )}
 
                 {order.delivery && <div className="mt-4 p-3 rounded-lg bg-gray-50 dark:bg-white/5 text-sm">
                     <p><strong>Vận đơn:</strong> {order.delivery.trackingCode}</p>

@@ -1,6 +1,6 @@
 import axiosClient from './axiosClient';
 
-const paymentApi = {
+const paymentService = {
   /**
    * PHASE 5: Khởi tạo phiên thanh toán SePay Gateway (tính tiền server-side bảo mật)
    * @param {Object} data - { orderId, paymentType, paymentMethod, userId }
@@ -15,7 +15,7 @@ const paymentApi = {
 
   /**
    * PHASE 11: Kiểm tra trạng thái thanh toán theo mã hóa đơn invoiceNumber (cho Polling kết quả).
-   * Các trang success/pending gọi lặp lại hàm này cho tới khi webhook SePay cập nhật trạng thái PAID.
+   * Các trang success/pending gọi lặp lại hàm này; mỗi lần backend tự hỏi API SePay (không có webhook) tới khi isPaid = true.
    */
   getPaymentStatusByInvoice: (invoiceNumber) => {
     return axiosClient.get(`/payments/status-by-invoice/${invoiceNumber}`);
@@ -58,12 +58,12 @@ const paymentApi = {
   /**
    * Tạo phiên thanh toán rồi chuyển khách sang cổng SePay.
    * @param {string} orderId
-   * @param {'FULL'|'DEPOSIT'|'FINAL'} paymentType - đơn thường dùng FULL; đơn đặt cọc dùng DEPOSIT rồi FINAL
+   * @param {'FULL'|'DEPOSIT'} paymentType - đơn thường dùng FULL; đơn đặt cọc dùng DEPOSIT (phần còn lại GHN thu COD)
    * @param {string} [paymentMethod] - CARD | BANK_TRANSFER | NAPAS_BANK_TRANSFER (bỏ trống để khách chọn trên cổng)
    */
   startSePayCheckout: async (orderId, paymentType = 'FULL', paymentMethod) => {
-    const payment = await paymentApi.createPayment({ orderId, paymentType, paymentMethod });
-    paymentApi.redirectToSePay(payment);
+    const payment = await paymentService.createPayment({ orderId, paymentType, paymentMethod });
+    paymentService.redirectToSePay(payment);
   },
 
   /**
@@ -71,8 +71,8 @@ const paymentApi = {
    * @param {string[]} orderIds
    */
   startSePayGroupCheckout: async (orderIds, paymentMethod) => {
-    const payment = await paymentApi.createGroupPayment({ orderIds, paymentMethod });
-    paymentApi.redirectToSePay(payment);
+    const payment = await paymentService.createGroupPayment({ orderIds, paymentMethod });
+    paymentService.redirectToSePay(payment);
   },
 
   /** Tạo 1 giao dịch SePay chung cho nhiều đơn (backend cộng tổng tiền các đơn). */
@@ -85,8 +85,8 @@ const paymentApi = {
     if (!checkoutUrl || !fields) throw new Error('Không nhận được thông tin cổng thanh toán từ máy chủ.');
     // Nhớ mã hóa đơn để các trang success/pending/cancel poll đúng giao dịch sau khi SePay redirect về
     if (payment?.invoiceNumber) sessionStorage.setItem('flower_pending_invoice', payment.invoiceNumber);
-    paymentApi.submitSePayCheckoutForm(checkoutUrl, fields);
+    paymentService.submitSePayCheckoutForm(checkoutUrl, fields);
   },
 };
 
-export default paymentApi;
+export default paymentService;

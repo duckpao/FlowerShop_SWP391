@@ -1,7 +1,7 @@
 ﻿import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import PageMeta from '../components/common/PageMeta';
-import paymentApi from '../api/paymentApi';
+import paymentService from '../services/paymentService';
 import { useCartContext } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 
@@ -37,7 +37,7 @@ export default function PaymentCancelPage() {
     // Gọi hủy; lỗi thì thử lại mỗi 2 giây, tối đa 5 lần rồi sang trang lỗi (tránh lặp vô hạn khi sai invoice/không có quyền)
     const cancelAndReturn = async () => {
       try {
-        const result = await paymentApi.cancelCheckout(invoiceNumber);
+        const result = await paymentService.cancelCheckout(invoiceNumber);
         if (!active) return;
         // Webhook báo đã trả tiền trước khi hủy kịp -> coi như thành công, không hủy
         if (result?.paid) {
@@ -47,7 +47,7 @@ export default function PaymentCancelPage() {
         // Thanh toán cọc/phần còn lại: hủy ở cổng không hủy đơn, chỉ bỏ lần thanh toán này.
         let deposit = false;
         try {
-          const res = await paymentApi.getPaymentStatusByInvoice(invoiceNumber);
+          const res = await paymentService.getPaymentStatusByInvoice(invoiceNumber);
           const type = (res?.data || res)?.paymentType;
           deposit = type === 'DEPOSIT' || type === 'FINAL';
         } catch { /* không lấy được trạng thái thì coi như đơn thường */ }

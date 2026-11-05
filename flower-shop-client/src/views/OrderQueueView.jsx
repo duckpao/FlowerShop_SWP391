@@ -33,7 +33,8 @@ function timeAgo(dateString) {
  * View Quản lý Đơn hàng của Cửa hàng (OrderQueueView).
  * Thực hiện quy trình đơn hàng 4 bước:
  * 1. PENDING (Chờ xác nhận): Shop bấm "Xác nhận đơn hàng" -> Chuyển sang PROCESSING.
- * 2. PROCESSING (Đang chuẩn bị): Shop làm hoa, bấm "Tạo mã vận đơn GHN & Giao" -> Tạo vận đơn GHN, chuyển sang DELIVERING.
+ * 2. PROCESSING (Đang chuẩn bị) hoặc DEPOSIT_PAID (đơn đặt cọc): Shop làm hoa, bấm "Tạo mã vận đơn GHN & Giao" -> Tạo vận đơn GHN
+ *    (phần chưa trả GHN thu hộ COD), chuyển sang DELIVERING.
  * 3. DELIVERING (Đang giao): Trạng thái vận đơn đi theo GHN; bảng giả lập gửi từng bước sang GHN staging.
  * 4. COMPLETED / REFUNDED: GHN báo giao thành công hoặc hoàn hàng thì đơn tự chuyển theo.
  */
@@ -325,7 +326,7 @@ export default function OrderQueueView({ shop }) {
                                                         </Button>
                                                     )}
                                                     
-                                                    {o.status === 'PROCESSING' && (
+                                                    {(o.status === 'PROCESSING' || o.status === 'DEPOSIT_PAID') && (
                                                         <Button size="sm" className="bg-brand-600 hover:bg-brand-700 text-white" onClick={() => ship(o.id)} disabled={busy}>
                                                             Tạo mã vận đơn GHN & Giao
                                                         </Button>
@@ -342,7 +343,7 @@ export default function OrderQueueView({ shop }) {
                                                         </>
                                                     )}
 
-                                                    {(o.status === 'PENDING' || o.status === 'AWAITING_DEPOSIT' || o.status === 'PROCESSING') && (
+                                                    {['PENDING', 'AWAITING_DEPOSIT', 'DEPOSIT_PAID', 'PROCESSING'].includes(o.status) && (
                                                         <Button size="sm" variant="outline" className="text-error-500 hover:bg-error-50 hover:border-error-200" onClick={() => openCancelModal(o)} disabled={busy}>
                                                             Hủy đơn
                                                         </Button>
@@ -442,7 +443,7 @@ export default function OrderQueueView({ shop }) {
                                         Xác nhận đơn hàng
                                     </Button>
                                 )}
-                                {orderDetail.status === 'PROCESSING' && (
+                                {(orderDetail.status === 'PROCESSING' || orderDetail.status === 'DEPOSIT_PAID') && (
                                     <Button className="bg-brand-600 hover:bg-brand-700 text-white" onClick={() => { setDetailModalOpen(false); ship(orderDetail.id); }}>
                                         Tạo mã vận đơn GHN & Giao
                                     </Button>

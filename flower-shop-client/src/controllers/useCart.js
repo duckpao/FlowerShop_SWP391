@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import cartApi from '../api/cartApi';
+import cartService from '../services/cartService';
 import { API_BASE } from '../apiBase';
 
 const GUEST_KEY = 'flower_guest_cart';
@@ -102,7 +102,7 @@ export function useCart(userId) {
     setLoading(true);
     setError(null);
     try {
-      setCart(await cartApi.getCart(userId));
+      setCart(await cartService.getCart(userId));
     } catch (err) {
       setError(err.message || 'Có lỗi xảy ra.');
     } finally {
@@ -120,7 +120,7 @@ export function useCart(userId) {
         for (const item of guestItems) {
           const productId = item.product?.id || item.productId;
           if (productId) {
-            await cartApi.addToCart(userId, { productId, quantity: item.quantity || 1 });
+            await cartService.addToCart(userId, { productId, quantity: item.quantity || 1 });
           }
         }
         guestItems = []; // lỗi giữa chừng thì giữ lại để lần sau thử lại
@@ -140,7 +140,7 @@ export function useCart(userId) {
    */
   const addToCart = useCallback((productId, quantity = 1, productData = null) => run(async () => {
     if (userId) {
-      await cartApi.addToCart(userId, { productId, quantity });
+      await cartService.addToCart(userId, { productId, quantity });
       await fetchCart();
       return;
     }
@@ -200,7 +200,7 @@ export function useCart(userId) {
   const updateItem = useCallback((itemId, quantity) => run(async () => {
     if (userId) {
       try {
-        await cartApi.updateCartItem(userId, itemId, { quantity });
+        await cartService.updateCartItem(userId, itemId, { quantity });
       } finally {
         await fetchCart(); // dù lỗi cũng tải lại để UI khớp server
       }
@@ -219,7 +219,7 @@ export function useCart(userId) {
   const removeItem = useCallback((itemId) => run(async () => {
     if (userId) {
       try {
-        await cartApi.removeCartItem(userId, itemId);
+        await cartService.removeCartItem(userId, itemId);
       } finally {
         await fetchCart();
       }
@@ -229,15 +229,14 @@ export function useCart(userId) {
   }), [userId, fetchCart]);
 
   // Tải giỏ khi mount/đổi user và khi quay lại tab/cửa sổ (vd: đã thanh toán ở tab khác nên giỏ server đã bị xóa)
+  // 'focus' bắt cả quay lại tab lẫn quay lại cửa sổ; không nghe thêm 'visibilitychange' vì quay lại tab sẽ bị gọi 2 lần (và cả lúc ẩn tab)
   useEffect(() => {
     fetchCart();
     window.addEventListener('pageshow', fetchCart);
     window.addEventListener('focus', fetchCart);
-    document.addEventListener('visibilitychange', fetchCart);
     return () => {
       window.removeEventListener('pageshow', fetchCart);
       window.removeEventListener('focus', fetchCart);
-      document.removeEventListener('visibilitychange', fetchCart);
     };
   }, [fetchCart]);
 

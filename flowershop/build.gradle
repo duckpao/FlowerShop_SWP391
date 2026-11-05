@@ -18,6 +18,11 @@ repositories {
     mavenCentral()
 }
 
+// Spring MVC needs parameter names for request and path argument binding.
+tasks.withType(JavaCompile).configureEach {
+    options.compilerArgs.add('-parameters')
+}
+
 dependencies {
     implementation 'org.springframework.security:spring-security-oauth2-jose'
     implementation 'org.springframework.boot:spring-boot-starter-mail'

@@ -1,6 +1,16 @@
 import { useProductReviewsController } from '../controllers/useProductReviewsController'
 import '../styles/catalog.css'
 
+const reviewTime = value => {
+  if (!value) return 'Chưa có thời gian'
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? 'Thời gian không hợp lệ' : date.toLocaleString('vi-VN', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+  })
+}
+
 export default function ProductReviewsView({ product, auth }) {
   const c = useProductReviewsController(product.id, auth?.user)
   const user = auth?.user
@@ -23,6 +33,7 @@ export default function ProductReviewsView({ product, auth }) {
         </label>
         <label>Nhận xét
           <textarea maxLength={2000} value={c.draft.comment}
+            placeholder={c.own ? 'Cập nhật nhận xét...' : 'Chia sẻ nhận xét của bạn…'}
             onChange={e => c.setDraft({ ...c.draft, comment: e.target.value })} />
         </label>
         <button className="primary">{c.own ? 'Cập nhật đánh giá' : 'Gửi đánh giá'}</button>
@@ -39,7 +50,9 @@ export default function ProductReviewsView({ product, auth }) {
       {!c.data.content.length && <p>Sản phẩm chưa có đánh giá nào.</p>}
       <ul className="catalog-list">{c.data.content.map(r => <li key={r.id}>
         <strong>{'★'.repeat(r.rating)} · {r.reviewerName}</strong>
-        <p className="muted">{new Date(r.createdAt).toLocaleString('vi-VN')}</p>
+        <p className="muted">Đã đăng: <time dateTime={r.createdAt}>{reviewTime(r.createdAt)}</time> </p>
+        {r.updatedAt && new Date(r.updatedAt).getTime() > new Date(r.createdAt).getTime() &&
+          <p className="muted">Cập nhật gần nhất: <time dateTime={r.updatedAt}>{reviewTime(r.updatedAt)}</time> </p>}
         {r.comment && <p>{r.comment}</p>}
         {r.shopReply && <p><em>Shop phản hồi: {r.shopReply}</em></p>}
         {ownsShop && <div>
