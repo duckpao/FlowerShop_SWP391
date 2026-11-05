@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import PageMeta from '../components/common/PageMeta'
 import { blogService } from '../services/blogService'
+import BlogInteractions from '../components/blog/BlogInteractions'
 
-export default function FloralCareDetailView() {
+export default function FloralCareDetailView({ auth }) {
   const { id } = useParams()
   const [post, setPost] = useState(null)
   const [error, setError] = useState('')
@@ -22,5 +23,6 @@ export default function FloralCareDetailView() {
       <div className="mt-8 whitespace-pre-wrap text-base leading-8 text-gray-700 dark:text-gray-300">{post.content}</div>
       {post.images.slice(1).length > 0 && <div className="mt-8 grid gap-4 sm:grid-cols-2">{post.images.slice(1).map((url, index) => <img key={`${url}-${index}`} src={url} alt="" className="h-64 w-full rounded-xl object-cover" />)}</div>}
     </article>
+    <BlogInteractions blogId={post.id} auth={auth} />
   </main>
 }

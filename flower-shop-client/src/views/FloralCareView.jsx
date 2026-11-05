@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router'
 import PageMeta from '../components/common/PageMeta'
 import { blogService } from '../services/blogService'
 
-export default function FloralCareView() {
+export default function FloralCareView({ auth }) {
   const [params, setParams] = useSearchParams()
   const [query, setQuery] = useState(params.get('q') || '')
   const [data, setData] = useState(null)
@@ -27,7 +27,7 @@ export default function FloralCareView() {
       <p className="text-sm font-semibold uppercase tracking-widest text-brand-500">Cẩm nang FlowerShop</p>
       <h1 className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">Chăm hoa đẹp lâu, trao yêu thương dài lâu</h1>
       <p className="mt-3 max-w-2xl text-gray-600 dark:text-gray-300">Khám phá hướng dẫn chăm sóc hoa, ý tưởng quà tặng và thông tin mới từ các cửa hàng.</p>
-      <form onSubmit={search} className="mt-6 flex max-w-xl gap-2"><input value={query} onChange={e => setQuery(e.target.value)} maxLength={100} placeholder="Tìm bài viết…" className="min-w-0 flex-1 rounded-lg border border-white bg-white px-4 py-2.5 shadow-sm dark:border-gray-700 dark:bg-gray-900" /><button className="rounded-lg bg-brand-500 px-5 py-2.5 font-medium text-white">Tìm</button></form>
+      <div className="mt-6 flex flex-wrap items-center gap-3"><form onSubmit={search} className="flex min-w-0 max-w-xl flex-1 gap-2"><input value={query} onChange={e => setQuery(e.target.value)} maxLength={100} placeholder="Tìm bài viết…" className="min-w-0 flex-1 rounded-lg border border-white bg-white px-4 py-2.5 shadow-sm dark:border-gray-700 dark:bg-gray-900" /><button className="rounded-lg bg-brand-500 px-5 py-2.5 font-medium text-white">Tìm</button></form>{auth?.user?.role === 'CUSTOMER' && <Link to="/saved-blogs" className="rounded-lg border border-brand-200 bg-white px-4 py-2.5 text-sm font-medium text-brand-600 dark:border-brand-500/30 dark:bg-gray-900">Bài viết đã lưu</Link>}</div>
     </header>
     {error && <p role="alert" className="rounded-lg bg-error-50 p-3 text-error-600">{error}</p>}
     {!data && !error && <p role="status">Đang tải bài viết…</p>}

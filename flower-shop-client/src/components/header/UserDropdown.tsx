@@ -13,7 +13,6 @@ const CUSTOMER_LINKS: [string, string, string][] = [
   ['/following-shops', 'Cửa hàng đang theo dõi', 'M4 10v9a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-9M3 10l1.5-5h15L21 10M3 10h18M3 10a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0M10 20v-5h4v5'],
   ['/favorites', 'Sản phẩm yêu thích', 'M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10Z'],
 ];
-
 export default function UserDropdown() {
   const [isOpen, setIsOpen] = useState(false);
   const [avatarOpen, setAvatarOpen] = useState(false);

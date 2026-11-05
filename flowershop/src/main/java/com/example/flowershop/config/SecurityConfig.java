@@ -39,9 +39,10 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/custom-orders", "/custom-orders/new", "/budget-flowers", "/api/public/custom-orders/suggestions").permitAll()
                         .requestMatchers(HttpMethod.GET, "/shops", "/following-shops", "/favorite-shops").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/public/products/*/reviews").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/public/blogs/*/engagement", "/api/public/blogs/*/comments").permitAll()
                         .requestMatchers(HttpMethod.GET, "/", "/index.html", "/assets/**", "/images/**", "/vite.svg", "/favicon.svg", "/icons.svg",
                                 "/login", "/account", "/admin", "/admin/**", "/shop-admin", "/shop-admin/**",
-                                "/products", "/products/*", "/favorites", "/shops/*", "/floral-care", "/floral-care/*", "/checkout", "/orders", "/orders/*",
+                                "/products", "/products/*", "/favorites", "/saved-blogs", "/shops/*", "/floral-care", "/floral-care/*", "/checkout", "/orders", "/orders/*",
                                 "/cart", "/home", "/occasions", "/chat", "/payment/**", "/invitations/accept").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/public/shops", "/api/public/shops/*", "/api/public/shops/*/products", "/api/public/products", "/api/public/products/*", "/api/public/categories", "/api/public/blogs", "/api/public/blogs/*", "/api/public/ghn/provinces", "/api/public/ghn/provinces/*/districts", "/api/public/ghn/districts/*/wards").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/payments/sepay/ipn", "/api/sepay/ipn", "/api/webhook/sepay").permitAll()

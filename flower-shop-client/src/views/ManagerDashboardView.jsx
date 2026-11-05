@@ -6,6 +6,7 @@ import ManagerCustomOrdersView from "./ManagerCustomOrdersView";
 import ManagerChatView from "./ManagerChatView";
 import ManagerBlogsView from "./ManagerBlogsView";
 import OrderQueueView from "./OrderQueueView";
+import ShopReportsView, { ShopReportSummary } from "./ShopReportsView";
 import AdminProfileView from "./AdminProfileView";
 import StaffRefundsView from "./StaffRefundsView";
 import ComponentCard from "../components/common/ComponentCard";
@@ -74,6 +75,18 @@ const quickActions = [
     description: "Hàng chờ xử lý, chi tiết đơn, vận đơn GHN và cập nhật trạng thái đơn hàng.",
   },
   {
+    href: "/shop-admin/reports",
+    title: "Báo cáo thống kê",
+    section: "reports",
+    color: "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400",
+    icon: (
+      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 19V9m5 10V5m5 14v-7m5 7V3" />
+      </svg>
+    ),
+    description: "Xem người theo dõi, đơn hàng, doanh thu và tỷ lệ hoàn trả theo ngày, tháng hoặc năm.",
+  },
+  {
     href: "/shop-admin/chat",
     title: "Tin nhắn khách hàng",
     section: "chat",
@@ -87,13 +100,6 @@ const quickActions = [
   },
 ];
 
-const statCards = [
-  { title: "Doanh thu tháng này", value: "24.500.000 đ", trend: "+12.5%", isPositive: true },
-  { title: "Đơn hàng mới", value: "156", trend: "+5.2%", isPositive: true },
-  { title: "Sản phẩm đang bán", value: "48", trend: "0%", isPositive: true },
-  { title: "Phản hồi chưa đọc", value: "12", trend: "-2.4%", isPositive: false },
-];
-
 export default function ManagerDashboardView({
   user,
   error,
@@ -103,7 +109,7 @@ export default function ManagerDashboardView({
   const profile = path === "/shop-admin/profile";
   const customOrders = path === "/shop-admin/custom-orders";
   const chat = path === "/shop-admin/chat";
-  const needsShop = customOrders || chat || current?.section === "orders" || current?.section === "blogs";
+  const needsShop = customOrders || chat || current?.section === "orders" || current?.section === "blogs" || current?.section === "reports";
 
   // Tải shop của Manager một lần, rồi truyền xuống các view con qua prop `shop`
   // (tương tự `user` do App truyền xuống). Mỗi Manager chỉ quản lý một shop.
@@ -134,8 +140,6 @@ export default function ManagerDashboardView({
   );
 
   if (path === "/shop-admin/refunds") return <StaffRefundsView />;
-
-  const orderQueue = path === "/shop-admin/order-queue";
   if (user?.role === 'SHOP_STAFF') {
     return <ManagerShopsView role="SHOP_STAFF" />;
   }
@@ -160,20 +164,7 @@ export default function ManagerDashboardView({
             </p>
           </div>
 
-          {/* Stats Row */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8">
-            {statCards.map((stat, idx) => (
-              <div key={idx} className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-white/3">
-                <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">{stat.title}</p>
-                <div className="flex items-end justify-between">
-                  <h4 className="text-2xl font-bold text-gray-900 dark:text-white">{stat.value}</h4>
-                  <span className={`text-sm font-medium ${stat.isPositive ? 'text-success-600 dark:text-success-500' : 'text-error-600 dark:text-error-500'}`}>
-                    {stat.trend}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
+          {shop ? <ShopReportSummary shop={shop} /> : <p role="status" className="mb-8 text-sm text-gray-500">{shopLoading ? 'Đang tải thống kê cửa hàng…' : shopError || 'Bạn chưa có cửa hàng nào.'}</p>}
           
           <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Lối tắt chức năng</h3>
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
@@ -206,6 +197,8 @@ export default function ManagerDashboardView({
         <ManagerBlogsView shop={shop} />
       ) : current && current.section === "orders" ? (
         <OrderQueueView shop={shop} />
+      ) : current && current.section === "reports" ? (
+        <ShopReportsView shop={shop} />
       ) : current ? (
         <ManagerShopsView
           key={current.section}

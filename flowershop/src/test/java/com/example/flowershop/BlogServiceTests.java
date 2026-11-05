@@ -3,6 +3,7 @@ package com.example.flowershop;
 import com.example.flowershop.entity.Shop;
 import com.example.flowershop.entity.User;
 import com.example.flowershop.entity.enums.BlogStatus;
+import com.example.flowershop.entity.enums.InteractionType;
 import com.example.flowershop.entity.enums.ShopStatus;
 import com.example.flowershop.entity.enums.UserRole;
 import com.example.flowershop.entity.enums.UserStatus;
@@ -10,6 +11,7 @@ import com.example.flowershop.repository.BlogRepository;
 import com.example.flowershop.repository.ShopRepository;
 import com.example.flowershop.repository.UserRepository;
 import com.example.flowershop.service.BlogService;
+import com.example.flowershop.service.BlogInteractionService;
 import com.example.flowershop.service.CloudinaryService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -49,6 +51,7 @@ class BlogServiceTests {
     @Autowired ShopRepository shops;
     @Autowired BlogRepository blogs;
     @Autowired BlogService service;
+    @Autowired BlogInteractionService interactionService;
     @Autowired MockMvc mvc;
 
     User owner;
@@ -111,7 +114,52 @@ class BlogServiceTests {
                 .andExpect(jsonPath("$.content[0].id").value(post.id()));
         mvc.perform(get("/api/public/blogs/" + post.id()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.title").value("Orchid care"));
+        mvc.perform(get("/api/public/blogs/" + post.id() + "/engagement"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.likeCount").value(0))
+                .andExpect(jsonPath("$.commentCount").value(0));
+        mvc.perform(get("/api/public/blogs/" + post.id() + "/comments"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(0));
         mvc.perform(get("/api/shop/mine/" + shop.getId() + "/blogs")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void customerCanLikeSaveCommentAndRemoveOwnComment() {
+        var customer = users.saveAndFlush(User.builder().id(id()).email(id() + "@example.test")
+                .fullName("Rose Lover").role(UserRole.CUSTOMER).status(UserStatus.ACTIVE)
+                .isEmailVerified(true).build());
+        var post = service.save(shop.getId(), null, owner.getId(),
+                new BlogService.Input("Rose care", "Useful flower care content", BlogStatus.PUBLISHED, List.of()));
+
+        assertThat(interactionService.engagement(post.id()).likeCount()).isZero();
+        assertThat(interactionService.mine(post.id(), customer.getId()))
+                .isEqualTo(new BlogInteractionService.InteractionResult(false, false));
+
+        interactionService.setInteraction(post.id(), customer.getId(), InteractionType.LIKE, true);
+        interactionService.setInteraction(post.id(), customer.getId(), InteractionType.LIKE, true);
+        interactionService.setInteraction(post.id(), customer.getId(), InteractionType.SAVE, true);
+        assertThat(interactionService.engagement(post.id()).likeCount()).isEqualTo(1);
+        assertThat(interactionService.mine(post.id(), customer.getId()))
+                .isEqualTo(new BlogInteractionService.InteractionResult(true, true));
+        assertThat(interactionService.saved(customer.getId(), 0).content())
+                .extracting(BlogService.Result::id).containsExactly(post.id());
+
+        var comment = interactionService.addComment(post.id(), customer.getId(),
+                new BlogInteractionService.CommentInput("  Bài viết rất hữu ích!  "));
+        assertThat(comment.content()).isEqualTo("Bài viết rất hữu ích!");
+        assertThat(interactionService.comments(post.id(), 0).content())
+                .extracting(BlogInteractionService.CommentResult::id).containsExactly(comment.id());
+        assertThat(interactionService.engagement(post.id()).commentCount()).isEqualTo(1);
+
+        interactionService.deleteComment(post.id(), comment.id(), customer.getId());
+        interactionService.setInteraction(post.id(), customer.getId(), InteractionType.LIKE, false);
+        interactionService.setInteraction(post.id(), customer.getId(), InteractionType.SAVE, false);
+        assertThat(interactionService.engagement(post.id()))
+                .isEqualTo(new BlogInteractionService.EngagementResult(0, 0));
+        assertThat(interactionService.mine(post.id(), customer.getId()))
+                .isEqualTo(new BlogInteractionService.InteractionResult(false, false));
+        assertThat(interactionService.saved(customer.getId(), 0).content()).isEmpty();
     }
 
     private String id() {

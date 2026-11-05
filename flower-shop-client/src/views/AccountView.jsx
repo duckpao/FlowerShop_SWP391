@@ -58,7 +58,7 @@ export default function AccountView({ user, logout, checkSession, busy: authBusy
           {c.profile && (
             <ComponentCard title="Hồ sơ cá nhân" desc="Thông tin dùng để liên hệ khi giao hoa." className="shadow-sm">
               <div className="space-y-6">
-                <AvatarUpload profile={c.profile} busy={busy} upload={c.uploadAvatar} />
+                <AvatarUpload profile={c.profile} busy={busy} upload={c.uploadAvatar} remove={c.removeAvatar} />
                 <div className="flex flex-wrap items-center gap-2 rounded-xl bg-gray-50 p-3 dark:bg-gray-800/70 text-sm text-gray-600 dark:text-gray-400">
                   <span className="min-w-0 break-all font-medium text-gray-900 dark:text-white">{c.profile.email}</span>
                   {c.profile.emailVerified && (
