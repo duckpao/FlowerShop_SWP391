@@ -1,0 +1,84 @@
+package com.example.flowershop.controller;
+
+import com.example.flowershop.dto.auth.CurrentUser;
+import com.example.flowershop.entity.enums.InteractionType;
+import com.example.flowershop.service.BlogInteractionService;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@SecurityRequirement(name = "bearerAuth")
+public class BlogInteractionController {
+    private final BlogInteractionService service;
+
+    public BlogInteractionController(BlogInteractionService service) {
+        this.service = service;
+    }
+
+    @GetMapping("/api/public/blogs/{blogId}/engagement")
+    public BlogInteractionService.EngagementResult engagement(@PathVariable String blogId) {
+        return service.engagement(blogId);
+    }
+
+    @GetMapping("/api/public/blogs/{blogId}/comments")
+    public BlogInteractionService.CommentResults comments(@PathVariable String blogId,
+            @RequestParam(defaultValue = "0") int page) {
+        return service.comments(blogId, page);
+    }
+
+    @GetMapping("/api/customer/blogs/{blogId}/interactions")
+    @PreAuthorize("hasRole('CUSTOMER')")
+    public BlogInteractionService.InteractionResult mine(@PathVariable String blogId,
+            @AuthenticationPrincipal CurrentUser user) {
+        return service.mine(blogId, user.id());
+    }
+
+    @PutMapping("/api/customer/blogs/{blogId}/likes")
+    @PreAuthorize("hasRole('CUSTOMER')")
+    public BlogInteractionService.InteractionResult like(@PathVariable String blogId,
+            @AuthenticationPrincipal CurrentUser user) {
+        return service.setInteraction(blogId, user.id(), InteractionType.LIKE, true);
+    }
+
+    @DeleteMapping("/api/customer/blogs/{blogId}/likes")
+    @PreAuthorize("hasRole('CUSTOMER')")
+    public BlogInteractionService.InteractionResult unlike(@PathVariable String blogId,
+            @AuthenticationPrincipal CurrentUser user) {
+        return service.setInteraction(blogId, user.id(), InteractionType.LIKE, false);
+    }
+
+    @PutMapping("/api/customer/blogs/{blogId}/saves")
+    @PreAuthorize("hasRole('CUSTOMER')")
+    public BlogInteractionService.InteractionResult save(@PathVariable String blogId,
+            @AuthenticationPrincipal CurrentUser user) {
+        return service.setInteraction(blogId, user.id(), InteractionType.SAVE, true);
+    }
+
+    @DeleteMapping("/api/customer/blogs/{blogId}/saves")
+    @PreAuthorize("hasRole('CUSTOMER')")
+    public BlogInteractionService.InteractionResult unsave(@PathVariable String blogId,
+            @AuthenticationPrincipal CurrentUser user) {
+        return service.setInteraction(blogId, user.id(), InteractionType.SAVE, false);
+    }
+
+    @PostMapping("/api/customer/blogs/{blogId}/comments")
+    @PreAuthorize("hasRole('CUSTOMER')")
+    @ResponseStatus(HttpStatus.CREATED)
+    public BlogInteractionService.CommentResult addComment(@PathVariable String blogId,
+            @AuthenticationPrincipal CurrentUser user,
+            @Valid @RequestBody BlogInteractionService.CommentInput input) {
+        return service.addComment(blogId, user.id(), input);
+    }
+
+    @DeleteMapping("/api/customer/blogs/{blogId}/comments/{commentId}")
+    @PreAuthorize("hasRole('CUSTOMER')")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteComment(@PathVariable String blogId, @PathVariable String commentId,
+            @AuthenticationPrincipal CurrentUser user) {
+        service.deleteComment(blogId, commentId, user.id());
+    }
+}
