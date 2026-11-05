@@ -77,7 +77,7 @@ public class HtmlMailSender {
                 + "<p style=\"margin:0 0 4px;color:#e11d48;font-weight:700\">🌸 FlowerShop</p>"
                 + "<h2 style=\"margin:0 0 16px;font-size:20px\">" + esc(heading) + "</h2>"
                 + bodyHtml + button
-                + "<p style=\"margin:28px 0 0;font-size:12px;color:#9ca3af\">Đây là email tự động từ FlowerShop, vui lòng không trả lời thư này.</p>"
+                + "<p style=\"margin:28px 0 0;font-size:12px;color:#6b7280\">Đây là email tự động từ FlowerShop, vui lòng không trả lời thư này.</p>"
                 + "</div></div>";
     }
 }
