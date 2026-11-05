@@ -70,6 +70,13 @@ export function useAccountController(user) {
       setAddresses(await accountService.addresses()); cancel(); setNotice('Đã lưu địa chỉ.')
     })
   }
+  const removeAvatar = () => {
+    if (!window.confirm('Xóa ảnh đại diện hiện tại?')) return
+    return run(async () => {
+      setProfile(await accountService.removeAvatar())
+      setNotice('Đã xóa ảnh đại diện.')
+    })
+  }
   const uploadAvatar = file => run(async () => {
     const updated = await accountService.uploadAvatar(file)
     setProfile(updated)
@@ -92,6 +99,8 @@ export function useAccountController(user) {
     setError(''); setNotice('')
   }
   return {
+    profile, form, setForm: next => { setServerPhoneError(''); setForm(next) }, phoneError, addresses, cities, address, setAddress, editing, busy, error, notice,
+    saveProfile, saveAddress, uploadAvatar, removeAvatar, remove, makeDefault, edit, cancel, retry: () => setReload(x => x + 1)
     profile, form, setForm: next => { setServerPhoneError(''); setForm(next) }, phoneError, addresses, addressesLoaded, address, setAddress, editing, busy, error, notice,
     saveProfile, saveAddress, uploadAvatar, remove, makeDefault, edit, cancel, retry: () => setReload(x => x + 1)
   }

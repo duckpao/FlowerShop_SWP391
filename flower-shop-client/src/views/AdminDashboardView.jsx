@@ -3,6 +3,7 @@ import AdminShopsView from "./AdminShopsView";
 import AdminManagerApplicationsView from "./AdminManagerApplicationsView";
 import AdminCustomersView from "./AdminCustomersView";
 import AdminProfileView from "./AdminProfileView";
+import AdminOverviewView from "./AdminOverviewView";
 import AdminCategoriesView from "./AdminCategoriesView";
 import ComponentCard from "../components/common/ComponentCard";
 import PageMeta from "../components/common/PageMeta";
@@ -68,12 +69,15 @@ export default function AdminDashboardView({ user, logout, busy, error, path }) 
           <PageMeta title="Tổng quan Quản trị | Hệ thống" description="Bảng điều khiển dành cho Admin" />
           <PageBreadCrumb pageTitle="Tổng quan Admin" />
           
+          <AdminOverviewView />
+
           <div className="mb-6">
+            <h2 className="text-lg font-semibold text-gray-800 dark:text-white/90">Quản lý</h2>
             <p className="text-gray-500 dark:text-gray-400">
               Chọn chức năng để quản lý người dùng, cửa hàng và xử lý các yêu cầu đang chờ duyệt.
             </p>
           </div>
-          
+
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
             {options.map((item) => (
               <ComponentCard key={item.href} title={item.title}>

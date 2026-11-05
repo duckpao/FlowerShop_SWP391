@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 
-export default function AvatarUpload({ profile, busy, upload }) {
+export default function AvatarUpload({ profile, busy, upload, remove }) {
   const input = useRef(null)
   const [file, setFile] = useState(null)
   const [preview, setPreview] = useState('')
@@ -36,7 +36,10 @@ export default function AvatarUpload({ profile, busy, upload }) {
       <div className="space-y-2">
         <p className="text-sm font-medium text-gray-900 dark:text-white">Ảnh đại diện</p>
         <input ref={input} className="hidden" type="file" accept="image/jpeg,image/png" disabled={busy} onChange={choose} aria-label="Chọn ảnh đại diện" />
-        <button type="button" disabled={busy} onClick={() => input.current.click()} className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 disabled:opacity-50 dark:text-gray-200">Chọn ảnh</button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" disabled={busy} onClick={() => input.current.click()} className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 disabled:opacity-50 dark:text-gray-200">Chọn ảnh</button>
+          {remove && profile.avatarUrl && !file && <button type="button" disabled={busy} onClick={remove} className="rounded-lg border border-error-300 px-3 py-2 text-sm font-medium text-error-600 hover:bg-error-50 disabled:opacity-50">Xóa ảnh</button>}
+        </div>
       </div>
     </div>
     <p className="text-xs text-gray-500">JPG hoặc PNG, tối đa 5 MB và 4096 × 4096 pixel.</p>

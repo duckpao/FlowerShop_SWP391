@@ -14,6 +14,7 @@ export const accountService = {
     body.append('file', file)
     return updateProfile('profile/avatar', 'POST', body)
   },
+  removeAvatar: () => updateProfile('profile/avatar', 'DELETE'),
   addresses: () => request('addresses'),
   saveAddress: (id, data) => request(id ? `addresses/${encodeURIComponent(id)}` : 'addresses', id ? 'PUT' : 'POST', data),
   deleteAddress: id => request(`addresses/${encodeURIComponent(id)}`, 'DELETE'),

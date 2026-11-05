@@ -16,13 +16,24 @@ public class AccountService {
     private final AddressRepository addresses;
     private final OrderRepository orders;
     private final CloudinaryService cloudinary;
+    private final ShopRepository shops;
 
     public AccountService(UserRepository users, AddressRepository addresses, OrderRepository orders,
-            CloudinaryService cloudinary) {
+            CloudinaryService cloudinary, ShopRepository shops) {
         this.users = users;
         this.addresses = addresses;
         this.orders = orders;
         this.cloudinary = cloudinary;
+        this.shops = shops;
+    }
+
+    // Với chủ shop, ảnh đại diện và logo shop là một: luôn đồng bộ hai chiều.
+    private void syncShopLogo(User user, String url) {
+        if (user.getRole() != com.example.flowershop.entity.enums.UserRole.SHOP) return;
+        shops.findByOwnerIdOrderByNameAsc(user.getId()).forEach(s -> {
+            s.setLogoUrl(url);
+            s.setLastModifyBy(user.getId());
+        });
     }
 
     @Transactional(readOnly = true)
@@ -60,11 +71,20 @@ public class AccountService {
                 javax.imageio.ImageIO.write(image, "png", normalized);
                 user.setAvatarUrl(cloudinary.uploadAvatar(normalized.toByteArray()));
                 user.setLastModifyBy(userId);
+                syncShopLogo(user, user.getAvatarUrl());
                 return ProfileResponse.from(user);
             } finally { reader.dispose(); }
         } catch (java.io.IOException e) {
             throw new IllegalArgumentException("Không thể đọc ảnh. Vui lòng chọn ảnh JPG hoặc PNG hợp lệ.");
         }
+    }
+
+    public ProfileResponse removeAvatar(String userId) {
+        User user = lock(userId);
+        user.setAvatarUrl(null);
+        user.setLastModifyBy(userId);
+        syncShopLogo(user, "");
+        return ProfileResponse.from(user);
     }
 
     @Transactional(readOnly = true)
@@ -99,6 +119,7 @@ public class AccountService {
         address.setIsPickup(Boolean.TRUE.equals(request.isPickup()));
         address.setIsReturn(Boolean.TRUE.equals(request.isReturn()));
         address.setLastModifyBy(userId);
+        
         boolean makeDefault = request.isDefault() || list.isEmpty() || Boolean.TRUE.equals(address.getIsDefault())
                 || list.stream().noneMatch(a -> Boolean.TRUE.equals(a.getIsDefault()));
         if (makeDefault)
