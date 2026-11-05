@@ -86,7 +86,6 @@ CREATE TABLE Otp_Challenges (
     window_start TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     failed_attempts INT NOT NULL DEFAULT 0,
     send_count INT NOT NULL DEFAULT 1,
-    used_at TIMESTAMP NULL,
     created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_by VARCHAR(36),
     last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -798,7 +797,6 @@ CREATE TABLE IF NOT EXISTS Shop_Product_Mails (
 );
 INSERT IGNORE INTO Shop_Product_Publications(product_id, published_at)
 SELECT id, COALESCE(created_date, NOW()) FROM Products WHERE status = 'ACTIVE';
-=======
 -- 18. DEMO SHOPS ĐỂ KIỂM THỬ THEO DÕI SHOP (chỉ dùng local; chủ shop dùng email example.test và chưa có mật khẩu nên không đăng nhập được)
 INSERT IGNORE INTO Users (id, email, full_name, role, is_email_verified, status, created_by) VALUES
 ('follow-demo-owner-01', 'lotus-owner@example.test', 'Chủ shop Lotus', 'SHOP', TRUE, 'ACTIVE', 'follow-demo'),
