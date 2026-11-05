@@ -48,13 +48,15 @@ public class BlogInteractionService {
     private final BlogInteractionRepository interactions;
     private final BlogCommentRepository comments;
     private final UserRepository users;
+    private final BlogService blogService;
 
     public BlogInteractionService(BlogRepository blogs, BlogInteractionRepository interactions,
-            BlogCommentRepository comments, UserRepository users) {
+            BlogCommentRepository comments, UserRepository users, BlogService blogService) {
         this.blogs = blogs;
         this.interactions = interactions;
         this.comments = comments;
         this.users = users;
+        this.blogService = blogService;
     }
 
     public EngagementResult engagement(String blogId) {
@@ -67,6 +69,14 @@ public class BlogInteractionService {
     public InteractionResult mine(String blogId, String actor) {
         visibleBlog(blogId);
         return interactionResult(blogId, actor);
+    }
+
+    public BlogService.Results saved(String actor, int page) {
+        if (page < 0 || page > 100000) {
+            throw new IllegalArgumentException("Trang không hợp lệ.");
+        }
+        return blogService.results(interactions.findVisibleBlogsByUserAndType(
+                actor, InteractionType.SAVE, PageRequest.of(page, 12)));
     }
 
     @Transactional

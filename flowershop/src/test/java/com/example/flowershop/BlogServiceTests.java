@@ -142,6 +142,8 @@ class BlogServiceTests {
         assertThat(interactionService.engagement(post.id()).likeCount()).isEqualTo(1);
         assertThat(interactionService.mine(post.id(), customer.getId()))
                 .isEqualTo(new BlogInteractionService.InteractionResult(true, true));
+        assertThat(interactionService.saved(customer.getId(), 0).content())
+                .extracting(BlogService.Result::id).containsExactly(post.id());
 
         var comment = interactionService.addComment(post.id(), customer.getId(),
                 new BlogInteractionService.CommentInput("  Bài viết rất hữu ích!  "));
@@ -157,6 +159,7 @@ class BlogServiceTests {
                 .isEqualTo(new BlogInteractionService.EngagementResult(0, 0));
         assertThat(interactionService.mine(post.id(), customer.getId()))
                 .isEqualTo(new BlogInteractionService.InteractionResult(false, false));
+        assertThat(interactionService.saved(customer.getId(), 0).content()).isEmpty();
     }
 
     private String id() {

@@ -35,6 +35,7 @@ export const blogService = {
   engagement: id => publicRequest(`/api/public/blogs/${encodeURIComponent(id)}/engagement`),
   comments: (id, page = 0) => publicRequest(`/api/public/blogs/${encodeURIComponent(id)}/comments?page=${page}`),
   interactions: id => authService.authenticatedRequest(`/api/customer/blogs/${encodeURIComponent(id)}/interactions`),
+  saved: (page = 0) => authService.authenticatedRequest(`/api/customer/blogs/saved?page=${page}`),
   setLike: (id, active) => authService.authenticatedRequest(
     `/api/customer/blogs/${encodeURIComponent(id)}/likes`,
     { method: active ? 'PUT' : 'DELETE' },

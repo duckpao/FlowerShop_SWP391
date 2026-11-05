@@ -3,6 +3,7 @@ package com.example.flowershop.controller;
 import com.example.flowershop.dto.auth.CurrentUser;
 import com.example.flowershop.entity.enums.InteractionType;
 import com.example.flowershop.service.BlogInteractionService;
+import com.example.flowershop.service.BlogService;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -35,6 +36,14 @@ public class BlogInteractionController {
     public BlogInteractionService.InteractionResult mine(@PathVariable String blogId,
             @AuthenticationPrincipal CurrentUser user) {
         return service.mine(blogId, user.id());
+    }
+
+    @GetMapping("/api/customer/blogs/saved")
+    @PreAuthorize("hasRole('CUSTOMER')")
+    public BlogService.Results saved(
+            @AuthenticationPrincipal CurrentUser user,
+            @RequestParam(defaultValue = "0") int page) {
+        return service.saved(user.id(), page);
     }
 
     @PutMapping("/api/customer/blogs/{blogId}/likes")

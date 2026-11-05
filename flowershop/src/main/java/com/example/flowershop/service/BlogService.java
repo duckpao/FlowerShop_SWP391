@@ -168,12 +168,12 @@ public class BlogService {
         return PageRequest.of(page, 12, Sort.by(Sort.Order.desc("createdDate"), Sort.Order.asc("id")));
     }
 
-    private Results results(org.springframework.data.domain.Page<Blog> page) {
+    Results results(org.springframework.data.domain.Page<Blog> page) {
         return new Results(page.getContent().stream().map(this::result).toList(), page.getNumber(),
                 page.getTotalPages(), page.getTotalElements());
     }
 
-    private Result result(Blog blog) {
+    Result result(Blog blog) {
         Shop shop = blog.getShop();
         return new Result(blog.getId(), new ShopSummary(shop.getId(), shop.getName(), shop.getLogoUrl()),
                 blog.getTitle(), blog.getContent(), readImages(blog.getImages()), blog.getStatus(),
