@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { managerOrderService } from '../services/managerOrderService'
 import { formatPrice } from '../models/productModel'
 import Badge from '../components/ui/badge/Badge'
@@ -319,6 +320,9 @@ export default function OrderQueueView({ shop }) {
                                                         <EyeIcon className="w-4 h-4 mr-1 inline" />
                                                        Xem chi tiết
                                                     </Button>
+                                                    <Link to={`/shop-admin/chat?orderId=${encodeURIComponent(o.id)}`} className="inline-flex items-center justify-center gap-2 rounded-lg font-medium transition px-4 py-3 text-sm bg-white text-gray-700 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-400 dark:ring-gray-700 dark:hover:bg-white/3">
+                                                        Chat
+                                                    </Link>
                                                     
                                                     {o.status === 'PENDING' && (
                                                         <Button size="sm" onClick={() => confirmOrder(o.id)} disabled={busy}>

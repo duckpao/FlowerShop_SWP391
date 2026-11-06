@@ -41,6 +41,7 @@ public class ChatService {
     private final ProductRepository products;
     private final ProductImageRepository productImages;
     private final CustomOrderRequestRepository customOrders;
+    private final OrderRepository orders;
     private final NotificationRepository notificationRepo;
     private final NotificationService notifications;
     private final CloudinaryService cloudinary;
@@ -49,7 +50,7 @@ public class ChatService {
 
     public ChatService(ChatSessionRepository sessions, ChatMessageRepository messages, ShopRepository shops,
                        UserRepository users, ProductRepository products, ProductImageRepository productImages,
-                       CustomOrderRequestRepository customOrders, NotificationRepository notificationRepo,
+                       CustomOrderRequestRepository customOrders, OrderRepository orders, NotificationRepository notificationRepo,
                        NotificationService notifications, CloudinaryService cloudinary, ApplicationEventPublisher events) {
         this.sessions = sessions;
         this.messages = messages;
@@ -58,6 +59,7 @@ public class ChatService {
         this.products = products;
         this.productImages = productImages;
         this.customOrders = customOrders;
+        this.orders = orders;
         this.notificationRepo = notificationRepo;
         this.notifications = notifications;
         this.cloudinary = cloudinary;
@@ -83,10 +85,20 @@ public class ChatService {
     @Transactional
     public SessionDto openForShop(String shopId, String ownerId, String customOrderId) {
         Shop shop = requireOwner(shopId, ownerId);
+        if (customOrderId == null) throw status(HttpStatus.BAD_REQUEST, "Thiếu yêu cầu custom hoặc đơn hàng.");
         CustomOrderRequest request = customOrders.findById(customOrderId)
                 .filter(r -> r.getShop().getId().equals(shopId))
                 .orElseThrow(() -> status(HttpStatus.NOT_FOUND, "Không tìm thấy yêu cầu custom."));
         return toSession(findOrCreate(request.getCustomer(), shop), SenderType.SHOP);
+    }
+
+    /** Chủ shop mở chat với khách của một đơn hàng thuộc shop mình. */
+    @Transactional
+    public SessionDto openForShopByOrder(String shopId, String ownerId, String orderId) {
+        Shop shop = requireOwner(shopId, ownerId);
+        Order order = orders.findById(orderId).filter(o -> o.getShop().getId().equals(shopId))
+                .orElseThrow(() -> status(HttpStatus.NOT_FOUND, "Không tìm thấy đơn hàng."));
+        return toSession(findOrCreate(order.getCustomer(), shop), SenderType.SHOP);
     }
 
     public List<SessionDto> customerSessions(String customerId) {
