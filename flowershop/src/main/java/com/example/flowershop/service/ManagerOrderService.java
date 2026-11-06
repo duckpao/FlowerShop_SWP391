@@ -167,9 +167,7 @@ public class ManagerOrderService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Chỉ đơn hàng PROCESSING mới có thể gửi GHN.");
 
         // Lấy địa chỉ kho/shop gửi hàng
-        var shopAddrs = addresses.findByShopIdAndUserIsNullOrderByCreatedDateAscIdAsc(shopId);
-        Address shopAddr = shopAddrs.stream().filter(a -> Boolean.TRUE.equals(a.getIsDefault())).findFirst()
-                .orElse(shopAddrs.isEmpty() ? null : shopAddrs.get(0));
+        Address shopAddr = addresses.findPickupByShopId(shopId).orElse(null);
         if (shopAddr == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Shop chưa cấu hình địa chỉ.");
         }
@@ -360,9 +358,7 @@ public class ManagerOrderService {
         // Định dạng địa chỉ gửi hàng của Shop
         String fromAddr = "";
         if (o.getShop() != null) {
-            var shopAddrs = addresses.findByShopIdAndUserIsNullOrderByCreatedDateAscIdAsc(o.getShop().getId());
-            Address shopAddr = shopAddrs.stream().filter(addr -> Boolean.TRUE.equals(addr.getIsDefault())).findFirst()
-                    .orElse(shopAddrs.isEmpty() ? null : shopAddrs.get(0));
+            Address shopAddr = addresses.findPickupByShopId(o.getShop().getId()).orElse(null);
             if (shopAddr != null) {
                 fromAddr = (shopAddr.getAddressLine() != null ? shopAddr.getAddressLine() : "") + ", " + 
                            (shopAddr.getWard() != null ? shopAddr.getWard() : "") + ", " + 

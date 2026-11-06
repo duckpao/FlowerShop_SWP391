@@ -47,16 +47,18 @@ public class CustomFlowerOrderService {
     private final UserRepository users;
     private final ProductRepository products;
     private final ProductCardAssembler cards;
+    private final CustomFlowerCatalogService catalog;
     private final ObjectMapper json=new ObjectMapper();
     public CustomFlowerOrderService(CustomOrderRequestRepository requests,ShopRepository shops,
-            UserRepository users,ProductRepository products,ProductCardAssembler cards) {
+            UserRepository users,ProductRepository products,ProductCardAssembler cards,CustomFlowerCatalogService catalog) {
         this.requests=requests;this.shops=shops;this.users=users;this.products=products;this.cards=cards;
+        this.catalog=catalog;
     }
     private static ResponseStatusException missing(){return new ResponseStatusException(HttpStatus.NOT_FOUND,"Không tìm thấy dữ liệu thuộc quyền truy cập của bạn.");}
     private static ResponseStatusException conflict(String message){return new ResponseStatusException(HttpStatus.CONFLICT,message);}
     private static String clean(String value){return value==null?null:value.strip();}
     private Pageable page(int value){if(value<0||value>100000)throw new IllegalArgumentException("Trang không hợp lệ.");return PageRequest.of(value,10,Sort.by(Sort.Order.desc("createdDate"),Sort.Order.asc("id")));}
-    private Shop activeShop(String id){return shops.findById(id).filter(s->s.getStatus()==ShopStatus.ACTIVE).orElseThrow(CustomFlowerOrderService::missing);}
+    private Shop activeShop(String id){return shops.findByIdAndStatus(id, ShopStatus.ACTIVE).orElseThrow(CustomFlowerOrderService::missing);}
     private Shop ownedShop(String id,String actor){var s=shops.findById(id).filter(x->x.getOwner().getId().equals(actor)).orElseThrow(CustomFlowerOrderService::missing);return s;}
     private void validateMoney(BigDecimal budget,int quantity){
         if(budget==null||budget.compareTo(BigDecimal.ONE)<0||budget.compareTo(new BigDecimal("9999999999.99"))>0||budget.stripTrailingZeros().scale()>2)
@@ -85,6 +87,7 @@ public class CustomFlowerOrderService {
     private Results results(Page<CustomOrderRequest> p){return new Results(p.getContent().stream().map(this::result).toList(),p.getNumber(),p.getTotalPages(),p.getTotalElements());}
     Design design(RequestInput input){
         validateMoney(input.budget(),input.quantity());var p=input.preferences();
+        catalog.validate(p);
         if(p.deliveryDate()!=null&&!p.deliveryDate().isBlank()){
             LocalDate date;try{date=LocalDate.parse(p.deliveryDate());}catch(java.time.format.DateTimeParseException e){throw new IllegalArgumentException("Ngày nhận hoa không hợp lệ.");}
             if(date.isBefore(LocalDate.now(ZoneId.of("Asia/Ho_Chi_Minh"))))throw new IllegalArgumentException("Ngày nhận hoa không được ở quá khứ.");
@@ -103,7 +106,7 @@ public class CustomFlowerOrderService {
     @Transactional
     public Result create(String actor,RequestInput input){
         var shop=activeShop(input.shopId());
-        var user=users.findById(actor).filter(u->u.getRole()==UserRole.CUSTOMER&&u.getStatus()==UserStatus.ACTIVE).orElseThrow(CustomFlowerOrderService::missing);
+        var user=users.findByIdAndRoleAndStatus(actor, UserRole.CUSTOMER, UserStatus.ACTIVE).orElseThrow(CustomFlowerOrderService::missing);
         var request=CustomOrderRequest.builder().id(UUID.randomUUID().toString()).customer(user).shop(shop)
                 .budget(input.budget()).description(input.description() == null ? "" : input.description().strip()).desiredComponents(encode(design(input)))
                 .status(CustomOrderStatus.REQUESTED).createdBy(actor).lastModifyBy(actor).build();

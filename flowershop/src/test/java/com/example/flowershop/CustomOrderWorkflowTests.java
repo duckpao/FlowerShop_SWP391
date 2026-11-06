@@ -46,6 +46,7 @@ class CustomOrderWorkflowTests {
     @Autowired PaymentRepository payments;
     @Autowired ProductRepository products;
     @Autowired CategoryRepository categories;
+    @Autowired CustomFlowerOptionRepository options;
     User customer, owner;
     Shop shop;
     Address destination;
@@ -54,6 +55,7 @@ class CustomOrderWorkflowTests {
     User user(UserRole role) { return users.saveAndFlush(User.builder().id(id()).email(id()+"@example.test")
             .fullName("Test User").phone("0901234567").isEmailVerified(true).role(role).status(UserStatus.ACTIVE).build()); }
     @BeforeEach void setup() {
+        CustomFlowerCatalogFixture.seed(options);
         customer=user(UserRole.CUSTOMER); owner=user(UserRole.SHOP);
         shop=shops.saveAndFlush(Shop.builder().id(id()).owner(owner).name("Design Shop").status(ShopStatus.ACTIVE).build());
         destination=addresses.saveAndFlush(Address.builder().id(id()).user(customer).addressLine("Customer street")
@@ -83,6 +85,20 @@ class CustomOrderWorkflowTests {
         assertThat(customerOrders.detail(customer.getId(), created.orderId()).customDesign().preferences().quantity()).isEqualTo(3);
         assertThat(reference.getStock()).isEqualTo(10);
         assertThat(payments.findByOrderId(created.orderId())).isEmpty();
+    }
+    @Test void customOrderValidatesCurrentCatalogAndKeepsHistoricalDesign() {
+        var created = create();
+        var ribbon = options.findAll().stream().filter(o -> o.getLabel().equals("Ribbon")).findFirst().orElseThrow();
+        ribbon.setDisabled(true);
+        options.saveAndFlush(ribbon);
+        long before = orders.count();
+        assertThatThrownBy(this::create).isInstanceOf(IllegalArgumentException.class).hasMessageContaining("Ribbon");
+        assertThat(orders.count()).isEqualTo(before);
+        assertThat(customerOrders.detail(customer.getId(), created.orderId()).customDesign().preferences().wrapping())
+                .isEqualTo("Paper, Ribbon");
+        ribbon.setDisabled(false);
+        options.saveAndFlush(ribbon);
+        assertThat(create().status()).isEqualTo("AWAITING_QUOTE");
     }
     @Test void quoteRequiresCustomerAgreementAndPreservesExactBatchPrice() {
         var id=create().orderId(); quote(id);

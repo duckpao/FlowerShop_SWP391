@@ -1,9 +1,12 @@
 # Custom flower orders in the shared order workflow
 
 Apply `sql/022_custom_order_workflow.sql` to the target database before starting this version.
+Also apply `sql/023_custom_flower_options.sql` for database-managed choices in the custom order form. See `CUSTOM_FLOWER_CATALOG.md` for configuration and Disable instructions.
 The local database used during development has already been migrated. The script can be rerun.
 
 Customer submits a design and an owned GHN delivery address at `/custom-orders/new`.
+Flower budget, bouquet quantity and budget-based reference suggestions are integrated
+into this form. The separate budget-flower page and navigation entry have been removed.
 This creates one `Orders` row with `order_type=CUSTOM`, plus a single batch line in
 `Order_Details`. The line's `custom_materials` JSON contains the flower budget, optional
 description and design preferences, including the requested bouquet quantity.

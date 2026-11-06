@@ -4,9 +4,9 @@
 
 ## Customer flow
 
-1. Open **Hoa theo ngân sách** (`/budget-flowers`). Enter the total budget, quantity (1–100), and optionally choose an active shop.
+1. Open **Đặt hoa theo yêu cầu** (`/custom-orders/new`), sign in as CUSTOMER, select an active shop, and enter the flower budget and quantity (1–100). Budget-based suggestions are integrated into this form; there is no separate budget-flower page.
 2. Available, visible products are suggested when `unit price × quantity <= total budget` and stock covers the quantity. Results are sorted by price descending and paginated.
-3. Choose a reference bouquet or open **Đặt hoa theo yêu cầu** (`/custom-orders/new`) from a shop page. Select a shop and enter flowers, colors, occasion, wrapping, desired date and description.
+3. Choose an optional reference bouquet in the same form and enter flowers, colors, occasion, wrapping, desired date and an optional description. The form can also be opened from a shop page.
 4. Sign in as CUSTOMER and submit. The server rechecks shop visibility, reference product ownership, stock and current price. It stores the request as REQUESTED.
 5. Open `/custom-orders` and reload responses to see the shop's note, quote and status. Requests remain available after refreshing the page.
 
@@ -21,6 +21,7 @@
 
 | Method | Endpoint | Access |
 | --- | --- | --- |
+| GET | `/api/public/custom-orders/options` | Public; database-managed flower, occasion, wrapping and accessory choices, including disabled rows |
 | GET | `/api/public/custom-orders/suggestions?budget=500000&quantity=1&shopId=...&page=0` | Public; shopId optional; q optional product-name filter |
 | POST | `/api/customer/custom-orders` | Active CUSTOMER |
 | GET | `/api/customer/custom-orders?page=0` | Customer's own requests |
@@ -51,11 +52,11 @@ Decision body: `{"status":"ACCEPTED","note":"We can make this design","quotedPri
 
 `CustomFlowerOrderController` → `CustomFlowerOrderService` → `CustomOrderRequestRepository`, `ShopRepository`, `UserRepository`, `ProductRepository`. Product suggestions use the existing `ProductCardAssembler`.
 
-Frontend: `BudgetFlowersView`, `CustomFlowerOrderView`, `CustomerCustomOrdersView`, `ManagerCustomOrdersView`; shared UI in `CustomFlowerParts`; API calls in `customFlowerService`.
+Frontend: `CustomFlowerOrderView`, `CustomerCustomOrdersView`, `ManagerCustomOrdersView`; shared UI in `CustomFlowerParts`; API calls in `customFlowerService`.
 
 ## Storage and scope
 
-Uses the existing `Custom_Order_Requests` table and `CustomOrderRequest` entity. No schema migration is required when the current database.sql schema is installed. Quantity, preferences, reference snapshot, shop response and quote are stored in `desired_components` JSON. Legacy flower arrays and wrapper fields are supported.
+The older request API uses `Custom_Order_Requests` and `CustomOrderRequest`; the current form creates ordinary CUSTOM orders as described in `CUSTOM_ORDER_WORKFLOW.md`. Apply `sql/023_custom_flower_options.sql` for database-managed choices; see `CUSTOM_FLOWER_CATALOG.md` for maintenance and Disable examples. Backend submission validates choices against this table. Existing design JSON remains a historical snapshot and is not revalidated when reading old orders. Legacy flower arrays and wrapper fields are supported.
 
 Suggestions estimate whole bouquet/product prices using current catalog prices; the database does not hold individual stem prices. Custom specifications require a shop quote. Budget is the total for all requested bouquets. Desired dates cannot be in the past (Asia/Ho_Chi_Minh).
 

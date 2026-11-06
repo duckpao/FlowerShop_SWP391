@@ -70,6 +70,9 @@
 .custom-flower-page .custom-wrapping-option:hover { border-color: #fda4af; background: #fff7f8; }
 .custom-flower-page .custom-order-panel .custom-wrapping-option.is-selected { border-color: #e11d48; background: #fff1f2; color: #9f1239; }
 .custom-flower-page .custom-order-panel form .custom-wrapping-option input[type='checkbox'] { appearance: auto; width: 18px; height: 18px; min-width: 18px; min-height: 18px; margin: 0; padding: 0; flex: 0 0 18px; accent-color: #be123c; cursor: pointer; }
+.custom-flower-page .custom-order-panel form .custom-wrapping-option.is-disabled,
+.custom-flower-page .custom-order-panel form .custom-wrapping-option.is-disabled:hover { opacity: .55; cursor: not-allowed; border-color: var(--catalog-line); background: var(--catalog-wash); }
+.custom-flower-page .custom-order-panel form .custom-wrapping-option input[type='checkbox']:disabled { cursor: not-allowed; }
 .custom-order-footer { display: flex; justify-content: space-between; align-items: center; gap: 1.5rem; padding-top: 1.5rem; }
 .dark .custom-order-intro p, .dark .custom-order-hint, .dark .custom-order-footer p { color: #98a2b3; }
 .dark .custom-order-section h3 > span, .dark .custom-flower-page .custom-order-panel .custom-wrapping-option.is-selected { background: #3b1c2b; color: #fda4af; }

@@ -54,9 +54,9 @@ public class CustomOrderWorkflowService {
     @Transactional
     public Receipt create(String actor, CreateInput input) {
         var request = input.design();
-        var shop = shops.findById(request.shopId()).filter(s -> s.getStatus() == ShopStatus.ACTIVE).orElseThrow(CustomOrderWorkflowService::missing);
-        var customer = users.findById(actor).filter(u -> u.getRole() == UserRole.CUSTOMER && u.getStatus() == UserStatus.ACTIVE).orElseThrow(CustomOrderWorkflowService::missing);
-        var address = addresses.findById(input.addressId()).filter(a -> a.getUser()!=null && a.getUser().getId().equals(actor)).orElseThrow(CustomOrderWorkflowService::missing);
+        var shop = shops.findByIdAndStatus(request.shopId(), ShopStatus.ACTIVE).orElseThrow(CustomOrderWorkflowService::missing);
+        var customer = users.findByIdAndRoleAndStatus(actor, UserRole.CUSTOMER, UserStatus.ACTIVE).orElseThrow(CustomOrderWorkflowService::missing);
+        var address = addresses.findByIdAndUserId(input.addressId(), actor).orElseThrow(CustomOrderWorkflowService::missing);
         if (address.getGhnDistrictId()==null || address.getGhnWardCode()==null || address.getGhnWardCode().isBlank())
             throw invalid("Vui lòng cập nhật địa chỉ nhận hàng theo danh mục GHN.");
         var design = new Design(request.budget(), request.description(), designs.design(request));
@@ -73,7 +73,7 @@ public class CustomOrderWorkflowService {
     }
     public Design design(Order order) {
         if (order.getOrderType() != OrderType.CUSTOM) return null;
-        var detail = details.findByOrderId(order.getId()).stream().filter(d -> d.getCustomMaterials()!=null).findFirst().orElse(null);
+        var detail = details.findCustomDesignByOrderId(order.getId()).orElse(null);
         if (detail==null) return null;
         try {
             var tree=json.readTree(detail.getCustomMaterials());
@@ -88,9 +88,7 @@ public class CustomOrderWorkflowService {
         if (order.getStatus()!=OrderStatus.AWAITING_QUOTE && order.getStatus()!=OrderStatus.QUOTED) throw invalid("Đơn không còn chờ báo giá.");
         var design=design(order);
         if (design==null || quote.amount().compareTo(design.budget())>0) throw invalid("Giá hoa không được vượt ngân sách khách hàng.");
-        var pickupList=addresses.findByShopIdAndUserIsNullOrderByCreatedDateAscIdAsc(shopId);
-        var pickup=pickupList.stream().filter(a -> Boolean.TRUE.equals(a.getIsDefault())).findFirst()
-                .orElse(pickupList.isEmpty() ? null : pickupList.get(0));
+        var pickup=addresses.findPickupByShopId(shopId).orElse(null);
         var destination=order.getDeliveryAddress();
         if (destination==null || destination.getGhnDistrictId()==null || destination.getGhnWardCode()==null)
             throw invalid("Khách cần bổ sung địa chỉ nhận hoa trước khi shop chốt báo giá.");
@@ -100,7 +98,7 @@ public class CustomOrderWorkflowService {
                 destination.getGhnDistrictId(), destination.getGhnWardCode(), GhnService.DEFAULT_WEIGHT_GRAM);
         order.setSubTotal(quote.amount()); order.setShippingFee(shippingFee); order.setTotalAmount(quote.amount().add(shippingFee));
         order.setShopNote(quote.note()==null ? "" : quote.note().strip()); order.setStatus(OrderStatus.QUOTED); order.setLastModifyBy(actor);
-        var line=details.findByOrderId(id).get(0);
+        var line=details.findCustomDesignByOrderId(id).orElseThrow(CustomOrderWorkflowService::missing);
         line.setPrice(quote.amount());
     }
     @Transactional
@@ -126,7 +124,7 @@ public class CustomOrderWorkflowService {
         if (!order.getCustomer().getId().equals(actor)) throw missing();
         if (order.getStatus()!=OrderStatus.AWAITING_QUOTE && order.getStatus()!=OrderStatus.QUOTED)
             throw invalid("Không thể thay đổi địa chỉ sau khi đã đồng ý báo giá.");
-        var address=addresses.findById(input.addressId()).filter(a -> a.getUser()!=null && a.getUser().getId().equals(actor)).orElseThrow(CustomOrderWorkflowService::missing);
+        var address=addresses.findByIdAndUserId(input.addressId(), actor).orElseThrow(CustomOrderWorkflowService::missing);
         if (address.getGhnDistrictId()==null || address.getGhnWardCode()==null || address.getGhnWardCode().isBlank())
             throw invalid("Vui lòng cập nhật địa chỉ theo danh mục GHN.");
         order.setDeliveryAddress(address); order.setRecipientName(address.getRecipientName()); order.setRecipientPhone(address.getRecipientPhone());

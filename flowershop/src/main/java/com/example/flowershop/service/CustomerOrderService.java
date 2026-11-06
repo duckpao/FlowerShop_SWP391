@@ -90,9 +90,7 @@ private static ResponseStatusException notFound() {
 
     /** The shop's default (or first) address; it must carry GHN codes to be a pickup point. */
     private Address pickupAddress(Shop shop) {
-        List<Address> list = addresses.findByShopIdAndUserIsNullOrderByCreatedDateAscIdAsc(shop.getId());
-        Address address = list.stream().filter(a -> Boolean.TRUE.equals(a.getIsDefault())).findFirst()
-                .orElse(list.isEmpty() ? null : list.get(0));
+        Address address = addresses.findPickupByShopId(shop.getId()).orElse(null);
         if (address == null || address.getGhnDistrictId() == null || address.getGhnWardCode() == null)
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cửa hàng chưa có địa chỉ lấy hàng theo danh mục GHN.");
         return address;
@@ -100,8 +98,7 @@ private static ResponseStatusException notFound() {
 
     /** The customer's saved address; it must carry the GHN district id and ward code a fee quote needs. */
     private Address destination(String customerId, String addressId) {
-        Address address = addresses.findById(addressId)
-                .filter(a -> a.getUser() != null && a.getUser().getId().equals(customerId))
+        Address address = addresses.findByIdAndUserId(addressId, customerId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Địa chỉ không tồn tại hoặc không thuộc về bạn."));
         if (address.getGhnDistrictId() == null || address.getGhnWardCode() == null)
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Địa chỉ chưa có mã quận/huyện và phường/xã GHN. Hãy lưu lại địa chỉ trong hồ sơ.");
@@ -177,8 +174,9 @@ private static ResponseStatusException notFound() {
             }
             result = orders.findByCustomerIdAndStatus(customerId, parsed, pageable);
         }
+        var itemCounts = orderDetails.countByOrderIds(result.getContent().stream().map(Order::getId).toList());
         var content = result.getContent().stream().map(o -> {
-            long itemCount = orderDetails.findByOrderId(o.getId()).size();
+            long itemCount = itemCounts.getOrDefault(o.getId(), 0L);
             return new OrderSummary(o.getId(), o.getShop().getName(), o.getTotalAmount(),
                     o.getStatus().name(), o.getCreatedDate(), itemCount);
         }).toList();
@@ -186,8 +184,7 @@ private static ResponseStatusException notFound() {
     }
 
     public OrderDetailResponse detail(String customerId, String orderId) {
-        Order order = orders.findById(orderId)
-                .filter(o -> o.getCustomer().getId().equals(customerId))
+        Order order = orders.findByIdAndCustomerId(orderId, customerId)
                 .orElseThrow(CustomerOrderService::notFound);
         var items = orderDetails.findByOrderId(orderId).stream()
                 .map(d -> new OrderItemResponse(
@@ -204,8 +201,7 @@ private static ResponseStatusException notFound() {
     }
 
         public BigDecimal calculateShippingFeeForOrder(String customerId, String orderId) {
-                Order order = orders.findById(orderId)
-                                .filter(o -> o.getCustomer().getId().equals(customerId))
+                Order order = orders.findByIdAndCustomerId(orderId, customerId)
                                 .orElseThrow(CustomerOrderService::notFound);
                 Address destination = order.getDeliveryAddress();
                 if (destination == null || destination.getGhnDistrictId() == null || destination.getGhnWardCode() == null) {
@@ -216,8 +212,7 @@ private static ResponseStatusException notFound() {
 
         @Transactional
         public DeliveryInfo refreshTracking(String customerId, String orderId) {
-                Order order = orders.findById(orderId)
-                                .filter(o -> o.getCustomer().getId().equals(customerId))
+                Order order = orders.findByIdAndCustomerId(orderId, customerId)
                                 .orElseThrow(CustomerOrderService::notFound);
                 if (order.getStatus() != OrderStatus.DELIVERING && order.getStatus() != OrderStatus.COMPLETED
                                 && order.getStatus() != OrderStatus.REFUNDED) {

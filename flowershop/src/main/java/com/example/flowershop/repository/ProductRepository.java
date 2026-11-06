@@ -1,33 +1,36 @@
 package com.example.flowershop.repository;
 
 import com.example.flowershop.entity.Product;
-import com.example.flowershop.entity.enums.ProductStatus;
-import jakarta.persistence.LockModeType;
+import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
-import org.springframework.data.jpa.repository.Lock;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
+import java.util.*;
+import com.example.flowershop.entity.enums.ProductStatus;
 
-import java.util.List;
-import java.util.Optional;
+/** Explicit Hibernate queries; Spring does not generate this repository. */
+@Repository
+public class ProductRepository extends HibernateRepository<Product> {
+    public ProductRepository() { super(Product.class); }
 
-public interface ProductRepository extends JpaRepository<Product, String>, JpaSpecificationExecutor<Product> {
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("SELECT p FROM Product p WHERE p.id = :id")
-    Optional<Product> findByIdForUpdate(@Param("id") String id);
+    @Transactional
+    public Optional<Product> findByIdForUpdate(String id) {
+        return locked("e.id = :id", Map.of("id", id));
+    }
 
-    Page<Product> findByShopId(String shopId, Pageable pageable);
-    Page<Product> findByShopIdAndStatus(String shopId, ProductStatus status, Pageable pageable);
-    Optional<Product> findByIdAndShopId(String id, String shopId);
+    public Page<Product> findByShopId(String shopId, Pageable pageable) {
+        return page("e.shop.id = :shopId", Map.of("shopId", shopId), pageable);
+    }
 
-    /** Đếm sản phẩm đang hiển thị công khai theo từng danh mục. */
-    @Query("select p.category.id, count(p) from Product p "
-         + "where p.status = com.example.flowershop.entity.enums.ProductStatus.ACTIVE "
-         + "and p.adminHidden = false "
-         + "and p.shop.status = com.example.flowershop.entity.enums.ShopStatus.ACTIVE "
-         + "group by p.category.id")
-    List<Object[]> countVisibleByCategory();
+    public Page<Product> findByShopIdAndStatus(String shopId, ProductStatus status, Pageable pageable) {
+        return page("e.shop.id = :shopId and e.status = :status", Map.of("shopId", shopId, "status", status), pageable);
+    }
+
+    public Optional<Product> findByIdAndShopId(String id, String shopId) {
+        return one("e.id = :id and e.shop.id = :shopId", Map.of("id", id, "shopId", shopId));
+    }
+
+    public List<Object[]> countVisibleByCategory() {
+        return session().createSelectionQuery("select e.category.id, count(e) from Product e where e.status = com.example.flowershop.entity.enums.ProductStatus.ACTIVE and e.adminHidden = false and e.shop.status = com.example.flowershop.entity.enums.ShopStatus.ACTIVE group by e.category.id", Object[].class).getResultList();
+    }
 }

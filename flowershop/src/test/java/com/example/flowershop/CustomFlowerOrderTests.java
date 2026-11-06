@@ -34,6 +34,7 @@ class CustomFlowerOrderTests {
     @Autowired CategoryRepository categories;
     @Autowired ProductRepository products;
     @Autowired CustomOrderRequestRepository requests;
+    @Autowired CustomFlowerOptionRepository options;
     @Autowired MockMvc mvc;
     @Autowired jakarta.validation.Validator validator;
     User owner,customer; Shop shop; Category category; Product rose;
@@ -42,6 +43,7 @@ class CustomFlowerOrderTests {
     Product product(String name,int price,int stock){return products.saveAndFlush(Product.builder().id(id()).shop(shop).category(category).name(name).price(BigDecimal.valueOf(price)).stock(stock).build());}
     RequestInput input(String reference){return new RequestInput(shop.getId(),new BigDecimal("300000"),2,"Pastel birthday bouquet",new Preferences("Rose","Pink","Birthday","Paper",null,reference));}
     @BeforeEach void fixture(){
+        CustomFlowerCatalogFixture.seed(options);
         owner=user(UserRole.SHOP);customer=user(UserRole.CUSTOMER);
         shop=shops.saveAndFlush(Shop.builder().id(id()).owner(owner).name("Custom test shop").status(ShopStatus.ACTIVE).build());
         category=categories.saveAndFlush(Category.builder().id(id()).name("Flowers").status(CategoryStatus.ACTIVE).build());
@@ -56,6 +58,35 @@ class CustomFlowerOrderTests {
         assertThat(service.mine(other.getId(),0).content()).isEmpty();
         assertThatThrownBy(()->service.detail(other.getId(),r.id())).isInstanceOf(ResponseStatusException.class);
         assertThat(rose.getStock()).isEqualTo(10);
+    }
+    @Test void catalogReflectsDatabaseChangesAndDisabledOptionsRemainVisible() throws Exception {
+        var added = CustomFlowerCatalogFixture.add(options, CustomFlowerOption.Group.ACCESSORY, "New accessory");
+        added.setDisabled(true);
+        added.setSortOrder(-1);
+        options.saveAndFlush(added);
+        mvc.perform(get("/api/public/custom-orders/options"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(added.getId()))
+                .andExpect(jsonPath("$[0].label").value("New accessory"))
+                .andExpect(jsonPath("$[0].group").value("ACCESSORY"))
+                .andExpect(jsonPath("$[0].disabled").value(true));
+    }
+    @Test void disabledRenamedOrUnknownChoicesCannotBeSubmittedButHistoryIsPreserved() {
+        var created = service.create(customer.getId(), input(null));
+        var paper = options.findAll().stream().filter(o -> o.getLabel().equals("Paper")).findFirst().orElseThrow();
+        paper.setDisabled(true);
+        options.saveAndFlush(paper);
+        assertThatThrownBy(() -> service.create(customer.getId(), input(null)))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("Paper");
+        paper.setLabel("New paper name");
+        options.saveAndFlush(paper);
+        assertThat(service.detail(customer.getId(), created.id()).design().wrapping()).isEqualTo("Paper");
+        var unknown = new RequestInput(shop.getId(), new BigDecimal("300000"), 1, null,
+                new Preferences("Not in database", null, null, null, null, null));
+        assertThatThrownBy(() -> service.create(customer.getId(), unknown)).isInstanceOf(IllegalArgumentException.class);
+        var wrongGroup = new RequestInput(shop.getId(), new BigDecimal("300000"), 1, null,
+                new Preferences("Birthday", null, null, null, null, null));
+        assertThatThrownBy(() -> service.create(customer.getId(), wrongGroup)).isInstanceOf(IllegalArgumentException.class);
     }
     @Test void optionalDescriptionAndMultipleAccessoriesPersist(){
         for (String description : new String[]{null, "", "   ", "Đẹp"}) {
@@ -113,7 +144,6 @@ class CustomFlowerOrderTests {
         assertThat(design.quantity()).isEqualTo(1);assertThat(design.flowers()).isEqualTo("Rose, Baby");assertThat(design.wrapping()).isEqualTo("Kraft");
     }
     @Test void publicSuggestionsAndPrivateApis() throws Exception {
-        mvc.perform(get("/budget-flowers")).andExpect(status().isOk()).andExpect(forwardedUrl("/index.html"));
         mvc.perform(get("/custom-orders/new")).andExpect(status().isOk()).andExpect(forwardedUrl("/index.html"));
         mvc.perform(get("/api/public/custom-orders/suggestions").param("budget","300000").param("quantity","2").param("shopId",shop.getId())).andExpect(status().isOk()).andExpect(jsonPath("$.content[0].estimatedTotal").value(200000));
         mvc.perform(get("/api/public/custom-orders/suggestions").param("budget","-1")).andExpect(status().isBadRequest());

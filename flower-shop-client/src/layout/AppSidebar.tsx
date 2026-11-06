@@ -53,7 +53,6 @@ const managerNavItems: NavItem[] = [
 ];
 
 const publicNavItems: NavItem[] = [
-  { name: 'Hoa theo ngân sách', path: '/budget-flowers', icon: <BoxCubeIcon fontSize={24} /> },
   { name: 'Trang chủ', path: '/', icon: <GridIcon fontSize={24} /> },
   { name: 'Cửa hàng', path: '/shops', icon: <ListIcon fontSize={24} /> },
   { name: 'Sản phẩm', path: '/#products', icon: <BoxCubeIcon fontSize={24} /> },
