@@ -34,6 +34,7 @@ class CustomFlowerOrderTests {
     @Autowired CategoryRepository categories;
     @Autowired ProductRepository products;
     @Autowired CustomOrderRequestRepository requests;
+    @Autowired OrderRepository orders;
     @Autowired CustomFlowerOptionRepository options;
     @Autowired MockMvc mvc;
     @Autowired jakarta.validation.Validator validator;
@@ -58,6 +59,17 @@ class CustomFlowerOrderTests {
         assertThat(service.mine(other.getId(),0).content()).isEmpty();
         assertThatThrownBy(()->service.detail(other.getId(),r.id())).isInstanceOf(ResponseStatusException.class);
         assertThat(rose.getStock()).isEqualTo(10);
+    }
+    @Test void historicalRequestResolvesBothMigratedAndPreviouslyLinkedOrders(){
+        for (boolean migrated : new boolean[]{true, false}) {
+            var request = service.create(customer.getId(), input(null));
+            assertThat(request.orderId()).isNull();
+            var order = orders.saveAndFlush(com.example.flowershop.entity.Order.builder()
+                    .id(migrated ? request.id() : id()).customRequestId(migrated ? null : request.id())
+                    .customer(customer).shop(shop).orderType(OrderType.CUSTOM).status(OrderStatus.AWAITING_QUOTE)
+                    .subTotal(BigDecimal.ZERO).totalAmount(BigDecimal.ZERO).build());
+            assertThat(service.detail(customer.getId(), request.id()).orderId()).isEqualTo(order.getId());
+        }
     }
     @Test void catalogReflectsDatabaseChangesAndDisabledOptionsRemainVisible() throws Exception {
         var added = CustomFlowerCatalogFixture.add(options, CustomFlowerOption.Group.ACCESSORY, "New accessory");

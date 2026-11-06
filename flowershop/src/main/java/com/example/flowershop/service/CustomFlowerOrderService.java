@@ -37,7 +37,7 @@ public class CustomFlowerOrderService {
             String referenceProductName, BigDecimal estimatedTotal, String shopNote, BigDecimal quotedPrice) {}
     public record Result(String id,String shopId,String shopName,String customerName,
             BigDecimal budget,String description,CustomOrderStatus status,Design design,
-            LocalDateTime createdAt,LocalDateTime updatedAt) {}
+            LocalDateTime createdAt,LocalDateTime updatedAt,String orderId) {}
     public record Results(List<Result> content,int page,int totalPages,long totalElements) {}
     public record Suggestion(ProductCardAssembler.ProductCard product, BigDecimal estimatedTotal,BigDecimal remainingBudget) {}
     public record Suggestions(List<Suggestion> content,int page,int totalPages,long totalElements,BigDecimal budget,int quantity) {}
@@ -48,11 +48,13 @@ public class CustomFlowerOrderService {
     private final ProductRepository products;
     private final ProductCardAssembler cards;
     private final CustomFlowerCatalogService catalog;
+    private final OrderRepository orders;
     private final ObjectMapper json=new ObjectMapper();
     public CustomFlowerOrderService(CustomOrderRequestRepository requests,ShopRepository shops,
-            UserRepository users,ProductRepository products,ProductCardAssembler cards,CustomFlowerCatalogService catalog) {
+            UserRepository users,ProductRepository products,ProductCardAssembler cards,CustomFlowerCatalogService catalog,OrderRepository orders) {
         this.requests=requests;this.shops=shops;this.users=users;this.products=products;this.cards=cards;
         this.catalog=catalog;
+        this.orders=orders;
     }
     private static ResponseStatusException missing(){return new ResponseStatusException(HttpStatus.NOT_FOUND,"Không tìm thấy dữ liệu thuộc quyền truy cập của bạn.");}
     private static ResponseStatusException conflict(String message){return new ResponseStatusException(HttpStatus.CONFLICT,message);}
@@ -71,6 +73,7 @@ public class CustomFlowerOrderService {
         // Earlier fixtures may contain arbitrary JSON; tolerate unknown keys.
         try{
             var tree=json.readTree(value);
+            if(tree.isTextual()) tree=json.readTree(tree.textValue());
             if(!tree.isObject())throw new IllegalArgumentException("Expected a design object");
             var object=(com.fasterxml.jackson.databind.node.ObjectNode)tree;
             if(object.path("flowers").isArray()){
@@ -83,7 +86,7 @@ public class CustomFlowerOrderService {
         }
         catch(JsonProcessingException e){throw new IllegalStateException("Dữ liệu thiết kế không hợp lệ.",e);}
     }
-    private Result result(CustomOrderRequest r){return new Result(r.getId(),r.getShop().getId(),r.getShop().getName(),r.getCustomer().getFullName(),r.getBudget(),r.getDescription(),r.getStatus(),decode(r.getDesiredComponents()),r.getCreatedDate(),r.getLastModifyDate());}
+    private Result result(CustomOrderRequest r){return new Result(r.getId(),r.getShop().getId(),r.getShop().getName(),r.getCustomer().getFullName(),r.getBudget(),r.getDescription(),r.getStatus(),decode(r.getDesiredComponents()),r.getCreatedDate(),r.getLastModifyDate(),orders.findLinkedCustomOrder(r.getId(),r.getCustomer().getId(),r.getShop().getId()).map(Order::getId).orElse(null));}
     private Results results(Page<CustomOrderRequest> p){return new Results(p.getContent().stream().map(this::result).toList(),p.getNumber(),p.getTotalPages(),p.getTotalElements());}
     Design design(RequestInput input){
         validateMoney(input.budget(),input.quantity());var p=input.preferences();

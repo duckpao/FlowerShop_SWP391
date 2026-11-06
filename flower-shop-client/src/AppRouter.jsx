@@ -64,7 +64,7 @@ function AppRouterContent() {
             <Route path="/products" element={<ProductCatalogView auth={controller} />} />
             <Route path="/shops" element={<ShopDirectoryView auth={controller} />} />
             <Route path="/custom-orders/new" element={<CustomFlowerOrderView auth={controller} />} />
-            <Route path="/custom-orders" element={<CustomerOrdersView />} />
+            <Route path="/custom-orders" element={<CustomerCustomOrdersView auth={controller} />} />
             <Route path="/following-shops" element={<FavoriteShopsView auth={controller} />} />
             <Route path="/occasions" element={<OccasionsView auth={controller} />} />
             <Route path="/chat" element={<ChatView auth={controller} />} />

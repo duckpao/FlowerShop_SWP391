@@ -16,6 +16,10 @@ import java.time.LocalDateTime;
 /** Explicit Hibernate queries; Spring does not generate this repository. */
 @Repository
 public class OrderRepository extends HibernateRepository<Order> {
+    public Optional<Order> findLinkedCustomOrder(String referenceId,String customerId,String shopId) {
+        return first("(e.id = :referenceId or e.customRequestId = :referenceId) and e.orderType = com.example.flowershop.entity.enums.OrderType.CUSTOM and e.customer.id = :customerId and e.shop.id = :shopId",
+                Map.of("referenceId",referenceId,"customerId",customerId,"shopId",shopId),Sort.by(Sort.Order.desc("createdDate"),Sort.Order.asc("id")));
+    }
     public OrderRepository() { super(Order.class); }
 
     @Transactional

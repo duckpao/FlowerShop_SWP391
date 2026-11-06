@@ -208,7 +208,7 @@ private static ResponseStatusException notFound() {
                 order.getStatus().name(), order.getSubTotal(), order.getShippingFee(), order.getTotalAmount(),
                 order.getCreatedDate(), order.getCustomerNote(), items, delivery,
                 order.getOrderType() == null ? null : order.getOrderType().name(), order.getDiscountAmount(),
-                order.getRecipientName(), order.getRecipientPhone(), address, paymentLines, refundLines,customWorkflow.design(order),order.getShopNote(),order.getCancelReason(),order.getDeliveryAddress()==null,
+                order.getRecipientName(), order.getRecipientPhone(), address, paymentLines, refundLines,customWorkflow.design(order),order.getShopNote(),order.getCancelReason(),!CustomOrderWorkflowService.hasCarrierAddress(a),
 order.getShippingDiscountAmount(),order.getCouponCode(),order.getShippingCouponCode());
     }
 

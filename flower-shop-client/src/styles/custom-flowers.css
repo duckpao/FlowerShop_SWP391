@@ -58,6 +58,8 @@
 .custom-order-section h3 > span { display: inline-flex; align-items: center; justify-content: center; width: 1.8rem; height: 1.8rem; border-radius: 50%; background: #fff1f2; color: #be123c; font-size: .75rem; font-weight: 700; }
 .custom-order-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 1.25rem; }
 .custom-order-grid-three { grid-template-columns: 2fr 1.5fr 1fr; }
+.custom-flower-page .custom-delivery-date { min-width: 0; border: 0; padding: 0; margin: 0; }
+.custom-flower-page .custom-delivery-date legend { margin-bottom: .5rem; }
 .custom-flower-page .custom-order-panel form label { display: flex; flex-direction: column; align-self: start; gap: .5rem; }
 .custom-flower-page .custom-order-panel form input:not([type='checkbox']),
 .custom-flower-page .custom-order-panel form select { height: 46px; min-height: 46px; flex: none; border-radius: 10px; }

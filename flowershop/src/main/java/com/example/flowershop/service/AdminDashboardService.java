@@ -37,7 +37,7 @@ public class AdminDashboardService {
         }
         void order(String status, long count, BigDecimal total) {
             switch (status) {
-                case "PENDING", "AWAITING_DEPOSIT", "DEPOSIT_PAID", "PROCESSING" -> placing += count;
+                case "PENDING", "AWAITING_DEPOSIT", "DEPOSIT_PAID", "PROCESSING", "AWAITING_QUOTE", "QUOTED" -> placing += count;
                 case "DELIVERING" -> delivering += count;
                 case "COMPLETED" -> { completed += count; revenue = revenue.add(total); }
                 case "CANCELLED", "REFUNDED" -> closed += count;

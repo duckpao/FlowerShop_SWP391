@@ -66,7 +66,7 @@ public class CustomerOrderController {
     }
     @GetMapping("/by-ids")
     public java.util.List<CustomerOrderService.OrderSummary> byIds(@AuthenticationPrincipal CurrentUser user,
-                                                         @RequestParam java.util.List<String> ids) {
+                                                         @RequestParam(name = "ids") java.util.List<String> ids) {
         return service.byIds(user.id(), ids);
     }
 }

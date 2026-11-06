@@ -40,7 +40,7 @@ public class OrderController {
     }
 
     /**
-     * Tạo đơn đặt cọc từ yêu cầu hoa tùy chỉnh đã được shop báo giá; sau đó frontend mở SePay với paymentType DEPOSIT.
+     * Retired deposit-creation endpoint; returns 410. Existing deposit orders remain readable/payable.
      * POST /api/orders/{userId}/custom/{requestId}
      */
     @PostMapping("/{userId}/custom/{requestId}")
@@ -74,7 +74,7 @@ public class OrderController {
      */
     @GetMapping("/{userId}/shipping-fee")
     public ResponseEntity<java.util.Map<String, java.math.BigDecimal>> estimateShippingFee(
-            @PathVariable("userId") String userId, @RequestParam String shopId, @RequestParam String addressId,
+            @PathVariable("userId") String userId, @RequestParam(name = "shopId") String shopId, @RequestParam(name = "addressId") String addressId,
             @AuthenticationPrincipal CurrentUser currentUser) {
         requireOwner(userId, currentUser);
         return ResponseEntity.ok(java.util.Map.of("shippingFee", orderService.estimateShippingFee(userId, shopId, addressId)));

@@ -26,12 +26,12 @@ public class StaffRefundController {
     }
 
     @GetMapping
-    public List<RefundResponse> list(@PathVariable String shopId, @AuthenticationPrincipal CurrentUser u) {
+    public List<RefundResponse> list(@PathVariable(name = "shopId") String shopId, @AuthenticationPrincipal CurrentUser u) {
         return service.list(shopId, u.id());
     }
 
     @PostMapping("/{id}/status")
-    public RefundResponse updateStatus(@PathVariable String shopId, @PathVariable String id,
+    public RefundResponse updateStatus(@PathVariable(name = "shopId") String shopId, @PathVariable(name = "id") String id,
                                        @RequestBody StatusRequest body, @AuthenticationPrincipal CurrentUser u) {
         return service.updateStatus(shopId, u.id(), id, body.status());
     }

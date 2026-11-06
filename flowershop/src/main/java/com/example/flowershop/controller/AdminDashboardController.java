@@ -18,9 +18,9 @@ public class AdminDashboardController {
     public AdminDashboardController(AdminDashboardService dashboard) { this.dashboard=dashboard; }
 
     @GetMapping
-    public AdminDashboardService.Dashboard get(@RequestParam(defaultValue="DAY") String granularity,
-            @RequestParam(required=false) @DateTimeFormat(iso=DateTimeFormat.ISO.DATE) LocalDate from,
-            @RequestParam(required=false) @DateTimeFormat(iso=DateTimeFormat.ISO.DATE) LocalDate to) {
+    public AdminDashboardService.Dashboard get(@RequestParam(name = "granularity", defaultValue="DAY") String granularity,
+            @RequestParam(name = "from", required=false) @DateTimeFormat(iso=DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(name = "to", required=false) @DateTimeFormat(iso=DateTimeFormat.ISO.DATE) LocalDate to) {
         AdminDashboardService.Granularity g;
         try { g = AdminDashboardService.Granularity.valueOf(granularity.toUpperCase(Locale.ROOT)); }
         catch (IllegalArgumentException e) { throw new IllegalArgumentException("Kiểu báo cáo phải là DAY, MONTH hoặc YEAR."); }

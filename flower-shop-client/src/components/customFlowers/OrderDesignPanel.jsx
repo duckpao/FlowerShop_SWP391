@@ -1,8 +1,11 @@
 import { useState } from 'react'
 import { managerOrderService } from '../../services/managerOrderService'
 import { formatPrice } from '../../models/productModel'
+import { Link } from 'react-router-dom'
+import { useAuth } from '../../context/AuthContext'
 
 export function OrderDesignPanel({ order }) {
+  const { user } = useAuth()
   const design = order.customDesign
   if (!design) return null
   const p = design.preferences || {}
@@ -15,6 +18,7 @@ export function OrderDesignPanel({ order }) {
     ].filter(([, value]) => value).map(([label, value]) => <div key={label}><dt className="text-gray-500">{label}</dt><dd className="whitespace-pre-wrap">{value}</dd></div>)}</dl>
     {order.status === 'AWAITING_QUOTE' && <p className="mt-3 text-sm text-gray-500">Chưa chốt giá. Phí giao hàng sẽ được tính cùng báo giá của shop.</p>}
     {order.cancelReason && <p className="mt-3 text-sm text-error-500">Lý do từ chối / hủy: {order.cancelReason}</p>}
+    {!design.legacy && <Link className="mt-3 inline-block text-sm font-semibold text-brand-600" to={user?.role === 'SHOP' ? `/shop-admin/chat?customOrderId=${encodeURIComponent(order.id)}` : `/chat?${new URLSearchParams({ shopId: order.shopId, customOrderId: order.id })}`}>Trao đổi về thiết kế này</Link>}
   </section>
 }
 

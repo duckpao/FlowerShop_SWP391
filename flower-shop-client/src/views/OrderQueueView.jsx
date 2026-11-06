@@ -1,5 +1,6 @@
 import { OrderDesignPanel, ShopCustomOrderActions } from '../components/customFlowers/OrderDesignPanel'
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { managerOrderService } from '../services/managerOrderService'
 import { formatPrice } from '../models/productModel'
 import OrderDiscountSummary from '../components/checkout/OrderDiscountSummary'
@@ -41,6 +42,8 @@ function timeAgo(dateString) {
  * 4. COMPLETED / REFUNDED: GHN báo giao thành công hoặc hoàn hàng thì đơn tự chuyển theo.
  */
 export default function OrderQueueView({ shop }) {
+    const [params] = useSearchParams()
+    const openId = params.get('open') || ''
     const { confirm, notify } = useConfirm()
     const [data, setData] = useState(null)
     const [page, setPage] = useState(0)
@@ -55,6 +58,13 @@ export default function OrderQueueView({ shop }) {
     const [selectedOrder, setSelectedOrder] = useState(null)
     const [cancelReason, setCancelReason] = useState('')
     const [orderDetail, setOrderDetail] = useState(null)
+    useEffect(() => {
+        if (!shop?.id || !openId) return
+        let active = true
+        setOrderDetail(null); setDetailModalOpen(false)
+        managerOrderService.detail(shop.id, openId).then(detail => { if (active) { setSelectedOrder(detail); setOrderDetail(detail); setDetailModalOpen(true) } }).catch(e => { if (active) setError(e.message) })
+        return () => { active = false }
+    }, [shop?.id, openId])
     
     // State quản lý Modal Cập nhật vận đơn GHN
     const [updateGhnModalOpen, setUpdateGhnModalOpen] = useState(false)

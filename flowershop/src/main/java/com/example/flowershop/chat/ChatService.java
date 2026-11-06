@@ -6,6 +6,8 @@ import com.example.flowershop.entity.enums.ChatContextType;
 import com.example.flowershop.entity.enums.SenderType;
 import com.example.flowershop.entity.enums.ShopStatus;
 import com.example.flowershop.entity.enums.UserRole;
+import com.example.flowershop.entity.enums.OrderType;
+import com.example.flowershop.service.CustomOrderWorkflowService;
 import com.example.flowershop.repository.*;
 import com.example.flowershop.service.CloudinaryService;
 import com.example.flowershop.service.NotificationService;
@@ -41,6 +43,8 @@ public class ChatService {
     private final ProductRepository products;
     private final ProductImageRepository productImages;
     private final CustomOrderRequestRepository customOrders;
+    private final OrderRepository orders;
+    private final CustomOrderWorkflowService customWorkflow;
     private final NotificationRepository notificationRepo;
     private final NotificationService notifications;
     private final CloudinaryService cloudinary;
@@ -50,7 +54,8 @@ public class ChatService {
     public ChatService(ChatSessionRepository sessions, ChatMessageRepository messages, ShopRepository shops,
                        UserRepository users, ProductRepository products, ProductImageRepository productImages,
                        CustomOrderRequestRepository customOrders, NotificationRepository notificationRepo,
-                       NotificationService notifications, CloudinaryService cloudinary, ApplicationEventPublisher events) {
+                       NotificationService notifications, CloudinaryService cloudinary, ApplicationEventPublisher events,
+                       OrderRepository orders,CustomOrderWorkflowService customWorkflow) {
         this.sessions = sessions;
         this.messages = messages;
         this.shops = shops;
@@ -62,6 +67,8 @@ public class ChatService {
         this.notifications = notifications;
         this.cloudinary = cloudinary;
         this.events = events;
+        this.orders=orders;
+        this.customWorkflow=customWorkflow;
     }
 
     private static ResponseStatusException status(HttpStatus code, String message) {
@@ -83,6 +90,13 @@ public class ChatService {
     @Transactional
     public SessionDto openForShop(String shopId, String ownerId, String customOrderId) {
         Shop shop = requireOwner(shopId, ownerId);
+        var order=orders.findById(customOrderId);
+        if(order.isPresent()) {
+            var o=order.get();
+            if(o.getOrderType()!=OrderType.CUSTOM || !o.getShop().getId().equals(shopId))
+                throw status(HttpStatus.NOT_FOUND,"Không tìm thấy đơn hoa riêng của cửa hàng.");
+            return toSession(findOrCreate(o.getCustomer(),shop),SenderType.SHOP);
+        }
         CustomOrderRequest request = customOrders.findById(customOrderId)
                 .filter(r -> r.getShop().getId().equals(shopId))
                 .orElseThrow(() -> status(HttpStatus.NOT_FOUND, "Không tìm thấy yêu cầu custom."));
@@ -202,7 +216,9 @@ public class ChatService {
         messages.markRead(sessionId, side == SenderType.CUSTOMER ? SenderType.SHOP : SenderType.CUSTOMER);
         if (side == SenderType.CUSTOMER) session.setCustomerUnreadCount(0);
         else session.setShopUnreadCount(0);
-        sessions.saveAndFlush(session);
+        // markRead clears the persistence context. Continue with merge's managed
+        // result, otherwise the old session's lazy Shop proxy is detached.
+        session = sessions.saveAndFlush(session);
         events.publishEvent(new ReadEvent(sessionId, session.getCustomer().getId(), session.getShop().getOwner().getId(),
                 side == SenderType.CUSTOMER, sessions.customerUnreadTotal(session.getCustomer().getId()),
                 sessions.shopUnreadTotal(session.getShop().getId())));
@@ -239,6 +255,19 @@ public class ChatService {
             productImages.findByProductIdOrderByDisplayOrderAscIdAsc(p.getId()).stream().findFirst()
                     .ifPresent(img -> snap.put("imageUrl", img.getImageUrl()));
         } else {
+            var order=orders.findById(id);
+            if(order.isPresent()) {
+                var o=order.get();
+                if(o.getOrderType()!=OrderType.CUSTOM || !o.getShop().getId().equals(session.getShop().getId())
+                        || !o.getCustomer().getId().equals(session.getCustomer().getId()))
+                    throw status(HttpStatus.BAD_REQUEST,"Đơn hoa riêng không thuộc cuộc trò chuyện này.");
+                var design=customWorkflow.design(o);
+                snap.put("orderId",o.getId());
+                snap.put("name","Đơn hoa riêng #"+o.getId().replace("-","").substring(0,8).toUpperCase());
+                snap.put("price",design==null?o.getSubTotal():design.budget());
+                snap.put("status",o.getStatus().name());
+                return snap;
+            }
             CustomOrderRequest r = customOrders.findById(id)
                     .filter(x -> x.getShop().getId().equals(session.getShop().getId())
                             && x.getCustomer().getId().equals(session.getCustomer().getId()))
@@ -246,6 +275,7 @@ public class ChatService {
             snap.put("name", "Yêu cầu hoa custom #" + r.getId().replace("-", "").substring(0, 8).toUpperCase());
             snap.put("price", r.getBudget());
             snap.put("status", r.getStatus().name());
+            orders.findLinkedCustomOrder(r.getId(),r.getCustomer().getId(),r.getShop().getId()).ifPresent(o -> snap.put("orderId",o.getId()));
         }
         return snap;
     }
@@ -287,10 +317,15 @@ public class ChatService {
         }
     }
 
+    private String jsonDocument(String value) throws JsonProcessingException {
+        var tree = json.readTree(value);
+        return tree != null && tree.isTextual() ? tree.textValue() : value;
+    }
+
     private List<String> readImages(String value) {
         if (value == null || value.isBlank()) return List.of();
         try {
-            return json.readValue(value, new TypeReference<List<String>>() { });
+            return json.readValue(jsonDocument(value), new TypeReference<List<String>>() { });
         } catch (JsonProcessingException e) {
             return List.of();
         }
@@ -299,7 +334,7 @@ public class ChatService {
     private Map<String, Object> readMap(String value) {
         if (value == null || value.isBlank()) return null;
         try {
-            return json.readValue(value, new TypeReference<Map<String, Object>>() { });
+            return json.readValue(jsonDocument(value), new TypeReference<Map<String, Object>>() { });
         } catch (JsonProcessingException e) {
             return null;
         }

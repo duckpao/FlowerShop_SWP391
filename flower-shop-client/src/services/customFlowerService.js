@@ -17,10 +17,8 @@ export const customFlowerService = {
     if (!response.ok) throw new Error(body.message || 'Không tải được mẫu hoa theo ngân sách.')
     return body
   },
-  create: body => authService.authenticatedRequest('/api/customer/custom-orders', { method: 'POST', body }),
   mine: page => authService.authenticatedRequest(`/api/customer/custom-orders?page=${page}`),
   detail: id => authService.authenticatedRequest(`/api/customer/custom-orders/${encodeURIComponent(id)}`),
   shopRequests: (shopId, page, status = '') => authService.authenticatedRequest(`/api/shop/mine/${encodeURIComponent(shopId)}/custom-orders?${new URLSearchParams({ page: String(page), ...(status ? { status } : {}) })}`),
   shopDetail: (shopId, id) => authService.authenticatedRequest(`/api/shop/mine/${encodeURIComponent(shopId)}/custom-orders/${encodeURIComponent(id)}`),
-  decide: (shopId, id, body) => authService.authenticatedRequest(`/api/shop/mine/${encodeURIComponent(shopId)}/custom-orders/${encodeURIComponent(id)}`, { method: 'PUT', body }),
 }

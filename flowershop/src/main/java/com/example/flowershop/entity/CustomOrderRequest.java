@@ -33,6 +33,7 @@ public class CustomOrderRequest {
     @Column(name = "budget", nullable = false, precision = 12, scale = 2)
     private BigDecimal budget;
 
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
     @Column(name = "desired_components", columnDefinition = "json")
     private String desiredComponents;
 

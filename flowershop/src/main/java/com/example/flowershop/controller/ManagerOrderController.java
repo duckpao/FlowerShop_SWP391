@@ -39,8 +39,8 @@ public class ManagerOrderController {
     @Operation(summary = "Danh sách đơn hàng của shop")
     @GetMapping
     public ManagerOrderService.Results list(@PathVariable("shopId") String shopId, @AuthenticationPrincipal CurrentUser u,
-                                            @RequestParam(defaultValue = "0") int page,
-                                            @RequestParam(required = false) String status) {
+                                            @RequestParam(name = "page", defaultValue = "0") int page,
+                                            @RequestParam(name = "status", required = false) String status) {
         return service.list(shopId, u.id(), page, status);
     }
 

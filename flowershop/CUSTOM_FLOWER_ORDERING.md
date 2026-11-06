@@ -1,4 +1,11 @@
 > Historical design-request API documentation. The active order workflow is documented in [CUSTOM_ORDER_WORKFLOW.md](CUSTOM_ORDER_WORKFLOW.md).
+>
+> The POST/PUT request endpoints and separate deposit-creation API described below are
+> retired and now return HTTP 410. New designs use `POST /api/customer/orders/custom`,
+> shop quotes and customer acceptance in normal order management. Legacy GET endpoints
+> remain for history; responses include the linked `orderId` when present. Old chat
+> bookmarks open that order or display read-only history. Existing orders and payments
+> are preserved. The steps below describe the earlier workflow, not current usage.
 
 # M04 — Custom Flower Ordering
 

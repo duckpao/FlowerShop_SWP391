@@ -29,6 +29,7 @@ public class OrderDetail {
     @JoinColumn(name = "product_id")
     private Product product;
 
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
     @Column(name = "custom_materials", columnDefinition = "json")
     private String customMaterials;
 

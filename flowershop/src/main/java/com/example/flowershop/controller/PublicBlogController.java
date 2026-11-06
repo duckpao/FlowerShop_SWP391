@@ -13,13 +13,13 @@ public class PublicBlogController {
     }
 
     @GetMapping
-    public BlogService.Results list(@RequestParam(required = false) String shopId,
-            @RequestParam(defaultValue = "") String q, @RequestParam(defaultValue = "0") int page) {
+    public BlogService.Results list(@RequestParam(name = "shopId", required = false) String shopId,
+            @RequestParam(name = "q", defaultValue = "") String q, @RequestParam(name = "page", defaultValue = "0") int page) {
         return service.listPublic(shopId, q, page);
     }
 
     @GetMapping("/{id}")
-    public BlogService.Result detail(@PathVariable String id) {
+    public BlogService.Result detail(@PathVariable(name = "id") String id) {
         return service.publicDetail(id);
     }
 }

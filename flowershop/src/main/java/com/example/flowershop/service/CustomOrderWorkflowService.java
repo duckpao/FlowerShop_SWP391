@@ -26,7 +26,9 @@ public class CustomOrderWorkflowService {
     }
     public record VoucherInput(@Size(max=50) String couponCode,@Size(max=50) String shippingCouponCode) {}
     public record DeliveryInput(@NotBlank String addressId) {}
-    public record Design(BigDecimal budget, String description, CustomFlowerOrderService.Design preferences) {}
+    public record Design(BigDecimal budget, String description, CustomFlowerOrderService.Design preferences, boolean legacy) {
+        public Design(BigDecimal budget,String description,CustomFlowerOrderService.Design preferences) { this(budget,description,preferences,false); }
+    }
     public record Receipt(String orderId, String status) {}
     private final OrderRepository orders;
     private final OrderDetailRepository details;
@@ -37,14 +39,16 @@ public class CustomOrderWorkflowService {
     private final CustomFlowerOrderService designs;
     private final GhnService ghn;
     private final CouponService vouchers;
+    private final NotificationService notifications;
     private final ObjectMapper json = new ObjectMapper();
 
     public CustomOrderWorkflowService(OrderRepository orders, OrderDetailRepository details, PaymentRepository payments,
-            AddressRepository addresses, ShopRepository shops, UserRepository users, CustomFlowerOrderService designs, GhnService ghn, CouponService vouchers) {
+            AddressRepository addresses, ShopRepository shops, UserRepository users, CustomFlowerOrderService designs, GhnService ghn, CouponService vouchers, NotificationService notifications) {
         this.orders=orders; this.details=details; this.payments=payments; this.addresses=addresses;
         this.shops=shops; this.users=users; this.designs=designs;
         this.ghn=ghn;
         this.vouchers=vouchers;
+        this.notifications=notifications;
     }
     private static ResponseStatusException invalid(String message) { return new ResponseStatusException(HttpStatus.CONFLICT, message); }
     private static ResponseStatusException missing() { return new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy đơn hàng thuộc quyền truy cập của bạn."); }
@@ -63,18 +67,21 @@ public class CustomOrderWorkflowService {
         var shop = shops.findByIdAndStatus(request.shopId(), ShopStatus.ACTIVE).orElseThrow(CustomOrderWorkflowService::missing);
         var customer = users.findByIdAndRoleAndStatus(actor, UserRole.CUSTOMER, UserStatus.ACTIVE).orElseThrow(CustomOrderWorkflowService::missing);
         var address = addresses.findByIdAndUserId(input.addressId(), actor).orElseThrow(CustomOrderWorkflowService::missing);
-        if (address.getGhnDistrictId()==null || address.getGhnWardCode()==null || address.getGhnWardCode().isBlank())
-            throw invalid("Vui lòng cập nhật địa chỉ nhận hàng theo danh mục GHN.");
+        // A design request must reach the shop even if its saved address still needs
+        // carrier codes. Those codes are required when quoting shipping, not submitting.
         var design = new Design(request.budget(), request.description(), designs.design(request));
         var order = Order.builder().id(UUID.randomUUID().toString()).customer(customer).shop(shop)
                 .deliveryAddress(address).recipientName(address.getRecipientName()).recipientPhone(address.getRecipientPhone())
                 .orderType(OrderType.CUSTOM).subTotal(BigDecimal.ZERO).totalAmount(BigDecimal.ZERO)
                 .customerNote(request.description()).status(OrderStatus.AWAITING_QUOTE).createdBy(actor).lastModifyBy(actor).build();
-        orders.save(order);
+        order=orders.save(order);
         String encoded;
         try { encoded=json.writeValueAsString(design); } catch (Exception e) { throw new IllegalStateException("Không thể lưu thiết kế.", e); }
         details.save(OrderDetail.builder().id(UUID.randomUUID().toString()).order(order).customMaterials(encoded)
                 .price(BigDecimal.ZERO).quantity(1).createdBy(actor).build());
+        notifications.notifyUser(shop.getOwner(), "Yêu cầu đặt hoa mới",
+                "Khách hàng đã gửi thiết kế hoa. Vui lòng xem và báo giá trong quản lý đơn hàng.",
+                "/shop-admin/orders?open="+order.getId());
         return new Receipt(order.getId(), order.getStatus().name());
     }
     public Design design(Order order) {
@@ -83,6 +90,17 @@ public class CustomOrderWorkflowService {
         if (detail==null) return null;
         try {
             var tree=json.readTree(detail.getCustomMaterials());
+            // Read snapshots written as JSON strings by older VARCHAR bindings too.
+            if(tree.isTextual()) tree=json.readTree(tree.textValue());
+            if(!tree.isObject()) throw new IllegalArgumentException("Thiết kế phải là một đối tượng.");
+            if(!tree.has("preferences")) {
+                BigDecimal budget=order.getSubTotal();
+                if(order.getCustomRequestId()!=null) {
+                    try { budget=designs.detail(order.getCustomer().getId(),order.getCustomRequestId()).budget(); }
+                    catch(ResponseStatusException missingHistory) { /* Keep old paid orders readable even without their request row. */ }
+                }
+                return new Design(budget,order.getCustomerNote(),designs.decode(tree.toString()),true);
+            }
             return new Design(tree.path("budget").decimalValue(), tree.path("description").isNull() ? null : tree.path("description").asText(),
                     designs.decode(tree.path("preferences").toString()));
         }
@@ -96,9 +114,9 @@ public class CustomOrderWorkflowService {
         if (design==null || quote.amount().compareTo(design.budget())>0) throw invalid("Giá hoa không được vượt ngân sách khách hàng.");
         var pickup=addresses.findPickupByShopId(shopId).orElse(null);
         var destination=order.getDeliveryAddress();
-        if (destination==null || destination.getGhnDistrictId()==null || destination.getGhnWardCode()==null)
+        if (!hasCarrierAddress(destination))
             throw invalid("Khách cần bổ sung địa chỉ nhận hoa trước khi shop chốt báo giá.");
-        if (pickup==null || pickup.getGhnDistrictId()==null || pickup.getGhnWardCode()==null)
+        if (!hasCarrierAddress(pickup))
             throw invalid("Cửa hàng cần cập nhật địa chỉ lấy hàng GHN trước khi báo giá.");
         var shippingFee=ghn.calculateFee(pickup.getGhnDistrictId(), pickup.getGhnWardCode(),
                 destination.getGhnDistrictId(), destination.getGhnWardCode(), GhnService.DEFAULT_WEIGHT_GRAM);
@@ -106,6 +124,8 @@ public class CustomOrderWorkflowService {
         order.setShopNote(quote.note()==null ? "" : quote.note().strip()); order.setStatus(OrderStatus.QUOTED); order.setLastModifyBy(actor);
         var line=details.findCustomDesignByOrderId(id).orElseThrow(CustomOrderWorkflowService::missing);
         line.setPrice(quote.amount());
+        notifications.notifyUser(order.getCustomer(), "Shop đã báo giá hoa theo yêu cầu",
+                "Vui lòng xem báo giá, đồng ý thiết kế và chọn phương thức thanh toán.", "/orders/"+id);
     }
     @Transactional
     public Receipt accept(String actor, String id, Accept input) {
@@ -132,7 +152,7 @@ public class CustomOrderWorkflowService {
         if (order.getStatus()!=OrderStatus.AWAITING_QUOTE && order.getStatus()!=OrderStatus.QUOTED)
             throw invalid("Không thể thay đổi địa chỉ sau khi đã đồng ý báo giá.");
         var address=addresses.findByIdAndUserId(input.addressId(), actor).orElseThrow(CustomOrderWorkflowService::missing);
-        if (address.getGhnDistrictId()==null || address.getGhnWardCode()==null || address.getGhnWardCode().isBlank())
+        if (!hasCarrierAddress(address))
             throw invalid("Vui lòng cập nhật địa chỉ theo danh mục GHN.");
         order.setDeliveryAddress(address); order.setRecipientName(address.getRecipientName()); order.setRecipientPhone(address.getRecipientPhone());
         order.setStatus(OrderStatus.AWAITING_QUOTE); order.setLastModifyBy(actor);
@@ -141,6 +161,10 @@ public class CustomOrderWorkflowService {
     private CouponService.Context context(Order order) {
         // A custom design is a quoted batch, not a purchase of its reference catalog product.
         return new CouponService.Context(order.getShop().getId(),order.getSubTotal(),order.getShippingFee(),Map.of());
+    }
+    public static boolean hasCarrierAddress(Address address) {
+        return address!=null && address.getGhnDistrictId()!=null && address.getGhnDistrictId()>0
+                && address.getGhnWardCode()!=null && !address.getGhnWardCode().isBlank();
     }
     public CouponService.Preview previewVouchers(String actor,String id,VoucherInput input) {
         var order=orders.findByIdAndCustomerId(id,actor).orElseThrow(CustomOrderWorkflowService::missing);

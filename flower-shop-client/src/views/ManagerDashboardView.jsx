@@ -193,7 +193,7 @@ export default function ManagerDashboardView({
         </>
       )}
       
-      {shopGate ? shopGate : chat ? <ManagerChatView user={user} shop={shop} /> : customOrders ? <OrderQueueView shop={shop} /> : current && current.section === "blogs" ? (
+      {shopGate ? shopGate : chat ? <ManagerChatView user={user} shop={shop} /> : customOrders ? <ManagerCustomOrdersView user={user} shop={shop} /> : current && current.section === "blogs" ? (
         <ManagerBlogsView shop={shop} />
       ) : current && current.section === "orders" ? (
         <OrderQueueView shop={shop} />

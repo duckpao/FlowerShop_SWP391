@@ -9,7 +9,7 @@ export default function CustomerQuoteActions({ order, user, onChanged }) {
   const [error, setError] = useState('')
   const [vouchers, setVouchers] = useState({ couponCode: '', shippingCouponCode: '' })
   const [voucherPreview, setVoucherPreview] = useState(null)
-  if (order.orderType !== 'CUSTOM' || !['QUOTED', 'PENDING'].includes(order.status)) return null
+  if (order.orderType !== 'CUSTOM' || order.customDesign?.legacy || !['QUOTED', 'PENDING'].includes(order.status)) return null
   async function proceed() {
     setBusy(true); setError('')
     try {

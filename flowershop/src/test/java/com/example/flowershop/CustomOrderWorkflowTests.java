@@ -47,6 +47,8 @@ class CustomOrderWorkflowTests {
     @Autowired ProductRepository products;
     @Autowired CategoryRepository categories;
     @Autowired CustomFlowerOptionRepository options;
+    @Autowired NotificationService notifications;
+    @Autowired jakarta.persistence.EntityManager entityManager;
     User customer, owner;
     Shop shop;
     Address destination;
@@ -85,6 +87,81 @@ class CustomOrderWorkflowTests {
         assertThat(customerOrders.detail(customer.getId(), created.orderId()).customDesign().preferences().quantity()).isEqualTo(3);
         assertThat(reference.getStock()).isEqualTo(10);
         assertThat(payments.findByOrderId(created.orderId())).isEmpty();
+    }
+    @Test void requestWithLegacyAddressCommitsAndAppearsForCustomerAndShop() throws Exception {
+        destination.setGhnDistrictId(null);
+        destination.setGhnWardCode(null);
+        addresses.saveAndFlush(destination);
+        var created=create();
+        // Catalog labels are shared across fixtures; keep this committed test isolated.
+        options.deleteAll();
+        // Verify committed rows in a new transaction rather than only the first-level cache.
+        org.springframework.test.context.transaction.TestTransaction.flagForCommit();
+        org.springframework.test.context.transaction.TestTransaction.end();
+        org.springframework.test.context.transaction.TestTransaction.start();
+        mvc.perform(get("/api/customer/orders").header("Authorization", "Bearer customer-test"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.content[0].id").value(created.orderId()));
+        mvc.perform(get("/api/shop/mine/"+shop.getId()+"/orders").header("Authorization", "Bearer shop-test"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.content[0].id").value(created.orderId()))
+                .andExpect(jsonPath("$.content[0].status").value("AWAITING_QUOTE"));
+        assertThat(customerOrders.detail(customer.getId(),created.orderId()).needsDeliveryAddress()).isTrue();
+        assertThat(manager.queueCount(shop.getId(),owner.getId()).pendingCount()).isEqualTo(1);
+        assertThat(notifications.mine(owner.getId())).extracting(NotificationService.NotificationResponse::link)
+                .contains("/shop-admin/orders?open="+created.orderId());
+        assertThatThrownBy(() -> quote(created.orderId())).isInstanceOf(ResponseStatusException.class);
+        var updated=addresses.findById(destination.getId()).orElseThrow();
+        updated.setGhnDistrictId(2); updated.setGhnWardCode("002"); addresses.saveAndFlush(updated);
+        workflow.deliveryAddress(customer.getId(),created.orderId(),new CustomOrderWorkflowService.DeliveryInput(updated.getId()));
+        quote(created.orderId());
+        assertThat(customerOrders.detail(customer.getId(),created.orderId()).needsDeliveryAddress()).isFalse();
+        assertThat(notifications.mine(customer.getId())).extracting(NotificationService.NotificationResponse::link)
+                .contains("/orders/"+created.orderId());
+    }
+    @Test void foreignAddressCannotCreateOrderOrNotifyShop() {
+        var other=user(UserRole.CUSTOMER);
+        long before=orders.count();
+        assertThatThrownBy(() -> workflow.create(other.getId(),input())).isInstanceOf(ResponseStatusException.class);
+        assertThat(orders.count()).isEqualTo(before);
+        assertThat(notifications.mine(owner.getId())).isEmpty();
+    }
+    @Test void olderStringEncodedSnapshotRemainsReadableAfterReload() throws Exception {
+        var created=create();
+        var line=details.findCustomDesignByOrderId(created.orderId()).orElseThrow();
+        line.setCustomMaterials(new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(line.getCustomMaterials()));
+        details.saveAndFlush(line);
+        entityManager.clear();
+        var design=customerOrders.detail(customer.getId(),created.orderId()).customDesign();
+        assertThat(design.budget()).isEqualByComparingTo("500000");
+        assertThat(design.preferences().quantity()).isEqualTo(3);
+    }
+    @Test void historicalDepositDesignWithoutEnvelopeRemainsReadable() {
+        var id=create().orderId();
+        var detail=details.findCustomDesignByOrderId(id).orElseThrow();
+        detail.setCustomMaterials("{\"quantity\":2,\"flowers\":\"Rose\",\"wrapping\":\"Paper\",\"quotedPrice\":250000}");
+        details.saveAndFlush(detail);
+        var order=orders.findById(id).orElseThrow();
+        order.setSubTotal(new BigDecimal("250000"));
+        order.setTotalAmount(new BigDecimal("280000"));
+        order.setStatus(OrderStatus.AWAITING_DEPOSIT);
+        orders.saveAndFlush(order);
+        var saved=customerOrders.detail(customer.getId(), id);
+        assertThat(saved.customDesign().legacy()).isTrue();
+        assertThat(saved.customDesign().preferences().flowers()).isEqualTo("Rose");
+        assertThat(saved.customDesign().preferences().quantity()).isEqualTo(2);
+        assertThat(saved.status()).isEqualTo("AWAITING_DEPOSIT");
+    }
+    @Test void retiredRequestCreationApiCannotCreateASeparateWorkflow() throws Exception {
+        var json=new com.fasterxml.jackson.databind.ObjectMapper();
+        var csrfResult=mvc.perform(get("/api/auth/csrf")).andReturn();
+        var csrf=json.readTree(csrfResult.getResponse().getContentAsString());
+        var session=(MockHttpSession)csrfResult.getRequest().getSession(false);
+        long before=orders.count();
+        mvc.perform(post("/api/customer/custom-orders").session(session)
+                        .header(csrf.path("headerName").asText(), csrf.path("token").asText())
+                        .header("Authorization", "Bearer customer-test").contentType("application/json")
+                        .content(json.writeValueAsString(input().design())))
+                .andExpect(status().isGone());
+        assertThat(orders.count()).isEqualTo(before);
     }
     @Test void customOrderValidatesCurrentCatalogAndKeepsHistoricalDesign() {
         var created = create();
