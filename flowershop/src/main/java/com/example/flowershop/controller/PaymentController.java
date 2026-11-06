@@ -21,7 +21,8 @@ public class PaymentController {
     private final PaymentService paymentService;
 
     /**
-     * PHASE 5: Khởi tạo phiên thanh toán SePay Gateway (an toàn, tính tiền server-side)
+     * PHASE 5: Khởi tạo phiên thanh toán SePay Gateway (an toàn, tính tiền server-side).
+     * Trả checkoutUrl + các field đã ký HMAC để FE POST form sang cổng SePay. Chỉ chủ đơn mới tạo được.
      * POST /api/payments/sepay/create
      */
     @PostMapping("/payments/sepay/create")
@@ -34,37 +35,25 @@ public class PaymentController {
     }
 
     /**
-     * Khởi tạo form thanh toán theo orderId (endpoint tương thích)
-     * POST /api/sepay/checkout/{orderId}
+     * Thanh toán gộp nhiều đơn (mỗi shop một đơn) trong một giao dịch SePay
+     * POST /api/payments/sepay/create-group
      */
-    @PostMapping("/sepay/checkout/{orderId}")
-    public ResponseEntity<SePayCheckoutFormResponse> initiateCheckout(@PathVariable(name = "orderId") String orderId, @AuthenticationPrincipal CurrentUser currentUser) {
-        return ResponseEntity.ok(sePayGatewayService.initiateCheckout(orderId, currentUser.id()));
-    }
-
-    /**
-     * PHASE 8 & 9: Endpoint IPN webhook nhận callback từ SePay Gateway
-     * POST /api/payments/sepay/ipn và POST /api/sepay/ipn
-     */
-    @PostMapping({"/payments/sepay/ipn", "/sepay/ipn"})
-    public ResponseEntity<Map<String, Object>> handleIpn(
-            @RequestBody SePayIpnPayload payload,
-            @RequestHeader(value = "X-Secret-Key", required = false) String xSecretKey
-    ) {
-        Map<String, Object> result = sePayGatewayService.handleIpn(payload, xSecretKey);
-        return ResponseEntity.ok(result);
-    }
-
-    /**
-     * PHASE 11: Truy vấn trạng thái thanh toán theo paymentId
-     * GET /api/payments/{paymentId}
-     */
-    @GetMapping("/payments/{paymentId}")
-    public ResponseEntity<PaymentStatusResponse> getPaymentById(
-            @PathVariable(name = "paymentId") String paymentId,
+    @PostMapping("/payments/sepay/create-group")
+    public ResponseEntity<CreatePaymentResponse> createGroupPayment(
+            @Valid @RequestBody com.example.flowershop.dto.payment.CreateGroupPaymentRequest request,
             @AuthenticationPrincipal CurrentUser currentUser
     ) {
-        return ResponseEntity.ok(sePayGatewayService.getStatusById(paymentId, currentUser.id()));
+        return ResponseEntity.ok(sePayGatewayService.createGroupPayment(request, currentUser.id()));
+    }
+
+    /**
+     * Khách đóng/hủy cổng SePay: hủy giao dịch + đơn tương ứng.
+     * POST /api/payments/sepay/cancel/{invoiceNumber} — trả {"paid": true} nếu thực ra đã thanh toán (không hủy được).
+     */
+    @PostMapping("/payments/sepay/cancel/{invoiceNumber}")
+    public Map<String, Boolean> cancelCheckout(@PathVariable("invoiceNumber") String invoiceNumber,
+                                               @AuthenticationPrincipal CurrentUser currentUser) {
+        return Map.of("paid", sePayGatewayService.cancelCheckout(invoiceNumber, currentUser.id()));
     }
 
     /**
@@ -73,40 +62,18 @@ public class PaymentController {
      */
     @GetMapping("/payments/status-by-invoice/{invoiceNumber}")
     public ResponseEntity<PaymentStatusResponse> getPaymentByInvoice(
-            @PathVariable(name = "invoiceNumber") String invoiceNumber,
+            @PathVariable("invoiceNumber") String invoiceNumber,
             @AuthenticationPrincipal CurrentUser currentUser
     ) {
         return ResponseEntity.ok(sePayGatewayService.getStatusByInvoice(invoiceNumber, currentUser.id()));
     }
 
     /**
-     * Truy vấn trạng thái thanh toán theo orderId
-     * GET /api/payments/status-by-order/{orderId} và GET /api/payment/status/{orderId}
+     * Truy vấn trạng thái thanh toán theo orderId (có đối soát chủ động với SePay trước khi trả kết quả)
+     * GET /api/payments/status-by-order/{orderId}
      */
-    @GetMapping({"/payments/status-by-order/{orderId}", "/payment/status/{orderId}"})
-    public ResponseEntity<PaymentStatusResponse> getPaymentByOrder(@PathVariable(name = "orderId") String orderId, @AuthenticationPrincipal CurrentUser currentUser) {
+    @GetMapping("/payments/status-by-order/{orderId}")
+    public ResponseEntity<PaymentStatusResponse> getPaymentByOrder(@PathVariable("orderId") String orderId, @AuthenticationPrincipal CurrentUser currentUser) {
         return ResponseEntity.ok(paymentService.checkPaymentStatus(orderId, currentUser.id()));
-    }
-
-    /**
-     * Sinh thông tin VietQR trực tiếp
-     * POST /api/payments/create-qr/{orderId} và POST /api/payment/create-qr/{orderId}
-     */
-    @PostMapping({"/payments/create-qr/{orderId}", "/payment/create-qr/{orderId}"})
-    public ResponseEntity<PaymentQrResponse> createQrPayment(@PathVariable(name = "orderId") String orderId, @AuthenticationPrincipal CurrentUser currentUser) {
-        return ResponseEntity.ok(paymentService.generatePaymentQr(orderId, currentUser.id()));
-    }
-
-    /**
-     * Nhận Webhook giao dịch tài khoản ngân hàng trực tiếp từ SePay
-     * POST /api/webhook/sepay
-     */
-    @PostMapping("/webhook/sepay")
-    public ResponseEntity<Map<String, Object>> receiveBankWebhook(
-            @RequestBody SePayWebhookDto webhookDto,
-            @RequestHeader(value = "Authorization", required = false) String authHeader
-    ) {
-        Map<String, Object> result = paymentService.processSePayWebhook(webhookDto, authHeader);
-        return ResponseEntity.ok(result);
     }
 }

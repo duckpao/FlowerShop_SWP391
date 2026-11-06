@@ -12,7 +12,8 @@
     "jsx": "react-jsx",
     "strict": false,
     "allowJs": true,
-    "checkJs": false
+    "checkJs": false,
+    "paths": { "@/*": ["./src/*"] }
   },
   "include": ["src"]
 }

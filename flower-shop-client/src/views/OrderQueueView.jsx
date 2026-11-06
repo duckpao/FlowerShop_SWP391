@@ -1,7 +1,6 @@
 import { OrderDesignPanel, ShopCustomOrderActions } from '../components/customFlowers/OrderDesignPanel'
 import { useEffect, useState } from 'react'
 import { managerOrderService } from '../services/managerOrderService'
-import { managerShopService } from '../services/managerShopService'
 import { formatPrice } from '../models/productModel'
 import OrderDiscountSummary from '../components/checkout/OrderDiscountSummary'
 import Badge from '../components/ui/badge/Badge'
@@ -36,13 +35,13 @@ function timeAgo(dateString) {
  * View Quản lý Đơn hàng của Cửa hàng (OrderQueueView).
  * Thực hiện quy trình đơn hàng 4 bước:
  * 1. PENDING (Chờ xác nhận): Shop bấm "Xác nhận đơn hàng" -> Chuyển sang PROCESSING.
- * 2. PROCESSING (Đang chuẩn bị): Shop làm hoa, bấm "Tạo mã vận đơn GHN & Giao" -> Tạo vận đơn GHN, chuyển sang DELIVERING.
+ * 2. PROCESSING (Đang chuẩn bị) hoặc DEPOSIT_PAID (đơn đặt cọc): Shop làm hoa, bấm "Tạo mã vận đơn GHN & Giao" -> Tạo vận đơn GHN
+ *    (phần chưa trả GHN thu hộ COD), chuyển sang DELIVERING.
  * 3. DELIVERING (Đang giao): Trạng thái vận đơn đi theo GHN; bảng giả lập gửi từng bước sang GHN staging.
  * 4. COMPLETED / REFUNDED: GHN báo giao thành công hoặc hoàn hàng thì đơn tự chuyển theo.
  */
-export default function OrderQueueView({ shop: initialShop }) {
+export default function OrderQueueView({ shop }) {
     const { confirm, notify } = useConfirm()
-    const [shop, setShop] = useState(initialShop)
     const [data, setData] = useState(null)
     const [page, setPage] = useState(0)
     const [statusFilter, setStatusFilter] = useState('') // Mở màn hình ở các đơn cần Manager xác nhận
@@ -61,18 +60,9 @@ export default function OrderQueueView({ shop: initialShop }) {
     const [updateGhnModalOpen, setUpdateGhnModalOpen] = useState(false)
     const [updatePayload, setUpdatePayload] = useState({ to_name: '', to_phone: '', weight: 2000, note: 'CHOXEMHANGKHONGTHU' })
 
-    // Nếu không truyền shop từ props, tự động lấy shop đầu tiên thuộc quyền quản lý của user
-    useEffect(() => {
-        if (initialShop) return
-        let active = true
-        managerShopService.list("SHOP").then(shops => {
-            if (active && shops.length > 0) setShop(shops[0])
-        }).catch(e => { if (active) setError(e.message) })
-        return () => { active = false }
-    }, [initialShop])
-
     /**
      * Tải danh sách đơn hàng từ backend theo trang và bộ lọc trạng thái
+     * Gọi: managerOrderService.list -> GET /api/shop/mine/{shopId}/orders
      */
     const load = async (pg, preserveNotice = false) => {
         if (!shop) return
@@ -92,6 +82,7 @@ export default function OrderQueueView({ shop: initialShop }) {
 
     /**
      * Bước 1: Xác nhận đơn hàng (PENDING -> PROCESSING)
+     * Gọi: managerOrderService.confirm -> POST .../orders/{id}/confirm
      */
     const confirmOrder = async orderId => {
         setBusy(true); setError(''); setNotice('')
@@ -104,6 +95,7 @@ export default function OrderQueueView({ shop: initialShop }) {
 
     /**
      * Bước 2: Tạo vận đơn GHN & Chuyển giao hàng (PROCESSING -> DELIVERING)
+     * Gọi: managerOrderService.ship -> POST .../orders/{id}/ship (backend gọi GHN shipping-order/create)
      */
     const ship = async orderId => {
         if (!await confirm({ title: 'Tạo vận đơn GHN', message: 'Tạo mã vận đơn GHN và chuyển đơn sang giao hàng?', confirmLabel: 'Tạo vận đơn' })) return
@@ -116,7 +108,40 @@ export default function OrderQueueView({ shop: initialShop }) {
     }
 
     /**
+     * Lấy trạng thái mới từ GHN cho đơn đang giao
+     * Gọi: managerOrderService.refreshStatus -> POST .../orders/{id}/refresh-status
+     */
+    const refresh = async orderId => {
+        setBusy(true); setError(''); setNotice('')
+        try {
+            const delivery = await managerOrderService.refreshStatus(shop.id, orderId)
+            await load(page, true)
+            setNotice(`Trạng thái GHN hiện tại: ${ghnStatusLabels[delivery.ghnStatus] || delivery.ghnStatus}`)
+        } catch (e) { setError(e.message) } finally { setBusy(false) }
+    }
+
+    /**
+     * Đổi trạng thái đơn thủ công, chỉ ghi vào database, không gọi GHN
+     * Gọi: managerOrderService.setStatus -> POST .../orders/{id}/set-status
+     */
+    const changeStatus = async (order, next) => {
+        if (!next) return
+        if (!await confirm({
+            title: 'Đổi trạng thái đơn',
+            message: `Chuyển đơn ${order.id.substring(0, 8)} từ "${statusLabels[order.status]}" sang "${statusLabels[next]}"? Chỉ cập nhật trong database, không gọi GHN.`,
+            tone: next === 'CANCELLED' ? 'danger' : 'primary',
+        })) return
+        setBusy(true); setError(''); setNotice('')
+        try {
+            const result = await managerOrderService.setStatus(shop.id, order.id, next)
+            await load(page, true)
+            setNotice(`Đã chuyển đơn ${order.id.substring(0, 8)} sang "${statusLabels[next]}".${result.warning ? ' ' + result.warning : ''}`)
+        } catch (e) { setError(e.message) } finally { setBusy(false) }
+    }
+
+    /**
      * Hủy đơn hàng trước khi giao (kèm lý do bắt buộc)
+     * Gọi: managerOrderService.cancelOrder -> POST .../orders/{id}/cancel
      */
     const cancel = async () => {
         if (!cancelReason.trim()) {
@@ -135,6 +160,7 @@ export default function OrderQueueView({ shop: initialShop }) {
 
     /**
      * Mở modal xem thông tin chi tiết đơn hàng (sản phẩm, địa chỉ người gửi, người nhận, GHN tracking)
+     * Gọi: managerOrderService.detail -> GET .../orders/{id}
      */
     const viewDetail = async orderSummary => {
         setSelectedOrder(orderSummary)
@@ -151,6 +177,7 @@ export default function OrderQueueView({ shop: initialShop }) {
 
     /**
      * Sau khi GHN đổi trạng thái: tải lại danh sách và chi tiết đơn đang mở
+     * GhnSimulator gọi hàm này qua prop onChanged; dùng load() và managerOrderService.detail
      */
     const onGhnChanged = async () => {
         await load(page, true)
@@ -183,7 +210,8 @@ export default function OrderQueueView({ shop: initialShop }) {
     }
 
     /**
-     * Xử lý gọi API cập nhật vận đơn GHN
+     * Xử lý gọi API cập nhật vận đơn GHN (tên, SĐT người nhận, cân nặng, ghi chú)
+     * Gọi: managerOrderService.updateGhnOrder -> POST .../orders/{id}/update-ghn (backend gọi GHN shipping-order/update)
      */
     const handleUpdateGhn = async () => {
         if (!updatePayload.to_phone) {
@@ -212,7 +240,7 @@ export default function OrderQueueView({ shop: initialShop }) {
 
             <ComponentCard title={
                 <div className="flex items-center gap-3">
-                    {statusFilter === 'PENDING' ? 'Đơn hàng chờ xác nhận' : 'Quản lý đơn hàng'}
+                    Quản lý đơn hàng
                     {data?.totalElements > 0 && (
                         <span className="flex items-center justify-center rounded-full bg-brand-500 px-2 py-0.5 text-xs font-medium text-white">
                             {data.totalElements}
@@ -292,7 +320,7 @@ export default function OrderQueueView({ shop: initialShop }) {
                                                         disabled={busy}
                                                     >
                                                         <EyeIcon className="w-4 h-4 mr-1 inline" />
-                                                        Chi tiết
+                                                       Xem chi tiết
                                                     </Button>
                                                     
                                                     {o.status === 'PENDING' && o.orderType !== 'CUSTOM' && (
@@ -301,23 +329,38 @@ export default function OrderQueueView({ shop: initialShop }) {
                                                         </Button>
                                                     )}
                                                     
-                                                    {o.status === 'PROCESSING' && (
+                                                    {(o.status === 'PROCESSING' || o.status === 'DEPOSIT_PAID') && (
                                                         <Button size="sm" className="bg-brand-600 hover:bg-brand-700 text-white" onClick={() => ship(o.id)} disabled={busy}>
                                                             Tạo mã vận đơn GHN & Giao
                                                         </Button>
                                                     )}
                                                     
                                                     {o.status === 'DELIVERING' && (
-                                                        <Button size="sm" className="bg-brand-600 hover:bg-brand-700 text-white" onClick={() => viewDetail(o)} disabled={busy}>
-                                                            Trạng thái GHN
-                                                        </Button>
+                                                        <>
+                                                            <Button size="sm" className="bg-brand-600 hover:bg-brand-700 text-white" onClick={() => viewDetail(o)} disabled={busy}>
+                                                                Trạng thái GHN
+                                                            </Button>
+                                                            <Button size="sm" variant="outline" onClick={() => refresh(o.id)} disabled={busy}>
+                                                                Kiểm tra GHN
+                                                            </Button>
+                                                        </>
                                                     )}
 
-                                                    {(o.status === 'PENDING' || o.status === 'AWAITING_DEPOSIT' || o.status === 'PROCESSING') && (
+                                                    {['PENDING', 'AWAITING_DEPOSIT', 'DEPOSIT_PAID', 'PROCESSING'].includes(o.status) && (
                                                         <Button size="sm" variant="outline" className="text-error-500 hover:bg-error-50 hover:border-error-200" onClick={() => openCancelModal(o)} disabled={busy}>
                                                             Hủy đơn
                                                         </Button>
                                                     )}
+
+                                                    <select
+                                                        aria-label={`Chuyển trạng thái đơn ${o.id.substring(0, 8)}`}
+                                                        className="h-9 rounded-lg border border-gray-300 px-2 text-sm dark:border-gray-700 dark:bg-gray-900"
+                                                        value="" disabled={busy}
+                                                        onChange={e => changeStatus(o, e.target.value)}
+                                                    >
+                                                        <option value="">Chuyển trạng thái</option>
+                                                        {Object.entries(statusLabels).filter(([k]) => k !== o.status).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                                                    </select>
                                                 </div>
                                             </TableCell>
                                         </TableRow>
@@ -405,7 +448,7 @@ export default function OrderQueueView({ shop: initialShop }) {
                                         Xác nhận đơn hàng
                                     </Button>
                                 )}
-                                {orderDetail.status === 'PROCESSING' && (
+                                {(orderDetail.status === 'PROCESSING' || orderDetail.status === 'DEPOSIT_PAID') && (
                                     <Button className="bg-brand-600 hover:bg-brand-700 text-white" onClick={() => { setDetailModalOpen(false); ship(orderDetail.id); }}>
                                         Tạo mã vận đơn GHN & Giao
                                     </Button>

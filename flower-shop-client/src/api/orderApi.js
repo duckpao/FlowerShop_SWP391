@@ -1,28 +1,7 @@
-import axiosClient from './axiosClient';
-
-const orderApi = {
-  /**
-   * Tạo đơn hàng từ các cart items đã chọn
-   * @param {string} userId
-   * @param {{
-   *   shopId: string,
-   *   cartItemIds: string[],
-   *   deliveryAddressId: string,
-   *   couponId?: string
-   * }} data
-   */
-  makeOrder: (userId, data) => axiosClient.post(`/orders/${userId}`, data),
-  previewVouchers: (userId, data) => axiosClient.post(`/orders/${userId}/voucher-preview`, data),
-
-  /** Phí vận chuyển GHN từ shop tới một địa chỉ đã lưu. */
-  getShippingFee: (userId, data) => axiosClient.post(`/orders/${userId}/shipping-fee`, data),
-
-  /**
-   * Lấy lịch sử đơn hàng của user
-   * @param {string} userId
-   */
-  getOrderHistory: (userId) => axiosClient.get(`/orders/${userId}`),
-};
-
-export default orderApi;
+import client from '../services/axiosClient'
+export default {
+makeOrder: (userId,body) => client.post(`/orders/${userId}`,body),
+getShippingFee: (userId,body) => client.get(`/orders/${userId}/shipping-fee`,{params:{shopId:body.shopId,addressId:body.deliveryAddressId}}),
+getOrderHistory: userId=>client.get(`/orders/${userId}`),
+}
 

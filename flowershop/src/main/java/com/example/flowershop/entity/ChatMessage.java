@@ -1,5 +1,6 @@
 package com.example.flowershop.entity;
 
+import com.example.flowershop.entity.enums.ChatContextType;
 import com.example.flowershop.entity.enums.SenderType;
 import jakarta.persistence.*;
 import lombok.*;
@@ -38,6 +39,17 @@ public class ChatMessage {
 
     @Column(name = "media", columnDefinition = "json")
     private String media;
+
+    @Builder.Default
+    @Enumerated(EnumType.STRING)
+    @Column(name = "context_type", nullable = false)
+    private ChatContextType contextType = ChatContextType.NONE;
+
+    @Column(name = "context_id", length = 36)
+    private String contextId;
+
+    @Column(name = "context_snapshot", columnDefinition = "json")
+    private String contextSnapshot;
 
     @Builder.Default
     @Column(name = "is_read")

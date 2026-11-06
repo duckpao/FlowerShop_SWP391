@@ -1,5 +1,8 @@
 package com.example.flowershop.repository;
 
+import java.util.*;
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import com.example.flowershop.entity.Payment;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,4 +42,10 @@ public class PaymentRepository extends HibernateRepository<Payment> {
     public boolean existsByInvoiceNumber(String invoiceNumber) {
         return countWhere("e.invoiceNumber = :value", Collections.singletonMap("value", invoiceNumber)) > 0;
     }
+public List<Payment> findByGroupInvoice(String groupInvoice) { return list("e.groupInvoice = :invoice", Map.of("invoice",groupInvoice)); }
+@org.springframework.transaction.annotation.Transactional
+public int failPendingByOrderId(String orderId, String actor) { return session().createMutationQuery("UPDATE Payment p SET p.status = com.example.flowershop.entity.enums.PaymentStatus.FAILED, p.lastModifyBy = :actor WHERE p.order.id = :orderId AND p.status = com.example.flowershop.entity.enums.PaymentStatus.PENDING").setParameter("orderId",orderId).setParameter("actor",actor).executeUpdate(); }
+
+public BigDecimal sumSuccessfulAmountForReport(String shopId, LocalDateTime start, LocalDateTime end) { return session().createSelectionQuery("SELECT COALESCE(SUM(p.amount), 0) FROM Payment p WHERE p.order.shop.id = :shopId AND p.status = com.example.flowershop.entity.enums.PaymentStatus.SUCCESS AND p.lastModifyDate >= :start AND p.lastModifyDate < :end",BigDecimal.class).setParameter("shopId",shopId).setParameter("start",start).setParameter("end",end).getSingleResult(); }
+
 }

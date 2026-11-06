@@ -4,17 +4,31 @@ import ComponentCard from '../components/common/ComponentCard'
 import Button from '../components/ui/button/Button'
 import Input from '../components/form/input/InputField'
 import Label from '../components/form/Label'
+import { useAuth } from '../context/AuthContext'
 
 export default function AcceptInvitationView({ email }) {
   const c = useAcceptInvitationController()
+  const { user } = useAuth()
+  const invitedEmail = new URLSearchParams(window.location.search).get('email') || email || ''
+  const next = encodeURIComponent(window.location.pathname + window.location.search)
+  const loginUrl = `/login?next=${next}&email=${encodeURIComponent(invitedEmail)}`
   
   return (
     <div className="w-full max-w-md mx-auto p-4 sm:p-6 mt-10">
       <ComponentCard title="Lời mời nhân viên">
+        {!user && !c.done && (
+          <div className="mb-6 space-y-3 rounded-lg bg-brand-50 p-4">
+            <p>Bạn được mời làm nhân viên cửa hàng bằng email {invitedEmail}. Hãy tạo tài khoản và xác thực email, hoặc đăng nhập nếu đã có tài khoản.</p>
+            <div className="flex gap-4">
+              <Link to={`${loginUrl}&register=1`}>Tạo tài khoản để tham gia</Link>
+              <Link to={loginUrl}>Đã có tài khoản? Đăng nhập</Link>
+            </div>
+          </div>
+        )}
         <div className="space-y-4 mb-6">
           <div className="rounded-lg bg-gray-50 p-4 dark:bg-white/5">
             <p className="text-sm text-gray-600 dark:text-gray-300">
-              Đăng nhập đúng email nhận thư: <strong className="text-gray-900 dark:text-white">{email}</strong>. Dán mã lời mời trong email để đồng ý tham gia.
+              Đăng nhập đúng email nhận thư: <strong className="text-gray-900 dark:text-white">{invitedEmail || user?.email}</strong>. Mã được điền sẵn khi bạn mở liên kết trong email; xác nhận để tham gia shop.
             </p>
           </div>
           
@@ -47,13 +61,13 @@ export default function AcceptInvitationView({ email }) {
             <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
               Bạn đã trở thành nhân viên cửa hàng. Vui lòng đăng nhập lại để sử dụng quyền nhân viên.
             </p>
-            <Link to="/" className="inline-flex items-center justify-center rounded-lg bg-brand-500 px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-600 transition-colors">
+            <a href="/login" className="inline-flex items-center justify-center rounded-lg bg-brand-500 px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-600 transition-colors">
               Đăng nhập lại
-            </Link>
+            </a>
           </div>
         ) : (
           <form onSubmit={c.accept}>
-            <fieldset disabled={c.busy} className="space-y-5">
+            <fieldset disabled={c.busy || !user} className="space-y-5">
               <div>
                 <Label>Mã lời mời</Label>
                 <Input 

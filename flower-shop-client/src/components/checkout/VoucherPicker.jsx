@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useId } from 'react'
 import { voucherService } from '../../services/voucherService'
 import { formatPrice } from '../../models/productModel'
 
 /** The server determines eligibility, combination restrictions and payable total. */
 export default function VoucherPicker({ context, value, onChange, onPreview, disabled = false }) {
+  const namespace = useId()
   const [data, setData] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -27,9 +28,9 @@ export default function VoucherPicker({ context, value, onChange, onPreview, dis
     : { ...value, couponCode: code })
   const renderChoices = (items, key, title) => <fieldset disabled={disabled || busy} className="space-y-2">
     <legend className="mb-2 text-sm font-semibold">{title}</legend>
-    <label className="flex items-center gap-2 text-sm"><input type="radio" name={`voucher-${key}`} checked={!value[key]} onChange={() => choose(key, '')} />Không dùng mã</label>
+    <label className="flex items-center gap-2 text-sm"><input type="radio" name={`${namespace}-voucher-${key}`} checked={!value[key]} onChange={() => choose(key, '')} />Không dùng mã</label>
     {items.map(item => <label key={item.id} className={`flex items-start gap-3 rounded-lg border p-3 text-sm ${item.eligible ? 'cursor-pointer border-gray-200 dark:border-gray-700' : 'border-gray-100 bg-gray-50 text-gray-400 dark:border-gray-800 dark:bg-gray-900'}`}>
-      <input className="mt-1" type="radio" name={`voucher-${key}`} disabled={!item.eligible} checked={value[key] === item.code} onChange={() => choose(key, item.code)} />
+      <input className="mt-1" type="radio" name={`${namespace}-voucher-${key}`} disabled={!item.eligible} checked={value[key] === item.code} onChange={() => choose(key, item.code)} />
       <span className="min-w-0 flex-1"><span className="font-semibold">{item.code}</span><span className="ml-2 text-xs">{item.scope === 'SHOP' ? 'Của shop' : 'Toàn sàn'}{item.target === 'PRODUCT' ? ' · Sản phẩm' : ''}</span>
         <span className="mt-1 block">Giảm {item.discountType === 'PERCENTAGE' ? `${item.discountValue}%` : formatPrice(item.discountValue)}, tối đa {formatPrice(item.maxDiscountValue)} · Đơn từ {formatPrice(item.minOrderValue)}</span>
         {item.eligible ? <span className="mt-1 block font-medium text-brand-600">Tiết kiệm {formatPrice(item.saving)}</span> : <span className="mt-1 block" role="status">{item.reason}</span>}

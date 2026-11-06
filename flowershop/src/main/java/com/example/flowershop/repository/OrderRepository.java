@@ -1,5 +1,8 @@
 package com.example.flowershop.repository;
 
+import java.util.*;
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import com.example.flowershop.entity.Order;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -67,4 +70,8 @@ public class OrderRepository extends HibernateRepository<Order> {
     public List<Order> findByCustomerIdAndStatusOrderByCreatedDateDesc(String customerId, OrderStatus status) {
         return list("e.customer.id = :customerId and e.status = :status", Map.of("customerId", customerId, "status", status), Sort.by(Sort.Order.desc("createdDate"), Sort.Order.asc("id")));
     }
+public boolean existsByCustomRequestIdAndStatusNot(String customRequestId, OrderStatus status) { return countWhere("e.customRequestId = :id and e.status <> :status", Map.of("id",customRequestId,"status",status)) > 0; }
+public Page<Order> findByCustomerIdAndStatusOrderByCreatedDateDesc(String customerId, OrderStatus status, Pageable pageable) { return findByCustomerIdAndStatus(customerId,status,pageable); }
+public List<Object[]> countStatusesForReport(String shopId, LocalDateTime start, LocalDateTime end) { return session().createSelectionQuery("SELECT o.status, COUNT(o) FROM Order o WHERE o.shop.id = :shopId AND o.createdDate >= :start AND o.createdDate < :end GROUP BY o.status",Object[].class).setParameter("shopId",shopId).setParameter("start",start).setParameter("end",end).getResultList(); }
+
 }

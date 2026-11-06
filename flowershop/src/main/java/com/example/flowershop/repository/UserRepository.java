@@ -1,5 +1,8 @@
 package com.example.flowershop.repository;
 
+import java.util.*;
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import com.example.flowershop.entity.User;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,4 +35,5 @@ public class UserRepository extends HibernateRepository<User> {
     public Optional<User> findByIdAndRoleAndStatus(String id, UserRole role, UserStatus status) {
         return one("e.id = :id and e.role = :role and e.status = :status", Map.of("id", id, "role", role, "status", status));
     }
+public Optional<User> findByGoogleId(String googleId) { return one("e.googleId = :googleId", Map.of("googleId",googleId)); }
 }

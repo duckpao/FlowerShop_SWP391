@@ -8,6 +8,12 @@ export const managerShopService = {
   cancelInvite: (id, invitationId) => call(`${base}/${encodeURIComponent(id)}/invitations/${encodeURIComponent(invitationId)}`, 'DELETE'),
   list: role => call(role === 'SHOP' ? base : '/api/staff/shops'),
   save: (id, body) => call(`${base}/${encodeURIComponent(id)}`, 'PUT', body),
+  uploadLogo: (id, file) => {
+    const body = new FormData()
+    body.append('file', file)
+    return call(`${base}/${encodeURIComponent(id)}/logo`, 'POST', body)
+  },
+  removeLogo: id => call(`${base}/${encodeURIComponent(id)}/logo`, 'DELETE'),
   staff: id => call(`${base}/${encodeURIComponent(id)}/staff`),
   address: id => call(`${base}/${encodeURIComponent(id)}/address`),
   saveAddress: (id, body) => call(`${base}/${encodeURIComponent(id)}/address`, 'PUT', body),

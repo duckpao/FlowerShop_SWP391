@@ -5,6 +5,7 @@ import Input from "../components/form/input/InputField";
 import Label from "../components/form/Label";
 import Badge from "../components/ui/badge/Badge";
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "../components/ui/table";
+import { shopStatusLabels } from '../models/shopModel';
 
 const labels = {
   PENDING: "Chờ xác nhận",
@@ -49,13 +50,21 @@ export default function ShopInvitationsView({ shop }) {
       )}
 
       <div className="mb-8 max-w-md">
+        {shop.status !== "ACTIVE" && (
+          <p role="status" className="mb-3 text-sm text-warning-600">
+            Trạng thái shop: {shopStatusLabels[shop.status] || shop.status || 'Chưa xác định'}. Chỉ shop đang hoạt động mới gửi được lời mời.
+            {shop.status === 'PENDING' && ' Cần Admin duyệt shop trước khi mời nhân viên.'}
+          </p>
+        )}
         <form noValidate onSubmit={c.send}>
-          <fieldset disabled={disabled} className="space-y-4">
+          <fieldset className="space-y-4">
             <div>
-              <Label>Email người nhận</Label>
+              <Label htmlFor="invitation-email">Email người nhận</Label>
               <div className="flex gap-3">
                 <div className="flex-1">
                   <Input
+                    id="invitation-email"
+                    placeholder="Nhập email nhân viên"
                     required
                     type="email"
                     maxLength={50}
@@ -66,7 +75,7 @@ export default function ShopInvitationsView({ shop }) {
                   />
                   <p id="invitation-email-error" className="text-sm text-error-500" aria-live="polite">{c.emailError}</p>
                 </div>
-                <Button type="submit">Gửi lời mời</Button>
+                <Button type="submit" disabled={c.busy}>{c.busy ? 'Đang xử lý…' : 'Gửi lời mời'}</Button>
               </div>
             </div>
           </fieldset>
@@ -76,7 +85,7 @@ export default function ShopInvitationsView({ shop }) {
       <div className="border-t border-gray-100 pt-6 dark:border-white/5">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90">Lịch sử lời mời</h3>
-          <Button disabled={c.busy} onClick={c.retry} variant="outline" size="sm">
+          <Button disabled={c.busy || c.loading} onClick={c.retry} variant="outline" size="sm">
             Tải lại lời mời
           </Button>
         </div>
@@ -94,7 +103,7 @@ export default function ShopInvitationsView({ shop }) {
               {c.items.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={3} className="text-center py-6 text-gray-500 dark:text-gray-400">
-                    Chưa có lời mời nào.
+                    {c.loading ? 'Đang tải lịch sử lời mời…' : 'Chưa có lời mời nào.'}
                   </TableCell>
                 </TableRow>
               ) : (

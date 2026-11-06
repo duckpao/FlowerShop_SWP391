@@ -44,6 +44,15 @@ public abstract class HibernateRepository<T> {
         return Optional.ofNullable(session().find(entityType, id));
     }
 
+    public T getReferenceById(String id) { return session().getReference(entityType, id); }
+
+    @Transactional
+    public <S extends T> List<S> saveAllAndFlush(Iterable<S> entities) {
+        var result = saveAll(entities);
+        session().flush();
+        return result;
+    }
+
     public boolean existsById(String id) { return countWhere("e.id = :id", Map.of("id", id)) > 0; }
     public long count() { return countWhere("", Map.of()); }
     public List<T> findAll() { return list("", Map.of()); }

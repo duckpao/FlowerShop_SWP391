@@ -64,4 +64,9 @@ public class CustomerOrderController {
                                                               @PathVariable(name = "id") String id) {
         return service.refreshTracking(user.id(), id);
     }
+    @GetMapping("/by-ids")
+    public java.util.List<CustomerOrderService.OrderSummary> byIds(@AuthenticationPrincipal CurrentUser user,
+                                                         @RequestParam java.util.List<String> ids) {
+        return service.byIds(user.id(), ids);
+    }
 }

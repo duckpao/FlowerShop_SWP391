@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { customerOrderService } from '../../services/customerOrderService'
-import paymentApi from '../../api/paymentApi'
+import paymentApi from '../../services/paymentService'
 import VoucherPicker from '../checkout/VoucherPicker'
 
 export default function CustomerQuoteActions({ order, user, onChanged }) {

@@ -2,6 +2,7 @@ import PasswordInput from '../components/form/PasswordInput';
 import { useState } from 'react';
 import { validateAuth } from '../models/authValidation';
 import AccountView from "./AccountView";
+import GoogleSignInButton from '../components/auth/GoogleSignInButton';
 export default function AuthView({
   registrationRole, setRegistrationRole,
   fieldErrors = {}, captchaRequired, captcha, captchaAnswer, setCaptchaAnswer, reloadCaptcha,
@@ -26,6 +27,7 @@ export default function AuthView({
   submit,
   resend,
   navigate,
+  googleLogin,
 }) {
   const [touched, setTouched] = useState({})
   const errors = validateAuth(page, {email, fullName, password, confirmation, otp})
@@ -103,7 +105,7 @@ export default function AuthView({
               {page === 'register' && (
                 <div className="space-y-1.5">
                   <label htmlFor="registration-role" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Loại tài khoản</label>
-                  <select id="registration-role" required value={registrationRole} onChange={e => setRegistrationRole(e.target.value)} className="block w-full rounded-lg border border-gray-300 px-4 py-3 dark:border-white/10 dark:bg-gray-800 dark:text-white">
+                  <select id="registration-role" required disabled={new URLSearchParams(window.location.search).get('next')?.startsWith('/invitations/accept?')} value={registrationRole} onChange={e => setRegistrationRole(e.target.value)} className="block w-full rounded-lg border border-gray-300 px-4 py-3 dark:border-white/10 dark:bg-gray-800 dark:text-white">
                     <option value="CUSTOMER">Customer — Khách hàng</option>
                     <option value="SHOP">Manager shop — Quản lý cửa hàng</option>
                   </select>
@@ -246,7 +248,9 @@ export default function AuthView({
               </button>
             </fieldset>
           </form>
-          
+
+          {page === "signin" && <GoogleSignInButton onCredential={googleLogin} disabled={busy} />}
+
           <div className="flex flex-col items-center space-y-4">
             {(page === "otp" || page === "reset") && (
               <>

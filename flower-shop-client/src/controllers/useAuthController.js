@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react'
 import { authService } from '../services/authService'
 import { validateAuth } from '../models/authValidation'
-import { useNavigate } from 'react-router'
+import { useLocation, useNavigate } from 'react-router'
 const post = authService.post
 
 export function useAuthController() {
   const routerNavigate = useNavigate();
+  const location = useLocation()
+  const invitationParams = new URLSearchParams(window.location.search)
+  const invitationNext = invitationParams.get('next')
+  const invitationReturn = invitationNext?.startsWith('/invitations/accept?') ? invitationNext : null
   const [user, setUser] = useState(null)
   useEffect(() => {
     const updated = event => {
@@ -25,7 +29,8 @@ export function useAuthController() {
         if (window.location.pathname === '/login') {
           const searchParams = new URLSearchParams(window.location.search);
           const nextUrl = searchParams.get('next');
-          if (current.role === 'ADMIN') routerNavigate('/admin');
+          if (invitationReturn) routerNavigate(invitationReturn);
+          else if (current.role === 'ADMIN') routerNavigate('/admin');
           else if (current.role === 'SHOP' || current.role === 'SHOP_STAFF') routerNavigate('/shop-admin');
           else if (nextUrl) routerNavigate(nextUrl);
           else routerNavigate('/');
@@ -34,10 +39,16 @@ export function useAuthController() {
     }).catch(() => { }).finally(() => { if (active) setInitializing(false) })
     return () => { active = false }
   }, [])
-  const [page, setPage] = useState('signin')
-  const [email, setEmail] = useState('')
+  const [page, setPage] = useState(() => invitationReturn && invitationParams.get('register') === '1' ? 'register' : 'signin')
+  const [email, setEmail] = useState(() => invitationReturn ? invitationParams.get('email') || '' : '')
   const [fullName, setFullName] = useState('')
   const [registrationRole, setRegistrationRole] = useState('CUSTOMER')
+  useEffect(() => {
+    if (location.pathname !== '/login' || !invitationReturn) return
+    setPage(invitationParams.get('register') === '1' ? 'register' : 'signin')
+    setEmail(invitationParams.get('email') || '')
+    setRegistrationRole('CUSTOMER')
+  }, [location.pathname, location.search])
   const [password, setPassword] = useState('')
   const [confirmation, setConfirmation] = useState('')
   const [otp, setOtp] = useState('')
@@ -86,7 +97,9 @@ export function useAuthController() {
         setUser(current); setPassword(''); setPage('account'); setNotice('Đăng nhập thành công.')
         const searchParams = new URLSearchParams(window.location.search);
         const nextUrl = searchParams.get('next');
-        if (current.role === 'ADMIN') {
+        if (invitationReturn) {
+          routerNavigate(invitationReturn);
+        } else if (current.role === 'ADMIN') {
           routerNavigate('/admin');
         } else if (current.role === 'SHOP' || current.role === 'SHOP_STAFF') {
           routerNavigate('/shop-admin');
@@ -99,7 +112,7 @@ export function useAuthController() {
         if (password !== confirmation) throw new Error('Mật khẩu xác nhận không khớp.')
         if (new TextEncoder().encode(password).length > 72) throw new Error('Mật khẩu không được vượt quá 72 byte UTF-8.')
         const account = { email: address, password, fullName: fullName.trim() }
-        const data = registrationRole === 'SHOP'
+        const data = registrationRole === 'SHOP' && !invitationReturn
           ? await post('register-shop', { account })
           : await post('register', account)
         setEmail(address); setPassword(''); setConfirmation(''); setOtp('')
@@ -121,6 +134,21 @@ export function useAuthController() {
       }
       setCaptchaRequired(false); setCaptcha(null); setCaptchaAnswer('')
     } catch (failure) { await failed(failure) }
+    finally { setBusy(false) }
+  }
+  async function googleLogin(credential) {
+    if (busy || !credential) return
+    setBusy(true); setError(''); setNotice('')
+    try {
+      const current = await authService.loginWithGoogle(credential)
+      setUser(current); setPage('account'); setNotice('Đăng nhập thành công.')
+      const nextUrl = new URLSearchParams(window.location.search).get('next')
+      if (invitationReturn) routerNavigate(invitationReturn)
+      else if (current.role === 'ADMIN') routerNavigate('/admin')
+      else if (current.role === 'SHOP' || current.role === 'SHOP_STAFF') routerNavigate('/shop-admin')
+      else if (nextUrl) routerNavigate(nextUrl)
+      else routerNavigate('/')
+    } catch (failure) { setError(failure.message) }
     finally { setBusy(false) }
   }
   async function resend() {
@@ -155,5 +183,5 @@ export function useAuthController() {
     setter(value)
     setFieldErrors(current => { const next = {...current}; delete next[name]; return next })
   }
-  return { registrationRole, setRegistrationRole, fieldErrors, captchaRequired, captcha, captchaAnswer, setCaptchaAnswer, reloadCaptcha, page, email, fullName, password, confirmation, otp, busy: busy || initializing, error, notice, seconds, user, logout, checkSession, setEmail: edit('email', setEmail), setFullName: edit('fullName', setFullName), setPassword: edit('password', setPassword), setConfirmation: edit('confirmation', setConfirmation), setOtp: edit('otp', setOtp), submit, resend, navigate }
+  return { registrationRole, setRegistrationRole, fieldErrors, captchaRequired, captcha, captchaAnswer, setCaptchaAnswer, reloadCaptcha, page, email, fullName, password, confirmation, otp, busy: busy || initializing, error, notice, seconds, user, logout, checkSession, setEmail: edit('email', setEmail), setFullName: edit('fullName', setFullName), setPassword: edit('password', setPassword), setConfirmation: edit('confirmation', setConfirmation), setOtp: edit('otp', setOtp), submit, resend, navigate, googleLogin }
 }

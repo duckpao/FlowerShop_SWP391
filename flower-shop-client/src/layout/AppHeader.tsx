@@ -7,13 +7,22 @@ import { useSidebar } from "@/context/SidebarContext";
 import { cn } from "@/utils";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router";
+import { Link, useLocation } from "react-router";
 import { useCartContext } from "@/context/CartContext";
-import { CartIcon } from "@/icons";
+import { useAuth } from "@/context/AuthContext";
+import { useChatUnread } from "@/controllers/useChatUnread";
+import { CartIcon, ChatIcon } from "@/icons";
+
+const CUSTOMER_CHAT = { kind: "customer" };
 
 const AppHeader: React.FC = () => {
   const { t } = useTranslation("header");
   const { cartCount } = useCartContext();
+  const { user } = useAuth();
+  const { pathname } = useLocation();
+  const isBackOffice = pathname.startsWith("/admin") || pathname.startsWith("/shop-admin");
+  const isCustomer = user?.role === "CUSTOMER";
+  const chatUnread = useChatUnread(isCustomer ? CUSTOMER_CHAT : null, isCustomer ? user?.id : undefined);
   const inputRef = useRef<HTMLInputElement>(null);
   const [isApplicationMenuOpen, setApplicationMenuOpen] = useState(false);
 
@@ -50,7 +59,13 @@ const AppHeader: React.FC = () => {
     <header className="sticky top-0 z-99999 flex w-full border-gray-200 bg-white xl:border-b dark:border-gray-800 dark:bg-gray-900">
       <div className="flex grow flex-col items-center justify-between xl:flex-row xl:px-6">
         <div className="flex w-full items-center justify-between gap-2 border-b border-gray-200 px-3 py-3 sm:gap-4 xl:justify-normal xl:border-b-0 xl:px-0 xl:py-4 dark:border-gray-800">
-          <button
+          {!isBackOffice && (
+            <Link to="/" className="flex shrink-0 items-center gap-2 rounded-lg">
+              <span className="text-2xl" aria-hidden="true">✿</span>
+              <span className="text-xl font-bold text-brand-500">FlowerShop</span>
+            </Link>
+          )}
+          {isBackOffice && <button
             className={`z-99999 flex h-10 w-10 items-center justify-center rounded-lg border-gray-200 text-gray-500 lg:h-11 lg:w-11 lg:bg-transparent xl:border dark:border-gray-800 dark:text-gray-400 dark:lg:bg-transparent ${
               isMobileOpen ? "bg-gray-100 dark:bg-white/3" : ""
             }`}
@@ -90,9 +105,9 @@ const AppHeader: React.FC = () => {
               </svg>
             )}
             {/* Cross Icon */}
-          </button>
+          </button>}
 
-          <Link to="/" className="xl:hidden">
+          {isBackOffice && <Link to="/" className="xl:hidden">
             <img
               className="dark:hidden"
               src="/images/logo/logo.svg"
@@ -103,7 +118,7 @@ const AppHeader: React.FC = () => {
               src="/images/logo/logo-dark.svg"
               alt="Logo"
             />
-          </Link>
+          </Link>}
 
           <div className="flex items-center gap-1 xl:hidden">
             {/* Mobile Cart Button */}
@@ -182,6 +197,21 @@ const AppHeader: React.FC = () => {
           )}
         >
           <div className="flex items-center gap-2 2xsm:gap-3">
+            {isCustomer && (
+              <Link
+                to="/chat"
+                className="relative flex h-11 w-11 items-center justify-center rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-100 dark:border-gray-800 dark:text-gray-400 dark:hover:bg-gray-800 transition-colors"
+                aria-label={chatUnread > 0 ? `Tin nhắn, ${chatUnread} chưa đọc` : "Tin nhắn"}
+                title="Tin nhắn"
+              >
+                <ChatIcon className="h-5 w-5" aria-hidden="true" />
+                {chatUnread > 0 && (
+                  <span className="absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-error-500 px-1 text-[11px] font-bold text-white shadow">
+                    {chatUnread > 99 ? '99+' : chatUnread}
+                  </span>
+                )}
+              </Link>
+            )}
             {/* <!-- Dark Mode Toggler --> */}
             <ThemeToggleButton />
             {/* <!-- Dark Mode Toggler --> */}

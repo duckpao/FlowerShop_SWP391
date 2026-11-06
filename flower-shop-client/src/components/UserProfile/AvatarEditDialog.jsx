@@ -23,6 +23,15 @@ export default function AvatarEditDialog({ user, onClose }) {
     } catch (failure) { setError(failure.message); return false }
     finally { setBusy(false) }
   }
+  async function remove() {
+    if (!window.confirm('Xóa ảnh đại diện hiện tại?')) return
+    setBusy(true); setError('')
+    try {
+      await accountService.removeAvatar()
+      onClose()
+    } catch (failure) { setError(failure.message) }
+    finally { setBusy(false) }
+  }
   return <dialog ref={ref} aria-labelledby="avatar-dialog-title"
     onCancel={e => { e.preventDefault(); if (!busy) onClose() }}
     className="m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-md overflow-y-auto rounded-2xl border-0 bg-white p-6 text-gray-900 shadow-xl backdrop:bg-black/50 dark:bg-gray-800 dark:text-white">
@@ -31,6 +40,6 @@ export default function AvatarEditDialog({ user, onClose }) {
       <button type="button" disabled={busy} aria-label="Đóng" onClick={onClose} className="rounded px-3 py-1 text-xl disabled:opacity-50">×</button>
     </div>
     {error && <p role="alert" className="mb-4 text-sm text-error-500">{error}</p>}
-    <AvatarUpload profile={profile} busy={busy} upload={upload} />
+    <AvatarUpload profile={profile} busy={busy} upload={upload} remove={remove} />
   </dialog>
 }

@@ -2,7 +2,9 @@ import { useState, useEffect } from "react";
 import { useManagerShopController } from "../controllers/useManagerShopController";
 import { shopStatusLabels } from "../models/shopModel";
 import StaffApplicationsView from "./StaffApplicationsView";
+import ShopInvitationsView from "./ShopInvitationsView";
 import ProductsView from "./ProductsView";
+import OrderQueueView from "./OrderQueueView";
 import ComponentCard from "../components/common/ComponentCard";
 import Badge from "../components/ui/badge/Badge";
 import Button from "../components/ui/button/Button";
@@ -98,7 +100,7 @@ export default function ManagerShopsView({ role, section = "all" }) {
 
       {c.selected && (
         <div className="space-y-6">
-          <ComponentCard title={`Chi tiết: ${c.selected.name}`}>
+          <ComponentCard title={`Xem chi tiết: ${c.selected.name}`}>
             <div className="mb-4">
               <Badge color={getStatusColor(c.selected.status)}>
                 {shopStatusLabels[c.selected.status]}
@@ -140,16 +142,39 @@ export default function ManagerShopsView({ role, section = "all" }) {
                         />
                       </div>
                       <div>
-                        <Label>URL logo (HTTPS)</Label>
-                        <Input
-                          type="url"
-                          maxLength={255}
-                          pattern="https://.*"
-                          value={c.form.logoUrl}
-                          onChange={(e) =>
-                            c.setForm({ ...c.form, logoUrl: e.target.value })
-                          }
-                        />
+                        <Label>Logo shop</Label>
+                        <div className="flex items-center gap-4">
+                          {c.selected?.logoUrl
+                            ? <img src={c.selected.logoUrl} alt="Logo shop" className="h-16 w-16 rounded-lg border border-gray-200 object-cover" />
+                            : <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-gray-100 text-xs text-gray-400">Chưa có</div>}
+                          {role === "SHOP" && (
+                            <label className={`inline-flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white shadow-theme-xs transition-colors focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-brand-500 ${c.busy ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:bg-brand-600'}`}>
+                              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M16 8l-4-4m0 0L8 8m4-4v12" />
+                              </svg>
+                              {c.busy ? 'Đang tải ảnh…' : 'Chọn ảnh logo'}
+                              <input
+                                type="file"
+                                accept="image/jpeg,image/png,image/webp"
+                                className="sr-only"
+                                disabled={c.busy}
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0]
+                                  e.target.value = ''
+                                  if (file) c.uploadLogo(file)
+                                }}
+                              />
+                            </label>
+                          )}
+                          {role === "SHOP" && c.selected?.logoUrl && (
+                            <button type="button" disabled={c.busy} onClick={c.removeLogo}
+                              className="rounded-lg border border-error-300 px-4 py-2.5 text-sm font-medium text-error-600 transition-colors hover:bg-error-50 disabled:cursor-not-allowed disabled:opacity-50">
+                              Xóa logo
+                            </button>
+                          )}
+                        </div>
+                        <p className="mt-1 text-xs text-gray-500">JPEG, PNG hoặc WebP, tối đa 5MB. Ảnh được tải lên Cloudinary ngay khi chọn.</p>
+                        {c.logoError && <p role="alert" className="mt-2 rounded-lg bg-error-50 px-3 py-2 text-sm text-error-500 dark:bg-error-500/10 dark:text-error-400">{c.logoError}</p>}
                       </div>
                       {role === "SHOP" && (
                         <Button type="submit">Lưu hồ sơ cửa hàng</Button>
@@ -186,6 +211,7 @@ export default function ManagerShopsView({ role, section = "all" }) {
 
           {role === "SHOP" && ["all", "staff"].includes(section) && (
             <div className="space-y-6">
+              <ShopInvitationsView key={`invitations-${c.selected.id}`} shop={c.selected} />
               <StaffApplicationsView key={c.selected.id} shop={c.selected} />
               
               <ComponentCard title="Nhân viên cửa hàng">
@@ -240,7 +266,7 @@ export default function ManagerShopsView({ role, section = "all" }) {
           )}
 
           {role === "SHOP" && ["all", "orders"].includes(section) && (
-            <ManagerOrdersView key={`orders-${c.selected.id}`} shop={c.selected} onBack={() => c.setSection("all")} />
+            <OrderQueueView key={`orders-${c.selected.id}`} shop={c.selected} />
           )}
         </div>
       )}

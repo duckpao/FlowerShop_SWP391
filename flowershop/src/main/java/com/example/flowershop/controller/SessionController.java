@@ -32,6 +32,14 @@ public class SessionController {
         limiter.check(servletRequest.getRemoteAddr());
         return respond(auth.login(request),response);
     }
+    public record GoogleLoginRequest(@jakarta.validation.constraints.NotBlank String credential) {}
+    @PostMapping("/google")
+    @Parameter(name="X-CSRF-TOKEN",in=ParameterIn.HEADER,required=true)
+    public LoginResponse google(@Valid @RequestBody GoogleLoginRequest request,HttpServletResponse response,
+                                jakarta.servlet.http.HttpServletRequest servletRequest) {
+        limiter.check(servletRequest.getRemoteAddr());
+        return respond(auth.loginWithGoogle(request.credential()),response);
+    }
     @PostMapping("/refresh")
     @Parameter(name="X-CSRF-TOKEN",in=ParameterIn.HEADER,required=true)
     public ResponseEntity<LoginResponse> refresh(@CookieValue(name="refresh_token",required=false) String refresh,HttpServletResponse response) {

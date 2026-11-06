@@ -16,6 +16,7 @@ import {
   UserCircleIcon,
 } from "../icons";
 import { cn } from "../utils";
+import { useChatUnread } from "../controllers/useChatUnread";
 
 type NavItem = {
   name: string;
@@ -36,36 +37,27 @@ type NavItem = {
 };
 
 const adminNavItems: NavItem[] = [
-  { name: 'Mã giảm giá của sàn', path: '/admin/vouchers', icon: <ListIcon fontSize={24} /> },
+{ name: 'Mã giảm giá của sàn', path: '/admin/vouchers', icon: <ListIcon fontSize={24} /> },
   { name: 'Tổng quan', path: '/admin', icon: <GridIcon fontSize={24} /> },
   { name: 'Quản lý người dùng', path: '/admin/users', icon: <UserCircleIcon fontSize={24} /> },
   { name: 'Quản lý các shop', path: '/admin/shops', icon: <BoxCubeIcon fontSize={24} /> },
+  { name: 'Danh mục & kiểm duyệt', path: '/admin/categories', icon: <TableIcon fontSize={24} /> },
   { name: 'Xem khiếu nại', path: '#', icon: <ListIcon fontSize={24} /> }
 ];
 
 const managerNavItems: NavItem[] = [
-  { name: 'Mã giảm giá của shop', path: '/shop-admin/vouchers', icon: <ListIcon fontSize={24} /> },
+{ name: 'Mã giảm giá của shop', path: '/shop-admin/vouchers', icon: <ListIcon fontSize={24} /> },
+  { name: 'Bài chăm sóc hoa', path: '/shop-admin/blogs', icon: <PageIcon fontSize={24} /> },
   { name: 'Tổng quan', path: '/shop-admin', icon: <GridIcon fontSize={24} /> },
   { name: 'Quản lý shop', path: '/shop-admin/shop', icon: <PageIcon fontSize={24} /> },
   { name: 'Quản lý mặt hàng', path: '/shop-admin/products', icon: <BoxCubeIcon fontSize={24} /> },
-  { name: 'Hàng chờ xử lý', path: '/shop-admin/order-queue', icon: <ListIcon fontSize={24} /> },
   { name: 'Quản lý đơn hàng', path: '/shop-admin/orders', icon: <TableIcon fontSize={24} /> },
+  { name: 'Báo cáo thống kê', path: '/shop-admin/reports', icon: <GridIcon fontSize={24} /> },
   { name: 'Quản lý nhân sự', path: '/shop-admin/staff', icon: <UserCircleIcon fontSize={24} /> },
-  { name: 'Nhắn tin nhanh', path: '#', icon: <ListIcon fontSize={24} /> }
+  { name: 'Tin nhắn khách hàng', path: '/shop-admin/chat', icon: <ListIcon fontSize={24} /> }
 ];
 
-const publicNavItems: NavItem[] = [
-  { name: 'Trang chủ', path: '/', icon: <GridIcon fontSize={24} /> },
-  { name: 'Cửa hàng', path: '/shops', icon: <ListIcon fontSize={24} /> },
-  { name: 'Sản phẩm', path: '/#products', icon: <BoxCubeIcon fontSize={24} /> },
-];
-
-const customerNavItems: NavItem[] = [
-  { name: 'Đặt hoa theo yêu cầu', path: '/custom-orders/new', icon: <ListIcon fontSize={24} /> },
-  ...publicNavItems,
-  { name: 'Cửa hàng đang theo dõi', path: '/following-shops', icon: <ListIcon fontSize={24} /> },
-  { name: 'Theo dõi đơn hàng', path: '/orders', icon: <TableIcon fontSize={24} /> },
-];
+// Phía khách không dùng sidebar nữa: menu nằm ở CategoryMenu (thanh ngang) và menu tài khoản.
 
 const AppSidebar: React.FC = () => {
   const { isExpanded, isMobileOpen, isHovered, setIsHovered, setIsMobileOpen } =
@@ -82,21 +74,23 @@ const AppSidebar: React.FC = () => {
   );
   const subMenuRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [queueCount, setQueueCount] = useState<number>(0);
+  const [managerShopId, setManagerShopId] = useState<string | undefined>(undefined);
   const isAdmin = location.pathname.startsWith('/admin') && !location.pathname.startsWith('/shop-admin');
   const isManager = location.pathname.startsWith('/shop-admin');
+  const chatScope = isManager ? { kind: 'shop', shopId: managerShopId } : null;
+  const chatUnread = useChatUnread(chatScope, user?.role === 'SHOP' ? user?.id : undefined);
   const navItems = isAdmin
     ? adminNavItems
-    : isManager
-      ? managerNavItems.map(item => item.path === '/shop-admin/order-queue' ? { ...item, badge: queueCount } : item)
-      : user?.role === 'CUSTOMER'
-        ? customerNavItems
-        : publicNavItems;
+    : [...managerNavItems.map(item => item.path === '/shop-admin/orders' ? { ...item, badge: queueCount }
+         : item.path === '/shop-admin/chat' ? { ...item, badge: chatUnread } : item),
+       ...(user?.role === 'SHOP_STAFF' ? [{ name: 'Đơn hủy cần hoàn tiền', path: '/shop-admin/refunds', icon: <ListIcon fontSize={24} /> } as NavItem] : [])];
 
   useEffect(() => {
     if (location.pathname.startsWith('/shop-admin')) {
       let active = true;
       managerShopService.list("SHOP").then(shops => {
         if (active && shops.length > 0) {
+          setManagerShopId(shops[0].id);
           managerOrderService.getQueueCount(shops[0].id).then(res => {
             if (active) setQueueCount(res.pendingCount);
           }).catch(() => {});
@@ -318,10 +312,7 @@ const AppSidebar: React.FC = () => {
     </ul>
   );
 
-  const isPublic = !isAdmin && !isManager;
-  const sectionTitle = isPublic
-    ? user?.role === 'CUSTOMER' ? 'KHÁCH HÀNG' : 'CHUNG'
-    : 'QUẢN LÝ';
+  const sectionTitle = 'QUẢN LÝ';
 
   return (
     <aside

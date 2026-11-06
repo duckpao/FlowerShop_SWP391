@@ -32,6 +32,9 @@ public class AccountController {
             @RequestParam("file") org.springframework.web.multipart.MultipartFile file) {
         return accounts.uploadAvatar(user.id(), file);
     }
+    @DeleteMapping("/profile/avatar")
+    @Parameter(name="X-CSRF-TOKEN",in=ParameterIn.HEADER,required=true)
+    public ProfileResponse removeAvatar(@AuthenticationPrincipal CurrentUser user) { return accounts.removeAvatar(user.id()); }
     @GetMapping("/addresses") @PreAuthorize("hasRole('CUSTOMER')")
     public List<AddressResponse> addresses(@AuthenticationPrincipal CurrentUser user) { return accounts.list(user.id()); }
     @PostMapping("/addresses") @ResponseStatus(org.springframework.http.HttpStatus.CREATED)

@@ -3,3 +3,8 @@
 *.tsbuildinfo
 hs_err_pid*.log
 replay_pid*.log
+# ghi chu ca nhan
+CLAUDE.md
+anti-slop/
+.claude/
+HOC_LUONG_*.html

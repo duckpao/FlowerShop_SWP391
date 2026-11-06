@@ -184,6 +184,22 @@ class CouponTests {
         assertThat(customerOrders.detail(customer.getId(),receipt.orderId()).totalAmount()).isEqualByComparingTo("380000");
         assertThat(low.getUsedCount()).isEqualTo(1);
     }
+    @Test void multiShopCheckoutKeepsEachShopsVoucherAndDiscountedTotal() {
+        var first=coupon("FIRST",CouponTarget.ORDER,"5","20000"); first.setShop(shop); coupons.saveAndFlush(first);
+        var second=coupon("SECOND",CouponTarget.ORDER,"10","50000"); second.setShop(otherShop); coupons.saveAndFlush(second);
+        var otherProduct=products.saveAndFlush(Product.builder().id(id()).shop(otherShop).category(product.getCategory()).name("Other rose").price(money("500000")).stock(20).build());
+        addresses.saveAndFlush(Address.builder().id(id()).shop(otherShop).addressLine("Other pickup").isDefault(true).ghnDistrictId(3).ghnWardCode("003").build());
+        var item1=cart.saveAndFlush(CartItem.builder().id(id()).user(customer).product(product).quantity(1).build());
+        var item2=cart.saveAndFlush(CartItem.builder().id(id()).user(customer).product(otherProduct).quantity(1).build());
+        var a=new com.example.flowershop.dto.order.MakeOrdersRequest.ShopOrder(); a.setShopId(shop.getId()); a.setCartItemIds(List.of(item1.getId())); a.setCouponId("FIRST"); a.setExpectedTotal(money("510000"));
+        var b=new com.example.flowershop.dto.order.MakeOrdersRequest.ShopOrder(); b.setShopId(otherShop.getId()); b.setCartItemIds(List.of(item2.getId())); b.setCouponId("SECOND"); b.setExpectedTotal(money("480000"));
+        var request=new com.example.flowershop.dto.order.MakeOrdersRequest(); request.setDeliveryAddressId(destination.getId()); request.setPaymentMethod("ONLINE"); request.setRecipientName("Customer"); request.setPhone("0901234567"); request.setShops(List.of(a,b));
+        var result=cartOrders.makeOrders(customer.getId(),request);
+        assertThat(result).hasSize(2);
+        assertThat(result).extracting(com.example.flowershop.dto.order.OrderResponse::getCouponCode).containsExactlyInAnyOrder("FIRST","SECOND");
+        assertThat(result.stream().map(com.example.flowershop.dto.order.OrderResponse::getTotalAmount).reduce(BigDecimal.ZERO,BigDecimal::add)).isEqualByComparingTo("990000");
+        assertThat(result.stream().map(r -> orders.findById(r.getId()).orElseThrow().getCheckoutGroup()).distinct().toList()).hasSize(1).doesNotContainNull();
+    }
     MockHttpServletRequestBuilder csrf(MockHttpServletRequestBuilder request,String role) throws Exception {
         var result=mvc.perform(get("/api/auth/csrf")).andReturn(); var token=json.readTree(result.getResponse().getContentAsString());
         return request.session((MockHttpSession)result.getRequest().getSession(false)).header(token.path("headerName").asText(),token.path("token").asText())

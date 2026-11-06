@@ -3,11 +3,15 @@ package com.example.flowershop.service;
 import com.example.flowershop.entity.Delivery;
 import com.example.flowershop.entity.Order;
 import com.example.flowershop.entity.enums.OrderStatus;
+import com.example.flowershop.entity.enums.PaymentMethod;
 import com.example.flowershop.entity.enums.PaymentStatus;
 import com.example.flowershop.repository.PaymentRepository;
 import org.springframework.stereotype.Component;
 
-/** Applies a status reported by GHN to the delivery and, when it ends the shipment, to the order. */
+/**
+ * Đồng bộ trạng thái GHN báo về vào Delivery và, khi vận đơn kết thúc, vào Order.
+ * delivered -> COMPLETED (và đánh dấu khoản COD SUCCESS), returned -> REFUNDED, cancel -> CANCELLED.
+ */
 @Component
 public class DeliverySync {
     private final PaymentRepository payments;
@@ -15,7 +19,9 @@ public class DeliverySync {
 
     public DeliverySync(PaymentRepository payments,CouponService vouchers) { this.payments = payments; this.vouchers=vouchers; }
 
+    /** Cập nhật Delivery theo tracking; chỉ đổi trạng thái Order khi đơn đang DELIVERING. */
     public void apply(Order order, Delivery delivery, GhnService.Tracking tracking, String actor) {
+        // Luôn lưu trạng thái thô của GHN và trạng thái rút gọn của hệ thống
         delivery.setStatus(tracking.status());
         delivery.setGhnStatus(tracking.ghnStatus());
         delivery.setLastModifyBy(actor);
@@ -23,7 +29,9 @@ public class DeliverySync {
         switch (tracking.ghnStatus()) {
             case "delivered" -> {
                 order.setStatus(OrderStatus.COMPLETED);
-                payments.findByOrderId(order.getId()).forEach(p -> {
+                // Chỉ tiền GHN thu hộ; lần thanh toán online FAILED/hủy không được thành SUCCESS
+                payments.findByOrderId(order.getId()).stream()
+                        .filter(p -> p.getPaymentMethod() == PaymentMethod.COD).forEach(p -> {
                     p.setStatus(PaymentStatus.SUCCESS);
                     p.setLastModifyBy(actor);
                 });

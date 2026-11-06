@@ -7,5 +7,3 @@ sepay.api-base-url=https://pgapi-sandbox.sepay.vn
 sepay.success-url=http://localhost:8080/payment/success
 sepay.error-url=http://localhost:8080/payment/error
 sepay.cancel-url=http://localhost:8080/payment/cancel
-# Configure an IPN secret and public callback URL only when testing IPN from SePay.
-sepay.ipn-secret=

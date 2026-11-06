@@ -1,5 +1,11 @@
 import { useEffect, useState } from 'react'
 import { managerShopService as api } from '../services/managerShopService'
+// Logo shop cũng là ảnh đại diện của chủ shop: báo cho header cập nhật theo.
+const syncHeaderAvatar = shop => window.dispatchEvent(new CustomEvent('flowershop-profile-updated', {
+  detail: { id: shop.owner?.id, fullName: shop.owner?.fullName, avatarUrl: shop.logoUrl || null },
+}))
+
+import { managerShopService} from '../services/managerShopService'
 import { useConfirm } from '../components/ui/confirm/ConfirmProvider'
 import { shopAddressForm } from '../models/shopModel'
 export function useManagerShopController(role) {
@@ -12,18 +18,19 @@ export function useManagerShopController(role) {
   const [busy, setBusy] = useState(true)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [logoError, setLogoError] = useState('')
   const [revision, setRevision] = useState(0)
   useEffect(() => {
     let active = true
     setBusy(true)
     setSelected(null); setMembers([])
-    api.list(role).then(async s => {
+    managerShopService.list(role).then(async s => {
       if (!active) return
       if (role === 'SHOP' && s.length > 1) throw new Error('Dữ liệu chưa đúng: mỗi Manager chỉ được quản lý một shop.')
       setShops(s); setError('')
       if (role === 'SHOP' && s.length === 1) {
         const shop = s[0]
-        const [staff, list] = await Promise.all([api.staff(shop.id), api.address(shop.id)])
+        const [staff, list] = await Promise.all([managerShopService.staff(shop.id), managerShopService.address(shop.id)])
         if (!active) return
         const a = list.find(x => x.isDefault) || list[0]
         setSelected(shop); setMembers(staff)
@@ -40,21 +47,41 @@ export function useManagerShopController(role) {
   }
   const select = shop => run(async () => {
     setSelected(null); setMembers([])
-    const staff = role === 'SHOP' ? await api.staff(shop.id) : []
-    const list = role === 'SHOP' ? await api.address(shop.id) : []
+    const staff = role === 'SHOP' ? await managerShopService.staff(shop.id) : []
+    const list = role === 'SHOP' ? await managerShopService.address(shop.id) : []
     const a = list.find(x => x.isDefault) || list[0]
     setAddress(shopAddressForm(a))
     setSelected(shop); setMembers(staff)
     setForm({ name: shop.name, description: shop.description || '', logoUrl: shop.logoUrl || '' })
   })
   const save = e => { e.preventDefault(); return run(async () => {
-    const shop = await api.save(selected.id, form); setSelected(shop); setShops(s => s.map(x => x.id === shop.id ? shop : x)); setNotice('Đã cập nhật hồ sơ shop.')
+    const shop = await managerShopService.save(selected.id, form); setSelected(shop); setShops(s => s.map(x => x.id === shop.id ? shop : x)); setNotice('Đã cập nhật hồ sơ shop.')
   }) }
-  const saveAddress = e => { e.preventDefault(); return run(async () => { await api.saveAddress(selected.id, address); setNotice('Đã lưu địa chỉ cửa hàng.') }) }
+  const uploadLogo = async file => {
+    setError(''); setNotice(''); setLogoError('')
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) { setLogoError('Chỉ nhận ảnh JPEG, PNG hoặc WebP.'); return }
+    if (file.size > 5 * 1024 * 1024) { setLogoError('Logo không được vượt quá 5MB.'); return }
+    setBusy(true)
+    try {
+      const shop = await api.uploadLogo(selected.id, file)
+      setSelected(shop); setShops(s => s.map(x => x.id === shop.id ? shop : x)); setNotice('Đã cập nhật logo shop.'); syncHeaderAvatar(shop)    } catch (e) {
+      setLogoError(e.message || 'Không thể tải logo lên. Vui lòng thử lại.')
+    } finally { setBusy(false) }
+  }
+  const removeLogo = async () => {
+    if (!window.confirm('Xóa logo shop hiện tại?')) return
+    setError(''); setNotice(''); setLogoError(''); setBusy(true)
+    try {
+      const shop = await api.removeLogo(selected.id)
+      setSelected(shop); setShops(s => s.map(x => x.id === shop.id ? shop : x)); setNotice('Đã xóa logo shop.'); syncHeaderAvatar(shop)    } catch (e) {
+      setLogoError(e.message || 'Không thể xóa logo. Vui lòng thử lại.')
+    } finally { setBusy(false) }
+  }
+  const saveAddress = e => { e.preventDefault(); return run(async () => { await managerShopService.saveAddress(selected.id, address); setNotice('Đã lưu địa chỉ cửa hàng.') }) }
   const toggle = async member => {
     if (!await confirm({ title: 'Quyền làm việc', message: `${member.active ? 'Ngừng' : 'Bật'} quyền làm việc của ${member.email}?`, tone: member.active ? 'danger' : 'primary' })) return
-    return run(async () => { await api.active(selected.id, member.userId, !member.active); setMembers(await api.staff(selected.id)); setNotice('Đã cập nhật quyền làm việc.') })
+    return run(async () => { await managerShopService.active(selected.id, member.userId, !member.active); setMembers(await managerShopService.staff(selected.id)); setNotice('Đã cập nhật quyền làm việc.') })
   }
-  return { shops, selected, members, form, setForm, address, setAddress, saveAddress, busy, error, notice, select, save, toggle,
+  return { shops, selected, members, form, setForm, address, setAddress, saveAddress, busy, error, notice, logoError, select, save, uploadLogo, removeLogo, toggle,
     retry: () => { setSelected(null); setRevision(x => x + 1) } }
 }

@@ -29,17 +29,18 @@ public class ManagerOrderService {
 
     /** Tóm tắt đơn hàng hiển thị trong danh sách bảng */
     public record OrderSummary(String id, String customerName, String customerPhone,
-                               BigDecimal totalAmount, String status, java.time.LocalDateTime createdDate, String orderType) {}
+                               BigDecimal totalAmount, String status, java.time.LocalDateTime createdDate,String orderType) {
+public OrderSummary(String id,String customerName,String customerPhone,BigDecimal totalAmount,String status,java.time.LocalDateTime createdDate) { this(id,customerName,customerPhone,totalAmount,status,createdDate,null); }
+}
 
     /** Chi tiết đầy đủ của đơn hàng hiển thị trong modal xem chi tiết */
     public record OrderDetailResponse(String id, String customerId, String customerName, String customerPhone,
-                                      String recipientName, String recipientPhone, String deliveryAddress, 
+                                      String recipientName, String recipientPhone, String deliveryAddress,
                                       String shopAddress, String status, BigDecimal subTotal,
                                       BigDecimal shippingFee, BigDecimal totalAmount,
                                       java.time.LocalDateTime createdDate, String note,
-                                      List<OrderItemResponse> items, DeliveryInfo delivery, PaymentInfo payment,
-                                      String orderType, CustomOrderWorkflowService.Design customDesign, String shopNote, String cancelReason,
-                                      BigDecimal discountAmount, BigDecimal shippingDiscountAmount, String couponCode, String shippingCouponCode) {}
+                                      List<OrderItemResponse> items, DeliveryInfo delivery, PaymentInfo payment,String orderType,CustomOrderWorkflowService.Design customDesign,String shopNote,String cancelReason,
+BigDecimal discountAmount,BigDecimal shippingDiscountAmount,String couponCode,String shippingCouponCode) {}
 
     /** Thông tin từng món hàng trong đơn */
     public record OrderItemResponse(String productId, String productName, BigDecimal price, Integer quantity) {}
@@ -64,13 +65,17 @@ public class ManagerOrderService {
     private final AddressRepository addresses;
     private final GhnService ghn;
     private final DeliverySync deliverySync;
-    private final CustomOrderWorkflowService customWorkflow;
     private final CouponService vouchers;
+    private final CustomOrderWorkflowService customWorkflow;
+    private final RefundRepository refunds;
+    private final NotificationService notifications;
 
     public ManagerOrderService(OrderRepository orders, OrderDetailRepository orderDetails,
                                DeliveryRepository deliveries, PaymentRepository payments,
                                ShopRepository shops, AddressRepository addresses, GhnService ghn,
-                               DeliverySync deliverySync, CustomOrderWorkflowService customWorkflow,CouponService vouchers) {
+                               DeliverySync deliverySync, RefundRepository refunds,
+                               NotificationService notifications,CouponService vouchers,CustomOrderWorkflowService customWorkflow) {
+this.vouchers=vouchers;this.customWorkflow=customWorkflow;
         this.orders = orders;
         this.orderDetails = orderDetails;
         this.deliveries = deliveries;
@@ -79,8 +84,20 @@ public class ManagerOrderService {
         this.addresses = addresses;
         this.ghn = ghn;
         this.deliverySync = deliverySync;
-        this.customWorkflow = customWorkflow;
-        this.vouchers = vouchers;
+        this.refunds = refunds;
+        this.notifications = notifications;
+    }
+
+    /** Tổng tiền khách đã trả thật (các Payment SUCCESS) cho đơn. */
+    private BigDecimal paidAmount(String orderId) {
+        return paidAmount(payments.findByOrderId(orderId));
+    }
+
+    private static BigDecimal paidAmount(List<Payment> orderPayments) {
+        return orderPayments.stream()
+                .filter(payment -> payment.getStatus() == PaymentStatus.SUCCESS)
+                .map(Payment::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     private static String blankToEmpty(String value) {
@@ -123,7 +140,7 @@ public class ManagerOrderService {
         }
         var content = result.map(o -> new OrderSummary(o.getId(),
                 o.getCustomer().getFullName(), o.getCustomer().getPhone(),
-                    o.getTotalAmount(), o.getStatus().name(), o.getCreatedDate(), o.getOrderType().name())).toList();
+                o.getTotalAmount(), o.getStatus().name(), o.getCreatedDate(),o.getOrderType().name())).toList();
         return new Results(content, page, result.getTotalPages(), result.getTotalElements());
     }
 
@@ -144,10 +161,9 @@ public class ManagerOrderService {
     public void confirm(String shopId, String actor, String orderId) {
         owned(shopId, actor);
         Order o = orders.findByIdAndShopId(orderId, shopId).orElseThrow(ManagerOrderService::notFound);
+        if(o.getOrderType()==OrderType.CUSTOM && o.getStatus()==OrderStatus.PENDING) throw new ResponseStatusException(HttpStatus.CONFLICT,"Khách cần hoàn tất thanh toán trước khi chuẩn bị hoa.");
         if (o.getStatus() != OrderStatus.PENDING)
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Chỉ đơn hàng PENDING mới có thể xác nhận.");
-        if (o.getOrderType() == OrderType.CUSTOM)
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Khách cần hoàn tất thanh toán trực tuyến trước khi chuẩn bị hoa.");
         o.setStatus(OrderStatus.PROCESSING);
         o.setLastModifyBy(actor);
     }
@@ -155,7 +171,7 @@ public class ManagerOrderService {
     /**
      * Tạo vận đơn GHN và chuyển đơn sang DELIVERING (Đang giao).
      * Quy trình:
-     * 1. Xác thực đơn hàng đang ở trạng thái PROCESSING.
+     * 1. Xác thực đơn hàng đang ở trạng thái PROCESSING, hoặc DEPOSIT_PAID (đơn đặt cọc: phần còn lại GHN thu hộ).
      * 2. Lấy địa chỉ lấy hàng mặc định của Shop (tự động phân giải mã GHN nếu là dữ liệu cũ).
      * 3. Lấy địa chỉ nhận hàng của khách (tự động phân giải mã GHN nếu chưa có).
      * 4. Gọi API GHN /shipping-order/create với đầy đủ thông tin người gửi, người nhận, kích thước và hàng hóa.
@@ -166,11 +182,13 @@ public class ManagerOrderService {
     public ShipResult ship(String shopId, String actor, String orderId) {
         owned(shopId, actor);
         Order o = orders.findByIdAndShopId(orderId, shopId).orElseThrow(ManagerOrderService::notFound);
-        if (o.getStatus() != OrderStatus.PROCESSING)
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Chỉ đơn hàng PROCESSING mới có thể gửi GHN.");
+        if (o.getStatus() != OrderStatus.PROCESSING && o.getStatus() != OrderStatus.DEPOSIT_PAID)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Chỉ đơn hàng PROCESSING hoặc đã đặt cọc mới có thể gửi GHN.");
 
         // Lấy địa chỉ kho/shop gửi hàng
-        Address shopAddr = addresses.findPickupByShopId(shopId).orElse(null);
+        var shopAddrs = addresses.findByShopIdAndUserIsNullOrderByCreatedDateAscIdAsc(shopId);
+        Address shopAddr = shopAddrs.stream().filter(a -> Boolean.TRUE.equals(a.getIsDefault())).findFirst()
+                .orElse(shopAddrs.isEmpty() ? null : shopAddrs.get(0));
         if (shopAddr == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Shop chưa cấu hình địa chỉ.");
         }
@@ -209,11 +227,15 @@ public class ManagerOrderService {
         var fromPlace = new GhnService.Place(blankToEmpty(shopAddr.getAddressLine()), blankToEmpty(shopAddr.getWard()),
                 blankToEmpty(shopAddr.getDistrict()), blankToEmpty(shopAddr.getCity()));
 
-        BigDecimal paidAmount = payments.findByOrderId(orderId).stream()
-            .filter(payment -> payment.getStatus() == PaymentStatus.SUCCESS)
-            .map(Payment::getAmount)
-            .reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal codAmount = o.getTotalAmount().subtract(paidAmount).max(BigDecimal.ZERO);
+        List<Payment> orderPayments = payments.findByOrderId(orderId);
+        BigDecimal codAmount = o.getTotalAmount().subtract(paidAmount(orderPayments)).max(BigDecimal.ZERO);
+        // Đơn đã cọc chưa có phiếu COD: ghi phần còn lại GHN thu hộ, giao thành công thì DeliverySync đánh dấu SUCCESS.
+        if (codAmount.signum() > 0 && orderPayments.stream().noneMatch(p -> p.getPaymentMethod() == PaymentMethod.COD)) {
+            payments.save(Payment.builder().id(UUID.randomUUID().toString()).order(o)
+                    .paymentType(PaymentType.FINAL).paymentMethod(PaymentMethod.COD).amount(codAmount)
+                    .invoiceNumber("COD-" + orderId.replace("-", "").substring(0, 8).toUpperCase())
+                    .status(PaymentStatus.PENDING).createdBy(actor).lastModifyBy(actor).build());
+        }
 
         var result = ghn.createOrder(toName, toPhone, toPlace, fromName, fromPhone, fromPlace,
                 codAmount.intValue(), productName, quantity, price);
@@ -254,6 +276,73 @@ public class ManagerOrderService {
         return new DeliveryInfo(d.getTrackingCode(), d.getDeliveryPartnerId(), d.getStatus().name(), d.getGhnStatus());
     }
 
+    /** Kết quả đổi trạng thái thủ công; warning không rỗng khi đơn chưa có vận đơn nên các thao tác GHN chưa dùng được */
+    public record StatusResult(String status, String warning) {}
+
+    private static final Set<OrderStatus> BEFORE_SHIPPING = EnumSet.of(OrderStatus.PENDING,
+            OrderStatus.AWAITING_DEPOSIT, OrderStatus.DEPOSIT_PAID, OrderStatus.PROCESSING);
+
+    /**
+     * Đổi trạng thái đơn trực tiếp trong DB, KHÔNG gọi GHN (dùng để test và để shop tự chỉnh từng đơn).
+     * Giữ bản ghi Delivery khớp với trạng thái mới để ship/refreshStatus/pushGhnStatus vẫn chạy đúng:
+     * - Đơn đã có vận đơn thì không được lùi về trước giai đoạn giao (ship() sẽ tạo vận đơn thứ 2 cho cùng đơn).
+     * - COMPLETED / REFUNDED / CANCELLED đặt vận đơn thành delivered / returned / cancel như khi GHN báo về
+     *   (COMPLETED còn đánh dấu thanh toán SUCCESS, giống DeliverySync).
+     * - DELIVERING mà vận đơn đã kết thúc thì đưa vận đơn về ready_to_pick.
+     */
+    @Transactional
+    public StatusResult changeStatus(String shopId, String actor, String orderId, String target) {
+        owned(shopId, actor);
+        Order o = orders.findByIdAndShopId(orderId, shopId).orElseThrow(ManagerOrderService::notFound);
+        OrderStatus next;
+        if(o.getOrderType()==OrderType.CUSTOM && (o.getStatus()==OrderStatus.AWAITING_QUOTE || o.getStatus()==OrderStatus.QUOTED || o.getStatus()==OrderStatus.PENDING)
+                && !"CANCELLED".equalsIgnoreCase(target))
+            throw new ResponseStatusException(HttpStatus.CONFLICT,"Đơn hoa riêng cần báo giá, khách đồng ý và chọn/thanh toán trước khi chuẩn bị hoa.");
+        try {
+            next = OrderStatus.valueOf(target == null ? "" : target.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Trạng thái không hợp lệ: " + target);
+        }
+        if (o.getStatus() == next)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Đơn đã ở trạng thái này.");
+
+        Delivery d = deliveries.findByOrderId(orderId).orElse(null);
+        String warning = null;
+        if (d != null && BEFORE_SHIPPING.contains(next))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Đơn đã có vận đơn GHN " + d.getTrackingCode()
+                    + " nên không thể lùi về trước giai đoạn giao.");
+        if (next == OrderStatus.DELIVERING && d == null)
+            warning = "Đơn chưa có vận đơn GHN nên chưa đồng bộ hoặc đẩy trạng thái GHN được.";
+
+        if (d != null) {
+            switch (next) {
+                case DELIVERING -> {
+                    if (d.getGhnStatus() == null || Set.of("delivered", "returned", "cancel").contains(d.getGhnStatus())) {
+                        d.setGhnStatus("ready_to_pick");
+                        d.setStatus(DeliveryStatus.PENDING);
+                    }
+                }
+                case COMPLETED -> { d.setGhnStatus("delivered"); d.setStatus(DeliveryStatus.DELIVERED); }
+                case REFUNDED -> { d.setGhnStatus("returned"); d.setStatus(DeliveryStatus.RETURNED); }
+                case CANCELLED -> { d.setGhnStatus("cancel"); d.setStatus(DeliveryStatus.FAILED); }
+                default -> { }
+            }
+            d.setLastModifyBy(actor);
+        }
+        if (next == OrderStatus.COMPLETED) {
+            payments.findByOrderId(orderId).forEach(p -> {
+                p.setStatus(PaymentStatus.SUCCESS);
+                p.setLastModifyBy(actor);
+            });
+        }
+        if (next == OrderStatus.CANCELLED && (o.getCancelReason() == null || o.getCancelReason().isBlank()))
+            o.setCancelReason("Shop chuyển trạng thái thủ công.");
+        o.setStatus(next);
+        if(next==OrderStatus.CANCELLED) vouchers.release(o);
+        o.setLastModifyBy(actor);
+        return new StatusResult(next.name(), warning);
+    }
+
     /** DTO chứa số lượng đơn hàng cần xử lý */
     public record QueueCount(long pendingCount) {}
 
@@ -261,58 +350,40 @@ public class ManagerOrderService {
     public record CancelRequest(String reason) {}
 
     /**
-     * Lấy danh sách hàng đợi xử lý của shop (chỉ bao gồm các đơn PENDING, AWAITING_DEPOSIT, PROCESSING).
-     */
-    public Results queue(String shopId, String actor, int page, String status) {
-        owned(shopId, actor);
-        Pageable pageable = PageRequest.of(page, 20, Sort.by(Sort.Order.desc("createdDate"), Sort.Order.asc("id")));
-        Page<Order> result;
-        List<OrderStatus> queueStatuses = List.of(OrderStatus.PENDING, OrderStatus.AWAITING_DEPOSIT, OrderStatus.PROCESSING, OrderStatus.AWAITING_QUOTE, OrderStatus.QUOTED);
-        
-        if (status != null && !status.isBlank()) {
-            try {
-                OrderStatus st = OrderStatus.valueOf(status.toUpperCase());
-                if (!queueStatuses.contains(st)) {
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Trạng thái không thuộc danh sách chờ xử lý.");
-                }
-                result = orders.findByShopIdAndStatus(shopId, st, pageable);
-            } catch (IllegalArgumentException e) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Trạng thái không hợp lệ: " + status);
-            }
-        } else {
-            result = orders.findByShopIdAndStatusIn(shopId, queueStatuses, pageable);
-        }
-        var content = result.map(o -> new OrderSummary(o.getId(),
-                o.getCustomer().getFullName(), o.getCustomer().getPhone(),
-                o.getTotalAmount(), o.getStatus().name(), o.getCreatedDate(), o.getOrderType().name())).toList();
-        return new Results(content, page, result.getTotalPages(), result.getTotalElements());
-    }
-
-    /**
      * Đếm tổng số đơn hàng đang chờ xác nhận hoặc chờ đặt cọc.
      */
     public QueueCount queueCount(String shopId, String actor) {
         owned(shopId, actor);
-        long count = orders.countByShopIdAndStatusIn(shopId, List.of(OrderStatus.PENDING, OrderStatus.AWAITING_DEPOSIT, OrderStatus.AWAITING_QUOTE));
+        long count = orders.countByShopIdAndStatusIn(shopId, List.of(OrderStatus.PENDING,OrderStatus.AWAITING_DEPOSIT,OrderStatus.AWAITING_QUOTE));
         return new QueueCount(count);
     }
 
     /**
      * Hủy đơn hàng trước khi chuyển sang giai đoạn giao hàng.
-     * Chỉ cho phép hủy khi đơn ở trạng thái PENDING, AWAITING_DEPOSIT hoặc PROCESSING.
+     * Chỉ cho phép hủy khi đơn ở trạng thái PENDING, AWAITING_DEPOSIT, DEPOSIT_PAID hoặc PROCESSING.
+     * Nếu khách đã trả tiền (cọc hoặc đủ) thì tạo yêu cầu hoàn tiền và báo staff để liên hệ khách.
      */
     @Transactional
     public void cancel(String shopId, String actor, String orderId, String reason) {
         owned(shopId, actor);
-        Order o = orders.findByIdForUpdate(orderId).filter(order -> order.getShop().getId().equals(shopId)).orElseThrow(ManagerOrderService::notFound);
-        if (o.getStatus() != OrderStatus.PENDING && o.getStatus() != OrderStatus.AWAITING_DEPOSIT && o.getStatus() != OrderStatus.PROCESSING
-                && o.getStatus() != OrderStatus.AWAITING_QUOTE && o.getStatus() != OrderStatus.QUOTED) {
+        Order o = orders.findByIdAndShopId(orderId, shopId).orElseThrow(ManagerOrderService::notFound);
+        if (o.getStatus() != OrderStatus.PENDING && o.getStatus() != OrderStatus.AWAITING_DEPOSIT
+                && o.getStatus() != OrderStatus.DEPOSIT_PAID && o.getStatus() != OrderStatus.PROCESSING && o.getStatus()!=OrderStatus.AWAITING_QUOTE && o.getStatus()!=OrderStatus.QUOTED) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Chỉ có thể hủy đơn hàng trước khi bắt đầu giao.");
         }
         o.setStatus(OrderStatus.CANCELLED);
         vouchers.release(o);
         o.setCancelReason(reason);
         o.setLastModifyBy(actor);
+
+        BigDecimal paid = paidAmount(orderId);
+        if (paid.signum() > 0) {
+            Refund refund = Refund.builder().id(UUID.randomUUID().toString()).order(o).amount(paid)
+                    .reason("Shop hủy đơn" + (reason == null || reason.isBlank() ? "." : ": " + reason))
+                    .createdBy(actor).lastModifyBy(actor).build();
+            refunds.save(refund);
+            notifications.notifyRefundRequested(refund);
+        }
     }
 
     /**
@@ -326,7 +397,7 @@ public class ManagerOrderService {
         Order o = orders.findByIdAndShopId(orderId, shopId).orElseThrow(ManagerOrderService::notFound);
         Delivery d = deliveries.findByOrderId(orderId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Đơn hàng chưa có vận đơn GHN để cập nhật."));
-        
+
         try {
             ghn.updateOrder(d.getTrackingCode(), body);
         } catch (Exception e) {
@@ -345,27 +416,29 @@ public class ManagerOrderService {
     private OrderDetailResponse buildDetail(Order o) {
         var items = orderDetails.findByOrderId(o.getId()).stream()
                 .map(d -> new OrderItemResponse(d.getProduct() != null ? d.getProduct().getId() : null,
-                        d.getProduct() != null ? d.getProduct().getName() : "Thiết kế hoa riêng (trọn bộ)", d.getPrice(), d.getQuantity()))
+                        d.getProduct() != null ? d.getProduct().getName() : null, d.getPrice(), d.getQuantity()))
                 .toList();
         DeliveryInfo di = deliveries.findByOrderId(o.getId())
                 .map(d -> new DeliveryInfo(d.getTrackingCode(), d.getDeliveryPartnerId(), d.getStatus().name(), d.getGhnStatus())).orElse(null);
         PaymentInfo pi = payments.findByOrderId(o.getId()).stream().findFirst()
                 .map(p -> new PaymentInfo(p.getId(), p.getPaymentMethod().name(), p.getStatus().name(), p.getAmount())).orElse(null);
-        
+
         // Định dạng địa chỉ người nhận
         var a = o.getDeliveryAddress();
-        String toAddr = a != null ? (a.getAddressLine() != null ? a.getAddressLine() : "") + ", " + 
-                                    (a.getWard() != null ? a.getWard() : "") + ", " + 
+        String toAddr = a != null ? (a.getAddressLine() != null ? a.getAddressLine() : "") + ", " +
+                                    (a.getWard() != null ? a.getWard() : "") + ", " +
                                     (a.getDistrict() != null ? a.getDistrict() : "") + ", " + (a.getCity() != null ? a.getCity() : "") : "";
         toAddr = toAddr.replaceAll("null, ", "").replaceAll("^, ", "").replaceAll(", $", "");
 
         // Định dạng địa chỉ gửi hàng của Shop
         String fromAddr = "";
         if (o.getShop() != null) {
-            Address shopAddr = addresses.findPickupByShopId(o.getShop().getId()).orElse(null);
+            var shopAddrs = addresses.findByShopIdAndUserIsNullOrderByCreatedDateAscIdAsc(o.getShop().getId());
+            Address shopAddr = shopAddrs.stream().filter(addr -> Boolean.TRUE.equals(addr.getIsDefault())).findFirst()
+                    .orElse(shopAddrs.isEmpty() ? null : shopAddrs.get(0));
             if (shopAddr != null) {
-                fromAddr = (shopAddr.getAddressLine() != null ? shopAddr.getAddressLine() : "") + ", " + 
-                           (shopAddr.getWard() != null ? shopAddr.getWard() : "") + ", " + 
+                fromAddr = (shopAddr.getAddressLine() != null ? shopAddr.getAddressLine() : "") + ", " +
+                           (shopAddr.getWard() != null ? shopAddr.getWard() : "") + ", " +
                            (shopAddr.getDistrict() != null ? shopAddr.getDistrict() : "") + ", " + (shopAddr.getCity() != null ? shopAddr.getCity() : "");
                 fromAddr = fromAddr.replaceAll("null, ", "").replaceAll("^, ", "").replaceAll(", $", "");
             }
@@ -374,12 +447,35 @@ public class ManagerOrderService {
         String toName = o.getRecipientName() != null && !o.getRecipientName().isBlank() ? o.getRecipientName() : (o.getCustomer() != null ? o.getCustomer().getFullName() : "Khách hàng");
         String toPhone = o.getRecipientPhone() != null && !o.getRecipientPhone().isBlank() ? o.getRecipientPhone() : (o.getCustomer() != null ? o.getCustomer().getPhone() : "");
 
-        return new OrderDetailResponse(o.getId(), o.getCustomer() != null ? o.getCustomer().getId() : null, 
+        return new OrderDetailResponse(o.getId(), o.getCustomer() != null ? o.getCustomer().getId() : null,
                 o.getCustomer() != null ? o.getCustomer().getFullName() : null,
                 o.getCustomer() != null ? o.getCustomer().getPhone() : null,
-                toName, toPhone, toAddr, fromAddr, o.getStatus().name(), 
-                o.getSubTotal(), o.getShippingFee(), o.getTotalAmount(), 
-                o.getCreatedDate(), o.getCustomerNote(), items, di, pi, o.getOrderType().name(), customWorkflow.design(o), o.getShopNote(), o.getCancelReason(),
-                o.getDiscountAmount(),o.getShippingDiscountAmount(),o.getCouponCode(),o.getShippingCouponCode());
+                toName, toPhone, toAddr, fromAddr, o.getStatus().name(),
+                o.getSubTotal(), o.getShippingFee(), o.getTotalAmount(),
+                o.getCreatedDate(),o.getCustomerNote(),items,di,pi,o.getOrderType().name(),customWorkflow.design(o),o.getShopNote(),o.getCancelReason(),o.getDiscountAmount(),o.getShippingDiscountAmount(),o.getCouponCode(),o.getShippingCouponCode());
+    }
+    public Results queue(String shopId, String actor, int page, String status) {
+        owned(shopId, actor);
+        Pageable pageable = PageRequest.of(page, 20, Sort.by(Sort.Order.desc("createdDate"), Sort.Order.asc("id")));
+        Page<Order> result;
+        List<OrderStatus> queueStatuses = List.of(OrderStatus.PENDING, OrderStatus.AWAITING_DEPOSIT, OrderStatus.PROCESSING, OrderStatus.AWAITING_QUOTE, OrderStatus.QUOTED);
+
+        if (status != null && !status.isBlank()) {
+            try {
+                OrderStatus st = OrderStatus.valueOf(status.toUpperCase());
+                if (!queueStatuses.contains(st)) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Trạng thái không thuộc danh sách chờ xử lý.");
+                }
+                result = orders.findByShopIdAndStatus(shopId, st, pageable);
+            } catch (IllegalArgumentException e) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Trạng thái không hợp lệ: " + status);
+            }
+        } else {
+            result = orders.findByShopIdAndStatusIn(shopId, queueStatuses, pageable);
+        }
+        var content = result.map(o -> new OrderSummary(o.getId(),
+                o.getCustomer().getFullName(), o.getCustomer().getPhone(),
+                o.getTotalAmount(), o.getStatus().name(), o.getCreatedDate(), o.getOrderType().name())).toList();
+        return new Results(content, page, result.getTotalPages(), result.getTotalElements());
     }
 }

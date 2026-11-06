@@ -127,7 +127,7 @@ class CustomOrderWorkflowTests {
         var id=create().orderId(); quote(id);
         orders.findById(id).orElseThrow().setCreatedDate(LocalDateTime.now().minusDays(1));
         workflow.accept(customer.getId(), id, new CustomOrderWorkflowService.Accept(PaymentMethod.ONLINE, new BigDecimal("380000")));
-        assertThat(paymentService.generatePaymentQr(id, customer.getId()).getAmount()).isEqualByComparingTo("380000");
+        assertThat(paymentService.checkPaymentStatus(id, customer.getId()).getTotalAmount()).isEqualByComparingTo("380000");
         orderService.cancelExpiredOrder(id, "Expired");
         assertThat(orders.findById(id).orElseThrow().getStatus()).isEqualTo(OrderStatus.PENDING);
         assertThatThrownBy(() -> manager.confirm(shop.getId(), owner.getId(), id)).isInstanceOf(ResponseStatusException.class);
@@ -144,6 +144,14 @@ class CustomOrderWorkflowTests {
                 .isInstanceOf(ResponseStatusException.class);
         assertThatThrownBy(() -> quote(id)).isInstanceOf(ResponseStatusException.class);
         assertThat(payments.findByOrderId(id)).hasSize(1);
+    }
+    @Test void manualStatusCannotBypassQuoteAcceptanceOrOnlinePayment() {
+        var id=create().orderId();
+        assertThatThrownBy(() -> manager.changeStatus(shop.getId(),owner.getId(),id,"PROCESSING")).isInstanceOf(ResponseStatusException.class);
+        quote(id);
+        assertThatThrownBy(() -> manager.changeStatus(shop.getId(),owner.getId(),id,"DELIVERING")).isInstanceOf(ResponseStatusException.class);
+        workflow.accept(customer.getId(),id,new CustomOrderWorkflowService.Accept(PaymentMethod.ONLINE,new BigDecimal("380000")));
+        assertThatThrownBy(() -> manager.changeStatus(shop.getId(),owner.getId(),id,"PROCESSING")).isInstanceOf(ResponseStatusException.class);
     }
     @Test void rejectionIsVisibleInCommonOrderHistory() {
         var id=create().orderId();
