@@ -112,12 +112,15 @@ public class OrderService {
         if (orderRepository.existsByCustomRequestIdAndStatusNot(requestId, OrderStatus.CANCELLED))
             throw ApiException.badRequest("Yêu cầu này đã có đơn đặt cọc.");
         BigDecimal quotedPrice;
+        Integer depositPercent;
         try {
-            var node = new com.fasterxml.jackson.databind.ObjectMapper().readTree(
-                    custom.getDesiredComponents() == null ? "{}" : custom.getDesiredComponents()).path("quotedPrice");
-            quotedPrice = node.isNumber() ? node.decimalValue() : null;
+            var design = new com.fasterxml.jackson.databind.ObjectMapper().readTree(
+                    custom.getDesiredComponents() == null ? "{}" : custom.getDesiredComponents());
+            quotedPrice = design.path("quotedPrice").isNumber() ? design.path("quotedPrice").decimalValue() : null;
+            depositPercent = design.path("depositPercent").isInt() ? design.path("depositPercent").intValue() : null;
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
             quotedPrice = null;
+            depositPercent = null;
         }
         if (quotedPrice == null || quotedPrice.signum() <= 0) throw ApiException.badRequest("Yêu cầu chưa có báo giá của shop.");
 
@@ -127,6 +130,9 @@ public class OrderService {
         Address deliveryAddress = resolveDestination(userId, request.getDeliveryAddressId());
         BigDecimal shippingFee = quoteFee(shop, deliveryAddress);
         BigDecimal totalAmount = quotedPrice.add(shippingFee);
+        // Cọc = % shop báo trên giá hoa, chốt vào đơn. Báo giá cũ chưa có % thì để 0 -> requiredDeposit lấy 50% tổng như trước.
+        BigDecimal depositAmount = depositPercent == null ? BigDecimal.ZERO
+                : quotedPrice.multiply(BigDecimal.valueOf(depositPercent)).divide(BigDecimal.valueOf(100), 0, java.math.RoundingMode.HALF_UP);
 
         Order order = orderRepository.save(Order.builder()
                 .id(UUID.randomUUID().toString())
@@ -140,6 +146,7 @@ public class OrderService {
                 .subTotal(quotedPrice)
                 .shippingFee(shippingFee)
                 .totalAmount(totalAmount)
+                .depositAmount(depositAmount)
                 .customerNote(custom.getDescription())
                 .status(OrderStatus.AWAITING_DEPOSIT)
                 .createdBy(userId)

@@ -47,7 +47,7 @@ export function CustomRequestCard({ request, children }) {
     <dl className="grid gap-2 text-sm sm:grid-cols-2"><div><dt className="text-gray-500">Ngân sách tổng</dt><dd className="font-semibold">{formatPrice(request.budget)}</dd></div><div><dt className="text-gray-500">Số mẫu/bó</dt><dd>{d.quantity || 1}</dd></div>
       {[["Loại hoa", d.flowers], ["Màu sắc", d.colors], ["Dịp tặng", d.occasion], ["Giấy gói / phụ kiện", d.wrapping], ["Ngày mong muốn", d.deliveryDate], ["Mẫu tham khảo", d.referenceProductName]].filter(([, value]) => value).map(([label, value]) => <div key={label}><dt className="text-gray-500">{label}</dt><dd>{value}</dd></div>)}
     </dl>
-    {(d.shopNote || d.quotedPrice != null) && <div className="mt-4 border-t border-gray-200 pt-4 dark:border-gray-700"><p className="font-semibold">Phản hồi của shop</p>{d.shopNote && <p className="whitespace-pre-wrap">{d.shopNote}</p>}{d.quotedPrice != null && <p className="mt-2 font-semibold">Báo giá tổng: {formatPrice(d.quotedPrice)}</p>}</div>}
+    {(d.shopNote || d.quotedPrice != null) && <div className="mt-4 border-t border-gray-200 pt-4 dark:border-gray-700"><p className="font-semibold">Phản hồi của shop</p>{d.shopNote && <p className="whitespace-pre-wrap">{d.shopNote}</p>}{d.quotedPrice != null && <p className="mt-2 font-semibold">Báo giá tổng: {formatPrice(d.quotedPrice)}</p>}{d.quotedPrice != null && d.depositPercent != null && <p className="mt-1">Cọc {d.depositPercent}%: {formatPrice(Math.round(d.quotedPrice * d.depositPercent / 100))}</p>}</div>}
     {request.status === 'ACCEPTED' && <p className="mt-3 text-sm text-gray-500">Shop đã nhận yêu cầu thiết kế. Đây chưa phải xác nhận thanh toán hoặc đơn giao hàng.</p>}
     {children}
   </article>

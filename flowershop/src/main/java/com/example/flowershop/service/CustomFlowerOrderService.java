@@ -31,10 +31,12 @@ public class CustomFlowerOrderService {
             @NotNull @Valid Preferences preferences) {}
     public record Decision(@NotNull CustomOrderStatus status,
             @Size(max=2000) String note,
-            @DecimalMin("1.00") @Digits(integer=10,fraction=2) BigDecimal quotedPrice) {}
+            @DecimalMin("1.00") @Digits(integer=10,fraction=2) BigDecimal quotedPrice,
+            @Min(10) @Max(100) Integer depositPercent) {}
     public record Design(int quantity, String flowers, String colors, String occasion,
             String wrapping, String deliveryDate, String referenceProductId,
-            String referenceProductName, BigDecimal estimatedTotal, String shopNote, BigDecimal quotedPrice) {}
+            String referenceProductName, BigDecimal estimatedTotal, String shopNote, BigDecimal quotedPrice,
+            Integer depositPercent) {}
     public record Result(String id,String shopId,String shopName,String customerName,
             BigDecimal budget,String description,CustomOrderStatus status,Design design,
             LocalDateTime createdAt,LocalDateTime updatedAt) {}
@@ -65,7 +67,7 @@ public class CustomFlowerOrderService {
     }
     private String encode(Design value){try{return json.writeValueAsString(value);}catch(JsonProcessingException e){throw new IllegalStateException("Không thể lưu thiết kế.",e);}}
     private Design decode(String value){
-        if(value==null||value.isBlank())return new Design(1,null,null,null,null,null,null,null,null,null,null);
+        if(value==null||value.isBlank())return new Design(1,null,null,null,null,null,null,null,null,null,null,null);
         // Earlier fixtures may contain arbitrary JSON; tolerate unknown keys.
         try{
             var tree=json.readTree(value);
@@ -98,7 +100,7 @@ public class CustomFlowerOrderService {
             if(total.compareTo(input.budget())>0)throw conflict("Mẫu hoa đã thay đổi giá hoặc vượt ngân sách. Hãy chọn lại.");
             productId=product.getId();name=product.getName();
         }
-        return new Design(input.quantity(),clean(p.flowers()),clean(p.colors()),clean(p.occasion()),clean(p.wrapping()),clean(p.deliveryDate()),productId,name,total,null,null);
+        return new Design(input.quantity(),clean(p.flowers()),clean(p.colors()),clean(p.occasion()),clean(p.wrapping()),clean(p.deliveryDate()),productId,name,total,null,null,null);
     }
     @Transactional
     public Result create(String actor,RequestInput input){
@@ -126,9 +128,10 @@ public class CustomFlowerOrderService {
         if(input.status()==CustomOrderStatus.REQUESTED)throw new IllegalArgumentException("Shop không thể chuyển về trạng thái mới gửi.");
         if(input.note()==null||input.note().isBlank())throw new IllegalArgumentException("Vui lòng nhập nội dung phản hồi cho khách.");
         if(input.status()==CustomOrderStatus.ACCEPTED&&input.quotedPrice()==null)throw new IllegalArgumentException("Cần báo giá tổng khi chấp nhận.");
+        if(input.status()==CustomOrderStatus.ACCEPTED&&input.depositPercent()==null)throw new IllegalArgumentException("Cần báo mức cọc (10-100%) khi chấp nhận.");
         if(input.quotedPrice()!=null){validateMoney(input.quotedPrice(),1);if(input.quotedPrice().compareTo(request.getBudget())>0)throw new IllegalArgumentException("Báo giá tổng không được vượt ngân sách của khách.");}
         var d=decode(request.getDesiredComponents());
-        request.setDesiredComponents(encode(new Design(Math.max(1,d.quantity()),d.flowers(),d.colors(),d.occasion(),d.wrapping(),d.deliveryDate(),d.referenceProductId(),d.referenceProductName(),d.estimatedTotal(),clean(input.note()),input.quotedPrice())));
+        request.setDesiredComponents(encode(new Design(Math.max(1,d.quantity()),d.flowers(),d.colors(),d.occasion(),d.wrapping(),d.deliveryDate(),d.referenceProductId(),d.referenceProductName(),d.estimatedTotal(),clean(input.note()),input.quotedPrice(),input.depositPercent())));
         request.setStatus(input.status());request.setLastModifyBy(actor);
         return result(requests.saveAndFlush(request));
     }
