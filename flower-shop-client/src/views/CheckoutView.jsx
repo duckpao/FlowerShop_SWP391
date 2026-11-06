@@ -12,6 +12,7 @@ import Button from '../components/ui/button/Button'
 import ComponentCard from '../components/common/ComponentCard'
 import PageMeta from '../components/common/PageMeta'
 import PageBreadCrumb from '../components/common/PageBreadCrumb'
+import VoucherPicker from '../components/checkout/VoucherPicker'
 
 export default function CheckoutView() {
     const { user } = useAuth()
@@ -29,6 +30,8 @@ export default function CheckoutView() {
     const [busy, setBusy] = useState(true)
     const [error, setError] = useState('')
     const [notice, setNotice] = useState('')
+    const [vouchers, setVouchers] = useState({ couponCode: '', shippingCouponCode: '' })
+    const [voucherPreview, setVoucherPreview] = useState(null)
 
     useEffect(() => {
         if (!user || user.role !== 'CUSTOMER') {
@@ -72,11 +75,12 @@ export default function CheckoutView() {
     const handleCheckout = async e => {
         e.preventDefault()
         if (!addressId) { setError('Vui lòng chọn địa chỉ.'); return }
+        if (!voucherPreview) { setError('Vui lòng chờ kiểm tra voucher và tổng thanh toán.'); return }
         if (shippingFee === null) { setError('Chưa có phí vận chuyển từ GHN cho địa chỉ này.'); return }
         setBusy(true); setError(''); setNotice('')
         try {
             const result = await customerOrderService.checkout({ 
-                addressId, productId, quantity, note: '',
+                addressId, productId, quantity, note: '', ...vouchers, expectedTotal: voucherPreview?.totalAmount,
             })
             setNotice(`Đặt hàng thành công! Mã đơn: ${result.orderId}. Phí ship: ${formatPrice(result.shippingFee)}`)
             setTimeout(() => navigate(`/orders/${result.orderId}`), 2000)
@@ -84,7 +88,8 @@ export default function CheckoutView() {
     }
 
     const subTotal = product ? product.price * quantity : 0
-    const total = shippingFee !== null ? subTotal + shippingFee : null
+    const total = voucherPreview?.totalAmount ?? (shippingFee !== null ? subTotal + shippingFee : null)
+    const voucherContext = product && addressId && shippingFee !== null ? { mode: 'direct', productId, addressId, quantity } : null
 
     if (!user) return <div className="max-w-3xl mx-auto p-8"><h1 className="text-xl font-bold">Đặt hàng</h1><p className="text-gray-500">Vui lòng <a href="/login" className="text-brand-500">đăng nhập</a> để đặt hàng.</p></div>
     if (!product && !busy && error) return <div className="max-w-3xl mx-auto p-8"><h1 className="text-xl font-bold">Đặt hàng</h1><p className="text-error-500">{error}</p></div>
@@ -127,6 +132,7 @@ export default function CheckoutView() {
                             <p className="text-lg font-bold">{formatPrice(product.price)}</p>
                         </div>
                     </div>
+                    <VoucherPicker context={voucherContext} value={vouchers} onChange={setVouchers} onPreview={setVoucherPreview} disabled={busy} />
                     <dl className="space-y-1 border-t border-gray-200 pt-4 text-sm dark:border-white/10" aria-live="polite">
                         <div className="flex justify-between"><dt>Tiền hàng</dt><dd>{formatPrice(subTotal)}</dd></div>
                         <div className="flex justify-between"><dt>Phí vận chuyển (GHN)</dt>
@@ -140,7 +146,7 @@ export default function CheckoutView() {
                             <dd className="text-brand-500">{total !== null ? formatPrice(total) : '---'}</dd>
                         </div>
                     </dl>
-                    <Button type="submit" disabled={busy || feeBusy || !addressId || shippingFee === null} className="w-full">
+                    <Button type="submit" disabled={busy || feeBusy || !addressId || shippingFee === null || !voucherPreview} className="w-full">
                         {busy ? 'Đang xử lý…' : total !== null ? `Đặt hàng (COD) — ${formatPrice(total)}` : 'Đặt hàng (chờ tính phí ship)'}
                     </Button>
                 </form>

@@ -248,6 +248,9 @@ CREATE TABLE Product_Videos (
 CREATE TABLE Coupons (
     id VARCHAR(36) PRIMARY KEY,
     shop_id VARCHAR(36), -- NULL nếu là platform voucher
+    target VARCHAR(20) NOT NULL DEFAULT 'ORDER', -- ORDER / SHIPPING / PRODUCT
+    product_id VARCHAR(36), -- Chỉ dùng cho voucher PRODUCT của sàn
+    deleted BOOLEAN NOT NULL DEFAULT FALSE,
     code VARCHAR(50) UNIQUE NOT NULL,
     discount_type ENUM('PERCENTAGE', 'FIXED_AMOUNT') NOT NULL,
     discount_value DECIMAL(12,2) NOT NULL,
@@ -262,7 +265,8 @@ CREATE TABLE Coupons (
     created_by VARCHAR(36),
     last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     last_modify_by VARCHAR(36),
-    FOREIGN KEY (shop_id) REFERENCES Shops(id)
+    FOREIGN KEY (shop_id) REFERENCES Shops(id),
+    CONSTRAINT fk_coupon_product FOREIGN KEY (product_id) REFERENCES Products(id)
 );
 
 -- ==========================================
@@ -293,6 +297,11 @@ CREATE TABLE Orders (
     recipient_name VARCHAR(255),
     recipient_phone VARCHAR(20),
     coupon_id VARCHAR(36),
+    shipping_coupon_id VARCHAR(36),
+    coupon_code VARCHAR(50),
+    shipping_coupon_code VARCHAR(50),
+    shipping_discount_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+    coupons_released BOOLEAN NOT NULL DEFAULT FALSE,
     order_type ENUM('STANDARD', 'CUSTOM') DEFAULT 'STANDARD',
     sub_total DECIMAL(12, 2) NOT NULL,
     discount_amount DECIMAL(12, 2) DEFAULT 0.00,
@@ -310,7 +319,8 @@ CREATE TABLE Orders (
     FOREIGN KEY (customer_id) REFERENCES Users(id),
     FOREIGN KEY (shop_id) REFERENCES Shops(id),
     FOREIGN KEY (delivery_address_id) REFERENCES Addresses(id),
-    FOREIGN KEY (coupon_id) REFERENCES Coupons(id)
+    FOREIGN KEY (coupon_id) REFERENCES Coupons(id),
+    CONSTRAINT fk_order_shipping_coupon FOREIGN KEY (shipping_coupon_id) REFERENCES Coupons(id)
 );
 
 CREATE TABLE Order_Details (
@@ -639,6 +649,46 @@ INSERT INTO Product_Videos (id, product_id, video_url, title, description, displ
 -- 6. COUPONS
 INSERT INTO Coupons (id, shop_id, code, discount_type, discount_value, min_order_value, max_discount_value, start_date, end_date, usage_limit, used_count, created_by) VALUES
 ('coupon-01', 'shop-01', 'WELCOME10', 'PERCENTAGE', 10.00, 200000.00, 50000.00, '2023-01-01 00:00:00', '2026-12-31 23:59:59', 100, 1, 'user-shop-01');
+
+-- 6.1 PLATFORM VOUCHERS: chỉ ADMIN quản lý; shop_id NULL áp dụng toàn sàn.
+INSERT INTO Coupons (id, shop_id, target, product_id, code, discount_type, discount_value, min_order_value, max_discount_value, start_date, end_date, usage_limit, used_count, status, created_by) VALUES
+('coupon-platform-20', NULL, 'ORDER', NULL, 'SAN20', 'PERCENTAGE', 10, 100000, 20000, NOW(), DATE_ADD(NOW(), INTERVAL 1 YEAR), 1000, 0, 'ACTIVE', 'user-admin-01'),
+('coupon-platform-70', NULL, 'ORDER', NULL, 'SAN70', 'PERCENTAGE', 20, 200000, 70000, NOW(), DATE_ADD(NOW(), INTERVAL 1 YEAR), 1000, 0, 'ACTIVE', 'user-admin-01'),
+('coupon-platform-ship', NULL, 'SHIPPING', NULL, 'SHIP30', 'PERCENTAGE', 100, 100000, 30000, NOW(), DATE_ADD(NOW(), INTERVAL 1 YEAR), 1000, 0, 'ACTIVE', 'user-admin-01'),
+('coupon-platform-product', NULL, 'PRODUCT', 'prod-01', 'HONG40', 'PERCENTAGE', 15, 100000, 40000, NOW(), DATE_ADD(NOW(), INTERVAL 1 YEAR), 1000, 0, 'ACTIVE', 'user-admin-01');
+
+-- 6.2 SHOP VOUCHERS (đồng bộ với sql/025_seed_shop_vouchers.sql)
+-- Apply after 024_voucher_management.sql, with the application's schema selected.
+-- Top up each existing shop to three usable ORDER vouchers; preserve existing codes/usage.
+SET NAMES utf8mb4;
+INSERT INTO Coupons (id, shop_id, target, product_id, code, discount_type, discount_value,
+    min_order_value, max_discount_value, start_date, end_date, usage_limit, used_count,
+    status, deleted, created_by, last_modify_by)
+SELECT UUID(), s.id, 'ORDER', NULL,
+    CONCAT('SHOP', UPPER(LEFT(MD5(s.id), 12)), '_', LPAD(v.percent_off, 2, '0')),
+    'PERCENTAGE', v.percent_off, 0, v.discount_cap,
+    DATE_SUB(NOW(), INTERVAL 1 DAY), DATE_ADD(NOW(), INTERVAL 1 YEAR), 1000, 0,
+    'ACTIVE', FALSE, s.owner_id, s.owner_id
+FROM Shops s
+CROSS JOIN (
+    SELECT 1 AS slot, 5 AS percent_off, 20000 AS discount_cap
+    UNION ALL SELECT 2, 15, 70000
+    UNION ALL SELECT 3, 10, 50000
+) v
+LEFT JOIN (
+    SELECT shop_id, COUNT(*) AS usable_count
+    FROM Coupons
+    WHERE shop_id IS NOT NULL AND target='ORDER' AND deleted=FALSE AND status='ACTIVE'
+      AND start_date<=NOW() AND end_date>NOW() AND used_count<usage_limit
+      AND discount_type='PERCENTAGE' AND discount_value>0 AND discount_value<=100
+      AND max_discount_value BETWEEN 20000 AND 70000
+    GROUP BY shop_id
+) existing ON existing.shop_id=s.id
+WHERE v.slot<=GREATEST(0, 3-COALESCE(existing.usable_count, 0))
+  AND NOT EXISTS (
+    SELECT 1 FROM Coupons c
+    WHERE c.code=CONCAT('SHOP', UPPER(LEFT(MD5(s.id), 12)), '_', LPAD(v.percent_off, 2, '0'))
+  );
 
 -- 7. CART ITEMS
 INSERT INTO Cart_Items (id, user_id, product_id, quantity, created_by) VALUES

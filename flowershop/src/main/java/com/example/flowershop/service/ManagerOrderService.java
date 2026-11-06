@@ -38,7 +38,8 @@ public class ManagerOrderService {
                                       BigDecimal shippingFee, BigDecimal totalAmount,
                                       java.time.LocalDateTime createdDate, String note,
                                       List<OrderItemResponse> items, DeliveryInfo delivery, PaymentInfo payment,
-                                      String orderType, CustomOrderWorkflowService.Design customDesign, String shopNote, String cancelReason) {}
+                                      String orderType, CustomOrderWorkflowService.Design customDesign, String shopNote, String cancelReason,
+                                      BigDecimal discountAmount, BigDecimal shippingDiscountAmount, String couponCode, String shippingCouponCode) {}
 
     /** Thông tin từng món hàng trong đơn */
     public record OrderItemResponse(String productId, String productName, BigDecimal price, Integer quantity) {}
@@ -64,11 +65,12 @@ public class ManagerOrderService {
     private final GhnService ghn;
     private final DeliverySync deliverySync;
     private final CustomOrderWorkflowService customWorkflow;
+    private final CouponService vouchers;
 
     public ManagerOrderService(OrderRepository orders, OrderDetailRepository orderDetails,
                                DeliveryRepository deliveries, PaymentRepository payments,
                                ShopRepository shops, AddressRepository addresses, GhnService ghn,
-                               DeliverySync deliverySync, CustomOrderWorkflowService customWorkflow) {
+                               DeliverySync deliverySync, CustomOrderWorkflowService customWorkflow,CouponService vouchers) {
         this.orders = orders;
         this.orderDetails = orderDetails;
         this.deliveries = deliveries;
@@ -78,6 +80,7 @@ public class ManagerOrderService {
         this.ghn = ghn;
         this.deliverySync = deliverySync;
         this.customWorkflow = customWorkflow;
+        this.vouchers = vouchers;
     }
 
     private static String blankToEmpty(String value) {
@@ -307,6 +310,7 @@ public class ManagerOrderService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Chỉ có thể hủy đơn hàng trước khi bắt đầu giao.");
         }
         o.setStatus(OrderStatus.CANCELLED);
+        vouchers.release(o);
         o.setCancelReason(reason);
         o.setLastModifyBy(actor);
     }
@@ -375,6 +379,7 @@ public class ManagerOrderService {
                 o.getCustomer() != null ? o.getCustomer().getPhone() : null,
                 toName, toPhone, toAddr, fromAddr, o.getStatus().name(), 
                 o.getSubTotal(), o.getShippingFee(), o.getTotalAmount(), 
-                o.getCreatedDate(), o.getCustomerNote(), items, di, pi, o.getOrderType().name(), customWorkflow.design(o), o.getShopNote(), o.getCancelReason());
+                o.getCreatedDate(), o.getCustomerNote(), items, di, pi, o.getOrderType().name(), customWorkflow.design(o), o.getShopNote(), o.getCancelReason(),
+                o.getDiscountAmount(),o.getShippingDiscountAmount(),o.getCouponCode(),o.getShippingCouponCode());
     }
 }

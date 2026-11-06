@@ -22,6 +22,13 @@ public class OrderController {
 
     private final OrderService orderService;
 
+    @PostMapping("/{userId}/voucher-preview")
+    public com.example.flowershop.service.CouponService.Preview vouchers(@PathVariable("userId") String userId,
+            @Valid @RequestBody MakeOrderRequest request, @AuthenticationPrincipal CurrentUser currentUser) {
+        requireOwner(userId,currentUser);
+        return orderService.previewVouchers(userId,request);
+    }
+
     private static void requireOwner(String userId, CurrentUser currentUser) {
         if (currentUser == null || !userId.equals(currentUser.id())) throw ApiException.forbidden("Không có quyền truy cập đơn hàng này.");
     }

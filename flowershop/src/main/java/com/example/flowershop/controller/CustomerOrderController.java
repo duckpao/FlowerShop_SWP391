@@ -19,6 +19,12 @@ public class CustomerOrderController {
     private final CustomerOrderService service;
     public CustomerOrderController(CustomerOrderService service) { this.service = service; }
 
+    @PostMapping("/voucher-preview")
+    public com.example.flowershop.service.CouponService.Preview vouchers(@AuthenticationPrincipal CurrentUser user,
+            @Valid @RequestBody CustomerOrderService.CheckoutRequest req) {
+        return service.previewVouchers(user.id(),req);
+    }
+
     @PostMapping("/fee")
     public java.util.Map<String, Object> fee(@AuthenticationPrincipal CurrentUser user,
                                              @RequestBody CustomerOrderService.CheckoutRequest req) {

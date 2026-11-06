@@ -12,8 +12,6 @@ import com.example.flowershop.entity.enums.PaymentType;
 import com.example.flowershop.entity.enums.ProductStatus;
 import com.example.flowershop.entity.enums.ProductType;
 import com.example.flowershop.entity.enums.ShopStatus;
-import com.example.flowershop.entity.enums.CouponStatus;
-import com.example.flowershop.entity.enums.DiscountType;
 import com.example.flowershop.exception.ApiException;
 import com.example.flowershop.repository.*;
 import lombok.RequiredArgsConstructor;
@@ -27,8 +25,6 @@ import java.util.UUID;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.time.LocalDateTime;
-import java.math.RoundingMode;
-import java.util.Optional;
 import lombok.extern.slf4j.Slf4j;
 import java.util.stream.Collectors;
 
@@ -44,9 +40,9 @@ public class OrderService {
     private final AddressRepository addressRepository;
     private final ProductRepository productRepository;
     private final PaymentRepository paymentRepository;
-    private final CouponRepository couponRepository;
     private final ShopRepository shopRepository;
     private final GhnService ghn;
+    private final CouponService vouchers;
 
     /**
      * Tạo đơn hàng từ các cart items đã chọn.
@@ -124,36 +120,10 @@ public class OrderService {
                 .map(item -> item.getProduct().getPrice().multiply(BigDecimal.valueOf(item.getQuantity())))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        BigDecimal discountAmount = BigDecimal.ZERO;
-        String couponId = null;
-        if (request.getCouponId() != null && !request.getCouponId().isBlank()) {
-            Coupon coupon = couponRepository.findByCodeForUpdate(request.getCouponId().trim())
-                    .orElseThrow(() -> ApiException.badRequest("Mã giảm giá không hợp lệ."));
-            LocalDateTime now = LocalDateTime.now();
-            if (coupon.getStatus() != CouponStatus.ACTIVE || now.isBefore(coupon.getStartDate())
-                    || now.isAfter(coupon.getEndDate()) || coupon.getUsedCount() >= coupon.getUsageLimit()
-                    || coupon.getDiscountValue().signum() <= 0
-                    || (coupon.getDiscountType() == DiscountType.PERCENTAGE && coupon.getDiscountValue().compareTo(new BigDecimal("100")) > 0)
-                    || subTotal.compareTo(coupon.getMinOrderValue()) < 0
-                    || (coupon.getShop() != null && !coupon.getShop().getId().equals(request.getShopId()))) {
-                throw ApiException.badRequest("Mã giảm giá không áp dụng được cho đơn hàng này.");
-            }
-            discountAmount = coupon.getDiscountType() == DiscountType.PERCENTAGE
-                    ? subTotal.multiply(coupon.getDiscountValue()).divide(new BigDecimal("100"), 2, RoundingMode.HALF_UP)
-                    : coupon.getDiscountValue();
-            if (coupon.getMaxDiscountValue() != null) discountAmount = discountAmount.min(coupon.getMaxDiscountValue());
-            discountAmount = discountAmount.min(subTotal);
-            if (discountAmount.signum() < 0) throw ApiException.badRequest("Mã giảm giá không hợp lệ.");
-            coupon.setUsedCount(coupon.getUsedCount() + 1);
-            couponRepository.save(coupon);
-            couponId = coupon.getId();
-        }
-        if (subTotal.subtract(discountAmount).signum() <= 0) throw ApiException.badRequest("Tổng thanh toán phải lớn hơn 0.");
-
         // Phí vận chuyển do GHN tính; khách trả tiền hàng + phí này
         Shop shop = selectedCartItems.get(0).getProduct().getShop();
         BigDecimal shippingFee = quoteFee(shop, deliveryAddress);
-        BigDecimal totalAmount = subTotal.subtract(discountAmount).add(shippingFee);
+        BigDecimal totalAmount = subTotal.add(shippingFee);
 
         // 5. Tạo Order
         Order order = Order.builder()
@@ -163,10 +133,8 @@ public class OrderService {
                 .deliveryAddress(deliveryAddress)
                 .recipientName(recipientName)
                 .recipientPhone(recipientPhone)
-                .couponId(couponId)
                 .orderType(OrderType.STANDARD)
                 .subTotal(subTotal)
-                .discountAmount(discountAmount)
                 .shippingFee(shippingFee)
                 .totalAmount(totalAmount)
                 .depositAmount(BigDecimal.ZERO)
@@ -175,6 +143,11 @@ public class OrderService {
                 .lastModifyBy(userId)
                 .build();
 
+        var voucherResult = vouchers.apply(order, voucherContext(request.getShopId(), selectedCartItems, shippingFee), request.getCouponId(), request.getShippingCouponCode());
+        BigDecimal discountAmount = voucherResult.discountAmount();
+        totalAmount = voucherResult.totalAmount();
+        if (request.getExpectedTotal()!=null && totalAmount.compareTo(request.getExpectedTotal())!=0)
+            throw ApiException.badRequest("Giá hoặc ưu đãi đã thay đổi. Vui lòng kiểm tra lại tổng thanh toán.");
         order = orderRepository.save(order);
 
         // 6. Tạo OrderDetail và giảm stock từng sản phẩm
@@ -246,6 +219,8 @@ public class OrderService {
                 .orderType(order.getOrderType().name())
                 .subTotal(subTotal)
                 .discountAmount(discountAmount)
+                .shippingDiscountAmount(order.getShippingDiscountAmount())
+                .couponCode(order.getCouponCode()).shippingCouponCode(order.getShippingCouponCode())
                 .shippingFee(shippingFee)
                 .totalAmount(totalAmount)
                 .deliveryAddressId(deliveryAddress.getId())
@@ -262,6 +237,24 @@ public class OrderService {
         Shop shop = shopRepository.findById(request.getShopId())
                 .orElseThrow(() -> ApiException.notFound("Không tìm thấy cửa hàng."));
         return quoteFee(shop, resolveDestination(userId, request.getDeliveryAddressId()));
+    }
+
+    private CouponService.Context voucherContext(String shopId, List<CartItem> items, BigDecimal shippingFee) {
+        var totals = new java.util.HashMap<String, BigDecimal>();
+        for (var item : items) totals.merge(item.getProduct().getId(), item.getProduct().getPrice().multiply(BigDecimal.valueOf(item.getQuantity())), BigDecimal::add);
+        return new CouponService.Context(shopId, totals.values().stream().reduce(BigDecimal.ZERO,BigDecimal::add),shippingFee,totals);
+    }
+
+    @Transactional(readOnly = true)
+    public CouponService.Preview previewVouchers(String userId, MakeOrderRequest request) {
+        if (new HashSet<>(request.getCartItemIds()).size()!=request.getCartItemIds().size()) throw ApiException.badRequest("Danh sách sản phẩm bị trùng.");
+        var items = request.getCartItemIds().stream().map(id -> cartItemRepository.findById(id)
+                .filter(c -> c.getUser().getId().equals(userId) && c.getProduct().getShop().getId().equals(request.getShopId()))
+                .filter(c -> c.getProduct().getStatus()==ProductStatus.ACTIVE && c.getProduct().getShop().getStatus()==ShopStatus.ACTIVE)
+                .orElseThrow(() -> ApiException.badRequest("Sản phẩm không thuộc giỏ hàng/shop đang chọn hoặc đã ngừng bán."))).toList();
+        if(items.isEmpty()) throw ApiException.badRequest("Chọn sản phẩm để áp voucher.");
+        var shippingFee=quoteFee(items.get(0).getProduct().getShop(),resolveDestination(userId,request.getDeliveryAddressId()));
+        return vouchers.preview(voucherContext(request.getShopId(),items,shippingFee), request.getCouponId(),request.getShippingCouponCode());
     }
 
     /** Fee from the shop's pickup address (default or first, with GHN codes) to the customer's address. */
@@ -321,6 +314,8 @@ public class OrderService {
                     .orderType(order.getOrderType().name())
                     .subTotal(order.getSubTotal())
                     .discountAmount(order.getDiscountAmount())
+                    .shippingDiscountAmount(order.getShippingDiscountAmount())
+                    .couponCode(order.getCouponCode()).shippingCouponCode(order.getShippingCouponCode())
                     .totalAmount(order.getTotalAmount())
                     .deliveryAddressId(order.getDeliveryAddress()==null ? null : order.getDeliveryAddress().getId())
                     .recipientName(order.getRecipientName())
@@ -365,13 +360,7 @@ public class OrderService {
         }
 
         // 3. Hoàn lại lượt dùng coupon nếu có
-        if (order.getCouponId() != null && !order.getCouponId().isBlank()) {
-            couponRepository.findById(order.getCouponId()).ifPresent(coupon -> {
-                coupon.setUsedCount(Math.max(0, coupon.getUsedCount() - 1));
-                couponRepository.save(coupon);
-                log.info("Hoàn lại coupon: {}", coupon.getCode());
-            });
-        }
+        vouchers.release(order);
 
         // 4. Hủy các payment PENDING của đơn hàng
         List<Payment> payments = paymentRepository.findByOrderId(order.getId());

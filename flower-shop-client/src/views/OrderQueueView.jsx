@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { managerOrderService } from '../services/managerOrderService'
 import { managerShopService } from '../services/managerShopService'
 import { formatPrice } from '../models/productModel'
+import OrderDiscountSummary from '../components/checkout/OrderDiscountSummary'
 import Badge from '../components/ui/badge/Badge'
 import Button from '../components/ui/button/Button'
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '../components/ui/table'
@@ -391,6 +392,7 @@ export default function OrderQueueView({ shop: initialShop }) {
                             </div>
                         </div>
                         
+                        <OrderDiscountSummary order={orderDetail} />
                         <div className="flex justify-between items-center pt-4 border-t border-gray-200 dark:border-gray-800">
                             <div>
                                 <p className="text-gray-500 text-sm">Tổng cộng</p>

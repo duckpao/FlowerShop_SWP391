@@ -36,6 +36,7 @@ type NavItem = {
 };
 
 const adminNavItems: NavItem[] = [
+  { name: 'Mã giảm giá của sàn', path: '/admin/vouchers', icon: <ListIcon fontSize={24} /> },
   { name: 'Tổng quan', path: '/admin', icon: <GridIcon fontSize={24} /> },
   { name: 'Quản lý người dùng', path: '/admin/users', icon: <UserCircleIcon fontSize={24} /> },
   { name: 'Quản lý các shop', path: '/admin/shops', icon: <BoxCubeIcon fontSize={24} /> },
@@ -43,6 +44,7 @@ const adminNavItems: NavItem[] = [
 ];
 
 const managerNavItems: NavItem[] = [
+  { name: 'Mã giảm giá của shop', path: '/shop-admin/vouchers', icon: <ListIcon fontSize={24} /> },
   { name: 'Tổng quan', path: '/shop-admin', icon: <GridIcon fontSize={24} /> },
   { name: 'Quản lý shop', path: '/shop-admin/shop', icon: <PageIcon fontSize={24} /> },
   { name: 'Quản lý mặt hàng', path: '/shop-admin/products', icon: <BoxCubeIcon fontSize={24} /> },

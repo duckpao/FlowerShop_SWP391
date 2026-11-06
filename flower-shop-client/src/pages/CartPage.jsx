@@ -7,6 +7,7 @@ import PageMeta from '../components/common/PageMeta';
 import PageBreadCrumb from '../components/common/PageBreadCrumb';
 import Button from '../components/ui/button/Button';
 import { TrashBinIcon } from '../icons';
+import VoucherPicker from '../components/checkout/VoucherPicker';
 
 export default function CartPage({ cart, loading, error, fetchCart, updateItem, removeItem, userId, user, isGuest }) {
   const navigate = useNavigate();
@@ -19,7 +20,8 @@ export default function CartPage({ cart, loading, error, fetchCart, updateItem, 
   const [shippingFee, setShippingFee] = useState(null);
   const [feeBusy, setFeeBusy] = useState(false);
   const [feeError, setFeeError] = useState('');
-  const [couponCode, setCouponCode] = useState('');
+  const [vouchers, setVouchers] = useState({ couponCode: '', shippingCouponCode: '' });
+  const [voucherPreview, setVoucherPreview] = useState(null);
   const [paymentMethod, setPaymentMethod] = useState('ONLINE'); // 'ONLINE' | 'COD'
 
   const [orderLoading, setOrderLoading] = useState(false);
@@ -152,7 +154,9 @@ export default function CartPage({ cart, loading, error, fetchCart, updateItem, 
     return () => { active = false; };
   }, [isUserLoggedIn, userId, user?.id, targetShop, addressId, needsGhnArea]);
 
-  const orderTotal = shippingFee !== null ? selectedTotal + shippingFee : null;
+  const voucherContext = isUserLoggedIn && targetShop && addressId && !needsGhnArea && shippingFee !== null
+    ? { mode: 'cart', userId: userId || user.id, shopId: targetShop, cartItemIds: selectedItems.map(i => i.id), deliveryAddressId: addressId, revision: selectedItems.map(i => `${i.id}:${i.quantity}`).join('|') } : null;
+  const orderTotal = voucherPreview?.totalAmount ?? (shippingFee !== null ? selectedTotal + shippingFee : null);
 
   // Kiểm tra xem có sản phẩm nào được chọn mà số lượng vượt quá tồn kho không
   const hasOverStockItem = selectedItems.some(
@@ -214,7 +218,9 @@ export default function CartPage({ cart, loading, error, fetchCart, updateItem, 
         deliveryAddressId: addressId,
         recipientName: recipientName.trim(),
         phone: phone.trim(),
-        couponId: couponCode.trim() || undefined,
+        couponId: vouchers.couponCode || undefined,
+        shippingCouponCode: vouchers.shippingCouponCode || undefined,
+        expectedTotal: voucherPreview?.totalAmount,
         paymentMethod: paymentMethod,
       });
 
@@ -591,6 +597,7 @@ export default function CartPage({ cart, loading, error, fetchCart, updateItem, 
                 </div>
               </div>
 
+              <VoucherPicker context={voucherContext} value={vouchers} onChange={setVouchers} onPreview={setVoucherPreview} disabled={orderLoading} />
               {/* Chi tiết tính tiền */}
               <div className="space-y-2.5 pt-4 border-t border-gray-100 dark:border-white/5 text-sm">
                 <div className="flex justify-between text-gray-600 dark:text-gray-400">
@@ -636,7 +643,7 @@ export default function CartPage({ cart, loading, error, fetchCart, updateItem, 
                 <Button
                   type="button"
                   onClick={handlePlaceOrder}
-                  disabled={orderLoading || feeBusy || shippingFee === null || selectedItems.length === 0 || hasMultipleShopsSelected || hasOverStockItem}
+                  disabled={orderLoading || feeBusy || shippingFee === null || !voucherPreview || selectedItems.length === 0 || hasMultipleShopsSelected || hasOverStockItem}
                   className="w-full py-3.5 text-base font-bold shadow-md"
                 >
                   {orderLoading

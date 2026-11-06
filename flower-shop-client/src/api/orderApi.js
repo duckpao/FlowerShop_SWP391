@@ -12,6 +12,7 @@ const orderApi = {
    * }} data
    */
   makeOrder: (userId, data) => axiosClient.post(`/orders/${userId}`, data),
+  previewVouchers: (userId, data) => axiosClient.post(`/orders/${userId}/voucher-preview`, data),
 
   /** Phí vận chuyển GHN từ shop tới một địa chỉ đã lưu. */
   getShippingFee: (userId, data) => axiosClient.post(`/orders/${userId}/shipping-fee`, data),

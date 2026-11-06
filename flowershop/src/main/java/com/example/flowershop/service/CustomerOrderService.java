@@ -21,10 +21,14 @@ public class CustomerOrderService {
             @NotBlank String addressId,
             @NotBlank String productId,
             @NotNull @Min(1) @Max(1000) Integer quantity,
-            @Size(max=500) String note) {}
+            @Size(max=500) String note, @Size(max=50) String couponCode, @Size(max=50) String shippingCouponCode,
+            @DecimalMin("1") BigDecimal expectedTotal) {
+        public CheckoutRequest(String addressId,String productId,Integer quantity,String note) { this(addressId,productId,quantity,note,null,null,null); }
+        public CheckoutRequest(String addressId,String productId,Integer quantity,String note,String couponCode,String shippingCouponCode) { this(addressId,productId,quantity,note,couponCode,shippingCouponCode,null); }
+    }
 
     public record CheckoutResponse(String orderId, BigDecimal subTotal, BigDecimal shippingFee,
-                                   BigDecimal totalAmount, String status) {}
+                                   BigDecimal totalAmount, String status, BigDecimal discountAmount, BigDecimal shippingDiscountAmount) {}
 
     public record OrderSummary(String id, String shopName, BigDecimal totalAmount, String status,
                                java.time.LocalDateTime createdDate, Long itemCount) {}
@@ -33,7 +37,8 @@ public class CustomerOrderService {
                                       BigDecimal subTotal, BigDecimal shippingFee, BigDecimal totalAmount,
                                       java.time.LocalDateTime createdDate, String note,
                                       List<OrderItemResponse> items, DeliveryInfo delivery,
-                                      String orderType, CustomOrderWorkflowService.Design customDesign, String shopNote, String cancelReason, boolean needsDeliveryAddress) {}
+                                      String orderType, CustomOrderWorkflowService.Design customDesign, String shopNote, String cancelReason, boolean needsDeliveryAddress,
+                                      BigDecimal discountAmount, BigDecimal shippingDiscountAmount, String couponCode, String shippingCouponCode) {}
 
         public record ShippingFeeResponse(BigDecimal shippingFee) {}
 
@@ -53,11 +58,12 @@ public class CustomerOrderService {
     private final GhnService ghn;
     private final DeliverySync deliverySync;
     private final CustomOrderWorkflowService customWorkflow;
+    private final CouponService vouchers;
 
     public CustomerOrderService(ProductRepository products, AddressRepository addresses,
                                 OrderRepository orders, OrderDetailRepository orderDetails,
                                 PaymentRepository payments, DeliveryRepository deliveries,
-                                UserRepository users, GhnService ghn, DeliverySync deliverySync, CustomOrderWorkflowService customWorkflow) {
+                                UserRepository users, GhnService ghn, DeliverySync deliverySync, CustomOrderWorkflowService customWorkflow, CouponService vouchers) {
         this.products = products;
         this.addresses = addresses;
         this.orders = orders;
@@ -68,6 +74,7 @@ public class CustomerOrderService {
         this.ghn = ghn;
         this.deliverySync = deliverySync;
         this.customWorkflow = customWorkflow;
+        this.vouchers = vouchers;
     }
 private static ResponseStatusException notFound() {
         return new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy dữ liệu.");
@@ -108,7 +115,7 @@ private static ResponseStatusException notFound() {
     @Transactional
     public CheckoutResponse checkout(String customerId, CheckoutRequest req) {
         // Load product + validate
-        Product product = products.findById(req.productId())
+        Product product = products.findByIdForUpdate(req.productId())
                 .filter(p -> p.getStatus() == ProductStatus.ACTIVE)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Sản phẩm không còn được bán."));
         Shop shop = product.getShop();
@@ -144,6 +151,10 @@ private static ResponseStatusException notFound() {
         order.setSubTotal(subTotal);
         order.setShippingFee(shippingFee);
         order.setTotalAmount(totalAmount);
+        var voucherResult=vouchers.apply(order,context(product,req.quantity(),shippingFee),req.couponCode(),req.shippingCouponCode());
+        totalAmount=voucherResult.totalAmount();
+        if(req.expectedTotal()!=null && totalAmount.compareTo(req.expectedTotal())!=0)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Giá hoặc ưu đãi đã thay đổi. Vui lòng kiểm tra lại tổng thanh toán.");
         order.setStatus(OrderStatus.PENDING);
         order.setCreatedBy(customerId);
         order.setLastModifyBy(customerId);
@@ -158,7 +169,18 @@ private static ResponseStatusException notFound() {
         orders.save(order);
         orderDetails.save(detail);
         payments.save(payment);
-        return new CheckoutResponse(orderId, subTotal, shippingFee, totalAmount, OrderStatus.PENDING.name());
+        return new CheckoutResponse(orderId, subTotal, shippingFee, totalAmount, OrderStatus.PENDING.name(), order.getDiscountAmount(),order.getShippingDiscountAmount());
+    }
+
+    private CouponService.Context context(Product product,int quantity,BigDecimal shippingFee) {
+        BigDecimal subtotal=product.getPrice().multiply(BigDecimal.valueOf(quantity));
+        return new CouponService.Context(product.getShop().getId(),subtotal,shippingFee,Map.of(product.getId(),subtotal));
+    }
+
+    public CouponService.Preview previewVouchers(String customerId,CheckoutRequest req) {
+        var product=products.findById(req.productId()).filter(p -> p.getStatus()==ProductStatus.ACTIVE && p.getShop().getStatus()==ShopStatus.ACTIVE)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,"Sản phẩm không còn được bán."));
+        return vouchers.preview(context(product,req.quantity(),quote(product.getShop(),destination(customerId,req.addressId()))),req.couponCode(),req.shippingCouponCode());
     }
 
     public Results list(String customerId, int page, String status) {
@@ -197,7 +219,8 @@ private static ResponseStatusException notFound() {
                 .orElse(null);
         return new OrderDetailResponse(order.getId(), order.getShop().getId(), order.getShop().getName(),
                 order.getStatus().name(), order.getSubTotal(), order.getShippingFee(), order.getTotalAmount(),
-                order.getCreatedDate(), order.getCustomerNote(), items, delivery, order.getOrderType().name(), customWorkflow.design(order), order.getShopNote(), order.getCancelReason(), order.getDeliveryAddress()==null);
+                order.getCreatedDate(), order.getCustomerNote(), items, delivery, order.getOrderType().name(), customWorkflow.design(order), order.getShopNote(), order.getCancelReason(), order.getDeliveryAddress()==null,
+                order.getDiscountAmount(),order.getShippingDiscountAmount(),order.getCouponCode(),order.getShippingCouponCode());
     }
 
         public BigDecimal calculateShippingFeeForOrder(String customerId, String orderId) {

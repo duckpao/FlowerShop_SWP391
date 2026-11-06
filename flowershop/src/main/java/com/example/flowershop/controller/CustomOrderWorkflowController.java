@@ -13,6 +13,13 @@ public class CustomOrderWorkflowController {
     private final CustomOrderWorkflowService workflow;
     public CustomOrderWorkflowController(CustomOrderWorkflowService workflow) { this.workflow=workflow; }
 
+    @PostMapping("/api/customer/orders/{id}/voucher-preview")
+    @PreAuthorize("hasRole('CUSTOMER')")
+    public com.example.flowershop.service.CouponService.Preview vouchers(@PathVariable("id") String id,
+            @AuthenticationPrincipal CurrentUser user,@Valid @RequestBody CustomOrderWorkflowService.VoucherInput body) {
+        return workflow.previewVouchers(user.id(),id,body);
+    }
+
     @PostMapping("/api/customer/orders/custom")
     @PreAuthorize("hasRole('CUSTOMER')")
     @ResponseStatus(HttpStatus.CREATED)

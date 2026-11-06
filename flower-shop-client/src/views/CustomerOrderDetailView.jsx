@@ -165,6 +165,8 @@ export default function CustomerOrderDetailView() {
 
                 <div className="space-y-1 text-sm">
                     <div className="flex justify-between"><span>Tạm tính:</span><span>{formatPrice(order.subTotal)}</span></div>
+                    {Number(order.discountAmount) > 0 && <div className="flex justify-between"><span>Giảm tiền hàng ({order.couponCode}):</span><span>−{formatPrice(order.discountAmount)}</span></div>}
+                    {Number(order.shippingDiscountAmount) > 0 && <div className="flex justify-between"><span>Giảm phí ship ({order.shippingCouponCode}):</span><span>−{formatPrice(order.shippingDiscountAmount)}</span></div>}
                     <div className="flex justify-between"><span>Phí ship (GHN):</span><span>{formatPrice(shippingFee ?? order.shippingFee)}</span></div>
                     {shippingFeeError && <p className="text-xs text-gray-500" role="status">{shippingFeeError}</p>}
                     {shippingFee !== null && Number(shippingFee) !== Number(order.shippingFee) && (

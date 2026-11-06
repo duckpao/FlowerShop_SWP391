@@ -24,6 +24,7 @@ import { CartProvider, useCartContext } from "./context/CartContext";
 import FavoriteShopsView from './views/FavoriteShopsView'
 import ShopDirectoryView from './views/ShopDirectoryView'
 import CustomFlowerOrderView from './views/CustomFlowerOrderView'
+import VoucherManagementView from './views/VoucherManagementView'
 
 export default function AppRouter() {
   return (
@@ -73,6 +74,8 @@ function AppRouterContent() {
 
             <Route path="/cart" element={<CartPageWrapper />} />
             <Route path="/checkout" element={<CheckoutView />} />
+            <Route path="/admin/vouchers" element={<VoucherManagementView />} />
+            <Route path="/shop-admin/vouchers" element={<VoucherManagementView />} />
             <Route path="/orders" element={<CustomerOrdersView />} />
             <Route path="/orders/:id" element={<CustomerOrderDetailView />} />
             <Route path="/payment/success" element={<PaymentSuccessPage />} />

@@ -4,7 +4,7 @@ const req = (path, options) => authService.authenticatedRequest(`/api/customer/o
 
 export const customerOrderService = {
     createCustom: data => req('/custom', { method: 'POST', body: data }),
-    acceptQuote: (id, paymentMethod, expectedTotal) => req(`/${encodeURIComponent(id)}/accept-quote`, { method: 'POST', body: { paymentMethod, expectedTotal } }),
+    acceptQuote: (id, paymentMethod, expectedTotal, vouchers = {}) => req(`/${encodeURIComponent(id)}/accept-quote`, { method: 'POST', body: { paymentMethod, expectedTotal, ...vouchers } }),
     customAddress: (id, addressId) => req(`/${encodeURIComponent(id)}/custom-address`, { method: 'PUT', body: { addressId } }),
     fee: data => req('/fee', { method: 'POST', body: data }),
     checkout: data => req('/checkout', { method: 'POST', body: data }),

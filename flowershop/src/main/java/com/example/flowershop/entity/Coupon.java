@@ -2,6 +2,7 @@ package com.example.flowershop.entity;
 
 import com.example.flowershop.entity.enums.CouponStatus;
 import com.example.flowershop.entity.enums.DiscountType;
+import com.example.flowershop.entity.enums.CouponTarget;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -26,6 +27,18 @@ public class Coupon {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "shop_id")
     private Shop shop;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "target", nullable = false, length = 20)
+    @Builder.Default
+    private CouponTarget target = CouponTarget.ORDER;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "product_id")
+    private Product product;
+
+    @Column(name = "deleted", nullable = false)
+    private boolean deleted;
 
     @Column(name = "code", unique = true, nullable = false, length = 50)
     private String code;

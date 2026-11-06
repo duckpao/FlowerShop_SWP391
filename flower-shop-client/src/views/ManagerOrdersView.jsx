@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import OrderDiscountSummary from '../components/checkout/OrderDiscountSummary'
 import { OrderDesignPanel, ShopCustomOrderActions } from '../components/customFlowers/OrderDesignPanel'
 import { managerOrderService } from '../services/managerOrderService'
 import { managerShopService } from '../services/managerShopService'
@@ -98,7 +99,7 @@ if (!shop) return <div className="p-8"><p className="text-gray-500">Đang tải 
             {error && <div className="mb-4 rounded-lg bg-error-50 p-4 text-sm text-error-500">{error}</div>}
             {notice && <div className="mb-4 rounded-lg bg-success-50 p-4 text-sm text-success-600">{notice}</div>}
             {busy && !data && <p className="text-gray-500">Đang tải…</p>}
-            {detail && <section className="mb-5 rounded-xl border border-gray-200 p-4 dark:border-gray-700"><div className="flex justify-between"><h3 className="font-semibold">Chi tiết đơn #{detail.id.substring(0,8)}</h3><button onClick={() => setDetail(null)}>Đóng</button></div><OrderDesignPanel order={detail} /><p className="text-sm">{detail.recipientName} · {detail.recipientPhone} · {detail.deliveryAddress}</p><ShopCustomOrderActions key={detail.id} order={detail} shopId={shop.id} onChanged={customChanged} /></section>}
+            {detail && <section className="mb-5 rounded-xl border border-gray-200 p-4 dark:border-gray-700"><div className="flex justify-between"><h3 className="font-semibold">Chi tiết đơn #{detail.id.substring(0,8)}</h3><button onClick={() => setDetail(null)}>Đóng</button></div><OrderDesignPanel order={detail} /><OrderDiscountSummary order={detail} /><p className="text-sm">{detail.recipientName} · {detail.recipientPhone} · {detail.deliveryAddress}</p><ShopCustomOrderActions key={detail.id} order={detail} shopId={shop.id} onChanged={customChanged} /></section>}
             {data && data.content.length === 0 && <p className="text-gray-500">Chưa có đơn hàng nào.</p>}
             {data && data.content.length > 0 && <>
                 <div className="overflow-hidden rounded-xl border border-gray-200 dark:border-white/5">

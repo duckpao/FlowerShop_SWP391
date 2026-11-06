@@ -44,6 +44,22 @@ public class Order {
     @Column(name = "coupon_id", length = 36)
     private String couponId;
 
+    @Column(name = "shipping_coupon_id", length = 36)
+    private String shippingCouponId;
+
+    @Column(name = "coupon_code", length = 50)
+    private String couponCode;
+
+    @Column(name = "shipping_coupon_code", length = 50)
+    private String shippingCouponCode;
+
+    @Builder.Default
+    @Column(name = "shipping_discount_amount", precision = 12, scale = 2, nullable = false)
+    private BigDecimal shippingDiscountAmount = BigDecimal.ZERO;
+
+    @Column(name = "coupons_released", nullable = false)
+    private boolean couponsReleased;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "order_type")
     @Builder.Default

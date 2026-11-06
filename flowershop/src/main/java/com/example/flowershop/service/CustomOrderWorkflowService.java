@@ -20,7 +20,11 @@ public class CustomOrderWorkflowService {
     public record CreateInput(@NotBlank String addressId, @NotNull @Valid CustomFlowerOrderService.RequestInput design) {}
     public record Quote(@NotNull @DecimalMin("1") @Digits(integer=10, fraction=2) BigDecimal amount,
                         @Size(max=2000) String note) {}
-    public record Accept(@NotNull PaymentMethod paymentMethod, @NotNull @DecimalMin("1") BigDecimal expectedTotal) {}
+    public record Accept(@NotNull PaymentMethod paymentMethod, @NotNull @DecimalMin("1") BigDecimal expectedTotal,
+                         @Size(max=50) String couponCode, @Size(max=50) String shippingCouponCode) {
+        public Accept(PaymentMethod paymentMethod,BigDecimal expectedTotal) { this(paymentMethod,expectedTotal,null,null); }
+    }
+    public record VoucherInput(@Size(max=50) String couponCode,@Size(max=50) String shippingCouponCode) {}
     public record DeliveryInput(@NotBlank String addressId) {}
     public record Design(BigDecimal budget, String description, CustomFlowerOrderService.Design preferences) {}
     public record Receipt(String orderId, String status) {}
@@ -32,13 +36,15 @@ public class CustomOrderWorkflowService {
     private final UserRepository users;
     private final CustomFlowerOrderService designs;
     private final GhnService ghn;
+    private final CouponService vouchers;
     private final ObjectMapper json = new ObjectMapper();
 
     public CustomOrderWorkflowService(OrderRepository orders, OrderDetailRepository details, PaymentRepository payments,
-            AddressRepository addresses, ShopRepository shops, UserRepository users, CustomFlowerOrderService designs, GhnService ghn) {
+            AddressRepository addresses, ShopRepository shops, UserRepository users, CustomFlowerOrderService designs, GhnService ghn, CouponService vouchers) {
         this.orders=orders; this.details=details; this.payments=payments; this.addresses=addresses;
         this.shops=shops; this.users=users; this.designs=designs;
         this.ghn=ghn;
+        this.vouchers=vouchers;
     }
     private static ResponseStatusException invalid(String message) { return new ResponseStatusException(HttpStatus.CONFLICT, message); }
     private static ResponseStatusException missing() { return new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy đơn hàng thuộc quyền truy cập của bạn."); }
@@ -106,6 +112,7 @@ public class CustomOrderWorkflowService {
         var order=locked(id); requireCustom(order);
         if (!order.getCustomer().getId().equals(actor)) throw missing();
         if (order.getStatus()!=OrderStatus.QUOTED) throw invalid("Đơn chưa được báo giá hoặc đã được xử lý.");
+        vouchers.apply(order,context(order),input.couponCode(),input.shippingCouponCode());
         if (input.expectedTotal()==null || order.getTotalAmount().compareTo(input.expectedTotal())!=0)
             throw invalid("Báo giá đã thay đổi. Vui lòng tải lại đơn hàng và kiểm tra trước khi đồng ý.");
         if (order.getDeliveryAddress()==null) throw invalid("Vui lòng bổ sung địa chỉ nhận hàng.");
@@ -129,5 +136,16 @@ public class CustomOrderWorkflowService {
             throw invalid("Vui lòng cập nhật địa chỉ theo danh mục GHN.");
         order.setDeliveryAddress(address); order.setRecipientName(address.getRecipientName()); order.setRecipientPhone(address.getRecipientPhone());
         order.setStatus(OrderStatus.AWAITING_QUOTE); order.setLastModifyBy(actor);
+    }
+
+    private CouponService.Context context(Order order) {
+        // A custom design is a quoted batch, not a purchase of its reference catalog product.
+        return new CouponService.Context(order.getShop().getId(),order.getSubTotal(),order.getShippingFee(),Map.of());
+    }
+    public CouponService.Preview previewVouchers(String actor,String id,VoucherInput input) {
+        var order=orders.findByIdAndCustomerId(id,actor).orElseThrow(CustomOrderWorkflowService::missing);
+        requireCustom(order);
+        if(order.getStatus()!=OrderStatus.QUOTED) throw invalid("Đơn chưa được báo giá hoặc đã được xử lý.");
+        return vouchers.preview(context(order),input.couponCode(),input.shippingCouponCode());
     }
 }
