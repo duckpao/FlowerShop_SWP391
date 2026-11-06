@@ -13,8 +13,9 @@ import java.util.*;
 
 @Service @Transactional(readOnly=true)
 public class ManagerShopService {
-    public record Profile(@NotBlank @Size(max=255) String name,@NotNull @Size(max=5000) String description,
-                          @NotNull @Size(max=255) @Pattern(regexp="^$|https://[^\\s]+",message="Logo phải là URL HTTPS hoặc để trống") String logoUrl) {}
+    private static final long MAX_LOGO_BYTES = 5L * 1024 * 1024;
+    private static final Set<String> LOGO_TYPES = Set.of("image/jpeg", "image/png", "image/webp");
+    public record Profile(@NotBlank @Size(max=255) String name,@NotNull @Size(max=5000) String description) {}
     public record ActiveInput(@NotNull Boolean active) {}
     public record StaffResponse(String userId,String email,String fullName,boolean active) {
         static StaffResponse from(ShopStaff s) { return new StaffResponse(s.getUser().getId(),s.getUser().getEmail(),s.getUser().getFullName(),s.isActive()); }
@@ -22,8 +23,9 @@ public class ManagerShopService {
     private final ShopRepository shops;
     private final ShopStaffRepository staff;
     private final AddressRepository addresses;
-    public ManagerShopService(ShopRepository shops,ShopStaffRepository staff,AddressRepository addresses) {
-        this.shops=shops; this.staff=staff; this.addresses=addresses;
+    private final CloudinaryService cloudinary;
+    public ManagerShopService(ShopRepository shops,ShopStaffRepository staff,AddressRepository addresses,CloudinaryService cloudinary) {
+        this.shops=shops; this.staff=staff; this.addresses=addresses; this.cloudinary=cloudinary;
     }
     public List<com.example.flowershop.dto.account.AddressResponse> address(String id,String actor) {
         owned(id,actor,false); return addresses.findByShopIdAndUserIsNullOrderByCreatedDateAscIdAsc(id).stream().map(com.example.flowershop.dto.account.AddressResponse::from).toList();
@@ -49,7 +51,22 @@ public class ManagerShopService {
     }
     @Transactional public ShopResponse update(String id,String actor,Profile input) {
         var s=owned(id,actor,true); s.setName(input.name().strip()); s.setDescription(input.description().strip());
-        s.setLogoUrl(input.logoUrl().strip()); s.setLastModifyBy(actor); shops.flush(); return ShopResponse.from(s);
+        s.setLastModifyBy(actor); shops.flush(); return ShopResponse.from(s);
+    }
+    @Transactional public ShopResponse uploadLogo(String id,String actor,org.springframework.web.multipart.MultipartFile file) {
+        var s=owned(id,actor,true);
+        if(file==null || file.isEmpty()) throw new IllegalArgumentException("Vui lòng chọn ảnh logo để tải lên.");
+        if(file.getSize()>MAX_LOGO_BYTES) throw new IllegalArgumentException("Logo không được vượt quá 5MB.");
+        if(!LOGO_TYPES.contains(file.getContentType())) throw new IllegalArgumentException("Chỉ nhận ảnh JPEG, PNG hoặc WebP.");
+        try { s.setLogoUrl(cloudinary.uploadShopLogo(file.getBytes(),file.getOriginalFilename(),file.getContentType())); }
+        catch(java.io.IOException e) { throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,"Không thể đọc dữ liệu ảnh. Vui lòng thử lại.",e); }
+        // Logo shop đồng thời là ảnh đại diện của chủ shop.
+        s.getOwner().setAvatarUrl(s.getLogoUrl()); s.getOwner().setLastModifyBy(actor);
+        s.setLastModifyBy(actor); shops.flush(); return ShopResponse.from(s);
+    }
+    @Transactional public ShopResponse removeLogo(String id,String actor) {
+        var s=owned(id,actor,true); s.setLogoUrl("");
+        s.getOwner().setAvatarUrl(null); s.getOwner().setLastModifyBy(actor); s.setLastModifyBy(actor); shops.flush(); return ShopResponse.from(s);
     }
     public List<StaffResponse> staff(String id,String actor) { owned(id,actor,false); return staff.findByShopIdOrderByIdAsc(id).stream().map(StaffResponse::from).toList(); }
     @Transactional public StaffResponse active(String id,String actor,String userId,boolean active) {

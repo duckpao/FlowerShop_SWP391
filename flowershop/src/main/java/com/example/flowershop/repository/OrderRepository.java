@@ -73,5 +73,10 @@ public interface OrderRepository extends JpaRepository<Order, String> {
         String customerId,
         OrderStatus status
 );
+
+    @Query("SELECT o.status, COUNT(o) FROM Order o WHERE o.shop.id = :shopId "
+            + "AND o.createdDate >= :start AND o.createdDate < :end GROUP BY o.status")
+    List<Object[]> countStatusesForReport(@Param("shopId") String shopId,
+            @Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
 }
 

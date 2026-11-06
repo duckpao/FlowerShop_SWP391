@@ -49,6 +49,11 @@ public class CloudinaryService {
         return upload(bytes, filename, contentType, "video", VIDEO_FOLDER, "Upload video lên Cloudinary thất bại.", "Cloudinary không trả về URL video.");
     }
 
+    public String uploadShopLogo(byte[] bytes, String filename, String contentType) {
+        return upload(bytes, filename, contentType, "image", "flowershop/shop-logos",
+                "Upload logo lên Cloudinary thất bại.", "Cloudinary không trả về URL logo.");
+    }
+
     public String uploadBlogImage(byte[] bytes, String filename, String contentType) {
         return upload(bytes, filename, contentType, "image", "flowershop/blogs",
                 "Upload ảnh bài viết lên Cloudinary thất bại.", "Cloudinary không trả về URL ảnh bài viết.");

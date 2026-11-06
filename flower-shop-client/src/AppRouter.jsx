@@ -34,6 +34,7 @@ import CustomFlowerOrderView from './views/CustomFlowerOrderView'
 import CustomerCustomOrdersView from './views/CustomerCustomOrdersView'
 import FloralCareView from './views/FloralCareView'
 import FloralCareDetailView from './views/FloralCareDetailView'
+import SavedBlogsView from './views/SavedBlogsView'
 
 export default function AppRouter() {
   return (
@@ -69,8 +70,9 @@ function AppRouterContent() {
             <Route path="/following-shops" element={<FavoriteShopsView auth={controller} />} />
             <Route path="/occasions" element={<OccasionsView auth={controller} />} />
             <Route path="/chat" element={<ChatView auth={controller} />} />
-            <Route path="/floral-care" element={<FloralCareView />} />
-            <Route path="/floral-care/:id" element={<FloralCareDetailView />} />
+            <Route path="/floral-care" element={<FloralCareView auth={controller} />} />
+            <Route path="/floral-care/:id" element={<FloralCareDetailView auth={controller} />} />
+            <Route path="/saved-blogs" element={<SavedBlogsView auth={controller} />} />
             <Route path="/products/:id" element={<ProductDetailViewWrapper auth={controller} />} />
 
             <Route
