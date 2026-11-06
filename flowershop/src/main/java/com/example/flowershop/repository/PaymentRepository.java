@@ -1,6 +1,9 @@
 package com.example.flowershop.repository;
 
 import com.example.flowershop.entity.Payment;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -17,6 +20,10 @@ public interface PaymentRepository extends JpaRepository<Payment, String> {
     Optional<Payment> findByInvoiceNumber(String invoiceNumber);
 
     List<Payment> findByGroupInvoice(String groupInvoice);
+
+    /** Lịch sử giao dịch của khách; nạp sẵn order + shop để khỏi N+1 khi map tên shop. */
+    @EntityGraph(attributePaths = {"order", "order.shop"})
+    Page<Payment> findByOrderCustomerId(String customerId, Pageable pageable);
 
     /** Cập nhật thẳng trong DB để không ghi đè SUCCESS mà IPN vừa commit. */
     @Modifying

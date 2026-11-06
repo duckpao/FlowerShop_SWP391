@@ -8,6 +8,8 @@ export const customerOrderService = {
     byIds: ids => req(`/by-ids?ids=${ids.map(encodeURIComponent).join(',')}`),
     // GET ?page=&status=: lịch sử đơn của khách (CustomerOrdersView)
     list: (page, status) => req(`?page=${page}${status ? `&status=${encodeURIComponent(status)}` : ''}`),
+    // GET /transactions?page=: lịch sử giao dịch của khách (CustomerTransactionsView)
+    transactions: page => req(`/transactions?page=${page}`),
     // GET /{id}: chi tiết đơn của khách kèm vận đơn (CustomerOrderDetailView)
     detail: id => req(`/${encodeURIComponent(id)}`),
     // GET /{id}/shipping-fee: phí ship GHN hiện tại của đơn (CustomerOrderDetailView)

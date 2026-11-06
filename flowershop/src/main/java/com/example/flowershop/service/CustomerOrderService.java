@@ -50,6 +50,13 @@ public class CustomerOrderService {
 
     public record Results(List<OrderSummary> content, int page, int totalPages, long totalElements) {}
 
+    /** Một giao dịch trong lịch sử giao dịch của khách (mọi đơn). */
+    public record TransactionLine(String orderId, String shopName, String paymentType, String paymentMethod,
+                                  BigDecimal amount, String status, String invoiceNumber, String gatewayTransactionNo,
+                                  java.time.LocalDateTime createdDate, java.time.LocalDateTime paidAt) {}
+
+    public record TransactionResults(List<TransactionLine> content, int page, int totalPages, long totalElements) {}
+
     private final AddressRepository addresses;
     private final OrderRepository orders;
     private final OrderDetailRepository orderDetails;
@@ -114,6 +121,18 @@ private static ResponseStatusException notFound() {
         }
         var content = result.getContent().stream().map(this::summary).toList();
         return new Results(content, page, result.getTotalPages(), result.getTotalElements());
+    }
+
+    /** Mọi lần thanh toán của khách, mới nhất trước, 20 dòng/trang. */
+    public TransactionResults transactions(String customerId, int page) {
+        Pageable pageable = PageRequest.of(Math.max(page, 0), 20, Sort.by(Sort.Order.desc("createdDate"), Sort.Order.asc("id")));
+        Page<Payment> result = payments.findByOrderCustomerId(customerId, pageable);
+        var content = result.getContent().stream().map(p -> new TransactionLine(
+                p.getOrder().getId(), p.getOrder().getShop().getName(), p.getPaymentType().name(),
+                p.getPaymentMethod().name(), p.getAmount(), p.getStatus().name(), p.getInvoiceNumber(),
+                p.getGatewayTransactionNo(), p.getCreatedDate(),
+                p.getStatus() == PaymentStatus.SUCCESS ? p.getLastModifyDate() : null)).toList();
+        return new TransactionResults(content, page, result.getTotalPages(), result.getTotalElements());
     }
 
     /** Các đơn của khách theo danh sách id (bỏ qua id không tồn tại hoặc không thuộc khách), theo thứ tự id truyền vào. */
