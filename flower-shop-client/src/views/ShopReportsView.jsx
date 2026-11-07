@@ -41,22 +41,33 @@ function MetricCard({ label, value, note, tone = 'brand', icon: Icon = ChartColu
 }
 
 function BlogEngagementReport({ engagement }) {
+  const metrics = engagement ?? {
+    commenters: 0,
+    comments: 0,
+    likes: 0,
+    saves: 0,
+    totalInteractions: 0,
+    posts: [],
+  }
+  const posts = Array.isArray(metrics.posts) ? metrics.posts : []
+
   return <section aria-labelledby="blog-engagement-heading" className="space-y-4">
     <div>
       <h3 id="blog-engagement-heading" className="flex items-center gap-2 text-lg font-semibold text-gray-900 dark:text-white"><Activity size={22} className="text-brand-500" aria-hidden="true" />Tương tác bài viết</h3>
       <p className="mt-1 text-sm text-gray-500">Thống kê bình luận, lượt thích và lượt lưu phát sinh trong kỳ đã chọn.</p>
+      {!engagement && <p role="alert" className="mt-2 rounded-lg bg-warning-50 px-3 py-2 text-sm text-warning-700 dark:bg-warning-500/10 dark:text-warning-400">Backend chưa trả dữ liệu tương tác. Hãy cập nhật và khởi động lại backend để xem số liệu mới nhất.</p>}
     </div>
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
-      <MetricCard label="Người bình luận" value={number.format(engagement.commenters)} note="Mỗi người chỉ tính một lần trong kỳ" icon={Users} />
-      <MetricCard label="Bình luận" value={number.format(engagement.comments)} note="Tổng số bình luận trong kỳ" icon={MessageCircle} />
-      <MetricCard label="Lượt thích" value={number.format(engagement.likes)} tone="error" icon={Heart} />
-      <MetricCard label="Lượt lưu" value={number.format(engagement.saves)} tone="warning" icon={Bookmark} />
-      <MetricCard label="Tổng tương tác" value={number.format(engagement.totalInteractions)} note="Bình luận + thích + lưu" tone="success" icon={Activity} />
+      <MetricCard label="Người bình luận" value={number.format(metrics.commenters ?? 0)} note="Mỗi người chỉ tính một lần trong kỳ" icon={Users} />
+      <MetricCard label="Bình luận" value={number.format(metrics.comments ?? 0)} note="Tổng số bình luận trong kỳ" icon={MessageCircle} />
+      <MetricCard label="Lượt thích" value={number.format(metrics.likes ?? 0)} tone="error" icon={Heart} />
+      <MetricCard label="Lượt lưu" value={number.format(metrics.saves ?? 0)} tone="warning" icon={Bookmark} />
+      <MetricCard label="Tổng tương tác" value={number.format(metrics.totalInteractions ?? 0)} note="Bình luận + thích + lưu" tone="success" icon={Activity} />
     </div>
     <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/3">
       <div className="border-b border-gray-100 p-5 dark:border-gray-800">
         <h4 className="flex items-center gap-2 font-semibold text-gray-900 dark:text-white"><FileText size={20} aria-hidden="true" />Tương tác theo từng bài viết</h4>
-        <p className="mt-1 text-sm text-gray-500">{number.format(engagement.posts.length)} bài viết có tương tác, sắp xếp theo tổng tương tác giảm dần.</p>
+        <p className="mt-1 text-sm text-gray-500">{number.format(posts.length)} bài viết có tương tác, sắp xếp theo tổng tương tác giảm dần.</p>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-200 text-left text-sm">
@@ -69,7 +80,7 @@ function BlogEngagementReport({ engagement }) {
             <th scope="col" className="px-5 py-3 text-right">Tổng tương tác</th>
           </tr></thead>
           <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-            {engagement.posts.map(post => <tr key={post.blogId} className="hover:bg-gray-50 dark:hover:bg-gray-900/50">
+            {posts.map(post => <tr key={post.blogId} className="hover:bg-gray-50 dark:hover:bg-gray-900/50">
               <td className="max-w-80 px-5 py-4">
                 {post.status === 'PUBLISHED'
                   ? <Link to={`/floral-care/${encodeURIComponent(post.blogId)}`} className="inline-flex items-center gap-2 font-medium text-brand-600 hover:underline dark:text-brand-400"><span className="break-words">{post.title}</span><ExternalLink size={15} className="shrink-0" aria-hidden="true" /></Link>
@@ -82,7 +93,7 @@ function BlogEngagementReport({ engagement }) {
               <td className="px-5 py-4 text-right text-warning-600 dark:text-warning-400">{number.format(post.saves)}</td>
               <td className="px-5 py-4 text-right font-semibold text-brand-600 dark:text-brand-400">{number.format(post.totalInteractions)}</td>
             </tr>)}
-            {engagement.posts.length === 0 && <tr><td colSpan={6} className="px-5 py-10 text-center text-gray-500"><MessageCircle size={32} className="mx-auto mb-3 text-gray-400" aria-hidden="true" />Chưa có tương tác với bài viết trong kỳ này.</td></tr>}
+            {posts.length === 0 && <tr><td colSpan={6} className="px-5 py-10 text-center text-gray-500"><MessageCircle size={32} className="mx-auto mb-3 text-gray-400" aria-hidden="true" />Chưa có tương tác với bài viết trong kỳ này.</td></tr>}
           </tbody>
         </table>
       </div>
