@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router'
+import { Activity, Bookmark, ChartColumn, ExternalLink, FileText, Heart, MessageCircle, RotateCcw, ShoppingBag, Truck, Users, Wallet } from 'lucide-react'
 import PageMeta from '../components/common/PageMeta'
 import PageBreadCrumb from '../components/common/PageBreadCrumb'
 import { shopReportService } from '../services/shopReportService'
@@ -21,7 +23,7 @@ const currentValue = period => {
 
 const periodLabels = { DAY: 'Theo ngày', MONTH: 'Theo tháng', YEAR: 'Theo năm' }
 
-function MetricCard({ label, value, note, tone = 'brand' }) {
+function MetricCard({ label, value, note, tone = 'brand', icon: Icon = ChartColumn }) {
   const tones = {
     brand: 'bg-brand-50 text-brand-600 dark:bg-brand-500/10 dark:text-brand-400',
     success: 'bg-success-50 text-success-600 dark:bg-success-500/10 dark:text-success-400',
@@ -29,10 +31,64 @@ function MetricCard({ label, value, note, tone = 'brand' }) {
     error: 'bg-error-50 text-error-600 dark:bg-error-500/10 dark:text-error-400',
   }
   return <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-white/3">
-    <span className={`inline-flex rounded-lg px-2.5 py-1 text-xs font-semibold ${tones[tone]}`}>{label}</span>
+    <div className="flex items-center gap-3">
+      <span className={`inline-flex shrink-0 rounded-xl p-2.5 ${tones[tone]}`}><Icon size={22} aria-hidden="true" /></span>
+      <span className="text-sm font-medium text-gray-600 dark:text-gray-300">{label}</span>
+    </div>
     <p className="mt-4 text-2xl font-bold text-gray-900 dark:text-white">{value}</p>
     {note && <p className="mt-1 text-xs text-gray-500">{note}</p>}
   </div>
+}
+
+function BlogEngagementReport({ engagement }) {
+  return <section aria-labelledby="blog-engagement-heading" className="space-y-4">
+    <div>
+      <h3 id="blog-engagement-heading" className="flex items-center gap-2 text-lg font-semibold text-gray-900 dark:text-white"><Activity size={22} className="text-brand-500" aria-hidden="true" />Tương tác bài viết</h3>
+      <p className="mt-1 text-sm text-gray-500">Thống kê bình luận, lượt thích và lượt lưu phát sinh trong kỳ đã chọn.</p>
+    </div>
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <MetricCard label="Người bình luận" value={number.format(engagement.commenters)} note="Mỗi người chỉ tính một lần trong kỳ" icon={Users} />
+      <MetricCard label="Bình luận" value={number.format(engagement.comments)} note="Tổng số bình luận trong kỳ" icon={MessageCircle} />
+      <MetricCard label="Lượt thích" value={number.format(engagement.likes)} tone="error" icon={Heart} />
+      <MetricCard label="Lượt lưu" value={number.format(engagement.saves)} tone="warning" icon={Bookmark} />
+      <MetricCard label="Tổng tương tác" value={number.format(engagement.totalInteractions)} note="Bình luận + thích + lưu" tone="success" icon={Activity} />
+    </div>
+    <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/3">
+      <div className="border-b border-gray-100 p-5 dark:border-gray-800">
+        <h4 className="flex items-center gap-2 font-semibold text-gray-900 dark:text-white"><FileText size={20} aria-hidden="true" />Tương tác theo từng bài viết</h4>
+        <p className="mt-1 text-sm text-gray-500">{number.format(engagement.posts.length)} bài viết có tương tác, sắp xếp theo tổng tương tác giảm dần.</p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-200 text-left text-sm">
+          <thead className="bg-gray-50 text-xs uppercase text-gray-500 dark:bg-gray-900"><tr>
+            <th scope="col" className="px-5 py-3">Bài viết</th>
+            <th scope="col" className="px-5 py-3 text-right">Người bình luận</th>
+            <th scope="col" className="px-5 py-3 text-right">Bình luận</th>
+            <th scope="col" className="px-5 py-3 text-right">Lượt thích</th>
+            <th scope="col" className="px-5 py-3 text-right">Lượt lưu</th>
+            <th scope="col" className="px-5 py-3 text-right">Tổng tương tác</th>
+          </tr></thead>
+          <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+            {engagement.posts.map(post => <tr key={post.blogId} className="hover:bg-gray-50 dark:hover:bg-gray-900/50">
+              <td className="max-w-80 px-5 py-4">
+                {post.status === 'PUBLISHED'
+                  ? <Link to={`/floral-care/${encodeURIComponent(post.blogId)}`} className="inline-flex items-center gap-2 font-medium text-brand-600 hover:underline dark:text-brand-400"><span className="break-words">{post.title}</span><ExternalLink size={15} className="shrink-0" aria-hidden="true" /></Link>
+                  : <span className="font-medium break-words text-gray-900 dark:text-white">{post.title}</span>}
+                <p className="mt-1 text-xs text-gray-500">{{ PUBLISHED: 'Đã xuất bản', DRAFT: 'Bản nháp', HIDDEN: 'Đã ẩn' }[post.status] || post.status}</p>
+              </td>
+              <td className="px-5 py-4 text-right">{number.format(post.commenters)}</td>
+              <td className="px-5 py-4 text-right">{number.format(post.comments)}</td>
+              <td className="px-5 py-4 text-right text-error-600 dark:text-error-400">{number.format(post.likes)}</td>
+              <td className="px-5 py-4 text-right text-warning-600 dark:text-warning-400">{number.format(post.saves)}</td>
+              <td className="px-5 py-4 text-right font-semibold text-brand-600 dark:text-brand-400">{number.format(post.totalInteractions)}</td>
+            </tr>)}
+            {engagement.posts.length === 0 && <tr><td colSpan={6} className="px-5 py-10 text-center text-gray-500"><MessageCircle size={32} className="mx-auto mb-3 text-gray-400" aria-hidden="true" />Chưa có tương tác với bài viết trong kỳ này.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      <p className="border-t border-gray-100 px-5 py-4 text-xs leading-5 text-gray-500 dark:border-gray-800">Một người có thể bình luận ở nhiều bài nên tổng số người ở từng bài có thể lớn hơn số người bình luận toàn kỳ. Chỉ tính bình luận, lượt thích và lượt lưu còn tồn tại tại thời điểm xem báo cáo.</p>
+    </div>
+  </section>
 }
 
 export function ShopReportSummary({ shop }) {
@@ -51,10 +107,10 @@ export function ShopReportSummary({ shop }) {
   if (!report) return <p role="status" className="mb-8 text-sm text-gray-500">Đang tải thống kê tháng này…</p>
 
   return <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-    <MetricCard label="Doanh thu thực nhận tháng" value={currency.format(report.revenue.netRevenue)} note={`Đã thu ${currency.format(report.revenue.grossReceived)}`} tone="success" />
-    <MetricCard label="Tổng đơn tháng" value={number.format(report.orders.total)} note={`${number.format(report.orders.completed)} đơn hoàn thành`} />
-    <MetricCard label="Đang giao" value={number.format(report.orders.delivering)} note={`${number.format(report.orders.processing)} đơn đang xử lý`} tone="warning" />
-    <MetricCard label="Khách đang theo dõi" value={number.format(report.followers.current)} note={`+${number.format(report.followers.newInPeriod)} trong tháng`} />
+    <MetricCard label="Doanh thu thực nhận tháng" value={currency.format(report.revenue.netRevenue)} note={`Đã thu ${currency.format(report.revenue.grossReceived)}`} tone="success" icon={Wallet} />
+    <MetricCard label="Tổng đơn tháng" value={number.format(report.orders.total)} note={`${number.format(report.orders.completed)} đơn hoàn thành`} icon={ShoppingBag} />
+    <MetricCard label="Đang giao" value={number.format(report.orders.delivering)} note={`${number.format(report.orders.processing)} đơn đang xử lý`} tone="warning" icon={Truck} />
+    <MetricCard label="Khách đang theo dõi" value={number.format(report.followers.current)} note={`+${number.format(report.followers.newInPeriod)} trong tháng`} icon={Users} />
   </div>
 }
 
@@ -68,6 +124,8 @@ export default function ShopReportsView({ shop }) {
   useEffect(() => {
     let active = true
     setLoading(true)
+    setReport(null)
+    setError('')
     shopReportService.get(shop.id, period, value)
       .then(result => { if (active) { setReport(result); setError('') } })
       .catch(requestError => { if (active) setError(requestError.message) })
@@ -93,8 +151,8 @@ export default function ShopReportsView({ shop }) {
     <section className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/3">
       <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
         <div>
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white">Báo cáo của {shop.name}</h2>
-          <p className="mt-1 text-sm text-gray-500">Theo dõi đơn hàng, doanh thu, người theo dõi và tình trạng hoàn sản phẩm.</p>
+          <h2 className="flex items-center gap-2 text-xl font-bold text-gray-900 dark:text-white"><ChartColumn size={24} className="text-brand-500" aria-hidden="true" />Báo cáo của {shop.name}</h2>
+          <p className="mt-1 text-sm text-gray-500">Theo dõi đơn hàng, doanh thu, người theo dõi, tương tác bài viết và tình trạng hoàn sản phẩm.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {Object.entries(periodLabels).map(([key, label]) => <button key={key} type="button" onClick={() => changePeriod(key)} className={`rounded-lg px-3 py-2 text-sm font-medium ${period === key ? 'bg-brand-500 text-white' : 'border border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800'}`}>{label}</button>)}
@@ -111,12 +169,14 @@ export default function ShopReportsView({ shop }) {
       <section aria-labelledby="report-summary-heading">
         <h3 id="report-summary-heading" className="mb-3 text-lg font-semibold text-gray-900 dark:text-white">Tổng quan</h3>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <MetricCard label="Khách đang theo dõi" value={number.format(report.followers.current)} note={`+${number.format(report.followers.newInPeriod)} trong kỳ`} />
-          <MetricCard label="Tổng số đơn" value={number.format(report.orders.total)} note={`${number.format(report.orders.completed)} đơn hoàn thành`} />
-          <MetricCard label="Doanh thu thực nhận" value={currency.format(report.revenue.netRevenue)} note="Thu thành công trừ tiền đã hoàn" tone="success" />
-          <MetricCard label="Sản phẩm hoàn trả" value={number.format(report.products.reduce((sum, product) => sum + product.returnedQuantity, 0))} note={`${number.format(report.orders.refunded)} đơn hoàn trả`} tone="error" />
+          <MetricCard label="Khách đang theo dõi" value={number.format(report.followers.current)} note={`+${number.format(report.followers.newInPeriod)} trong kỳ`} icon={Users} />
+          <MetricCard label="Tổng số đơn" value={number.format(report.orders.total)} note={`${number.format(report.orders.completed)} đơn hoàn thành`} icon={ShoppingBag} />
+          <MetricCard label="Doanh thu thực nhận" value={currency.format(report.revenue.netRevenue)} note="Thu thành công trừ tiền đã hoàn" tone="success" icon={Wallet} />
+          <MetricCard label="Sản phẩm hoàn trả" value={number.format(report.products.reduce((sum, product) => sum + product.returnedQuantity, 0))} note={`${number.format(report.orders.refunded)} đơn hoàn trả`} tone="error" icon={RotateCcw} />
         </div>
       </section>
+
+      <BlogEngagementReport engagement={report.blogEngagement} />
 
       <section className="grid gap-6 xl:grid-cols-2">
         <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/3">
