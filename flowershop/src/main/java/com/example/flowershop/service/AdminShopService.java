@@ -3,6 +3,7 @@ package com.example.flowershop.service;
 import com.example.flowershop.dto.account.ShopResponse;
 import com.example.flowershop.entity.Shop;
 import com.example.flowershop.entity.enums.*;
+import com.example.flowershop.repository.AddressRepository;
 import com.example.flowershop.repository.ShopRepository;
 import org.springframework.data.domain.*;
 import org.springframework.data.jpa.domain.Specification;
@@ -16,7 +17,11 @@ import java.util.*;
 @Transactional(readOnly=true)
 public class AdminShopService {
     private final ShopRepository shops;
-    public AdminShopService(ShopRepository shops) { this.shops=shops; }
+    private final AddressRepository addresses;
+    public AdminShopService(ShopRepository shops,AddressRepository addresses) { this.shops=shops; this.addresses=addresses; }
+    private ShopResponse withAddress(Shop s) {
+        return ShopResponse.from(s,addresses.findByShopIdAndUserIsNullOrderByCreatedDateAscIdAsc(s.getId()).stream().findFirst().orElse(null));
+    }
     public record ShopPage(List<ShopResponse> content,int page,int size,long totalElements,int totalPages) {}
     public ShopPage list(String q,String status,int page,int size) {
         if (page<0 || page>100000 || size<1 || size>100 || q.length()>100)
@@ -35,9 +40,9 @@ public class AdminShopService {
             return cb.and(predicates.toArray(jakarta.persistence.criteria.Predicate[]::new));
         };
         var result=shops.findAll(spec,PageRequest.of(page,size,Sort.by(Sort.Order.desc("createdDate"),Sort.Order.asc("id"))));
-        return new ShopPage(result.getContent().stream().map(ShopResponse::from).toList(),page,size,result.getTotalElements(),result.getTotalPages());
+        return new ShopPage(result.getContent().stream().map(this::withAddress).toList(),page,size,result.getTotalElements(),result.getTotalPages());
     }
-    public ShopResponse detail(String id) { return ShopResponse.from(shops.findById(id).orElseThrow(AdminShopService::missing)); }
+    public ShopResponse detail(String id) { return withAddress(shops.findById(id).orElseThrow(AdminShopService::missing)); }
     @Transactional
     public ShopResponse transition(String id,String action,String actor) {
         Shop shop=shops.findForUpdate(id).orElseThrow(AdminShopService::missing);
@@ -56,7 +61,7 @@ public class AdminShopService {
         }
         shop.setStatus(target); shop.setLastModifyBy(actor);
         shops.flush();
-        return ShopResponse.from(shop);
+        return withAddress(shop);
     }
     private static ResponseStatusException missing() { return new ResponseStatusException(HttpStatus.NOT_FOUND,"Không tìm thấy cửa hàng."); }
 }
