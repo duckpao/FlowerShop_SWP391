@@ -3,8 +3,10 @@ import { useState } from 'react';
 import { validateAuth } from '../models/authValidation';
 import AccountView from "./AccountView";
 import GoogleSignInButton from '../components/auth/GoogleSignInButton';
+import GhnAddressPicker from '../components/GhnAddressPicker';
 export default function AuthView({
   registrationRole, setRegistrationRole,
+  shopDescription, setShopDescription, shopAddress, setShopAddress,
   fieldErrors = {}, captchaRequired, captcha, captchaAnswer, setCaptchaAnswer, reloadCaptcha,
   page,
   email,
@@ -30,7 +32,9 @@ export default function AuthView({
   googleLogin,
 }) {
   const [touched, setTouched] = useState({})
-  const errors = validateAuth(page, {email, fullName, password, confirmation, otp})
+  const isInvitation = !!new URLSearchParams(window.location.search).get('next')?.startsWith('/invitations/accept?')
+  const isShopRegistration = page === 'register' && registrationRole === 'SHOP' && !isInvitation
+  const errors = validateAuth(page, {email, fullName, password, confirmation, otp, registrationRole: isShopRegistration ? 'SHOP' : 'CUSTOMER', shopDescription, shopAddress})
   const field = name => ({id: 'auth-' + name, onBlur: () => setTouched(x => ({...x, [name]: true})), 'aria-invalid': !!(fieldErrors[name] || touched[name] && errors[name]), 'aria-describedby': 'auth-' + name + '-error'})
   const feedback = name => <p id={'auth-' + name + '-error'} className="text-sm text-error-500" aria-live="polite">{(touched[name] && errors[name]) || fieldErrors[name] || ''}</p>
   if (page === "account" && user)
@@ -110,8 +114,44 @@ export default function AuthView({
                     <option value="SHOP">Manager shop — Quản lý cửa hàng</option>
                   </select>
                   <p className="text-sm text-gray-500">
-                    {registrationRole === 'SHOP' ? 'Sau khi xác thực email, bạn có thể đăng nhập vào trang quản lý cửa hàng. Cửa hàng mới cần được quản trị viên duyệt.' : 'Đăng nhập để mua sắm và quản lý tài khoản khách hàng.'}
+                    {registrationRole === 'SHOP' ? 'Sau khi xác thực email, bạn có thể đăng nhập vào trang quản lý cửa hàng. Cửa hàng đang chờ quản trị viên duyệt, mô tả và địa chỉ bên dưới sẽ được gửi cho admin xem xét.' : 'Đăng nhập để mua sắm và quản lý tài khoản khách hàng.'}
                   </p>
+                </div>
+              )}
+              {isShopRegistration && (
+                <div className="space-y-4 rounded-lg border border-gray-200 p-4 dark:border-white/10">
+                  <div className="space-y-1.5">
+                    <label htmlFor="auth-shopDescription" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Mô tả cửa hàng<span className="text-error-500" aria-hidden="true"> *</span>
+                    </label>
+                    <textarea
+                      className="block w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 placeholder-gray-400 focus:border-brand-500 focus:ring-3 focus:ring-brand-500/10 dark:border-white/10 dark:bg-gray-800 dark:text-white"
+                      rows={3} required maxLength={5000}
+                      placeholder="Giới thiệu ngắn về cửa hàng, sản phẩm kinh doanh..."
+                      {...field('shopDescription')} value={shopDescription}
+                      onChange={e => setShopDescription(e.target.value)}
+                    />
+                    {feedback('shopDescription')}
+                  </div>
+                  <div className="space-y-1.5">
+                    <span className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Địa chỉ cửa hàng<span className="text-error-500" aria-hidden="true"> *</span>
+                    </span>
+                    <GhnAddressPicker value={shopAddress} onChange={setShopAddress} />
+                    {feedback('shopAddress')}
+                  </div>
+                  <div className="space-y-1.5">
+                    <label htmlFor="auth-shopAddressLine" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Số nhà, tên đường<span className="text-error-500" aria-hidden="true"> *</span>
+                    </label>
+                    <input
+                      className="block w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 placeholder-gray-400 focus:border-brand-500 focus:ring-3 focus:ring-brand-500/10 dark:border-white/10 dark:bg-gray-800 dark:text-white"
+                      required maxLength={255} autoComplete="street-address"
+                      {...field('shopAddressLine')} value={shopAddress.addressLine}
+                      onChange={e => setShopAddress({ ...shopAddress, addressLine: e.target.value })}
+                    />
+                    {feedback('shopAddressLine')}
+                  </div>
                 </div>
               )}
               {page === "register" && (

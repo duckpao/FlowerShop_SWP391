@@ -101,6 +101,12 @@ CREATE TABLE Pending_Registrations (
     otp_hash VARCHAR(255) NOT NULL,
     shop_name VARCHAR(255),
     shop_description TEXT,
+    shop_address_line VARCHAR(255),
+    shop_city VARCHAR(100),
+    shop_district VARCHAR(100),
+    shop_ward VARCHAR(100),
+    shop_ghn_ward_code VARCHAR(20),
+    shop_ghn_district_id INT,
     issued_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     expires_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     window_start TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -745,8 +751,8 @@ INSERT INTO Customer_Occasions (id, customer_id, title, occasion_date, reminder_
 INSERT INTO Otp_Challenges (id, user_id, purpose, code_hash, issued_at, expires_at, window_start, failed_attempts, send_count) VALUES
 ('otp-01', 'user-customer-01', 'RESET_PASSWORD', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', '2026-09-27 09:00:00', '2026-09-27 09:05:00', '2026-09-27 09:00:00', 0, 1);
 
-INSERT INTO Pending_Registrations (email, full_name, password_hash, otp_hash, shop_name, shop_description, issued_at, expires_at, window_start, failed_attempts, send_count) VALUES
-('hoaxinh.owner@gmail.com', 'Đỗ Thị Hoa', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', 'Hoa Xinh Corner', 'Tiệm hoa nhỏ chuyên hoa cưới và hoa sự kiện.', '2026-09-27 08:00:00', '2026-09-27 08:05:00', '2026-09-27 08:00:00', 0, 1);
+INSERT INTO Pending_Registrations (email, full_name, password_hash, otp_hash, shop_name, shop_description, shop_address_line, shop_city, shop_district, shop_ward, shop_ghn_ward_code, shop_ghn_district_id, issued_at, expires_at, window_start, failed_attempts, send_count) VALUES
+('hoaxinh.owner@gmail.com', 'Đỗ Thị Hoa', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', 'Hoa Xinh Corner', 'Tiệm hoa nhỏ chuyên hoa cưới và hoa sự kiện.', 'Số 5, Đường Láng', 'Hà Nội', 'Đống Đa', 'Láng Thượng', '1A0101', 1482, '2026-09-27 08:00:00', '2026-09-27 08:05:00', '2026-09-27 08:00:00', 0, 1);
 
 INSERT INTO Auth_Sessions (id, user_id, refresh_hash, expires_at, revoked) VALUES
 ('sess-01', 'user-customer-01', '120c7fd6bccd463cc455a83865ca1e395c080dfbf1c3068fd16739cda0e2e381', '2026-10-04 09:00:00', FALSE);

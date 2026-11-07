@@ -24,6 +24,7 @@ public class AuthService {
     private final ApplicationEventPublisher events;
     private final ShopRepository shops;
     private final CloudinaryService cloudinary;
+    private final AddressRepository addresses;
     private final com.example.flowershop.security.CaptchaService captcha;
 
     @Transactional
@@ -35,10 +36,18 @@ public class AuthService {
     public void registerShop(com.example.flowershop.dto.auth.ShopRegisterRequest request) {
         String name = request.shopName() == null || request.shopName().isBlank()
                 ? "Cửa hàng của " + request.account().fullName().strip() : request.shopName().strip();
-        register(request.account(), name, request.description() == null ? "" : request.description().strip());
+        var address = request.address();
+        if (request.description() == null || request.description().isBlank() || address == null)
+            throw new IllegalArgumentException("Manager shop bắt buộc nhập mô tả và địa chỉ cửa hàng.");
+        register(request.account(), name, request.description().strip(), address);
     }
 
     private void register(RegisterRequest request,String shopName,String description) {
+        register(request, shopName, description, null);
+    }
+
+    private void register(RegisterRequest request,String shopName,String description,
+                          com.example.flowershop.dto.auth.ShopRegisterRequest.ShopAddress address) {
         String email = normalize(request.email());
         if (request.password().getBytes(StandardCharsets.UTF_8).length > 72)
             throw new IllegalArgumentException("Mật khẩu không được vượt quá 72 byte UTF-8.");
@@ -59,6 +68,12 @@ public class AuthService {
         registration.setFullName(request.fullName().strip());
         registration.setShopName(shopName);
         registration.setShopDescription(description);
+        registration.setShopAddressLine(address == null ? null : address.addressLine().strip());
+        registration.setShopCity(address == null ? null : address.city().strip());
+        registration.setShopDistrict(address == null ? null : address.district().strip());
+        registration.setShopWard(address == null ? null : address.ward().strip());
+        registration.setShopGhnWardCode(address == null ? null : address.ghnWardCode().strip());
+        registration.setShopGhnDistrictId(address == null ? null : address.ghnDistrictId());
         registration.setPasswordHash(encoder.encode(request.password()));
         issue(registration);
     }
@@ -122,8 +137,14 @@ public class AuthService {
                 .passwordHash(p.getPasswordHash()).role(p.getShopName()==null ? UserRole.CUSTOMER : UserRole.SHOP)
                 .status(UserStatus.ACTIVE).isEmailVerified(true).createdBy(id).build();
         users.saveAndFlush(user);
-        if(p.getShopName()!=null) shops.saveAndFlush(Shop.builder().id(UUID.randomUUID().toString()).owner(user)
-                .name(p.getShopName()).description(p.getShopDescription()).status(ShopStatus.PENDING).createdBy(id).build());
+        if(p.getShopName()!=null) {
+            Shop shop = shops.saveAndFlush(Shop.builder().id(UUID.randomUUID().toString()).owner(user)
+                    .name(p.getShopName()).description(p.getShopDescription()).status(ShopStatus.PENDING).createdBy(id).build());
+            if(p.getShopAddressLine()!=null) addresses.save(Address.builder().id(UUID.randomUUID().toString()).shop(shop)
+                    .addressLine(p.getShopAddressLine()).city(p.getShopCity()).district(p.getShopDistrict()).ward(p.getShopWard())
+                    .ghnWardCode(p.getShopGhnWardCode()).ghnDistrictId(p.getShopGhnDistrictId())
+                    .isDefault(true).addressType("OFFICE").createdBy(id).build());
+        }
         pending.delete(p);
         pending.flush();
         events.publishEvent(new AuthMailEvent(id, user.getEmail(), AuthMailEvent.Kind.WELCOME, null));

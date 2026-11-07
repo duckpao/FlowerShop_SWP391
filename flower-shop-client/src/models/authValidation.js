@@ -27,6 +27,13 @@ export function validateAuth(page, values) {
     if (!values.confirmation) errors.confirmation = 'Vui lòng nhập lại mật khẩu.'
     else if (values.password !== values.confirmation) errors.confirmation = 'Mật khẩu xác nhận không khớp.'
   }
-  if (['otp', 'reset'].includes(page) && !/^\d{6}$/.test(values.otp)) errors.otp = 'Vui lòng nhập đủ 6 chữ số OTP.'
+  if (page === 'register' && values.registrationRole === 'SHOP') {
+    if (!values.shopDescription?.trim()) errors.shopDescription = 'Vui lòng nhập mô tả cửa hàng.'
+    else if (values.shopDescription.trim().length > 5000) errors.shopDescription = 'Mô tả tối đa 5000 ký tự.'
+    const a = values.shopAddress || {}
+    if (!a.city || !a.district || !a.ward || !a.ghnWardCode || !a.ghnDistrictId) errors.shopAddress = 'Vui lòng chọn đầy đủ Tỉnh/Thành phố, Quận/Huyện, Phường/Xã.'
+    if (!a.addressLine?.trim()) errors.shopAddressLine = 'Vui lòng nhập tên đường, tòa nhà, số nhà.'
+  }
+  if (['otp', 'reset'].includes(page) &&!/^\d{6}$/.test(values.otp)) errors.otp = 'Vui lòng nhập đủ 6 chữ số OTP.'
   return errors
 }

@@ -159,6 +159,14 @@ export default function AdminShopsView() {
                   <span className="font-medium text-gray-900 dark:text-white text-right ml-4">{c.selected.description || "Chưa có mô tả"}</span>
                 </div>
                 <div className="flex justify-between">
+                  <span className="text-gray-500 dark:text-gray-400">Địa chỉ:</span>
+                  <span className="font-medium text-gray-900 dark:text-white text-right ml-4">
+                    {c.selected.address
+                      ? [c.selected.address.addressLine, c.selected.address.ward, c.selected.address.district, c.selected.address.city].filter(Boolean).join(', ')
+                      : "Chưa có địa chỉ"}
+                  </span>
+                </div>
+                <div className="flex justify-between">
                   <span className="text-gray-500 dark:text-gray-400">Trạng thái:</span>
                   <Badge size="sm" color={statusColors[c.selected.status] || 'primary'}>
                     {labels[c.selected.status] || c.selected.status}
