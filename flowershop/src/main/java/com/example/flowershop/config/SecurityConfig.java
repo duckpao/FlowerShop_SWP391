@@ -36,6 +36,7 @@ public class SecurityConfig {
                         org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter.class)
 
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers(HttpMethod.GET, "/api/public/featured-products").permitAll()
                         .requestMatchers(HttpMethod.GET, "/custom-orders", "/custom-orders/new", "/api/public/custom-orders/suggestions", "/api/public/custom-orders/options").permitAll()
                         .requestMatchers(HttpMethod.GET, "/shops", "/following-shops", "/favorite-shops").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/public/products/*/reviews").permitAll()

@@ -30,6 +30,7 @@ import OccasionsView from './views/OccasionsView'
 import ChatView from './views/ChatView'
 import ShopDirectoryView from './views/ShopDirectoryView'
 import CustomFlowerOrderView from './views/CustomFlowerOrderView'
+import ShopSubscriptionView from './views/ShopSubscriptionView'
 import CustomerCustomOrdersView from './views/CustomerCustomOrdersView'
 import FloralCareView from './views/FloralCareView'
 import FloralCareDetailView from './views/FloralCareDetailView'
@@ -89,6 +90,7 @@ function AppRouterContent() {
             />
 
             <Route path="/cart" element={<CartPageWrapper />} />
+            <Route path="/shop-admin/subscription" element={<ShopSubscriptionView auth={controller} />} />
             <Route path="/admin/vouchers" element={<VoucherManagementView />} />
 <Route path="/shop-admin/vouchers" element={<VoucherManagementView />} />
             <Route path="/checkout" element={controller.busy ? <p role="status">Đang kiểm tra đăng nhập…</p> : <CheckoutPage />} />

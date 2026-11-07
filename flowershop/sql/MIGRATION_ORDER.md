@@ -1,5 +1,11 @@
 # Migration sau khi gộp master và feature/dung
 
+## Gói đăng ký shop
+
+Sau schema đã gộp, áp dụng thêm `030_shop_subscriptions.sql` để có Free/Pro, giao dịch mua gói, lượt tạo sản phẩm, sản phẩm nổi bật và lịch sử nhắc hạn.
+File này đã được đồng bộ vào `database.sql`. Chi tiết tại `../SHOP_SUBSCRIPTIONS.md`.
+Áp dụng tiếp `031_admin_pro_activation.sql` để lưu lịch sử admin kích hoạt Pro và đối chiếu giao dịch; cũng đã có trong `database.sql`.
+
 Không chạy theo số prefix đơn thuần: các nhánh đã phát hành nhiều file trùng số. Giữ nguyên tên file lịch sử để đối chiếu database đã cập nhật; mỗi file dưới đây là một migration riêng, không chọn một file thay cho file còn lại chỉ vì trùng số.
 
 ## Database local đã có dữ liệu

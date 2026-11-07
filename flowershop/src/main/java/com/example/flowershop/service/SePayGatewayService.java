@@ -268,6 +268,37 @@ public class SePayGatewayService {
      * Thứ tự field gửi đi phải trùng thứ tự ký (SDK SePay ký theo thứ tự field của form), nên dùng LinkedHashMap.
      * success/error/cancel URL kèm invoice_number để các trang kết quả FE biết poll giao dịch nào.
      */
+    public record SubscriptionCheckout(String checkoutUrl, Map<String,String> fields) {}
+    public record CapturedInvoice(String invoiceNumber, BigDecimal amount, String transactionNo) {}
+
+    /** Subscription billing reuses the configured gateway, without creating flower Orders/Payments. */
+    public SubscriptionCheckout subscriptionCheckout(String invoice, BigDecimal amount, String ownerId, String returnUrl) {
+        if (secretKey == null || secretKey.isBlank() || merchantId == null || merchantId.isBlank())
+            throw ApiException.badRequest("Cổng thanh toán chưa được cấu hình.");
+        var fields = signedCheckoutFields(invoice, amount.longValueExact(), "Gia han FlowerShop Pro", ownerId, null);
+        fields.remove("signature");
+        fields.put("success_url", returnUrl + "?invoice_number=" + invoice + "&result=success");
+        fields.put("error_url", returnUrl + "?invoice_number=" + invoice + "&result=error");
+        fields.put("cancel_url", returnUrl + "?invoice_number=" + invoice + "&result=cancel");
+        fields.put("signature", SePaySignatureUtil.generateSignature(fields, secretKey));
+        return new SubscriptionCheckout(checkoutUrl, fields);
+    }
+
+    /** Only the authenticated server-to-server SePay response can activate a subscription. */
+    public Optional<CapturedInvoice> capturedSubscriptionInvoice(String invoice) {
+        String body = callSePayApi("GET", "/v1/order/detail/" + invoice, null);
+        if (body == null) return Optional.empty();
+        try {
+            var root = objectMapper.readTree(body);
+            var data = root.has("data") && root.get("data").isObject() ? root.get("data") : root;
+            if (!"CAPTURED".equalsIgnoreCase(data.path("order_status").asText())
+                    || !invoice.equals(data.path("order_invoice_number").asText())
+                    || !"VND".equalsIgnoreCase(data.path("order_currency").asText(data.path("currency").asText()))) return Optional.empty();
+            return Optional.of(new CapturedInvoice(invoice, new BigDecimal(data.path("order_amount").asText()),
+                    data.path("order_id").asText("SEPAY-CAPTURED")));
+        } catch (Exception invalid) { return Optional.empty(); }
+    }
+
     private Map<String, String> signedCheckoutFields(String invoiceNumber, long amount, String description,
                                                      String customerId, String paymentMethod) {
         Map<String, String> fields = new LinkedHashMap<>();

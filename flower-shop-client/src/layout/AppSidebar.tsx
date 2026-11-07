@@ -46,6 +46,7 @@ const adminNavItems: NavItem[] = [
 ];
 
 const managerNavItems: NavItem[] = [
+  { name: 'Gói đăng ký Pro', path: '/shop-admin/subscription', icon: <ListIcon fontSize={24} /> },
 { name: 'Mã giảm giá của shop', path: '/shop-admin/vouchers', icon: <ListIcon fontSize={24} /> },
   { name: 'Bài chăm sóc hoa', path: '/shop-admin/blogs', icon: <PageIcon fontSize={24} /> },
   { name: 'Tổng quan', path: '/shop-admin', icon: <GridIcon fontSize={24} /> },
