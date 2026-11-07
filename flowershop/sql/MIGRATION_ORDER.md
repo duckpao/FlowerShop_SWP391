@@ -6,6 +6,10 @@ Sau schema đã gộp, áp dụng thêm `030_shop_subscriptions.sql` để có F
 File này đã được đồng bộ vào `database.sql`. Chi tiết tại `../SHOP_SUBSCRIPTIONS.md`.
 Áp dụng tiếp `031_admin_pro_activation.sql` để lưu lịch sử admin kích hoạt Pro và đối chiếu giao dịch; cũng đã có trong `database.sql`.
 
+Sau khi merge master: chạy `032_pending_shop_address_sync.sql` để thêm sáu cột địa chỉ đăng ký shop còn thiếu. File chạy lại được, thay cho việc chạy trực tiếp `016_pending_shop_address.sql` trên database đang dùng. `database.sql` đã khai báo sáu cột này cho database mới.
+
+Luồng đặt hoa mới sau merge dùng yêu cầu riêng → báo giá/mức cọc → tạo Orders khi khách chọn địa chỉ và voucher. Không chạy lại `022_custom_order_workflow.sql` để chuyển các yêu cầu mới vào Orders trước bước đặt cọc. Các đơn đã chuyển theo luồng cũ vẫn được giữ và xử lý tiếp.
+
 Không chạy theo số prefix đơn thuần: các nhánh đã phát hành nhiều file trùng số. Giữ nguyên tên file lịch sử để đối chiếu database đã cập nhật; mỗi file dưới đây là một migration riêng, không chọn một file thay cho file còn lại chỉ vì trùng số.
 
 ## Database local đã có dữ liệu

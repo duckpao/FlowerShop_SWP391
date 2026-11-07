@@ -2,6 +2,7 @@ import { useSidebar } from "../context/SidebarContext";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useLocation } from "react-router";
+import { ChartColumn, Flower2, LayoutDashboard, MessagesSquare, NotebookPen, Package, ShoppingBag, Store, Users } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { managerShopService } from "../services/managerShopService";
 import { managerOrderService } from "../services/managerOrderService";
@@ -11,7 +12,6 @@ import {
   GridIcon,
   HorizontaLDots,
   ListIcon,
-  PageIcon,
   TableIcon,
   UserCircleIcon,
 } from "../icons";
@@ -47,15 +47,16 @@ const adminNavItems: NavItem[] = [
 
 const managerNavItems: NavItem[] = [
   { name: 'Gói đăng ký Pro', path: '/shop-admin/subscription', icon: <ListIcon fontSize={24} /> },
-{ name: 'Mã giảm giá của shop', path: '/shop-admin/vouchers', icon: <ListIcon fontSize={24} /> },
-  { name: 'Bài chăm sóc hoa', path: '/shop-admin/blogs', icon: <PageIcon fontSize={24} /> },
-  { name: 'Tổng quan', path: '/shop-admin', icon: <GridIcon fontSize={24} /> },
-  { name: 'Quản lý shop', path: '/shop-admin/shop', icon: <PageIcon fontSize={24} /> },
-  { name: 'Quản lý mặt hàng', path: '/shop-admin/products', icon: <BoxCubeIcon fontSize={24} /> },
-  { name: 'Quản lý đơn hàng', path: '/shop-admin/orders', icon: <TableIcon fontSize={24} /> },
-  { name: 'Báo cáo thống kê', path: '/shop-admin/reports', icon: <GridIcon fontSize={24} /> },
-  { name: 'Quản lý nhân sự', path: '/shop-admin/staff', icon: <UserCircleIcon fontSize={24} /> },
-  { name: 'Tin nhắn khách hàng', path: '/shop-admin/chat', icon: <ListIcon fontSize={24} /> }
+  { name: 'Mã giảm giá của shop', path: '/shop-admin/vouchers', icon: <ListIcon fontSize={24} /> },
+  { name: 'Bài chăm sóc hoa', path: '/shop-admin/blogs', icon: <NotebookPen size={24} /> },
+  { name: 'Yêu cầu đặt hoa riêng', path: '/shop-admin/custom-orders', icon: <Flower2 size={24} /> },
+  { name: 'Tổng quan', path: '/shop-admin', icon: <LayoutDashboard size={24} /> },
+  { name: 'Quản lý shop', path: '/shop-admin/shop', icon: <Store size={24} /> },
+  { name: 'Quản lý mặt hàng', path: '/shop-admin/products', icon: <Package size={24} /> },
+  { name: 'Quản lý đơn hàng', path: '/shop-admin/orders', icon: <ShoppingBag size={24} /> },
+  { name: 'Báo cáo thống kê', path: '/shop-admin/reports', icon: <ChartColumn size={24} /> },
+  { name: 'Quản lý nhân sự', path: '/shop-admin/staff', icon: <Users size={24} /> },
+  { name: 'Tin nhắn khách hàng', path: '/shop-admin/chat', icon: <MessagesSquare size={24} /> }
 ];
 
 // Phía khách không dùng sidebar nữa: menu nằm ở CategoryMenu (thanh ngang) và menu tài khoản.

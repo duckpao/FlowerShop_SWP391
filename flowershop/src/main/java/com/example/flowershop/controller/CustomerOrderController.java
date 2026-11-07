@@ -46,6 +46,13 @@ public class CustomerOrderController {
         return service.list(user.id(), page, status);
     }
 
+    /** Lịch sử giao dịch (mọi lần thanh toán) của khách. GET /api/customer/orders/transactions?page= */
+    @GetMapping("/transactions")
+    public CustomerOrderService.TransactionResults transactions(@AuthenticationPrincipal CurrentUser user,
+            @RequestParam(name = "page", defaultValue = "0") int page) {
+        return service.transactions(user.id(), page);
+    }
+
     @GetMapping("/{id}")
     public CustomerOrderService.OrderDetailResponse detail(@AuthenticationPrincipal CurrentUser user,
                                                            @PathVariable(name = "id") String id) {

@@ -27,6 +27,15 @@ public class OrderRepository extends HibernateRepository<Order> {
         return locked("e.id = :id", Map.of("id", id));
     }
 
+    public Optional<Order> findByIdAndShopIdForUpdate(String id,String shopId) {
+        return locked("e.id = :id and e.shop.id = :shopId",Map.of("id",id,"shopId",shopId));
+    }
+
+    public List<Order> findByStatusAndPaymentWindowStartBefore(OrderStatus status,LocalDateTime threshold) {
+        return list("e.status = :status and coalesce(e.paymentStartedAt,e.createdDate) <= :threshold",
+                Map.of("status",status,"threshold",threshold));
+    }
+
     public List<Order> findByCustomerIdOrderByCreatedDateDesc(String customerId) {
         return list("e.customer.id = :customerId", Map.of("customerId", customerId), Sort.by(Sort.Order.desc("createdDate"), Sort.Order.asc("id")));
     }

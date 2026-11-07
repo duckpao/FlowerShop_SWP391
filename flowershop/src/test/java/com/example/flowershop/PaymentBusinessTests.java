@@ -170,6 +170,7 @@ class PaymentBusinessTests {
     @Test
     void expiredOrderPaidAtSePayIsNotCancelled() {
         SePayGatewayService service = spy(newGateway(orders, payments, refunds, orderService));
+        when(orders.findById("order-1")).thenReturn(Optional.of(Order.builder().id("order-1").status(OrderStatus.PENDING).createdDate(LocalDateTime.now().minusSeconds(70)).build()));
         Payment payment = Payment.builder().paymentMethod(PaymentMethod.ONLINE).invoiceNumber("invoice-1")
                 .status(PaymentStatus.PENDING).build();
         when(payments.findByOrderId("order-1")).thenReturn(List.of(payment));
@@ -183,6 +184,7 @@ class PaymentBusinessTests {
     @Test
     void expiredUnpaidOrderIsCancelled() {
         SePayGatewayService service = spy(newGateway(orders, payments, refunds, orderService));
+        when(orders.findById("order-1")).thenReturn(Optional.of(Order.builder().id("order-1").status(OrderStatus.PENDING).createdDate(LocalDateTime.now().minusSeconds(70)).build()));
         Payment payment = Payment.builder().paymentMethod(PaymentMethod.ONLINE).invoiceNumber("invoice-1")
                 .status(PaymentStatus.PENDING).build();
         when(payments.findByOrderId("order-1")).thenReturn(List.of(payment));
@@ -258,9 +260,9 @@ class PaymentBusinessTests {
     }
 
     @Test
-    void awaitingDepositOlderThan24hCannotBePaid() {
-        Order old = customOrder(OrderStatus.AWAITING_DEPOSIT, "400000", "0", LocalDateTime.now().minusHours(25));
-        Order fresh = customOrder(OrderStatus.AWAITING_DEPOSIT, "400000", "0", LocalDateTime.now().minusHours(23));
+    void awaitingDepositOlderThanOneMinuteCannotBePaid() {
+        Order old = customOrder(OrderStatus.AWAITING_DEPOSIT, "400000", "0", LocalDateTime.now().minusSeconds(70));
+        Order fresh = customOrder(OrderStatus.AWAITING_DEPOSIT, "400000", "0", LocalDateTime.now().minusSeconds(50));
 
         assertThatThrownBy(() -> pay(gatewayWithCheckoutConfig(), old, PaymentType.DEPOSIT))
                 .isInstanceOf(ApiException.class);
@@ -268,17 +270,17 @@ class PaymentBusinessTests {
     }
 
     @Test
-    void schedulerExpiresAwaitingDepositUsing24hThreshold() {
+    void schedulerExpiresAwaitingDepositUsingOneMinuteThreshold() {
         SePayGatewayService gateway = mock(SePayGatewayService.class);
         var scheduler = new com.example.flowershop.scheduler.PaymentTimeoutScheduler(orders, gateway);
-        Order old = customOrder(OrderStatus.AWAITING_DEPOSIT, "400000", "0", LocalDateTime.now().minusHours(25));
+        Order old = customOrder(OrderStatus.AWAITING_DEPOSIT, "400000", "0", LocalDateTime.now().minusSeconds(70));
         old.setId("old-order");
-        when(orders.findByStatusAndCreatedDateBefore(eq(OrderStatus.PENDING), any())).thenReturn(List.of());
-        when(orders.findByStatusAndCreatedDateBefore(eq(OrderStatus.AWAITING_DEPOSIT), any())).thenAnswer(inv -> {
+        when(orders.findByStatusAndPaymentWindowStartBefore(eq(OrderStatus.PENDING), any())).thenReturn(List.of());
+        when(orders.findByStatusAndPaymentWindowStartBefore(eq(OrderStatus.AWAITING_DEPOSIT), any())).thenAnswer(inv -> {
             LocalDateTime threshold = inv.getArgument(1);
-            // ngưỡng phải khoảng 24 giờ trước: đơn 25h tuổi bị bắt, đơn 23h tuổi thì không
-            assertThat(threshold).isBefore(LocalDateTime.now().minusHours(23));
-            assertThat(threshold).isAfter(LocalDateTime.now().minusHours(25));
+            // ngưỡng phải khoảng 1 phút trước: đơn 70s tuổi bị bắt, đơn 50s tuổi thì không
+            assertThat(threshold).isBefore(LocalDateTime.now().minusSeconds(50));
+            assertThat(threshold).isAfter(LocalDateTime.now().minusSeconds(70));
             return List.of(old);
         });
 
@@ -292,11 +294,11 @@ class PaymentBusinessTests {
         SePayGatewayService service = newGateway(orders, payments, refunds, orderService);
         when(payments.findByOrderId("order-1")).thenReturn(List.of());
         when(orders.findById("order-1")).thenReturn(Optional.of(
-                customOrder(OrderStatus.AWAITING_DEPOSIT, "400000", "0", LocalDateTime.now().minusHours(25))));
+                customOrder(OrderStatus.AWAITING_DEPOSIT, "400000", "0", LocalDateTime.now().minusSeconds(70))));
 
         service.expireUnpaidOrder("order-1");
 
-        verify(orderService).cancelExpiredOrder(eq("order-1"), contains("24 giờ"));
+        verify(orderService).cancelExpiredOrder(eq("order-1"), contains("1 phút"));
     }
 
     @Test
@@ -313,13 +315,13 @@ class PaymentBusinessTests {
                 notifications,
                 mock(org.springframework.context.ApplicationEventPublisher.class), refunds);
         ReflectionTestUtils.setField(service, "entityManager", mock(EntityManager.class));
-        Order order = customOrder(OrderStatus.AWAITING_DEPOSIT, "400000", "0", LocalDateTime.now().minusHours(25));
+        Order order = customOrder(OrderStatus.AWAITING_DEPOSIT, "400000", "0", LocalDateTime.now().minusSeconds(70));
         when(orderRepo.findById(order.getId())).thenReturn(Optional.of(order));
 
         assertThat(service.cancelPendingOrder(order.getId(), "test", "SYSTEM")).isTrue();
         assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
 
-        Order paid = customOrder(OrderStatus.DEPOSIT_PAID, "400000", "0", LocalDateTime.now().minusHours(25));
+        Order paid = customOrder(OrderStatus.DEPOSIT_PAID, "400000", "0", LocalDateTime.now().minusSeconds(70));
         paid.setId("paid-order");
         when(orderRepo.findById("paid-order")).thenReturn(Optional.of(paid));
         assertThat(service.cancelPendingOrder("paid-order", "test", "SYSTEM")).isFalse();

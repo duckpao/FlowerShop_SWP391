@@ -29,7 +29,7 @@ async function describeContext(scope, type, id) {
 
 /**
  * Controller trang chat. entry mô tả cách vào trang từ URL:
- * { sessionId?, shopId? (khách), customOrderId?, productId? }.
+ * { sessionId?, shopId? (khách), customOrderId?, orderId? (shop), productId? }.
  * Khách và chủ shop dùng chung controller; khác nhau ở scope và cách mở phiên.
  */
 export function useChatController({ scope, user, entry }) {
@@ -61,9 +61,10 @@ export function useChatController({ scope, user, entry }) {
             try {
                 let list = await reloadSessions()
                 if (!active) return
-                const wantsOpen = scope.kind === 'customer' ? entry.shopId : entry.customOrderId
+                const wantsOpen = scope.kind === 'customer' ? entry.shopId : entry.customOrderId || entry.orderId
                 if (wantsOpen) {
-                    const opened = await api.open(scope.kind === 'customer' ? { shopId: entry.shopId } : { customOrderId: entry.customOrderId })
+                    const opened = await api.open(scope.kind === 'customer' ? { shopId: entry.shopId }
+                        : entry.orderId ? { orderId: entry.orderId } : { customOrderId: entry.customOrderId })
                     if (!active) return
                     if (!list.some(s => s.id === opened.id)) list = await reloadSessions()
                     setActiveId(opened.id)
@@ -78,7 +79,7 @@ export function useChatController({ scope, user, entry }) {
             }
         })()
         return () => { active = false }
-    }, [api, scope.kind, entry.shopId, entry.customOrderId, entry.productId, reloadSessions])
+    }, [api, scope.kind, entry.shopId, entry.customOrderId, entry.orderId, entry.productId, reloadSessions])
 
     useEffect(() => chatSocket.onState(setOnline), [])
 

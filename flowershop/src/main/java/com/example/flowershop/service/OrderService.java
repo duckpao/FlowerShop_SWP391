@@ -100,13 +100,118 @@ single.setShippingCouponCode(part.getShippingCouponCode()); single.setExpectedTo
     }
 
     /**
-     * Compatibility endpoint for retired separate deposit creation. New custom designs
-     * are created and quoted directly in the shared Orders workflow.
+     * Create the fulfillment order only after the shop accepts and prices a separate request.
      */
     @Transactional
     public OrderResponse makeCustomOrder(String userId, String requestId, com.example.flowershop.dto.order.MakeCustomOrderRequest request) {
-        throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.GONE,
-                "Chức năng tạo đơn đặt cọc riêng đã ngừng. Vui lòng gửi thiết kế trong luồng đặt hoa theo yêu cầu và chấp nhận báo giá trên đơn hàng.");
+        CustomOrderRequest custom = entityManager.find(CustomOrderRequest.class, requestId,
+                jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
+        if (custom == null || !custom.getCustomer().getId().equals(userId))
+            throw ApiException.notFound("Không tìm thấy yêu cầu hoa tùy chỉnh.");
+        if (custom.getStatus() != com.example.flowershop.entity.enums.CustomOrderStatus.ACCEPTED)
+            throw ApiException.badRequest("Shop chưa chấp nhận yêu cầu này.");
+        if (orderRepository.existsByCustomRequestIdAndStatusNot(requestId, OrderStatus.CANCELLED))
+            throw ApiException.badRequest("Yêu cầu này đã có đơn đặt cọc.");
+        var price = customPrice(custom);
+        BigDecimal quotedPrice = price.amount();
+        Integer depositPercent = price.depositPercent();
+
+        Shop shop = custom.getShop();
+        if (shop.getStatus() != ShopStatus.ACTIVE) throw ApiException.badRequest("Cửa hàng hiện không hoạt động.");
+        User user = custom.getCustomer();
+        Address deliveryAddress = resolveDestination(userId, request.getDeliveryAddressId());
+        BigDecimal shippingFee = quoteFee(shop, deliveryAddress);
+        BigDecimal totalAmount = quotedPrice.add(shippingFee);
+
+        Order order = orderRepository.save(Order.builder()
+                .id(UUID.randomUUID().toString())
+                .customer(user)
+                .shop(shop)
+                .deliveryAddress(deliveryAddress)
+                .recipientName(firstNonBlank(request.getRecipientName(), user.getFullName()))
+                .recipientPhone(firstNonBlank(request.getPhone(), user.getPhone()))
+                .orderType(OrderType.CUSTOM)
+                .customRequestId(requestId)
+                .subTotal(quotedPrice)
+                .shippingFee(shippingFee)
+                .totalAmount(totalAmount)
+                .depositAmount(BigDecimal.ZERO)
+                .customerNote(custom.getDescription())
+                .status(OrderStatus.AWAITING_DEPOSIT)
+                .createdBy(userId)
+                .lastModifyBy(userId)
+                .build());
+        // A custom design is not the reference catalog product: only ORDER/SHIPPING vouchers apply.
+        vouchers.apply(order,new CouponService.Context(shop.getId(),quotedPrice,shippingFee,java.util.Map.of()),
+                request.getCouponCode(),request.getShippingCouponCode());
+        if(request.getExpectedTotal()!=null && request.getExpectedTotal().compareTo(order.getTotalAmount())!=0)
+            throw ApiException.badRequest("Giá hoặc voucher đã thay đổi. Vui lòng kiểm tra lại trước khi đặt cọc.");
+        // New quotes: deposit is a percentage of flower price AFTER the order voucher.
+        // Legacy quotes without a percentage keep the existing 50% of net total fallback.
+        BigDecimal netFlowers=quotedPrice.subtract(order.getDiscountAmount()==null?BigDecimal.ZERO:order.getDiscountAmount());
+        order.setDepositAmount(depositPercent==null?BigDecimal.ZERO:netFlowers.multiply(BigDecimal.valueOf(depositPercent))
+                .divide(BigDecimal.valueOf(100),0,RoundingMode.HALF_UP));
+        // Hoa làm theo yêu cầu không có sản phẩm trong kho: một dòng giá = báo giá, kèm thiết kế khách đã gửi.
+        OrderDetail detail = orderDetailRepository.save(OrderDetail.builder()
+                .id(UUID.randomUUID().toString())
+                .order(order)
+                .customMaterials(custom.getDesiredComponents())
+                .price(quotedPrice)
+                .quantity(1)
+                .createdBy(userId)
+                .lastModifyBy(userId)
+                .build());
+
+        entityManager.flush();
+        events.publishEvent(new com.example.flowershop.event.OrderPlacedEvent(List.of(order.getId())));
+        return OrderResponse.builder()
+                .id(order.getId())
+                .status(order.getStatus().name())
+                .orderType(order.getOrderType().name())
+                .subTotal(quotedPrice)
+                .discountAmount(order.getDiscountAmount())
+                .shippingDiscountAmount(order.getShippingDiscountAmount())
+                .couponCode(order.getCouponCode())
+                .shippingCouponCode(order.getShippingCouponCode())
+                .shippingFee(shippingFee)
+                .totalAmount(order.getTotalAmount())
+                .deliveryAddressId(deliveryAddress.getId())
+                .recipientName(order.getRecipientName())
+                .recipientPhone(order.getRecipientPhone())
+                .items(List.of(OrderResponse.OrderItemResponse.builder()
+                        .id(detail.getId()).productName("Hoa đặt theo yêu cầu")
+                        .price(quotedPrice).quantity(1).itemTotal(quotedPrice).build()))
+                .createdDate(order.getCreatedDate())
+                .build();
+    }
+
+    private record CustomPrice(BigDecimal amount,Integer depositPercent) {}
+    private CustomPrice customPrice(CustomOrderRequest custom) {
+        try {
+            var design=new com.fasterxml.jackson.databind.ObjectMapper().readTree(custom.getDesiredComponents()==null?"{}":custom.getDesiredComponents());
+            BigDecimal amount=design.path("quotedPrice").isNumber()?design.path("quotedPrice").decimalValue():null;
+            Integer percent=design.path("depositPercent").isInt()?design.path("depositPercent").intValue():null;
+            if(amount==null || amount.signum()<=0 || (percent!=null && (percent<10 || percent>100)))
+                throw ApiException.badRequest("Yêu cầu chưa có báo giá hoặc mức cọc hợp lệ của shop.");
+            return new CustomPrice(amount,percent);
+        } catch(com.fasterxml.jackson.core.JsonProcessingException e) {
+            throw ApiException.badRequest("Báo giá thiết kế không hợp lệ.");
+        }
+    }
+
+    @Transactional(readOnly=true)
+    public CouponService.Preview previewCustomVouchers(String userId,String requestId,com.example.flowershop.dto.order.MakeCustomOrderRequest request) {
+        var custom=entityManager.find(CustomOrderRequest.class,requestId);
+        if(custom==null || !custom.getCustomer().getId().equals(userId)) throw ApiException.notFound("Không tìm thấy yêu cầu hoa tùy chỉnh.");
+        if(custom.getStatus()!=com.example.flowershop.entity.enums.CustomOrderStatus.ACCEPTED)
+            throw ApiException.badRequest("Shop chưa chấp nhận yêu cầu này.");
+        if(custom.getShop().getStatus()!=ShopStatus.ACTIVE) throw ApiException.badRequest("Cửa hàng hiện không hoạt động.");
+        if(orderRepository.existsByCustomRequestIdAndStatusNot(requestId,OrderStatus.CANCELLED))
+            throw ApiException.badRequest("Yêu cầu này đã có đơn đặt cọc. Hãy xem đơn hàng để tiếp tục thanh toán.");
+        var price=customPrice(custom);
+        var fee=quoteFee(custom.getShop(),resolveDestination(userId,request.getDeliveryAddressId()));
+        return vouchers.preview(new CouponService.Context(custom.getShop().getId(),price.amount(),fee,java.util.Map.of()),
+                request.getCouponCode(),request.getShippingCouponCode());
     }
 
     /**
@@ -372,7 +477,7 @@ single.setShippingCouponCode(part.getShippingCouponCode()); single.setExpectedTo
     }
 
     /**
-     * Tự động hủy đơn hàng quá hạn chưa thanh toán (PENDING 10 phút, AWAITING_DEPOSIT 24 giờ).
+     * Tự động hủy đơn hàng quá hạn chưa thanh toán (PENDING/AWAITING_DEPOSIT 1 phút).
      * Hoàn lại tồn kho cho từng sản phẩm, hoàn lại coupon (nếu có), và hủy các payment pending.
      */
     @Transactional
@@ -380,9 +485,9 @@ single.setShippingCouponCode(part.getShippingCouponCode()); single.setExpectedTo
         var current=orderRepository.findById(orderId).orElse(null);
         if(current!=null && current.getPaymentWindowStart()!=null) {
             var deadline=current.getStatus()==OrderStatus.AWAITING_DEPOSIT
-                    ? current.getCreatedDate().plusHours(SePayGatewayService.DEPOSIT_DEADLINE_HOURS)
+                    ? current.getCreatedDate().plusMinutes(SePayGatewayService.DEPOSIT_DEADLINE_MINUTES)
                     : current.getPaymentWindowStart().plusMinutes(SePayGatewayService.PAYMENT_WINDOW_MINUTES);
-            if(!deadline.isBefore(LocalDateTime.now())) return;
+            if(deadline.isAfter(LocalDateTime.now())) return;
         }
         cancelPendingOrder(orderId, reason, "SYSTEM_AUTO_CANCEL");
     }

@@ -8,7 +8,7 @@ import PageMeta from '../components/common/PageMeta'
 import PageBreadCrumb from '../components/common/PageBreadCrumb'
 import Button from '../components/ui/button/Button'
 
-// Màn "Chờ thanh toán": đơn online chưa trả (không mở được cổng, mất mạng, back trình duyệt...) được giữ 10 phút; khách trả lại hoặc để đơn tự hủy khi quá hạn.
+// Màn "Chờ thanh toán": đơn online chưa trả (không mở được cổng, mất mạng, back trình duyệt...) được giữ 1 phút; khách trả lại hoặc để đơn tự hủy khi quá hạn.
 export default function PaymentPendingPage() {
   const { user, busy: authBusy } = useAuth()
   const [searchParams] = useSearchParams()

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
+import { ChartColumn } from "lucide-react";
 import { managerShopService } from "../services/managerShopService";
 import ManagerShopsView from "./ManagerShopsView";
 import ManagerCustomOrdersView from "./ManagerCustomOrdersView";
@@ -79,12 +80,8 @@ const quickActions = [
     title: "Báo cáo thống kê",
     section: "reports",
     color: "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400",
-    icon: (
-      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 19V9m5 10V5m5 14v-7m5 7V3" />
-      </svg>
-    ),
-    description: "Xem người theo dõi, đơn hàng, doanh thu và tỷ lệ hoàn trả theo ngày, tháng hoặc năm.",
+    icon: <ChartColumn size={24} aria-hidden="true" />,
+    description: "Xem doanh thu, đơn hàng, tương tác từng bài viết và tỷ lệ hoàn trả theo ngày, tháng hoặc năm.",
   },
   {
     href: "/shop-admin/chat",

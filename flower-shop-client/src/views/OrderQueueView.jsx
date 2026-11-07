@@ -1,6 +1,6 @@
 import { OrderDesignPanel, ShopCustomOrderActions } from '../components/customFlowers/OrderDesignPanel'
 import { useEffect, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { managerOrderService } from '../services/managerOrderService'
 import { formatPrice } from '../models/productModel'
 import OrderDiscountSummary from '../components/checkout/OrderDiscountSummary'
@@ -12,7 +12,7 @@ import { Modal } from '../components/ui/modal'
 import { EyeIcon } from '../icons'
 import GhnSimulator from '../components/ghn/GhnSimulator'
 import { useConfirm } from '../components/ui/confirm/ConfirmProvider'
-import { ghnStatusLabels, orderStatusColors as statusColors, orderStatusLabels as statusLabels, orderTabs } from '../models/orderStatus'
+import { ghnStatusLabels, manualOrderStatuses, orderStatusColors as statusColors, orderStatusLabels as statusLabels, orderTabs } from '../models/orderStatus'
 
 /**
  * Hàm định dạng thời gian tương đối (ví dụ: "5 phút trước", "2 giờ trước")
@@ -135,6 +135,7 @@ export default function OrderQueueView({ shop }) {
      * Gọi: managerOrderService.setStatus -> POST .../orders/{id}/set-status
      */
     const changeStatus = async (order, next) => {
+        if (next === 'CANCELLED') { openCancelModal(order); return }
         if (!next) return
         if (!await confirm({
             title: 'Đổi trạng thái đơn',
@@ -332,6 +333,9 @@ export default function OrderQueueView({ shop }) {
                                                         <EyeIcon className="w-4 h-4 mr-1 inline" />
                                                        Xem chi tiết
                                                     </Button>
+                                                    <Link to={`/shop-admin/chat?orderId=${encodeURIComponent(o.id)}`} className="inline-flex items-center justify-center gap-2 rounded-lg font-medium transition px-4 py-3 text-sm bg-white text-gray-700 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-400 dark:ring-gray-700 dark:hover:bg-white/3">
+                                                        Chat
+                                                    </Link>
                                                     
                                                     {o.status === 'PENDING' && o.orderType !== 'CUSTOM' && (
                                                         <Button size="sm" onClick={() => confirmOrder(o.id)} disabled={busy}>
@@ -369,7 +373,7 @@ export default function OrderQueueView({ shop }) {
                                                         onChange={e => changeStatus(o, e.target.value)}
                                                     >
                                                         <option value="">Chuyển trạng thái</option>
-                                                        {Object.entries(statusLabels).filter(([k]) => k !== o.status).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                                                        {manualOrderStatuses(o).map(status => <option key={status} value={status}>{statusLabels[status]}</option>)}
                                                     </select>
                                                 </div>
                                             </TableCell>

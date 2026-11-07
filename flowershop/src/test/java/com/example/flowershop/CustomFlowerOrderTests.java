@@ -137,16 +137,18 @@ class CustomFlowerOrderTests {
     }
     @Test void lifecycleAllowsNegotiationThenAcceptance(){
         var r=service.create(customer.getId(),input(null));
-        service.decide(shop.getId(),owner.getId(),r.id(),new Decision(CustomOrderStatus.NEGOTIATING,"Can make pink roses",new BigDecimal("250000")));
-        var accepted=service.decide(shop.getId(),owner.getId(),r.id(),new Decision(CustomOrderStatus.ACCEPTED,"Design confirmed",new BigDecimal("260000")));
+        service.decide(shop.getId(),owner.getId(),r.id(),new Decision(CustomOrderStatus.NEGOTIATING,"Can make pink roses",new BigDecimal("250000"),null));
+        var accepted=service.decide(shop.getId(),owner.getId(),r.id(),new Decision(CustomOrderStatus.ACCEPTED,"Design confirmed",new BigDecimal("260000"),30));
         assertThat(accepted.design().quotedPrice()).isEqualByComparingTo("260000");
+        assertThat(accepted.design().depositPercent()).isEqualTo(30);
         assertThat(service.detail(customer.getId(),r.id()).status()).isEqualTo(CustomOrderStatus.ACCEPTED);
-        assertThatThrownBy(()->service.decide(shop.getId(),owner.getId(),r.id(),new Decision(CustomOrderStatus.REJECTED,"Changed mind",null))).isInstanceOf(ResponseStatusException.class);
+        assertThatThrownBy(()->service.decide(shop.getId(),owner.getId(),r.id(),new Decision(CustomOrderStatus.REJECTED,"Changed mind",null,null))).isInstanceOf(ResponseStatusException.class);
     }
     @Test void rejectsOverBudgetQuoteAndUnauthorizedShop(){
         var r=service.create(customer.getId(),input(null));
-        assertThatThrownBy(()->service.decide(shop.getId(),owner.getId(),r.id(),new Decision(CustomOrderStatus.ACCEPTED,"Quote",new BigDecimal("300001")))).isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(()->service.decide(shop.getId(),owner.getId(),r.id(),new Decision(CustomOrderStatus.ACCEPTED,"Quote",null))).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(()->service.decide(shop.getId(),owner.getId(),r.id(),new Decision(CustomOrderStatus.ACCEPTED,"Quote",new BigDecimal("300001"),30))).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(()->service.decide(shop.getId(),owner.getId(),r.id(),new Decision(CustomOrderStatus.ACCEPTED,"Quote",null,30))).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(()->service.decide(shop.getId(),owner.getId(),r.id(),new Decision(CustomOrderStatus.ACCEPTED,"Quote",new BigDecimal("250000"),null))).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(()->service.shopRequests(shop.getId(),user(UserRole.SHOP).getId(),null,0)).isInstanceOf(ResponseStatusException.class);
     }
     @Test void readsLegacyFlowerArray(){

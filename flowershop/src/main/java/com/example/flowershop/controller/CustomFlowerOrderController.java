@@ -23,7 +23,7 @@ public class CustomFlowerOrderController {
             @RequestParam(name="quantity", defaultValue="1") int quantity,@RequestParam(name="shopId", required=false) String shopId,
             @RequestParam(name="q", defaultValue="") String q,@RequestParam(name="page", defaultValue="0") int page){return service.suggestions(budget,quantity,shopId,q,page);}
     @PostMapping("/api/customer/custom-orders") @PreAuthorize("hasRole('CUSTOMER')") @ResponseStatus(HttpStatus.CREATED)
-    public CustomFlowerOrderService.Result create(@AuthenticationPrincipal CurrentUser user,@Valid @RequestBody CustomFlowerOrderService.RequestInput input){throw new org.springframework.web.server.ResponseStatusException(HttpStatus.GONE,"Gửi thiết kế qua /api/customer/orders/custom để shop xử lý trong quản lý đơn hàng.");}
+    public CustomFlowerOrderService.Result create(@AuthenticationPrincipal CurrentUser user,@Valid @RequestBody CustomFlowerOrderService.RequestInput input){return service.create(user.id(),input);}
     @GetMapping("/api/customer/custom-orders") @PreAuthorize("hasRole('CUSTOMER')")
     public CustomFlowerOrderService.Results mine(@AuthenticationPrincipal CurrentUser user,@RequestParam(name="page", defaultValue="0") int page){return service.mine(user.id(),page);}
     @GetMapping("/api/customer/custom-orders/{id}") @PreAuthorize("hasRole('CUSTOMER')")
@@ -33,5 +33,5 @@ public class CustomFlowerOrderController {
     @GetMapping("/api/shop/mine/{shopId}/custom-orders/{id}") @PreAuthorize("hasRole('SHOP')")
     public CustomFlowerOrderService.Result shopDetail(@PathVariable("shopId") String shopId,@PathVariable("id") String id,@AuthenticationPrincipal CurrentUser user){return service.shopRequest(shopId,user.id(),id);}
     @PutMapping("/api/shop/mine/{shopId}/custom-orders/{id}") @PreAuthorize("hasRole('SHOP')")
-    public CustomFlowerOrderService.Result decide(@PathVariable("shopId") String shopId,@PathVariable("id") String id,@AuthenticationPrincipal CurrentUser user,@Valid @RequestBody CustomFlowerOrderService.Decision input){throw new org.springframework.web.server.ResponseStatusException(HttpStatus.GONE,"Xử lý thiết kế và báo giá trong quản lý đơn hàng.");}
+    public CustomFlowerOrderService.Result decide(@PathVariable("shopId") String shopId,@PathVariable("id") String id,@AuthenticationPrincipal CurrentUser user,@Valid @RequestBody CustomFlowerOrderService.Decision input){return service.decide(shopId,user.id(),id,input);}
 }

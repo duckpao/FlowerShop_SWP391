@@ -43,6 +43,7 @@ class ChatServiceTests {
     @Autowired NotificationRepository notifications;
     @Autowired CustomerOccasionRepository occasions;
     @Autowired jakarta.persistence.EntityManager entityManager;
+    @Autowired AddressRepository addresses;
 
     record Fixture(User owner, User customer, Shop shop, Product product) {}
 
@@ -197,6 +198,23 @@ class ChatServiceTests {
         var otherSession = chat.openForCustomer(otherCustomer.getId(), f.shop().getId());
         assertThatThrownBy(() -> chat.send(otherSession.id(), otherCustomer.getId(),
                 new SendInput("x", null, new ContextInput(ChatContextType.CUSTOM_ORDER, request.getId()))))
+                .isInstanceOf(ResponseStatusException.class);
+    }
+
+    @Test
+    void shopOpensChatWithCustomerOfItsOwnOrderOnly() {
+        var f = fixture();
+        var address = addresses.saveAndFlush(Address.builder().id(UUID.randomUUID().toString()).user(f.customer())
+                .addressLine("1 Phố Huế").build());
+        var order = orders.saveAndFlush(Order.builder().id(UUID.randomUUID().toString()).customer(f.customer()).shop(f.shop())
+                .deliveryAddress(address).subTotal(new BigDecimal("250000")).totalAmount(new BigDecimal("250000")).build());
+
+        var session = chat.openForShopByOrder(f.shop().getId(), f.owner().getId(), order.getId());
+        assertThat(session.customerId()).isEqualTo(f.customer().getId());
+        assertThat(chat.openForCustomer(f.customer().getId(), f.shop().getId()).id()).isEqualTo(session.id());
+
+        var other = fixture();
+        assertThatThrownBy(() -> chat.openForShopByOrder(other.shop().getId(), other.owner().getId(), order.getId()))
                 .isInstanceOf(ResponseStatusException.class);
     }
 

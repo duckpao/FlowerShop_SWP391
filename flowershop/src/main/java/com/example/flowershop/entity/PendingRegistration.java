@@ -10,6 +10,12 @@ import java.time.Instant;
 public class PendingRegistration {
     @Column(name="shop_name",length=255) private String shopName;
     @Column(name="shop_description",length=5000) private String shopDescription;
+    @Column(name="shop_address_line",length=255) private String shopAddressLine;
+    @Column(name="shop_city",length=100) private String shopCity;
+    @Column(name="shop_district",length=100) private String shopDistrict;
+    @Column(name="shop_ward",length=100) private String shopWard;
+    @Column(name="shop_ghn_ward_code",length=20) private String shopGhnWardCode;
+    @Column(name="shop_ghn_district_id") private Integer shopGhnDistrictId;
     @Id @Column(length = 255) private String email;
     @Column(name = "full_name", nullable = false, length = 100) private String fullName;
     @Column(name = "password_hash", nullable = false, length = 100) private String passwordHash;

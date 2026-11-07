@@ -4,12 +4,13 @@ import PageMeta from '../components/common/PageMeta'
 import PageBreadCrumb from '../components/common/PageBreadCrumb'
 import ChatWorkspace from '../components/chat/ChatWorkspace'
 
-/** Trang chat phía chủ shop (/shop-admin/chat). Mở thẳng một phiên bằng ?session= hoặc ?customOrderId=. */
+/** Trang chat phía chủ shop (/shop-admin/chat). Mở thẳng một phiên bằng ?session=, ?customOrderId= hoặc ?orderId=. */
 export default function ManagerChatView({ user, shop }) {
     const [params] = useSearchParams()
     const entry = useMemo(() => ({
         sessionId: params.get('session') || undefined,
         customOrderId: params.get('customOrderId') || undefined,
+        orderId: params.get('orderId') || undefined,
     }), [params])
     const scope = useMemo(() => ({ kind: 'shop', shopId: shop?.id }), [shop?.id])
 

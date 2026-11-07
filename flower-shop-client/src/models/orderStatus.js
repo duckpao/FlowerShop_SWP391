@@ -32,6 +32,8 @@ export const orderTabs = [
     { id: 'AWAITING_QUOTE', label: orderStatusLabels.AWAITING_QUOTE },
     { id: 'QUOTED', label: orderStatusLabels.QUOTED },
     { id: 'PENDING', label: orderStatusLabels.PENDING },
+    { id: 'AWAITING_DEPOSIT', label: orderStatusLabels.AWAITING_DEPOSIT },
+    { id: 'DEPOSIT_PAID', label: orderStatusLabels.DEPOSIT_PAID },
     { id: 'PROCESSING', label: orderStatusLabels.PROCESSING },
     { id: 'DELIVERING', label: orderStatusLabels.DELIVERING },
     { id: 'COMPLETED', label: orderStatusLabels.COMPLETED },
@@ -40,6 +42,12 @@ export const orderTabs = [
 ]
 
 // Nhãn tiếng Việt cho mã trạng thái vận đơn GHN. Status codes as GHN reports them: https://developer.ghn.vn/en/docs/order/update
+export function manualOrderStatuses(order) {
+    if (['CANCELLED', 'REFUNDED'].includes(order.status)) return []
+    if (order.orderType === 'CUSTOM' && ['AWAITING_QUOTE', 'QUOTED', 'PENDING', 'AWAITING_DEPOSIT'].includes(order.status)) return ['CANCELLED']
+    return ['PENDING', 'PROCESSING', 'DELIVERING', 'COMPLETED', 'CANCELLED', 'REFUNDED'].filter(status => status !== order.status)
+}
+
 export const ghnStatusLabels = {
     ready_to_pick: 'Mới tạo, chờ lấy hàng',
     picking: 'Đang lấy hàng',

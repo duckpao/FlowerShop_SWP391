@@ -16,4 +16,13 @@ public class MakeCustomOrderRequest {
 
     @Size(max = 20)
     private String phone;
+
+    @Size(max = 50)
+    private String couponCode;
+
+    @Size(max = 50)
+    private String shippingCouponCode;
+
+    @jakarta.validation.constraints.DecimalMin("1")
+    private java.math.BigDecimal expectedTotal;
 }

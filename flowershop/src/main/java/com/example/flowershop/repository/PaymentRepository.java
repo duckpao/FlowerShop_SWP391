@@ -1,18 +1,23 @@
 package com.example.flowershop.repository;
 
-import java.util.*;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import com.example.flowershop.entity.Payment;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import java.util.*;
 
 /** Explicit Hibernate queries; Spring does not generate this repository. */
 @Repository
 public class PaymentRepository extends HibernateRepository<Payment> {
     public PaymentRepository() { super(Payment.class); }
+
+    public Page<Payment> findByOrderCustomerId(String customerId, Pageable pageable) {
+        return page("e.order.customer.id = :customerId", Map.of("customerId", customerId), pageable);
+    }
 
     @Transactional
     public Optional<Payment> findByInvoiceNumberForUpdate(String invoiceNumber) {

@@ -69,12 +69,14 @@ BigDecimal discountAmount,BigDecimal shippingDiscountAmount,String couponCode,St
     private final CustomOrderWorkflowService customWorkflow;
     private final RefundRepository refunds;
     private final NotificationService notifications;
+    private final ProductRepository products;
 
     public ManagerOrderService(OrderRepository orders, OrderDetailRepository orderDetails,
                                DeliveryRepository deliveries, PaymentRepository payments,
                                ShopRepository shops, AddressRepository addresses, GhnService ghn,
                                DeliverySync deliverySync, RefundRepository refunds,
-                               NotificationService notifications,CouponService vouchers,CustomOrderWorkflowService customWorkflow) {
+                               NotificationService notifications,CouponService vouchers,CustomOrderWorkflowService customWorkflow,ProductRepository products) {
+        this.products=products;
 this.vouchers=vouchers;this.customWorkflow=customWorkflow;
         this.orders = orders;
         this.orderDetails = orderDetails;
@@ -160,7 +162,7 @@ this.vouchers=vouchers;this.customWorkflow=customWorkflow;
     @Transactional
     public void confirm(String shopId, String actor, String orderId) {
         owned(shopId, actor);
-        Order o = orders.findByIdAndShopId(orderId, shopId).orElseThrow(ManagerOrderService::notFound);
+        Order o = orders.findByIdAndShopIdForUpdate(orderId, shopId).orElseThrow(ManagerOrderService::notFound);
         if(o.getOrderType()==OrderType.CUSTOM && o.getStatus()==OrderStatus.PENDING) throw new ResponseStatusException(HttpStatus.CONFLICT,"Khách cần hoàn tất thanh toán trước khi chuẩn bị hoa.");
         if (o.getStatus() != OrderStatus.PENDING)
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Chỉ đơn hàng PENDING mới có thể xác nhận.");
@@ -181,9 +183,11 @@ this.vouchers=vouchers;this.customWorkflow=customWorkflow;
     @Transactional
     public ShipResult ship(String shopId, String actor, String orderId) {
         owned(shopId, actor);
-        Order o = orders.findByIdAndShopId(orderId, shopId).orElseThrow(ManagerOrderService::notFound);
+        Order o = orders.findByIdAndShopIdForUpdate(orderId, shopId).orElseThrow(ManagerOrderService::notFound);
         if (o.getStatus() != OrderStatus.PROCESSING && o.getStatus() != OrderStatus.DEPOSIT_PAID)
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Chỉ đơn hàng PROCESSING hoặc đã đặt cọc mới có thể gửi GHN.");
+        if(deliveries.findByOrderId(orderId).isPresent())
+            throw new ResponseStatusException(HttpStatus.CONFLICT,"Đơn đã có vận đơn. Vui lòng kiểm tra trạng thái GHN.");
 
         // Lấy địa chỉ kho/shop gửi hàng
         var shopAddrs = addresses.findByShopIdAndUserIsNullOrderByCreatedDateAscIdAsc(shopId);
@@ -293,9 +297,9 @@ this.vouchers=vouchers;this.customWorkflow=customWorkflow;
     @Transactional
     public StatusResult changeStatus(String shopId, String actor, String orderId, String target) {
         owned(shopId, actor);
-        Order o = orders.findByIdAndShopId(orderId, shopId).orElseThrow(ManagerOrderService::notFound);
+        Order o = orders.findByIdAndShopIdForUpdate(orderId, shopId).orElseThrow(ManagerOrderService::notFound);
         OrderStatus next;
-        if(o.getOrderType()==OrderType.CUSTOM && (o.getStatus()==OrderStatus.AWAITING_QUOTE || o.getStatus()==OrderStatus.QUOTED || o.getStatus()==OrderStatus.PENDING)
+        if(o.getOrderType()==OrderType.CUSTOM && (o.getStatus()==OrderStatus.AWAITING_QUOTE || o.getStatus()==OrderStatus.QUOTED || o.getStatus()==OrderStatus.PENDING || o.getStatus()==OrderStatus.AWAITING_DEPOSIT)
                 && !"CANCELLED".equalsIgnoreCase(target))
             throw new ResponseStatusException(HttpStatus.CONFLICT,"Đơn hoa riêng cần báo giá, khách đồng ý và chọn/thanh toán trước khi chuẩn bị hoa.");
         try {
@@ -305,6 +309,14 @@ this.vouchers=vouchers;this.customWorkflow=customWorkflow;
         }
         if (o.getStatus() == next)
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Đơn đã ở trạng thái này.");
+        if(o.getStatus()==OrderStatus.CANCELLED || o.getStatus()==OrderStatus.REFUNDED)
+            throw new ResponseStatusException(HttpStatus.CONFLICT,"Đơn đã đóng, không thể mở lại bằng chuyển trạng thái thủ công.");
+        if(Set.of(OrderStatus.AWAITING_QUOTE,OrderStatus.QUOTED,OrderStatus.AWAITING_DEPOSIT,OrderStatus.DEPOSIT_PAID).contains(next))
+            throw new ResponseStatusException(HttpStatus.CONFLICT,"Trạng thái báo giá và đặt cọc được cập nhật qua luồng thiết kế/thanh toán.");
+        if(next==OrderStatus.CANCELLED) {
+            cancel(shopId,actor,orderId,"Shop chuyển trạng thái thủ công.");
+            return new StatusResult(next.name(),null);
+        }
 
         Delivery d = deliveries.findByOrderId(orderId).orElse(null);
         String warning = null;
@@ -366,15 +378,25 @@ this.vouchers=vouchers;this.customWorkflow=customWorkflow;
     @Transactional
     public void cancel(String shopId, String actor, String orderId, String reason) {
         owned(shopId, actor);
-        Order o = orders.findByIdAndShopId(orderId, shopId).orElseThrow(ManagerOrderService::notFound);
+        Order o = orders.findByIdAndShopIdForUpdate(orderId, shopId).orElseThrow(ManagerOrderService::notFound);
         if (o.getStatus() != OrderStatus.PENDING && o.getStatus() != OrderStatus.AWAITING_DEPOSIT
                 && o.getStatus() != OrderStatus.DEPOSIT_PAID && o.getStatus() != OrderStatus.PROCESSING && o.getStatus()!=OrderStatus.AWAITING_QUOTE && o.getStatus()!=OrderStatus.QUOTED) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Chỉ có thể hủy đơn hàng trước khi bắt đầu giao.");
         }
         o.setStatus(OrderStatus.CANCELLED);
-        vouchers.release(o);
         o.setCancelReason(reason);
         o.setLastModifyBy(actor);
+
+        for(var item:orderDetails.findByOrderId(orderId).stream()
+                .filter(line->line.getProduct()!=null).sorted(Comparator.comparing(line->line.getProduct().getId())).toList()) {
+            products.findByIdForUpdate(item.getProduct().getId()).ifPresent(product->{
+                if(product.getType()!=ProductType.CUSTOM) {
+                    product.setStock(product.getStock()+item.getQuantity());product.setLastModifyBy(actor);
+                }
+            });
+        }
+        vouchers.release(o);
+        payments.failPendingByOrderId(orderId,actor);
 
         BigDecimal paid = paidAmount(orderId);
         if (paid.signum() > 0) {
@@ -458,7 +480,7 @@ this.vouchers=vouchers;this.customWorkflow=customWorkflow;
         owned(shopId, actor);
         Pageable pageable = PageRequest.of(page, 20, Sort.by(Sort.Order.desc("createdDate"), Sort.Order.asc("id")));
         Page<Order> result;
-        List<OrderStatus> queueStatuses = List.of(OrderStatus.PENDING, OrderStatus.AWAITING_DEPOSIT, OrderStatus.PROCESSING, OrderStatus.AWAITING_QUOTE, OrderStatus.QUOTED);
+        List<OrderStatus> queueStatuses = List.of(OrderStatus.PENDING, OrderStatus.AWAITING_DEPOSIT, OrderStatus.DEPOSIT_PAID, OrderStatus.PROCESSING, OrderStatus.AWAITING_QUOTE, OrderStatus.QUOTED);
 
         if (status != null && !status.isBlank()) {
             try {

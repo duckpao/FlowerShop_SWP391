@@ -2,6 +2,8 @@ import { API_BASE } from '../apiBase'
 import { authService } from './authService'
 
 export const customFlowerService = {
+  create: body => authService.authenticatedRequest('/api/customer/custom-orders', { method: 'POST', body }),
+  decide: (shopId, id, body) => authService.authenticatedRequest(`/api/shop/mine/${encodeURIComponent(shopId)}/custom-orders/${encodeURIComponent(id)}`, { method: 'PUT', body }),
   async options() {
     const response = await fetch(`${API_BASE}/api/public/custom-orders/options`, { cache: 'no-store' })
     const body = await response.json().catch(() => ({}))

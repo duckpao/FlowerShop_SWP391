@@ -48,9 +48,13 @@ class CouponTests {
     @Autowired CategoryRepository categories;
     @Autowired AddressRepository addresses;
     @Autowired OrderRepository orders;
+    @Autowired OrderDetailRepository orderDetails;
+    @Autowired RefundRepository refunds;
+    @Autowired jakarta.persistence.EntityManager entityManager;
     @Autowired PaymentRepository payments;
     @Autowired CartItemRepository cart;
     @Autowired CustomFlowerOptionRepository options;
+    @Autowired CustomOrderRequestRepository customRequests;
     @Autowired MockMvc mvc;
     @Autowired org.springframework.transaction.PlatformTransactionManager transactionManager;
     User admin,owner,customer;
@@ -95,6 +99,72 @@ class CouponTests {
         service.delete(admin.getId(),null,global.id());
         assertThat(coupons.findById(global.id()).orElseThrow().isDeleted()).isTrue();
         assertThat(service.list(admin.getId(),null)).isEmpty();
+    }
+    private CustomOrderRequest acceptedDesign() {
+        return customRequests.saveAndFlush(CustomOrderRequest.builder().id(id()).customer(customer).shop(shop)
+                .budget(money("500000")).status(CustomOrderStatus.ACCEPTED)
+                .desiredComponents("{\"quantity\":2,\"quotedPrice\":500000,\"depositPercent\":30}").build());
+    }
+    private com.example.flowershop.dto.order.MakeCustomOrderRequest depositInput() {
+        var input=new com.example.flowershop.dto.order.MakeCustomOrderRequest();
+        input.setDeliveryAddressId(destination.getId());return input;
+    }
+    @Test void separateDepositLocksVouchersAndChargesPercentageOfDiscountedFlowers() {
+        var design=acceptedDesign();
+        var low=coupon("CUSTOMLOW",CouponTarget.ORDER,"5","20000");low.setShop(shop);
+        var high=coupon("CUSTOMHIGH",CouponTarget.ORDER,"20","70000");high.setShop(shop);
+        var ship=coupon("CUSTOMSHIP",CouponTarget.SHIPPING,"100","30000");coupons.flush();
+        var input=depositInput();input.setCouponCode(low.getCode());input.setShippingCouponCode(ship.getCode());
+        var preview=cartOrders.previewCustomVouchers(customer.getId(),design.getId(),input);
+        assertThat(preview.totalAmount()).isEqualByComparingTo("480000");
+        assertThat(preview.orderVouchers()).filteredOn(v->v.code().equals(high.getCode())).allSatisfy(v->assertThat(v.eligible()).isFalse());
+        input.setExpectedTotal(preview.totalAmount());
+        var created=cartOrders.makeCustomOrder(customer.getId(),design.getId(),input);
+        var saved=orders.findById(created.getId()).orElseThrow();
+        assertThat(saved.getStatus()).isEqualTo(OrderStatus.AWAITING_DEPOSIT);
+        assertThat(saved.getTotalAmount()).isEqualByComparingTo("480000");
+        assertThat(saved.getDepositAmount()).isEqualByComparingTo("144000");
+        assertThat(created.getCouponCode()).isEqualTo(low.getCode());
+        assertThat(created.getShippingCouponCode()).isEqualTo(ship.getCode());
+        assertThat(coupons.findById(low.getId()).orElseThrow().getUsedCount()).isEqualTo(1);
+        assertThat(coupons.findById(ship.getId()).orElseThrow().getUsedCount()).isEqualTo(1);
+        assertThat(payments.findByOrderId(saved.getId())).isEmpty();
+        cartOrders.cancelByCustomer(customer.getId(),saved.getId(),"Changed design");
+        assertThat(coupons.findById(low.getId()).orElseThrow().getUsedCount()).isZero();
+        assertThat(coupons.findById(ship.getId()).orElseThrow().getUsedCount()).isZero();
+    }
+    @Test void separateDepositRejectsStaleTotalAndProductVoucherForReferenceProduct() {
+        var design=acceptedDesign();var input=depositInput();
+        input.setExpectedTotal(money("1"));
+        assertThatThrownBy(()->cartOrders.makeCustomOrder(customer.getId(),design.getId(),input)).isInstanceOf(ApiException.class);
+    }
+    @Test void separateDepositPreviewChecksCustomerOwnershipAndDoesNotUseReferenceProductVouchers() {
+        var design=acceptedDesign();var input=depositInput();
+        var productVoucher=coupon("CUSTOMPRODUCT",CouponTarget.PRODUCT,"20","70000");productVoucher.setProduct(product);coupons.flush();
+        var preview=cartOrders.previewCustomVouchers(customer.getId(),design.getId(),input);
+        assertThat(preview.orderVouchers()).filteredOn(v->v.code().equals(productVoucher.getCode()))
+                .allSatisfy(v->{assertThat(v.eligible()).isFalse();assertThat(v.reason()).contains("sản phẩm");});
+        assertThatThrownBy(()->cartOrders.previewCustomVouchers(owner.getId(),design.getId(),input)).isInstanceOf(ApiException.class);
+    }
+    @Test void shopManualCancellationRestoresStockReleasesVoucherAndRequestsRefundOnlyOnce() {
+        product.setStock(18);products.flush();
+        var order=orders.saveAndFlush(Order.builder().id(id()).customer(customer).shop(shop).orderType(OrderType.STANDARD)
+                .status(OrderStatus.PROCESSING).subTotal(money("1000000")).totalAmount(money("1000000")).build());
+        orderDetails.saveAndFlush(OrderDetail.builder().id(id()).order(order).product(product).quantity(2).price(money("500000")).build());
+        var voucher=coupon("SHOPCANCEL",CouponTarget.ORDER,"10","20000");
+        service.apply(order,new CouponService.Context(shop.getId(),money("1000000"),BigDecimal.ZERO,Map.of(product.getId(),money("1000000"))),voucher.getCode(),null);
+        payments.saveAndFlush(Payment.builder().id(id()).order(order).paymentType(PaymentType.DEPOSIT).paymentMethod(PaymentMethod.ONLINE)
+                .amount(money("100000")).status(PaymentStatus.SUCCESS).build());
+        var pending=payments.saveAndFlush(Payment.builder().id(id()).order(order).paymentType(PaymentType.FINAL).paymentMethod(PaymentMethod.COD)
+                .amount(money("880000")).status(PaymentStatus.PENDING).build());
+        manager.changeStatus(shop.getId(),owner.getId(),order.getId(),"CANCELLED");
+        assertThat(product.getStock()).isEqualTo(20);
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
+        assertThat(voucher.getUsedCount()).isZero();
+        entityManager.refresh(pending);assertThat(pending.getStatus()).isEqualTo(PaymentStatus.FAILED);
+        assertThat(refunds.findByOrderIdOrderByCreatedDateAsc(order.getId())).hasSize(1).allSatisfy(refund->assertThat(refund.getAmount()).isEqualByComparingTo("100000"));
+        assertThatThrownBy(()->manager.cancel(shop.getId(),owner.getId(),order.getId(),"Again")).isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+        assertThat(product.getStock()).isEqualTo(20);
     }
     @Test void discountCapsAndRoundingUseActualMoney() {
         coupon("CAP70",CouponTarget.ORDER,"50","70000");

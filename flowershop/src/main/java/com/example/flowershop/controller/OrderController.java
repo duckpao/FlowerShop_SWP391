@@ -40,7 +40,7 @@ public class OrderController {
     }
 
     /**
-     * Retired deposit-creation endpoint; returns 410. Existing deposit orders remain readable/payable.
+     * Create a deposit order from a request accepted and priced by the shop.
      * POST /api/orders/{userId}/custom/{requestId}
      */
     @PostMapping("/{userId}/custom/{requestId}")
@@ -50,6 +50,15 @@ public class OrderController {
             @AuthenticationPrincipal CurrentUser currentUser) {
         requireOwner(userId, currentUser);
         return ResponseEntity.status(HttpStatus.CREATED).body(orderService.makeCustomOrder(userId, requestId, request));
+    }
+
+    @PostMapping("/{userId}/custom/{requestId}/voucher-preview")
+    public com.example.flowershop.service.CouponService.Preview customVouchers(
+            @PathVariable("userId") String userId, @PathVariable("requestId") String requestId,
+            @Valid @RequestBody MakeCustomOrderRequest request,
+            @AuthenticationPrincipal CurrentUser currentUser) {
+        requireOwner(userId,currentUser);
+        return orderService.previewCustomVouchers(userId,requestId,request);
     }
 
     /**

@@ -1,6 +1,7 @@
 package com.example.flowershop;
 
 import com.example.flowershop.entity.*;
+import com.example.flowershop.entity.Order;
 import com.example.flowershop.entity.enums.*;
 import com.example.flowershop.repository.*;
 import com.example.flowershop.service.*;
@@ -150,7 +151,7 @@ class CustomOrderWorkflowTests {
         assertThat(saved.customDesign().preferences().quantity()).isEqualTo(2);
         assertThat(saved.status()).isEqualTo("AWAITING_DEPOSIT");
     }
-    @Test void retiredRequestCreationApiCannotCreateASeparateWorkflow() throws Exception {
+    @Test void separateRequestCreationApiWaitsForQuoteBeforeCreatingOrder() throws Exception {
         var json=new com.fasterxml.jackson.databind.ObjectMapper();
         var csrfResult=mvc.perform(get("/api/auth/csrf")).andReturn();
         var csrf=json.readTree(csrfResult.getResponse().getContentAsString());
@@ -160,7 +161,9 @@ class CustomOrderWorkflowTests {
                         .header(csrf.path("headerName").asText(), csrf.path("token").asText())
                         .header("Authorization", "Bearer customer-test").contentType("application/json")
                         .content(json.writeValueAsString(input().design())))
-                .andExpect(status().isGone());
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value("REQUESTED"))
+                .andExpect(jsonPath("$.orderId").isEmpty());
         assertThat(orders.count()).isEqualTo(before);
     }
     @Test void customOrderValidatesCurrentCatalogAndKeepsHistoricalDesign() {
@@ -229,6 +232,29 @@ class CustomOrderWorkflowTests {
         assertThatThrownBy(() -> manager.changeStatus(shop.getId(),owner.getId(),id,"DELIVERING")).isInstanceOf(ResponseStatusException.class);
         workflow.accept(customer.getId(),id,new CustomOrderWorkflowService.Accept(PaymentMethod.ONLINE,new BigDecimal("380000")));
         assertThatThrownBy(() -> manager.changeStatus(shop.getId(),owner.getId(),id,"PROCESSING")).isInstanceOf(ResponseStatusException.class);
+    }
+    @Test void manualStatusCannotPretendAnUnpaidDepositWasPaid() {
+        var id=create().orderId();
+        var order=orders.findById(id).orElseThrow();order.setStatus(OrderStatus.AWAITING_DEPOSIT);orders.flush();
+        for(String next:java.util.List.of("DEPOSIT_PAID","PROCESSING","DELIVERING","COMPLETED"))
+            assertThatThrownBy(()->manager.changeStatus(shop.getId(),owner.getId(),id,next)).isInstanceOf(ResponseStatusException.class);
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.AWAITING_DEPOSIT);
+        assertThat(payments.findByOrderId(id)).isEmpty();
+        assertThat(manager.queue(shop.getId(),owner.getId(),0,"AWAITING_DEPOSIT").content())
+                .extracting(ManagerOrderService.OrderSummary::id).contains(id);
+        order.setStatus(OrderStatus.DEPOSIT_PAID);orders.flush();
+        assertThat(manager.queue(shop.getId(),owner.getId(),0,"DEPOSIT_PAID").content())
+                .extracting(ManagerOrderService.OrderSummary::id).contains(id);
+    }
+    @Test void timeoutScanUsesPaymentStartRatherThanOldDesignCreationTime() {
+        var id=create().orderId();var order=orders.findById(id).orElseThrow();
+        order.setStatus(OrderStatus.PENDING);order.setCreatedDate(LocalDateTime.now().minusHours(2));
+        order.setPaymentStartedAt(LocalDateTime.now());orders.flush();
+        assertThat(orders.findByStatusAndPaymentWindowStartBefore(OrderStatus.PENDING,LocalDateTime.now().minusMinutes(1)))
+                .extracting(Order::getId).doesNotContain(id);
+        order.setPaymentStartedAt(LocalDateTime.now().minusSeconds(70));orders.flush();
+        assertThat(orders.findByStatusAndPaymentWindowStartBefore(OrderStatus.PENDING,LocalDateTime.now().minusMinutes(1)))
+                .extracting(Order::getId).contains(id);
     }
     @Test void rejectionIsVisibleInCommonOrderHistory() {
         var id=create().orderId();

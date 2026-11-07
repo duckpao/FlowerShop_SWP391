@@ -43,6 +43,8 @@ export function useAuthController() {
   const [email, setEmail] = useState(() => invitationReturn ? invitationParams.get('email') || '' : '')
   const [fullName, setFullName] = useState('')
   const [registrationRole, setRegistrationRole] = useState('CUSTOMER')
+  const [shopDescription, setShopDescription] = useState('')
+  const [shopAddress, setShopAddress] = useState({ addressLine: '', city: '', district: '', ward: '', ghnDistrictId: null, ghnWardCode: '' })
   useEffect(() => {
     if (location.pathname !== '/login' || !invitationReturn) return
     setPage(invitationParams.get('register') === '1' ? 'register' : 'signin')
@@ -64,7 +66,7 @@ export function useAuthController() {
   }
   async function failed(failure) {
     setError(failure.message)
-    setFieldErrors(Object.fromEntries(Object.entries(failure.fieldErrors || {}).map(([key,value]) => [key.replace(/^account\./, '').replace(/^newPassword$/, 'password').replace(/^confirmPassword$/, 'confirmation'),value])))
+    setFieldErrors(Object.fromEntries(Object.entries(failure.fieldErrors || {}).map(([key,value]) => [key.replace(/^account\./, '').replace(/^description$/, 'shopDescription').replace(/^address\.addressLine$/, 'shopAddressLine').replace(/^address(\..*)?$/, 'shopAddress').replace(/^newPassword$/, 'password').replace(/^confirmPassword$/, 'confirmation'),value])))
     if (failure.captchaRequired || captchaRequired) { setCaptchaRequired(true); await reloadCaptcha() }
   }
 
@@ -86,7 +88,7 @@ export function useAuthController() {
   async function submit(event) {
     event.preventDefault()
     if (busy) return
-    const validation = validateAuth(page, { email, fullName, password, confirmation, otp, registrationRole })
+    const validation = validateAuth(page, { email, fullName, password, confirmation, otp, registrationRole: invitationReturn ? 'CUSTOMER' : registrationRole, shopDescription, shopAddress })
     setFieldErrors(validation)
     if (Object.keys(validation).length) return
     setBusy(true); setError(''); setNotice('')
@@ -113,7 +115,11 @@ export function useAuthController() {
         if (new TextEncoder().encode(password).length > 72) throw new Error('Mật khẩu không được vượt quá 72 byte UTF-8.')
         const account = { email: address, password, fullName: fullName.trim() }
         const data = registrationRole === 'SHOP' && !invitationReturn
-          ? await post('register-shop', { account })
+          ? await post('register-shop', {
+            account,
+            description: shopDescription.trim(),
+            address: { ...shopAddress, addressLine: shopAddress.addressLine.trim() },
+          })
           : await post('register', account)
         setEmail(address); setPassword(''); setConfirmation(''); setOtp('')
         setPage('otp'); setSeconds(0); setNotice(data.message)
@@ -183,5 +189,7 @@ export function useAuthController() {
     setter(value)
     setFieldErrors(current => { const next = {...current}; delete next[name]; return next })
   }
-  return { registrationRole, setRegistrationRole, fieldErrors, captchaRequired, captcha, captchaAnswer, setCaptchaAnswer, reloadCaptcha, page, email, fullName, password, confirmation, otp, busy: busy || initializing, error, notice, seconds, user, logout, checkSession, setEmail: edit('email', setEmail), setFullName: edit('fullName', setFullName), setPassword: edit('password', setPassword), setConfirmation: edit('confirmation', setConfirmation), setOtp: edit('otp', setOtp), submit, resend, navigate, googleLogin }
+  return { registrationRole, setRegistrationRole,
+    shopDescription, setShopDescription: edit('shopDescription', setShopDescription),
+    shopAddress, setShopAddress: value => { setShopAddress(value); setFieldErrors(current => { const next = {...current}; delete next.shopAddress; delete next.shopAddressLine; return next }) }, fieldErrors, captchaRequired, captcha, captchaAnswer, setCaptchaAnswer, reloadCaptcha, page, email, fullName, password, confirmation, otp, busy: busy || initializing, error, notice, seconds, user, logout, checkSession, setEmail: edit('email', setEmail), setFullName: edit('fullName', setFullName), setPassword: edit('password', setPassword), setConfirmation: edit('confirmation', setConfirmation), setOtp: edit('otp', setOtp), submit, resend, navigate, googleLogin }
 }
