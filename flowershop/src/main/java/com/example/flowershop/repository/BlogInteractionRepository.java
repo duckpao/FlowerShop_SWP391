@@ -10,6 +10,9 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
+import java.util.List;
+
 public interface BlogInteractionRepository extends JpaRepository<BlogInteraction, BlogInteractionId> {
     long countByIdBlogIdAndIdInteractionType(String blogId, InteractionType interactionType);
 
@@ -18,6 +21,13 @@ public interface BlogInteractionRepository extends JpaRepository<BlogInteraction
 
     void deleteByIdUserIdAndIdBlogIdAndIdInteractionType(
             String userId, String blogId, InteractionType interactionType);
+
+    @Query("select i.blog.id, i.blog.title, i.blog.status, i.id.interactionType, count(i) "
+            + "from BlogInteraction i where i.blog.shop.id = :shopId "
+            + "and i.createdDate >= :start and i.createdDate < :end "
+            + "group by i.blog.id, i.blog.title, i.blog.status, i.id.interactionType")
+    List<Object[]> engagementForReport(@Param("shopId") String shopId,
+            @Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
 
     @Query(value = "select interaction.blog from BlogInteraction interaction "
             + "where interaction.id.userId = :userId "

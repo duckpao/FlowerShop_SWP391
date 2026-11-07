@@ -1,7 +1,11 @@
 package com.example.flowershop.service;
 
 import com.example.flowershop.entity.Shop;
+import com.example.flowershop.entity.enums.BlogStatus;
+import com.example.flowershop.entity.enums.InteractionType;
 import com.example.flowershop.entity.enums.OrderStatus;
+import com.example.flowershop.repository.BlogCommentRepository;
+import com.example.flowershop.repository.BlogInteractionRepository;
 import com.example.flowershop.repository.FavoriteShopRepository;
 import com.example.flowershop.repository.OrderDetailRepository;
 import com.example.flowershop.repository.OrderRepository;
@@ -22,7 +26,10 @@ import java.time.YearMonth;
 import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
 import java.util.EnumMap;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @Transactional(readOnly = true)
@@ -54,7 +61,15 @@ public class ShopReportService {
 
     public record ReportResult(String shopId, String shopName, PeriodResult period,
             FollowerMetrics followers, OrderMetrics orders, RevenueMetrics revenue,
-            List<ProductPerformance> products) {
+            List<ProductPerformance> products, BlogEngagementMetrics blogEngagement) {
+    }
+
+    public record BlogPerformance(String blogId, String title, BlogStatus status,
+            long commenters, long comments, long likes, long saves, long totalInteractions) {
+    }
+
+    public record BlogEngagementMetrics(long commenters, long comments, long likes, long saves,
+            long totalInteractions, List<BlogPerformance> posts) {
     }
 
     private record Range(Period period, String value, LocalDate start, LocalDate endExclusive) {
@@ -66,16 +81,21 @@ public class ShopReportService {
     private final OrderDetailRepository orderDetails;
     private final PaymentRepository payments;
     private final RefundRepository refunds;
+    private final BlogCommentRepository blogComments;
+    private final BlogInteractionRepository blogInteractions;
 
     public ShopReportService(ShopRepository shops, FavoriteShopRepository followers,
             OrderRepository orders, OrderDetailRepository orderDetails,
-            PaymentRepository payments, RefundRepository refunds) {
+            PaymentRepository payments, RefundRepository refunds,
+            BlogCommentRepository blogComments, BlogInteractionRepository blogInteractions) {
         this.shops = shops;
         this.followers = followers;
         this.orders = orders;
         this.orderDetails = orderDetails;
         this.payments = payments;
         this.refunds = refunds;
+        this.blogComments = blogComments;
+        this.blogInteractions = blogInteractions;
     }
 
     public ReportResult report(String shopId, String actor, String requestedPeriod, String requestedValue) {
@@ -108,7 +128,36 @@ public class ShopReportService {
                 new FollowerMetrics(followers.countByIdShopId(shopId),
                         followers.countByIdShopIdAndCreatedDateGreaterThanEqualAndCreatedDateLessThan(shopId, start, end)),
                 new OrderMetrics(total, processing, delivering, completed, cancelled, refunded),
-                new RevenueMetrics(gross, refundedAmount, gross.subtract(refundedAmount)), products);
+                new RevenueMetrics(gross, refundedAmount, gross.subtract(refundedAmount)), products,
+                blogEngagement(shopId, start, end));
+    }
+
+    private BlogEngagementMetrics blogEngagement(String shopId, LocalDateTime start, LocalDateTime end) {
+        Map<String, BlogPerformance> posts = new HashMap<>();
+        for (Object[] row : blogComments.engagementForReport(shopId, start, end)) {
+            long comments = ((Number) row[4]).longValue();
+            posts.put((String) row[0], new BlogPerformance((String) row[0], (String) row[1],
+                    (BlogStatus) row[2], ((Number) row[3]).longValue(), comments, 0, 0, comments));
+        }
+        for (Object[] row : blogInteractions.engagementForReport(shopId, start, end)) {
+            String blogId = (String) row[0];
+            BlogPerformance previous = posts.getOrDefault(blogId,
+                    new BlogPerformance(blogId, (String) row[1], (BlogStatus) row[2], 0, 0, 0, 0, 0));
+            long count = ((Number) row[4]).longValue();
+            long likes = previous.likes() + (row[3] == InteractionType.LIKE ? count : 0);
+            long saves = previous.saves() + (row[3] == InteractionType.SAVE ? count : 0);
+            posts.put(blogId, new BlogPerformance(blogId, previous.title(), previous.status(),
+                    previous.commenters(), previous.comments(), likes, saves, previous.comments() + likes + saves));
+        }
+        List<BlogPerformance> ranked = posts.values().stream()
+                .sorted(Comparator.comparingLong(BlogPerformance::totalInteractions).reversed()
+                        .thenComparing(BlogPerformance::title).thenComparing(BlogPerformance::blogId))
+                .toList();
+        long comments = ranked.stream().mapToLong(BlogPerformance::comments).sum();
+        long likes = ranked.stream().mapToLong(BlogPerformance::likes).sum();
+        long saves = ranked.stream().mapToLong(BlogPerformance::saves).sum();
+        return new BlogEngagementMetrics(blogComments.countCommentersForReport(shopId, start, end),
+                comments, likes, saves, comments + likes + saves, ranked);
     }
 
     private Shop owned(String shopId, String actor) {
