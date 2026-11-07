@@ -5,10 +5,11 @@ import { CustomRequestCard, customButton, customStatus } from '../components/cus
 import '../styles/custom-flowers.css'
 
 function DecisionForm({ request, busy, submit }) {
-  const [status, setStatus] = useState('NEGOTIATING'), [note, setNote] = useState(''), [price, setPrice] = useState('')
-  return <form className="mt-4 space-y-3 border-t border-gray-200 pt-4 dark:border-gray-700" onSubmit={e => { e.preventDefault(); submit(request.id, { status, note, quotedPrice: price === '' ? null : Number(price) }) }}>
+  const [status, setStatus] = useState('NEGOTIATING'), [note, setNote] = useState(''), [price, setPrice] = useState(''), [deposit, setDeposit] = useState('')
+  return <form className="mt-4 space-y-3 border-t border-gray-200 pt-4 dark:border-gray-700" onSubmit={e => { e.preventDefault(); submit(request.id, { status, note, quotedPrice: price === '' ? null : Number(price), depositPercent: deposit === '' ? null : Number(deposit) }) }}>
     <fieldset disabled={busy} className="grid gap-3 md:grid-cols-2"><label>Hướng xử lý<select value={status} onChange={e => setStatus(e.target.value)}>{['NEGOTIATING', 'ACCEPTED', 'REJECTED'].map(s => <option value={s} key={s}>{customStatus[s]}</option>)}</select></label>
       <label>Báo giá tổng (VND)<input type="number" min="1" max={request.budget} step="0.01" required={status === 'ACCEPTED'} value={price} onChange={e => setPrice(e.target.value)} /></label>
+      <label>Mức cọc (%)<input type="number" min="10" max="100" step="1" required={status === 'ACCEPTED'} value={deposit} onChange={e => setDeposit(e.target.value)} placeholder="10–100" /></label>
       <label className="md:col-span-2">Phản hồi cho khách<textarea required maxLength={2000} rows={3} value={note} onChange={e => setNote(e.target.value)} placeholder="Thiết kế đề xuất, khả năng đáp ứng, thời gian hoặc lý do từ chối…" /></label>
       <button className={customButton}>Gửi phản hồi</button></fieldset>
   </form>

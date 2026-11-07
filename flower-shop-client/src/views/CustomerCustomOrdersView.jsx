@@ -33,7 +33,7 @@ function DepositAction({ request, userId, addresses }) {
     <select id={`deposit-address-${request.id}`} value={selected} onChange={e => setAddressId(e.target.value)} disabled={busy} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-white/10 dark:bg-gray-800">
       {addresses.map(a => <option key={a.id} value={a.id}>{[a.addressLine, a.ward, a.district, a.city].filter(Boolean).join(', ')}</option>)}
     </select>
-    <p className="text-xs text-gray-500">Tổng = báo giá + phí giao hàng GHN. Trả trước 50% online để shop bắt đầu làm hoa, phần còn lại thanh toán khi nhận hàng (COD). Quá 24 giờ chưa cọc thì đơn tự hủy.</p>
+    <p className="text-xs text-gray-500">Tổng = báo giá + phí giao hàng GHN. Trả trước {request.design.depositPercent != null ? `${request.design.depositPercent}% giá hoa` : '50%'} online để shop bắt đầu làm hoa, phần còn lại thanh toán khi nhận hàng (COD). Quá 24 giờ chưa cọc thì đơn tự hủy.</p>
     {error && <p role="alert" className="message error">{error} {error.includes('đã có đơn') && <Link className="underline" to="/orders">Xem đơn hàng</Link>}</p>}
     <button type="button" className={customButton} disabled={busy || !selected} onClick={deposit}>{busy ? 'Đang chuyển…' : 'Đặt cọc'}</button>
   </div>

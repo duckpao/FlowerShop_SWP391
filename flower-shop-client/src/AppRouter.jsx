@@ -21,6 +21,7 @@ import CodSuccessPage from "./views/CodSuccessPage";
 import OrderInvoiceView from "./views/OrderInvoiceView";
 import CustomerOrdersView from "./views/CustomerOrdersView";
 import CustomerOrderDetailView from "./views/CustomerOrderDetailView";
+import CustomerTransactionsView from "./views/CustomerTransactionsView";
 import { useAuthController } from "./controllers/useAuthController";
 import { AuthProvider } from "./context/AuthContext";
 import { CartProvider, useCartContext } from "./context/CartContext";
@@ -93,6 +94,7 @@ function AppRouterContent() {
             <Route path="/checkout" element={controller.busy ? <p role="status">Đang kiểm tra đăng nhập…</p> : <CheckoutPage />} />
             <Route path="/orders" element={<CustomerOrdersView />} />
             <Route path="/orders/:id" element={<CustomerOrderDetailView />} />
+            <Route path="/transactions" element={<CustomerTransactionsView />} />
             <Route path="/payment/success" element={<PaymentSuccessPage />} />
             <Route path="/payment/error" element={<PaymentErrorPage />} />
             <Route path="/payment/cancel" element={<PaymentCancelPage />} />

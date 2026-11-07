@@ -39,7 +39,8 @@ public class ManagerChatController {
     @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
     public SessionDto open(@PathVariable String shopId, @AuthenticationPrincipal CurrentUser user,
                            @Valid @RequestBody OpenForShop body) {
-        return chat.openForShop(shopId, user.id(), body.customOrderId());
+        return body.orderId() != null ? chat.openForShopByOrder(shopId, user.id(), body.orderId())
+                : chat.openForShop(shopId, user.id(), body.customOrderId());
     }
 
     @GetMapping("/unread")

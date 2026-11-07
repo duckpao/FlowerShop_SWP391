@@ -31,6 +31,13 @@ public class CustomerOrderController {
         return service.byIds(user.id(), ids);
     }
 
+    /** Lịch sử giao dịch (mọi lần thanh toán) của khách. GET /api/customer/orders/transactions?page= */
+    @GetMapping("/transactions")
+    public CustomerOrderService.TransactionResults transactions(@AuthenticationPrincipal CurrentUser user,
+                                                                @RequestParam(defaultValue = "0") int page) {
+        return service.transactions(user.id(), page);
+    }
+
     @GetMapping("/{id}")
     public CustomerOrderService.OrderDetailResponse detail(@AuthenticationPrincipal CurrentUser user,
                                                            @PathVariable String id) {

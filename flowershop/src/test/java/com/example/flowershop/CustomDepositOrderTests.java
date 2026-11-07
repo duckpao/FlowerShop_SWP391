@@ -78,6 +78,18 @@ class CustomDepositOrderTests {
         assertThat(order.getTotalAmount()).isEqualByComparingTo("830000");
         assertThat(order.getRecipientName()).isEqualTo("Lan");
         assertThat(response.getTotalAmount()).isEqualByComparingTo("830000");
+        // Báo giá cũ không có depositPercent: để 0, SePay tự lấy 50% tổng như trước
+        assertThat(order.getDepositAmount()).isEqualByComparingTo("0");
+    }
+
+    @Test
+    void depositIsShopPercentOfQuoteLockedIntoOrder() {
+        request.setDesiredComponents("{\"quantity\":1,\"quotedPrice\":800000,\"depositPercent\":30}");
+        service.makeCustomOrder("c-1", "req-1", body());
+
+        ArgumentCaptor<Order> saved = ArgumentCaptor.forClass(Order.class);
+        verify(orders).save(saved.capture());
+        assertThat(saved.getValue().getDepositAmount()).isEqualByComparingTo("240000");
     }
 
     @Test
