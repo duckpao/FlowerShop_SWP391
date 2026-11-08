@@ -10,14 +10,17 @@ import PageMeta from '../components/common/PageMeta'
 import PageBreadCrumb from '../components/common/PageBreadCrumb'
 
 const statusColors = {
+    AWAITING_QUOTE: 'warning', QUOTED: 'info',
     PENDING: 'warning', AWAITING_DEPOSIT: 'warning', DEPOSIT_PAID: 'info', PROCESSING: 'info', DELIVERING: 'info',
     COMPLETED: 'success', CANCELLED: 'error', REFUNDED: 'error',
 }
 const statusLabels = {
+    AWAITING_QUOTE: 'Chờ shop báo giá', QUOTED: 'Chờ đồng ý báo giá',
     PENDING: 'Chờ xác nhận', AWAITING_DEPOSIT: 'Chờ đặt cọc', DEPOSIT_PAID: 'Đã đặt cọc', PROCESSING: 'Đang chuẩn bị',
     DELIVERING: 'Đang giao', COMPLETED: 'Hoàn thành', CANCELLED: 'Đã hủy', REFUNDED: 'Hoàn hàng',
 }
 const tabs = [
+    ['AWAITING_QUOTE', 'Chờ báo giá'], ['QUOTED', 'Chờ đồng ý báo giá'],
     ['', 'Tất cả'], ['PENDING', 'Chờ thanh toán'], ['PROCESSING', 'Đang chuẩn bị'],
     ['DELIVERING', 'Đang giao'], ['COMPLETED', 'Hoàn thành'], ['CANCELLED', 'Đã hủy'],
 ]

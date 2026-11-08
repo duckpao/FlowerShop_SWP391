@@ -1,0 +1,909 @@
+/*DROP DATABASE IF EXISTS flower_shop_db;*/
+CREATE DATABASE IF NOT EXISTS flower_shop_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE flower_shop_db;
+SET NAMES utf8mb4;
+
+-- ==========================================
+-- M01: AUTHENTICATION & USER MANAGEMENT
+-- ==========================================
+CREATE TABLE Users (
+    avatar_url VARCHAR(1024),
+    id VARCHAR(36) PRIMARY KEY,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password_hash VARCHAR(255),
+    google_id VARCHAR(255) UNIQUE,
+    full_name VARCHAR(100),
+    phone VARCHAR(20),
+    role ENUM('ADMIN', 'SHOP', 'CUSTOMER', 'DELIVERY', 'SHOP_STAFF') NOT NULL, -- DELIVERY: giá trị cũ, giữ lại cho chức năng giao hàng sau này
+    is_email_verified BOOLEAN DEFAULT FALSE,
+    status ENUM('ACTIVE', 'INACTIVE', 'BANNED') DEFAULT 'ACTIVE',
+    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(36),
+    last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    last_modify_by VARCHAR(36)
+);
+
+CREATE TABLE Shops (
+    id VARCHAR(36) PRIMARY KEY,
+    owner_id VARCHAR(36) NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    logo_url VARCHAR(255),
+    status ENUM('PENDING', 'ACTIVE', 'INACTIVE', 'BANNED') DEFAULT 'PENDING',
+    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(36),
+    last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    last_modify_by VARCHAR(36),
+    FOREIGN KEY (owner_id) REFERENCES Users(id),
+    UNIQUE KEY uq_shop_owner (owner_id) -- mỗi chủ shop chỉ có một shop
+);
+
+CREATE TABLE Addresses (
+    recipient_name VARCHAR(100),
+    recipient_phone VARCHAR(10),
+    is_pickup BOOLEAN DEFAULT FALSE,
+    is_return BOOLEAN DEFAULT FALSE,
+    address_type VARCHAR(10) DEFAULT 'HOME',
+    id VARCHAR(36) PRIMARY KEY,
+    user_id VARCHAR(36), -- NULL nếu là địa chỉ của Shop
+    shop_id VARCHAR(36), -- NULL nếu là địa chỉ của User
+    address_line VARCHAR(255) NOT NULL,
+    ward VARCHAR(100),
+    district VARCHAR(100),
+    city VARCHAR(100),
+    ghn_district_id INT, -- mã quận/huyện và mã phường/xã của GHN, dùng để tính phí và tạo vận đơn
+    ghn_ward_code VARCHAR(20),
+    is_default BOOLEAN DEFAULT FALSE,
+    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(36),
+    last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    last_modify_by VARCHAR(36),
+    FOREIGN KEY (user_id) REFERENCES Users(id),
+    FOREIGN KEY (shop_id) REFERENCES Shops(id),
+    CONSTRAINT chk_address_owner CHECK ((user_id IS NULL) <> (shop_id IS NULL)) -- đúng 1 trong 2
+);
+
+CREATE TABLE Auth_Sessions (
+    id VARCHAR(36) PRIMARY KEY,
+    user_id VARCHAR(36) NOT NULL,
+    refresh_hash VARCHAR(255) NOT NULL,
+    expires_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    revoked BOOLEAN DEFAULT FALSE,
+    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(36),
+    last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    last_modify_by VARCHAR(36),
+    FOREIGN KEY (user_id) REFERENCES Users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE Otp_Challenges (
+    id VARCHAR(36) PRIMARY KEY,
+    user_id VARCHAR(36) NOT NULL,
+    purpose VARCHAR(30) NOT NULL, -- ví dụ: RESET_PASSWORD
+    code_hash VARCHAR(255) NOT NULL,
+    issued_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    used_at TIMESTAMP NULL, -- thời điểm mã đã được dùng
+    window_start TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    failed_attempts INT NOT NULL DEFAULT 0,
+    send_count INT NOT NULL DEFAULT 1,
+    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(36),
+    last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    last_modify_by VARCHAR(36),
+    FOREIGN KEY (user_id) REFERENCES Users(id) ON DELETE CASCADE,
+    UNIQUE KEY uq_otp_user_purpose (user_id, purpose) -- mỗi user chỉ một mã đang hiệu lực cho mỗi mục đích
+);
+
+CREATE TABLE Pending_Registrations (
+    email VARCHAR(255) PRIMARY KEY,
+    full_name VARCHAR(100),
+    password_hash VARCHAR(255) NOT NULL,
+    otp_hash VARCHAR(255) NOT NULL,
+    shop_name VARCHAR(255),
+    shop_description TEXT,
+    issued_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    window_start TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    failed_attempts INT NOT NULL DEFAULT 0,
+    send_count INT NOT NULL DEFAULT 1,
+    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+CREATE TABLE Manager_Applications (
+    id VARCHAR(36) PRIMARY KEY,
+    user_id VARCHAR(36) NOT NULL UNIQUE, -- mỗi user chỉ một đơn xin mở shop (gửi lại thì ghi đè đơn cũ)
+    full_name VARCHAR(100) NOT NULL,
+    phone VARCHAR(20) NOT NULL,
+    shop_name VARCHAR(255) NOT NULL,
+    description VARCHAR(5000) NOT NULL,
+    address_line VARCHAR(255) NOT NULL,
+    city VARCHAR(100) NOT NULL,
+    district VARCHAR(100) NOT NULL,
+    ward VARCHAR(100) NOT NULL,
+    status VARCHAR(16) NOT NULL,
+    review_note VARCHAR(1000),
+    submitted_at DATETIME(6) NOT NULL,
+    reviewed_at DATETIME(6),
+    reviewed_by VARCHAR(36),
+    shop_id VARCHAR(36),
+    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(36),
+    last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    last_modify_by VARCHAR(36),
+    FOREIGN KEY (user_id) REFERENCES Users(id)
+);
+
+CREATE TABLE Shop_Staff (
+    id VARCHAR(36) PRIMARY KEY,
+    shop_id VARCHAR(36) NOT NULL,
+    user_id VARCHAR(36) NOT NULL,
+    active BOOLEAN DEFAULT TRUE,
+    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(36),
+    last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    last_modify_by VARCHAR(36),
+    FOREIGN KEY (shop_id) REFERENCES Shops(id),
+    FOREIGN KEY (user_id) REFERENCES Users(id),
+    UNIQUE KEY uq_shop_staff (shop_id, user_id)
+);
+
+CREATE TABLE Staff_Applications (
+    id VARCHAR(36) PRIMARY KEY,
+    shop_id VARCHAR(36) NOT NULL,
+    user_id VARCHAR(36) NOT NULL,
+    full_name VARCHAR(100) NOT NULL,
+    phone VARCHAR(20) NOT NULL,
+    introduction VARCHAR(1000) NOT NULL,
+    status VARCHAR(16) NOT NULL, -- PENDING, APPROVED, REJECTED
+    submitted_at DATETIME(6) NOT NULL,
+    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(36),
+    last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    last_modify_by VARCHAR(36),
+    FOREIGN KEY (shop_id) REFERENCES Shops(id),
+    FOREIGN KEY (user_id) REFERENCES Users(id),
+    UNIQUE KEY uq_staff_application (shop_id, user_id)
+);
+
+CREATE TABLE Staff_Invitations (
+    id VARCHAR(36) PRIMARY KEY,
+    shop_id VARCHAR(36) NOT NULL,
+    email VARCHAR(255) NOT NULL,
+    token_hash VARCHAR(255) NOT NULL,
+    issued_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    window_start TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    send_count INT NOT NULL DEFAULT 1,
+    status VARCHAR(16) NOT NULL DEFAULT 'PENDING', -- PENDING, ACCEPTED, EXPIRED, CANCELLED (service ghi CANCELLED nên không dùng ENUM)
+    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(36),
+    last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    last_modify_by VARCHAR(36),
+    FOREIGN KEY (shop_id) REFERENCES Shops(id),
+    UNIQUE KEY uq_staff_invite (shop_id, email)
+);
+
+-- ==========================================
+-- M02: PRODUCT & CATALOG
+-- ==========================================
+CREATE TABLE Categories (
+    id VARCHAR(36) PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+    group_name VARCHAR(50), -- nhóm trên menu: Chủ đề, Hoa tươi, Kiểu dáng
+    status ENUM('ACTIVE', 'INACTIVE') DEFAULT 'ACTIVE',
+    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(36),
+    last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    last_modify_by VARCHAR(36)
+);
+
+CREATE TABLE Products (
+    id VARCHAR(36) PRIMARY KEY,
+    shop_id VARCHAR(36) NOT NULL,
+    category_id VARCHAR(36) NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    components JSON, -- Thành phần: {"roses": 5, "baby_breath": 2}
+    shelf_life_days INT, -- Thời gian bảo quản
+    price DECIMAL(12, 2) NOT NULL,
+    stock INT NOT NULL DEFAULT 0,
+    product_type ENUM('READY_MADE', 'CUSTOM') NOT NULL DEFAULT 'READY_MADE',
+    status ENUM('ACTIVE', 'INACTIVE', 'OUT_OF_STOCK') DEFAULT 'ACTIVE',
+    admin_hidden BOOLEAN NOT NULL DEFAULT FALSE,
+    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(36),
+    last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    last_modify_by VARCHAR(36),
+    FOREIGN KEY (shop_id) REFERENCES Shops(id),
+    FOREIGN KEY (category_id) REFERENCES Categories(id)
+);
+
+CREATE TABLE Product_Images (
+    id VARCHAR(36) PRIMARY KEY,
+    product_id VARCHAR(36) NOT NULL,
+    image_url VARCHAR(500) NOT NULL, -- URL từ Cloudinary
+    is_primary BOOLEAN DEFAULT FALSE,
+    display_order INT DEFAULT 0,
+    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(36),
+    last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    last_modify_by VARCHAR(36),
+    FOREIGN KEY (product_id) REFERENCES Products(id) ON DELETE CASCADE
+);
+
+CREATE TABLE Product_Videos (
+    id VARCHAR(36) PRIMARY KEY,
+    product_id VARCHAR(36) NOT NULL,
+    video_url VARCHAR(500) NOT NULL, -- URL từ Cloudinary
+    title VARCHAR(255),
+    description TEXT,
+    display_order INT DEFAULT 0,
+    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(36),
+    last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    last_modify_by VARCHAR(36),
+    FOREIGN KEY (product_id) REFERENCES Products(id) ON DELETE CASCADE
+);
+
+-- ==========================================
+-- VOUCHER / COUPON SYSTEM
+-- ==========================================
+CREATE TABLE Coupons (
+    id VARCHAR(36) PRIMARY KEY,
+    shop_id VARCHAR(36), -- NULL nếu là platform voucher
+    target VARCHAR(20) NOT NULL DEFAULT 'ORDER', -- ORDER / SHIPPING / PRODUCT
+    product_id VARCHAR(36), -- Chỉ dùng cho voucher PRODUCT của sàn
+    deleted BOOLEAN NOT NULL DEFAULT FALSE,
+    code VARCHAR(50) UNIQUE NOT NULL,
+    discount_type ENUM('PERCENTAGE', 'FIXED_AMOUNT') NOT NULL,
+    discount_value DECIMAL(12,2) NOT NULL,
+    min_order_value DECIMAL(12,2) DEFAULT 0,
+    max_discount_value DECIMAL(12,2),
+    start_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ,
+    end_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    usage_limit INT DEFAULT 1,
+    used_count INT DEFAULT 0,
+    status ENUM('ACTIVE', 'EXPIRED', 'DISABLED') DEFAULT 'ACTIVE',
+    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(36),
+    last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    last_modify_by VARCHAR(36),
+    FOREIGN KEY (shop_id) REFERENCES Shops(id),
+    CONSTRAINT fk_coupon_product FOREIGN KEY (product_id) REFERENCES Products(id)
+);
+
+-- ==========================================
+-- M03: CART & CHECKOUT
+-- ==========================================
+CREATE TABLE Cart_Items (
+    id VARCHAR(36) PRIMARY KEY,
+    user_id VARCHAR(36) NOT NULL,
+    product_id VARCHAR(36) NOT NULL,
+    quantity INT NOT NULL DEFAULT 1,
+    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(36),
+    last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    last_modify_by VARCHAR(36),
+    FOREIGN KEY (user_id) REFERENCES Users(id),
+    FOREIGN KEY (product_id) REFERENCES Products(id),
+    UNIQUE KEY uq_cart_user_product (user_id, product_id)
+);
+
+-- ==========================================
+-- M04, M06: ORDER & FULFILLMENT MANAGEMENT
+-- ==========================================
+CREATE TABLE Orders (
+    id VARCHAR(36) PRIMARY KEY,
+    customer_id VARCHAR(36) NOT NULL,
+    shop_id VARCHAR(36) NOT NULL,
+    delivery_address_id VARCHAR(36) NULL,
+    recipient_name VARCHAR(255),
+    recipient_phone VARCHAR(20),
+    coupon_id VARCHAR(36),
+    shipping_coupon_id VARCHAR(36),
+    coupon_code VARCHAR(50),
+    shipping_coupon_code VARCHAR(50),
+    shipping_discount_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+    coupons_released BOOLEAN NOT NULL DEFAULT FALSE,
+    order_type ENUM('STANDARD', 'CUSTOM') DEFAULT 'STANDARD',
+    sub_total DECIMAL(12, 2) NOT NULL,
+    discount_amount DECIMAL(12, 2) DEFAULT 0.00,
+    shipping_fee DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+    total_amount DECIMAL(12, 2) NOT NULL,
+    deposit_amount DECIMAL(12, 2) DEFAULT 0.00,
+    customer_note TEXT,
+    cancel_reason TEXT,
+    shop_note TEXT,
+    checkout_group VARCHAR(36), -- chung cho các đơn (mỗi shop một đơn) tạo trong cùng một lần thanh toán giỏ; NULL với đơn lẻ
+    custom_request_id VARCHAR(36), -- đơn đặt cọc (CUSTOM) sinh từ Custom_Order_Requests; NULL với đơn thường
+    payment_started_at DATETIME NULL,
+    status ENUM('PENDING', 'AWAITING_DEPOSIT', 'DEPOSIT_PAID', 'PROCESSING', 'DELIVERING', 'COMPLETED', 'CANCELLED', 'REFUNDED', 'AWAITING_QUOTE', 'QUOTED') DEFAULT 'PENDING',
+    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(36),
+    last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    last_modify_by VARCHAR(36),
+    FOREIGN KEY (customer_id) REFERENCES Users(id),
+    FOREIGN KEY (shop_id) REFERENCES Shops(id),
+    FOREIGN KEY (delivery_address_id) REFERENCES Addresses(id),
+    FOREIGN KEY (coupon_id) REFERENCES Coupons(id),
+    CONSTRAINT fk_order_shipping_coupon FOREIGN KEY (shipping_coupon_id) REFERENCES Coupons(id),
+    INDEX idx_orders_checkout_group (checkout_group),
+    INDEX idx_orders_custom_request (custom_request_id)
+);
+
+CREATE TABLE Order_Details (
+    id VARCHAR(36) PRIMARY KEY,
+    order_id VARCHAR(36) NOT NULL,
+    product_id VARCHAR(36),
+    custom_materials JSON, -- {"main_flower": "Hoa hồng đỏ", "wrapper_color": "Đen", "ribbon": "Trắng"}
+    price DECIMAL(12, 2) NOT NULL, -- Đơn giá tại thời điểm mua
+    quantity INT NOT NULL,
+    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(36),
+    last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    last_modify_by VARCHAR(36),
+    FOREIGN KEY (order_id) REFERENCES Orders(id),
+    FOREIGN KEY (product_id) REFERENCES Products(id)
+);
+
+-- Giao hàng thông qua đối tác bên ngoài (GHN/GHTK...), không có tài khoản người giao hàng trong hệ thống.
+-- delivery_partner_id lưu mã/tên đối tác dạng chuỗi, không phải khóa ngoại.
+CREATE TABLE Deliveries (
+    id VARCHAR(36) PRIMARY KEY,
+    order_id VARCHAR(36) NOT NULL,
+    delivery_partner_id VARCHAR(36),
+    tracking_code VARCHAR(100),
+    status ENUM('PENDING', 'PICKED_UP', 'ON_THE_WAY', 'DELIVERED', 'FAILED', 'RETURNING', 'RETURNED') DEFAULT 'PENDING',
+    ghn_status VARCHAR(40),
+    tracking_notes TEXT,
+    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(36),
+    last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    last_modify_by VARCHAR(36),
+    FOREIGN KEY (order_id) REFERENCES Orders(id)
+);
+
+-- ==========================================
+-- CHAT SYSTEM
+-- ==========================================
+CREATE TABLE Chat_Sessions (
+    id VARCHAR(36) PRIMARY KEY,
+    customer_id VARCHAR(36) NOT NULL,
+    shop_id VARCHAR(36) NOT NULL,
+    last_message_at DATETIME(6) NULL,
+    last_message_preview VARCHAR(255) NULL,
+    customer_unread_count INT NOT NULL DEFAULT 0, -- tin shop gửi mà khách chưa đọc
+    shop_unread_count INT NOT NULL DEFAULT 0, -- tin khách gửi mà shop chưa đọc
+    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(36),
+    last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    last_modify_by VARCHAR(36),
+    FOREIGN KEY (customer_id) REFERENCES Users(id),
+    FOREIGN KEY (shop_id) REFERENCES Shops(id),
+    UNIQUE KEY uq_chat_customer_shop (customer_id, shop_id),
+    INDEX idx_chat_shop_last (shop_id, last_message_at)
+);
+
+CREATE TABLE Chat_Messages (
+    id VARCHAR(36) PRIMARY KEY,
+    session_id VARCHAR(36) NOT NULL,
+    sender_id VARCHAR(36) NOT NULL,
+    sender_type ENUM('CUSTOMER', 'SHOP') NOT NULL,
+    message TEXT,
+    media JSON, -- Hình ảnh, video, voucher đính kèm
+    context_type ENUM('NONE', 'CUSTOM_ORDER', 'PRODUCT') NOT NULL DEFAULT 'NONE', -- thẻ đính kèm: đơn custom hoặc sản phẩm
+    context_id VARCHAR(36) NULL,
+    context_snapshot JSON NULL, -- tên, giá, ảnh, trạng thái tại lúc gửi
+    is_read BOOLEAN DEFAULT FALSE,
+    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(36),
+    last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    last_modify_by VARCHAR(36),
+    FOREIGN KEY (session_id) REFERENCES Chat_Sessions(id),
+    FOREIGN KEY (sender_id) REFERENCES Users(id),
+    INDEX idx_chat_messages_session (session_id, created_date)
+);
+
+-- ==========================================
+-- M04: CUSTOM FLOWER REQUEST
+-- ==========================================
+-- Danh mục loại hoa, dịp tặng, giấy gói và phụ kiện cho đơn hoa theo yêu cầu.
+-- disabled = TRUE: vẫn hiển thị nhưng không cho khách lựa chọn.
+CREATE TABLE IF NOT EXISTS Custom_Flower_Options (
+    id VARCHAR(36) PRIMARY KEY,
+    option_group VARCHAR(20) NOT NULL,
+    label VARCHAR(100) NOT NULL,
+    disabled BOOLEAN NOT NULL DEFAULT FALSE,
+    sort_order INT NOT NULL DEFAULT 0,
+    CONSTRAINT uq_custom_flower_option UNIQUE (option_group, label)
+) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+CREATE TABLE Custom_Order_Requests (
+    id VARCHAR(36) PRIMARY KEY,
+    customer_id VARCHAR(36) NOT NULL,
+    shop_id VARCHAR(36) NOT NULL,
+    budget DECIMAL(12, 2) NOT NULL,
+    desired_components JSON, -- {"flowers": ["Hoa hồng", "Hoa ly"], "wrapper": "Giấy Kraft"}
+    description TEXT,
+    status ENUM('REQUESTED', 'NEGOTIATING', 'ACCEPTED', 'REJECTED') DEFAULT 'REQUESTED',
+    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(36),
+    last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    last_modify_by VARCHAR(36),
+    FOREIGN KEY (customer_id) REFERENCES Users(id),
+    FOREIGN KEY (shop_id) REFERENCES Shops(id)
+);
+
+-- ==========================================
+-- M05: PAYMENT & REFUND
+-- ==========================================
+CREATE TABLE Payments (
+    id VARCHAR(36) PRIMARY KEY,
+    order_id VARCHAR(36) NOT NULL,
+    payment_type ENUM('DEPOSIT', 'FINAL', 'FULL') NOT NULL,
+    payment_method ENUM('ONLINE', 'COD') NOT NULL,
+    amount DECIMAL(12, 2) NOT NULL,
+    gateway_transaction_no VARCHAR(100), -- mã giao dịch từ cổng thanh toán
+    invoice_number VARCHAR(100) UNIQUE, -- Mã hóa đơn duy nhất dùng cho SePay/IPN
+    group_invoice VARCHAR(100), -- mã gửi SePay khi thanh toán gộp nhiều đơn; NULL với thanh toán đơn lẻ
+    gateway_response JSON,
+    status ENUM('PENDING', 'SUCCESS', 'FAILED') DEFAULT 'PENDING',
+    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(36),
+    last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    last_modify_by VARCHAR(36),
+    FOREIGN KEY (order_id) REFERENCES Orders(id),
+    INDEX idx_payments_group_invoice (group_invoice)
+);
+
+CREATE TABLE Refunds (
+    id VARCHAR(36) PRIMARY KEY,
+    order_id VARCHAR(36) NOT NULL,
+    amount DECIMAL(12, 2) NOT NULL,
+    reason TEXT NOT NULL,
+    gateway_refund_id VARCHAR(100),
+    gateway_response JSON,
+    status ENUM('REQUESTED', 'APPROVED', 'PROCESSED', 'REJECTED') DEFAULT 'REQUESTED',
+    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(36),
+    last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    last_modify_by VARCHAR(36),
+    FOREIGN KEY (order_id) REFERENCES Orders(id)
+);
+
+-- ==========================================
+-- M07: REVIEW & CUSTOMER ENGAGEMENT
+-- ==========================================
+CREATE TABLE Product_Reviews (
+    id VARCHAR(36) PRIMARY KEY,
+    product_id VARCHAR(36) NOT NULL,
+    user_id VARCHAR(36) NOT NULL,
+    order_id VARCHAR(36) NULL,
+    rating INT CHECK (rating >= 1 AND rating <= 5),
+    comment TEXT,
+    media JSON,
+    shop_reply TEXT,
+    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(36),
+    last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    last_modify_by VARCHAR(36),
+    FOREIGN KEY (product_id) REFERENCES Products(id),
+    FOREIGN KEY (user_id) REFERENCES Users(id),
+    FOREIGN KEY (order_id) REFERENCES Orders(id),
+    UNIQUE KEY uq_review_user_product (user_id, product_id)
+);
+
+CREATE TABLE Favorite_Products (
+    user_id VARCHAR(36) NOT NULL,
+    product_id VARCHAR(36) NOT NULL,
+    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(36),
+    last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    last_modify_by VARCHAR(36),
+    PRIMARY KEY (user_id, product_id),
+    FOREIGN KEY (user_id) REFERENCES Users(id),
+    FOREIGN KEY (product_id) REFERENCES Products(id)
+);
+
+CREATE TABLE Favorite_Shops (
+    user_id VARCHAR(36) NOT NULL,
+    shop_id VARCHAR(36) NOT NULL,
+    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(36),
+    last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    last_modify_by VARCHAR(36),
+    PRIMARY KEY (user_id, shop_id),
+    FOREIGN KEY (user_id) REFERENCES Users(id),
+    FOREIGN KEY (shop_id) REFERENCES Shops(id)
+);
+
+-- ==========================================
+-- M08: BLOG & NOTIFICATION
+-- ==========================================
+CREATE TABLE Blogs (
+    id VARCHAR(36) PRIMARY KEY,
+    shop_id VARCHAR(36) NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    content LONGTEXT NOT NULL, -- HTML/Rich Text
+    thumbnail_url VARCHAR(500),
+    images JSON, -- danh sách ảnh của bài viết (entity Blog.images)
+    status ENUM('DRAFT', 'PUBLISHED', 'HIDDEN') DEFAULT 'PUBLISHED',
+    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(36),
+    last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    last_modify_by VARCHAR(36),
+    FOREIGN KEY (shop_id) REFERENCES Shops(id),
+    INDEX idx_blogs_public_feed (status, created_date),
+    INDEX idx_blogs_shop_feed (shop_id, created_date)
+);
+
+CREATE TABLE Blog_Images (
+    id VARCHAR(36) PRIMARY KEY,
+    blog_id VARCHAR(36) NOT NULL,
+    image_url VARCHAR(500) NOT NULL,
+    display_order INT DEFAULT 0,
+    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(36),
+    last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    last_modify_by VARCHAR(36),
+    FOREIGN KEY (blog_id) REFERENCES Blogs(id) ON DELETE CASCADE
+);
+
+CREATE TABLE Blog_Interactions (
+    user_id VARCHAR(36) NOT NULL,
+    blog_id VARCHAR(36) NOT NULL,
+    interaction_type ENUM('LIKE', 'SAVE') NOT NULL,
+    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(36),
+    last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    last_modify_by VARCHAR(36),
+    PRIMARY KEY (user_id, blog_id, interaction_type),
+    FOREIGN KEY (user_id) REFERENCES Users(id),
+    FOREIGN KEY (blog_id) REFERENCES Blogs(id)
+);
+
+CREATE TABLE Blog_Comments (
+    id VARCHAR(36) PRIMARY KEY,
+    blog_id VARCHAR(36) NOT NULL,
+    user_id VARCHAR(36) NOT NULL,
+    parent_comment_id VARCHAR(36), -- Reply comment
+    content TEXT NOT NULL,
+    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(36),
+    last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    last_modify_by VARCHAR(36),
+    FOREIGN KEY (blog_id) REFERENCES Blogs(id),
+    FOREIGN KEY (user_id) REFERENCES Users(id),
+    FOREIGN KEY (parent_comment_id) REFERENCES Blog_Comments(id)
+);
+
+CREATE TABLE Customer_Occasions (
+    id VARCHAR(36) PRIMARY KEY,
+    customer_id VARCHAR(36) NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    occasion_date DATE NOT NULL,
+    reminder_sent BOOLEAN DEFAULT FALSE, -- dịp một lần: đã nhắc xong
+    recurring_yearly BOOLEAN NOT NULL DEFAULT FALSE, -- lặp lại hằng năm (sinh nhật, kỷ niệm)
+    notify_days_before INT NOT NULL DEFAULT 7, -- nhắc trước ngày dịp bao nhiêu ngày (mặc định 1 tuần)
+    notify_time TIME NOT NULL DEFAULT '08:00:00', -- giờ gửi nhắc
+    last_reminded_for DATE NULL, -- ngày diễn ra của lần dịp đã nhắc gần nhất, tránh nhắc lặp
+    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(36),
+    last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    last_modify_by VARCHAR(36),
+    FOREIGN KEY (customer_id) REFERENCES Users(id),
+    INDEX idx_occasions_customer (customer_id)
+);
+
+-- Thông báo trong ứng dụng (chuông thông báo)
+CREATE TABLE Notifications (
+    id VARCHAR(36) PRIMARY KEY,
+    user_id VARCHAR(36) NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    message TEXT,
+    link VARCHAR(255),
+    is_read BOOLEAN NOT NULL DEFAULT FALSE,
+    created_date DATETIME(6) NOT NULL,
+    CONSTRAINT fk_notification_user FOREIGN KEY (user_id) REFERENCES Users(id),
+    INDEX ix_notification_user (user_id, created_date)
+);
+
+-- Theo dõi shop: sản phẩm đã được công bố (để sửa sản phẩm thường không gửi lại thông báo)
+CREATE TABLE Shop_Product_Publications (
+    product_id VARCHAR(36) PRIMARY KEY,
+    published_at DATETIME(6) NOT NULL
+);
+
+-- Hàng đợi email báo sản phẩm mới cho người theo dõi shop
+CREATE TABLE Shop_Product_Mails (
+    id VARCHAR(36) PRIMARY KEY,
+    product_id VARCHAR(36) NOT NULL,
+    shop_id VARCHAR(36) NOT NULL,
+    user_id VARCHAR(36) NOT NULL,
+    status VARCHAR(16) NOT NULL DEFAULT 'PENDING',
+    attempts INT NOT NULL DEFAULT 0,
+    next_attempt_at DATETIME(6) NOT NULL,
+    created_at DATETIME(6) NOT NULL,
+    sent_at DATETIME(6),
+    CONSTRAINT uk_shop_product_mail UNIQUE (product_id, user_id),
+    INDEX ix_shop_product_mail_due (status, next_attempt_at, created_at)
+);
+
+-- ==========================================
+-- MOCK DATA
+-- ==========================================
+
+-- 1. USERS (Admin, Shop Owner, Shop Staff, Customer)
+INSERT INTO Users (id, email, password_hash, full_name, phone, role, is_email_verified, status, created_by) VALUES
+('user-admin-01', 'admin@flowershop.com', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', 'System Admin', '0901234567', 'ADMIN', TRUE, 'ACTIVE', 'user-admin-01'),
+('user-shop-01', 'shop1@gmail.com', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', 'Nguyễn Đức Bảo', '0912345678', 'SHOP', TRUE, 'ACTIVE', 'user-admin-01'),
+('user-staff-01', 'staff1@gmail.com', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', 'Phạm Văn D', '0933445566', 'SHOP_STAFF', TRUE, 'ACTIVE', 'user-shop-01'),
+('user-customer-01', 'khachhang1@gmail.com', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', 'Trần Thị B', '0987654321', 'CUSTOMER', TRUE, 'ACTIVE', 'user-customer-01');
+
+-- 2. SHOPS
+INSERT INTO Shops (id, owner_id, name, description, logo_url, status, created_by) VALUES
+('shop-01', 'user-shop-01', 'FPTU Smart Floral', 'Tiệm hoa sinh viên giá rẻ, thiết kế theo yêu cầu.', 'https://link-to-logo.com/logo1.png', 'ACTIVE', 'user-admin-01');
+
+-- 3. ADDRESSES
+-- Mô hình 3 cấp: tỉnh (city) > quận/huyện (district) > phường/xã (ward). ghn_district_id / ghn_ward_code để NULL vì chưa lấy
+-- được mã từ API GHN; mở hồ sơ và chọn lại Tỉnh, Quận/Huyện, Phường/Xã để có mã thì mới tính được phí vận chuyển.
+INSERT INTO Addresses (id, user_id, shop_id, address_line, ward, district, city, recipient_name, recipient_phone, address_type, is_pickup, is_default, created_by) VALUES
+('addr-shop-01', NULL, 'shop-01', 'Khu Công Nghệ Cao Hòa Lạc', 'Thạch Hòa', 'Thạch Thất', 'Hà Nội', 'Nguyễn Đức Bảo', '0912345678', 'OFFICE', TRUE, TRUE, 'user-shop-01'),
+('addr-customer-01', 'user-customer-01', NULL, 'Số 10, Ngõ 20, Đường Cầu Giấy', 'Dịch Vọng', 'Cầu Giấy', 'Hà Nội', 'Trần Thị B', '0987654321', 'HOME', FALSE, TRUE, 'user-customer-01');
+
+-- 4. CATEGORIES
+INSERT INTO Categories (id, name, description, status, created_by) VALUES
+('cat-01', 'Hoa Tình Yêu', 'Các mẫu hoa lãng mạn dành cho cặp đôi', 'ACTIVE', 'user-admin-01'),
+('cat-02', 'Hoa Khai Trương', 'Kệ hoa, lẵng hoa chúc mừng khai trương', 'ACTIVE', 'user-admin-01'),
+-- Theo dịp
+('cat-03', 'Hoa Sinh Nhật', 'Bó hoa, giỏ hoa chúc mừng sinh nhật', 'ACTIVE', 'user-admin-01'),
+('cat-04', 'Hoa Chúc Mừng', 'Hoa chúc mừng thăng chức, thành công, sự kiện vui', 'ACTIVE', 'user-admin-01'),
+('cat-05', 'Hoa Chia Buồn', 'Vòng hoa, lẵng hoa viếng và chia buồn', 'ACTIVE', 'user-admin-01'),
+('cat-06', 'Hoa Chúc Sức Khỏe', 'Hoa thăm hỏi, chúc người thân mau khỏe', 'ACTIVE', 'user-admin-01'),
+('cat-07', 'Hoa Cảm Ơn', 'Hoa gửi lời cảm ơn thầy cô, đối tác, người thân', 'ACTIVE', 'user-admin-01'),
+('cat-08', 'Hoa Mừng Tốt Nghiệp', 'Hoa tặng lễ tốt nghiệp, bảo vệ luận văn', 'ACTIVE', 'user-admin-01'),
+('cat-09', 'Hoa Cưới', 'Hoa cầm tay cô dâu, hoa trang trí tiệc cưới', 'ACTIVE', 'user-admin-01'),
+('cat-10', 'Hoa Ngày 20/10', 'Hoa tặng Ngày Phụ nữ Việt Nam', 'ACTIVE', 'user-admin-01'),
+('cat-11', 'Hoa Ngày 8/3', 'Hoa tặng Ngày Quốc tế Phụ nữ', 'ACTIVE', 'user-admin-01'),
+('cat-12', 'Hoa Ngày Nhà Giáo', 'Hoa tri ân thầy cô ngày 20/11', 'ACTIVE', 'user-admin-01'),
+('cat-13', 'Hoa Valentine', 'Hoa tặng người yêu ngày 14/2', 'ACTIVE', 'user-admin-01'),
+('cat-14', 'Hoa Tết', 'Hoa trưng bàn, hoa chúc Tết đầu năm', 'ACTIVE', 'user-admin-01'),
+('cat-15', 'Hoa Giáng Sinh', 'Hoa và cành trang trí mùa Noel', 'ACTIVE', 'user-admin-01'),
+-- Theo loại hoa
+('cat-16', 'Hoa Hồng', 'Hồng đỏ, hồng pastel, hồng Ecuador', 'ACTIVE', 'user-admin-01'),
+('cat-17', 'Hoa Hướng Dương', 'Bó và giỏ hướng dương rực rỡ', 'ACTIVE', 'user-admin-01'),
+('cat-18', 'Hoa Đồng Tiền', 'Đồng tiền nhiều màu, bền hoa', 'ACTIVE', 'user-admin-01'),
+('cat-19', 'Hoa Ly', 'Ly thơm, ly Tycoon, ly Sorbonne', 'ACTIVE', 'user-admin-01'),
+('cat-20', 'Hoa Cúc', 'Cúc họa mi, cúc mẫu đơn, cúc pingpong', 'ACTIVE', 'user-admin-01'),
+('cat-21', 'Hoa Cẩm Chướng', 'Cẩm chướng đơn và chùm', 'ACTIVE', 'user-admin-01'),
+('cat-22', 'Hoa Cát Tường', 'Cát tường tím, trắng, hồng', 'ACTIVE', 'user-admin-01'),
+('cat-23', 'Baby Flower', 'Hoa baby trắng, baby nhuộm màu', 'ACTIVE', 'user-admin-01'),
+('cat-24', 'Lan Hồ Điệp', 'Chậu lan hồ điệp để bàn, làm quà biếu', 'ACTIVE', 'user-admin-01'),
+-- Theo kiểu dáng
+('cat-25', 'Bó Hoa Tươi', 'Hoa bó gói giấy, cầm tay', 'ACTIVE', 'user-admin-01'),
+('cat-26', 'Giỏ Hoa Tươi', 'Hoa cắm giỏ mây, giỏ gỗ', 'ACTIVE', 'user-admin-01'),
+('cat-27', 'Hộp Hoa Tươi', 'Hoa cắm hộp tròn, hộp vuông, hộp mica', 'ACTIVE', 'user-admin-01'),
+('cat-28', 'Bình Hoa Tươi', 'Hoa cắm sẵn trong bình thủy tinh, bình gốm', 'ACTIVE', 'user-admin-01'),
+('cat-29', 'Lẵng Hoa', 'Lẵng hoa chúc mừng và chia buồn cỡ lớn', 'ACTIVE', 'user-admin-01'),
+('cat-30', 'Kệ Hoa', 'Kệ hoa khai trương, hội nghị, sự kiện', 'ACTIVE', 'user-admin-01');
+
+SET SQL_SAFE_UPDATES = 0;
+UPDATE Categories SET group_name = 'Chủ đề' WHERE name IN ('Hoa Tình Yêu', 'Hoa Khai Trương', 'Hoa Sinh Nhật', 'Hoa Chúc Mừng', 'Hoa Chia Buồn', 'Hoa Chúc Sức Khỏe', 'Hoa Cảm Ơn', 'Hoa Mừng Tốt Nghiệp', 'Hoa Cưới', 'Hoa Ngày 20/10', 'Hoa Ngày 8/3', 'Hoa Ngày Nhà Giáo', 'Hoa Valentine', 'Hoa Tết', 'Hoa Giáng Sinh');
+UPDATE Categories SET group_name = 'Hoa tươi' WHERE name IN ('Hoa Hồng', 'Hoa Hướng Dương', 'Hoa Đồng Tiền', 'Hoa Ly', 'Hoa Cúc', 'Hoa Cẩm Chướng', 'Hoa Cát Tường', 'Baby Flower', 'Lan Hồ Điệp');
+UPDATE Categories SET group_name = 'Kiểu dáng' WHERE name IN ('Bó Hoa Tươi', 'Giỏ Hoa Tươi', 'Hộp Hoa Tươi', 'Bình Hoa Tươi', 'Lẵng Hoa', 'Kệ Hoa');
+SET SQL_SAFE_UPDATES = 1;
+-- 5. PRODUCTS
+INSERT INTO Products (id, shop_id, category_id, name, description, components, shelf_life_days, price, stock, status, created_by) VALUES
+('prod-01', 'shop-01', 'cat-01', 'Bó Hồng Đỏ Mix Baby', 'Bó hoa hồng đỏ Ecuador mix hoa baby trắng', '{"red_roses": 10, "white_baby_breath": 3, "wrapper": "Giấy Kraft"}', 4, 350000.00, 50, 'ACTIVE', 'user-shop-01'),
+('prod-02', 'shop-01', 'cat-02', 'Lẵng Hướng Dương Ban Mai', 'Hoa hướng dương tặng khai trương, tốt nghiệp', '{"sunflowers": 5, "yellow_roses": 5}', 5, 650000.00, 20, 'ACTIVE', 'user-shop-01');
+
+-- 5.0 Sản phẩm đang bán được ghi nhận là đã công bố, để sửa sản phẩm thường không gửi thông báo "sản phẩm mới"
+INSERT IGNORE INTO Shop_Product_Publications (product_id, published_at)
+SELECT id, COALESCE(created_date, NOW()) FROM Products WHERE status = 'ACTIVE';
+
+-- 5.1 PRODUCT IMAGES
+
+-- 5.2 PRODUCT VIDEOS
+
+-- 6. COUPONS
+INSERT INTO Coupons (id, shop_id, code, discount_type, discount_value, min_order_value, max_discount_value, start_date, end_date, usage_limit, used_count, created_by) VALUES
+('coupon-01', 'shop-01', 'WELCOME10', 'PERCENTAGE', 10.00, 200000.00, 50000.00, '2023-01-01 00:00:00', '2026-12-31 23:59:59', 100, 1, 'user-shop-01');
+
+-- 6.1 PLATFORM VOUCHERS: chỉ ADMIN quản lý; shop_id NULL áp dụng toàn sàn.
+INSERT INTO Coupons (id, shop_id, target, product_id, code, discount_type, discount_value, min_order_value, max_discount_value, start_date, end_date, usage_limit, used_count, status, created_by) VALUES
+('coupon-platform-20', NULL, 'ORDER', NULL, 'SAN20', 'PERCENTAGE', 10, 100000, 20000, NOW(), DATE_ADD(NOW(), INTERVAL 1 YEAR), 1000, 0, 'ACTIVE', 'user-admin-01'),
+('coupon-platform-70', NULL, 'ORDER', NULL, 'SAN70', 'PERCENTAGE', 20, 200000, 70000, NOW(), DATE_ADD(NOW(), INTERVAL 1 YEAR), 1000, 0, 'ACTIVE', 'user-admin-01'),
+('coupon-platform-ship', NULL, 'SHIPPING', NULL, 'SHIP30', 'PERCENTAGE', 100, 100000, 30000, NOW(), DATE_ADD(NOW(), INTERVAL 1 YEAR), 1000, 0, 'ACTIVE', 'user-admin-01'),
+('coupon-platform-product', NULL, 'PRODUCT', 'prod-01', 'HONG40', 'PERCENTAGE', 15, 100000, 40000, NOW(), DATE_ADD(NOW(), INTERVAL 1 YEAR), 1000, 0, 'ACTIVE', 'user-admin-01');
+
+-- 6.2 SHOP VOUCHERS (đồng bộ với sql/025_seed_shop_vouchers.sql)
+-- Apply after 024_voucher_management.sql, with the application's schema selected.
+-- Top up each existing shop to three usable ORDER vouchers; preserve existing codes/usage.
+SET NAMES utf8mb4;
+INSERT INTO Coupons (id, shop_id, target, product_id, code, discount_type, discount_value,
+    min_order_value, max_discount_value, start_date, end_date, usage_limit, used_count,
+    status, deleted, created_by, last_modify_by)
+SELECT UUID(), s.id, 'ORDER', NULL,
+    CONCAT('SHOP', UPPER(LEFT(MD5(s.id), 12)), '_', LPAD(v.percent_off, 2, '0')),
+    'PERCENTAGE', v.percent_off, 0, v.discount_cap,
+    DATE_SUB(NOW(), INTERVAL 1 DAY), DATE_ADD(NOW(), INTERVAL 1 YEAR), 1000, 0,
+    'ACTIVE', FALSE, s.owner_id, s.owner_id
+FROM Shops s
+CROSS JOIN (
+    SELECT 1 AS slot, 5 AS percent_off, 20000 AS discount_cap
+    UNION ALL SELECT 2, 15, 70000
+    UNION ALL SELECT 3, 10, 50000
+) v
+LEFT JOIN (
+    SELECT shop_id, COUNT(*) AS usable_count
+    FROM Coupons
+    WHERE shop_id IS NOT NULL AND target='ORDER' AND deleted=FALSE AND status='ACTIVE'
+      AND start_date<=NOW() AND end_date>NOW() AND used_count<usage_limit
+      AND discount_type='PERCENTAGE' AND discount_value>0 AND discount_value<=100
+      AND max_discount_value BETWEEN 20000 AND 70000
+    GROUP BY shop_id
+) existing ON existing.shop_id=s.id
+WHERE v.slot<=GREATEST(0, 3-COALESCE(existing.usable_count, 0))
+  AND NOT EXISTS (
+    SELECT 1 FROM Coupons c
+    WHERE c.code=CONCAT('SHOP', UPPER(LEFT(MD5(s.id), 12)), '_', LPAD(v.percent_off, 2, '0'))
+  );
+
+-- 7. CART ITEMS
+INSERT INTO Cart_Items (id, user_id, product_id, quantity, created_by) VALUES
+('cart-01', 'user-customer-01', 'prod-02', 1, 'user-customer-01');
+
+-- 8. ORDERS: 2 x 350000 = 700000, giảm 10% tối đa 50000 -> tổng 650000
+INSERT INTO Orders (id, customer_id, shop_id, delivery_address_id, recipient_name, recipient_phone, coupon_id, order_type, sub_total, discount_amount, shipping_fee, total_amount, deposit_amount, status, created_by) VALUES
+('order-01', 'user-customer-01', 'shop-01', 'addr-customer-01', 'Trần Thị B', '0987654321', 'coupon-01', 'STANDARD', 700000.00, 50000.00, 0.00, 650000.00, 0.00, 'COMPLETED', 'user-customer-01');
+
+-- 9. ORDER DETAILS
+INSERT INTO Order_Details (id, order_id, product_id, price, quantity, created_by) VALUES
+('ord-dtl-01', 'order-01', 'prod-01', 350000.00, 2, 'user-customer-01');
+
+-- 10. PAYMENTS
+INSERT INTO Payments (id, order_id, payment_type, payment_method, amount, gateway_transaction_no, invoice_number, gateway_response, status, created_by) VALUES
+('pay-01', 'order-01', 'FULL', 'ONLINE', 650000.00, 'VNP123456789', 'INV-0001', '{"vnp_ResponseCode":"00", "vnp_BankCode":"NCB"}', 'SUCCESS', 'user-customer-01');
+
+-- 11. DELIVERIES (đối tác giao hàng bên ngoài)
+INSERT INTO Deliveries (id, order_id, delivery_partner_id, tracking_code, tracking_notes, status, created_by) VALUES
+('del-01', 'order-01', 'GHTK', 'GHTK987654321', 'Giao trong giờ hành chính', 'DELIVERED', 'user-shop-01');
+
+-- 12. CHAT
+INSERT INTO Chat_Sessions (id, customer_id, shop_id, created_by) VALUES
+('session-01', 'user-customer-01', 'shop-01', 'user-customer-01');
+
+INSERT INTO Chat_Messages (id, session_id, sender_id, sender_type, message, is_read, created_by) VALUES
+('msg-01', 'session-01', 'user-customer-01', 'CUSTOMER', 'Shop ơi bó hồng đỏ còn hàng không ạ?', TRUE, 'user-customer-01'),
+('msg-02', 'session-01', 'user-shop-01', 'SHOP', 'Dạ tiệm em còn nhiều hoa tươi mới nhập sáng nay ạ!', FALSE, 'user-shop-01');
+
+-- 13. CUSTOM ORDER REQUESTS
+INSERT INTO Custom_Order_Requests (id, customer_id, shop_id, budget, desired_components, description, status, created_by) VALUES
+('req-01', 'user-customer-01', 'shop-01', 1000000.00, '{"main_flowers": ["Hồng Ân", "Lan Hồ Điệp"], "color_tone": "Pastel"}', 'Làm cho mình một lẵng hoa tặng kỷ niệm 10 năm ngày cưới.', 'NEGOTIATING', 'user-customer-01');
+
+-- 13.1 CUSTOM FLOWER OPTIONS (đồng bộ với sql/023_custom_flower_options.sql)
+INSERT INTO Custom_Flower_Options (id, option_group, label, disabled, sort_order) VALUES
+('flower-rose', 'FLOWER', 'Hoa hồng', FALSE, 10),
+('flower-baby', 'FLOWER', 'Hoa baby', FALSE, 20),
+('flower-tulip', 'FLOWER', 'Hoa tulip', FALSE, 30),
+('flower-sunflower', 'FLOWER', 'Hoa hướng dương', FALSE, 40),
+('flower-hydrangea', 'FLOWER', 'Hoa cẩm tú cầu', FALSE, 50),
+('flower-carnation', 'FLOWER', 'Hoa cẩm chướng', FALSE, 60),
+('flower-orchid', 'FLOWER', 'Hoa lan', FALSE, 70),
+('flower-lily', 'FLOWER', 'Hoa ly', FALSE, 80),
+('flower-chrysanthemum', 'FLOWER', 'Hoa cúc', FALSE, 90),
+('flower-lotus', 'FLOWER', 'Hoa sen', FALSE, 100),
+('flower-peony', 'FLOWER', 'Hoa mẫu đơn', FALSE, 110),
+('flower-gerbera', 'FLOWER', 'Hoa đồng tiền', FALSE, 120),
+('flower-mixed', 'FLOWER', 'Phối nhiều loại hoa', FALSE, 130),
+('flower-other', 'FLOWER', 'Khác', FALSE, 140),
+('occasion-birthday', 'OCCASION', 'Sinh nhật', FALSE, 10),
+('occasion-graduation', 'OCCASION', 'Tốt nghiệp', FALSE, 20),
+('occasion-anniversary', 'OCCASION', 'Kỷ niệm', FALSE, 30),
+('occasion-love', 'OCCASION', 'Tình yêu', FALSE, 40),
+('occasion-opening', 'OCCASION', 'Khai trương', FALSE, 50),
+('occasion-congratulations', 'OCCASION', 'Chúc mừng', FALSE, 60),
+('occasion-thanks', 'OCCASION', 'Cảm ơn', FALSE, 70),
+('occasion-wedding', 'OCCASION', 'Ngày cưới', FALSE, 80),
+('occasion-condolence', 'OCCASION', 'Chia buồn', FALSE, 90),
+('occasion-other', 'OCCASION', 'Khác', FALSE, 100),
+('wrapping-kraft', 'WRAPPING', 'Giấy kraft', FALSE, 10),
+('wrapping-tissue', 'WRAPPING', 'Giấy lụa', FALSE, 20),
+('wrapping-cellophane', 'WRAPPING', 'Giấy bóng kính', FALSE, 30),
+('wrapping-korean', 'WRAPPING', 'Giấy gói Hàn Quốc', FALSE, 40),
+('accessory-ribbon', 'ACCESSORY', 'Ruy băng', FALSE, 10),
+('accessory-bow', 'ACCESSORY', 'Nơ', FALSE, 20),
+('accessory-card', 'ACCESSORY', 'Thiệp chúc mừng', FALSE, 30),
+('accessory-led', 'ACCESSORY', 'Đèn LED', FALSE, 40),
+('accessory-teddy', 'ACCESSORY', 'Gấu bông', FALSE, 50)
+ON DUPLICATE KEY UPDATE id = Custom_Flower_Options.id;
+
+-- 14. PRODUCT REVIEWS
+INSERT INTO Product_Reviews (id, product_id, user_id, order_id, rating, comment, shop_reply, created_by) VALUES
+('rev-01', 'prod-01', 'user-customer-01', 'order-01', 5, 'Hoa rất tươi, giao hàng siêu nhanh. Sẽ ủng hộ shop tiếp!', 'Cảm ơn bạn đã tin tưởng FPTU Smart Floral ạ!', 'user-customer-01');
+
+-- 15. BLOGS & COMMENTS
+INSERT INTO Blogs (id, shop_id, title, content, thumbnail_url, status, created_by) VALUES
+('blog-01', 'shop-01', 'Cách Giữ Hoa Hồng Tươi Lâu', '<p>Bí quyết giữ hoa hồng tươi lâu đến 7 ngày...</p>', NULL, 'PUBLISHED', 'user-shop-01');
+
+
+INSERT INTO Blog_Comments (id, blog_id, user_id, parent_comment_id, content, created_by) VALUES
+('cmt-01', 'blog-01', 'user-customer-01', NULL, 'Bài viết rất hữu ích, cảm ơn shop!', 'user-customer-01'),
+('cmt-02', 'blog-01', 'user-shop-01', 'cmt-01', 'Dạ shop cảm ơn bạn ạ.', 'user-shop-01');
+
+-- 16. FAVORITES & OCCASIONS
+INSERT INTO Favorite_Products (user_id, product_id, created_by) VALUES
+('user-customer-01', 'prod-01', 'user-customer-01');
+
+INSERT INTO Customer_Occasions (id, customer_id, title, occasion_date, reminder_sent, recurring_yearly, notify_days_before, notify_time, created_by) VALUES
+('occ-01', 'user-customer-01', 'Kỷ niệm ngày cưới', '2026-10-15', FALSE, TRUE, 7, '08:00:00', 'user-customer-01');
+
+-- 17. AUTH & SHOP/STAFF ONBOARDING
+INSERT INTO Otp_Challenges (id, user_id, purpose, code_hash, issued_at, expires_at, window_start, failed_attempts, send_count) VALUES
+('otp-01', 'user-customer-01', 'RESET_PASSWORD', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', '2026-09-27 09:00:00', '2026-09-27 09:05:00', '2026-09-27 09:00:00', 0, 1);
+
+INSERT INTO Pending_Registrations (email, full_name, password_hash, otp_hash, shop_name, shop_description, issued_at, expires_at, window_start, failed_attempts, send_count) VALUES
+('hoaxinh.owner@gmail.com', 'Đỗ Thị Hoa', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', 'Hoa Xinh Corner', 'Tiệm hoa nhỏ chuyên hoa cưới và hoa sự kiện.', '2026-09-27 08:00:00', '2026-09-27 08:05:00', '2026-09-27 08:00:00', 0, 1);
+
+INSERT INTO Auth_Sessions (id, user_id, refresh_hash, expires_at, revoked) VALUES
+('sess-01', 'user-customer-01', '120c7fd6bccd463cc455a83865ca1e395c080dfbf1c3068fd16739cda0e2e381', '2026-10-04 09:00:00', FALSE);
+
+INSERT INTO Shop_Staff (id, shop_id, user_id, active) VALUES
+('staff-01', 'shop-01', 'user-staff-01', TRUE);
+
+INSERT INTO Staff_Applications (id, shop_id, user_id, full_name, phone, introduction, status, submitted_at) VALUES
+('staff-app-01', 'shop-01', 'user-staff-01', 'Phạm Văn D', '0933445566', 'Em có kinh nghiệm 1 năm bán hoa, mong được hỗ trợ shop.', 'APPROVED', '2026-09-20 10:00:00');
+
+INSERT INTO Staff_Invitations (id, shop_id, email, token_hash, issued_at, expires_at, window_start, send_count, status) VALUES
+('staff-inv-01', 'shop-01', 'staff2@gmail.com', 'fdb7ea0d1c4c9c541c51ea56199e1784310feae640c5ed70f465ddb1c113c336', '2026-09-27 09:00:00', '2026-10-04 09:00:00', '2026-09-27 09:00:00', 1, 'PENDING');
+
+INSERT INTO Manager_Applications (id, user_id, full_name, phone, shop_name, description, address_line, city, district, ward, status, submitted_at) VALUES
+('mgr-app-01', 'user-customer-01', 'Trần Thị B', '0987654321', 'B Flower House', 'Xin mở shop hoa online phục vụ khu vực Cầu Giấy.', 'Số 10, Ngõ 20, Đường Cầu Giấy', 'Hà Nội', 'Cầu Giấy', 'Dịch Vọng', 'PENDING', '2026-09-25 14:00:00');
+
+-- ===================================
+-- NOTIFICATIONS & SHOP FOLLOW MAIL (migration 020, 024)
+-- ==========================================
+CREATE TABLE IF NOT EXISTS Notifications (
+    id VARCHAR(36) PRIMARY KEY,
+    user_id VARCHAR(36) NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    message TEXT,
+    link VARCHAR(255),
+    is_read BOOLEAN NOT NULL DEFAULT FALSE,
+    created_date DATETIME(6) NOT NULL,
+    CONSTRAINT fk_notification_user FOREIGN KEY (user_id) REFERENCES Users(id),
+    INDEX ix_notification_user (user_id, created_date)
+);
+
+CREATE TABLE IF NOT EXISTS Shop_Product_Publications (
+    product_id VARCHAR(36) PRIMARY KEY,
+    published_at DATETIME(6) NOT NULL
+);
+CREATE TABLE IF NOT EXISTS Shop_Product_Mails (
+    id VARCHAR(36) PRIMARY KEY,
+    product_id VARCHAR(36) NOT NULL,
+    shop_id VARCHAR(36) NOT NULL,
+    user_id VARCHAR(36) NOT NULL,
+    status VARCHAR(16) NOT NULL DEFAULT 'PENDING',
+    attempts INT NOT NULL DEFAULT 0,
+    next_attempt_at DATETIME(6) NOT NULL,
+    created_at DATETIME(6) NOT NULL,
+    sent_at DATETIME(6),
+    CONSTRAINT uk_shop_product_mail UNIQUE (product_id, user_id),
+    INDEX ix_shop_product_mail_due (status, next_attempt_at, created_at)
+);
+INSERT IGNORE INTO Shop_Product_Publications(product_id, published_at)
+SELECT id, COALESCE(created_date, NOW()) FROM Products WHERE status = 'ACTIVE';
+-- 18. DEMO SHOPS ĐỂ KIỂM THỬ THEO DÕI SHOP (chỉ dùng local; chủ shop dùng email example.test và chưa có mật khẩu nên không đăng nhập được)
+INSERT IGNORE INTO Users (id, email, full_name, role, is_email_verified, status, created_by) VALUES
+('follow-demo-owner-01', 'lotus-owner@example.test', 'Chủ shop Lotus', 'SHOP', TRUE, 'ACTIVE', 'follow-demo'),
+('follow-demo-owner-02', 'rose-owner@example.test', 'Chủ shop Rose', 'SHOP', TRUE, 'ACTIVE', 'follow-demo'),
+('follow-demo-owner-03', 'sunflower-owner@example.test', 'Chủ shop Sunflower', 'SHOP', TRUE, 'ACTIVE', 'follow-demo');
+
+INSERT IGNORE INTO Shops (id, owner_id, name, description, status, created_by) VALUES
+('follow-demo-shop-01', 'follow-demo-owner-01', 'Lotus Flower Studio', 'Hoa tươi và bó hoa theo mùa. Shop mẫu để kiểm thử theo dõi.', 'ACTIVE', 'follow-demo'),
+('follow-demo-shop-02', 'follow-demo-owner-02', 'Rose Garden', 'Hoa hồng, hoa sinh nhật và hoa chúc mừng. Shop mẫu để kiểm thử theo dõi.', 'ACTIVE', 'follow-demo'),
+('follow-demo-shop-03', 'follow-demo-owner-03', 'Sunflower House', 'Hoa hướng dương và giỏ hoa trang trí. Shop mẫu để kiểm thử theo dõi.', 'ACTIVE', 'follow-demo');

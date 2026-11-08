@@ -10,11 +10,26 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
+import jakarta.validation.constraints.*;
 import java.util.*;
 
 @Service
 @Transactional(readOnly = true)
 public class CustomerOrderService {
+
+    public record CheckoutRequest(
+            @NotBlank String addressId,
+            @NotBlank String productId,
+            @NotNull @Min(1) @Max(1000) Integer quantity,
+            @Size(max=500) String note, @Size(max=50) String couponCode, @Size(max=50) String shippingCouponCode,
+            @DecimalMin("1") BigDecimal expectedTotal) {
+        public CheckoutRequest(String addressId,String productId,Integer quantity,String note) { this(addressId,productId,quantity,note,null,null,null); }
+        public CheckoutRequest(String addressId,String productId,Integer quantity,String note,String couponCode,String shippingCouponCode) { this(addressId,productId,quantity,note,couponCode,shippingCouponCode,null); }
+    }
+
+    public record CheckoutResponse(String orderId, BigDecimal subTotal, BigDecimal shippingFee,
+                                   BigDecimal totalAmount, String status, BigDecimal discountAmount, BigDecimal shippingDiscountAmount) {}
+
 
     public record OrderLine(String productId, String productName, String imageUrl, BigDecimal price, Integer quantity) {}
 
@@ -24,7 +39,9 @@ public class CustomerOrderService {
                                java.time.LocalDateTime createdDate, Long itemCount,
                                String shopId, BigDecimal subTotal, BigDecimal shippingFee,
                                String paymentMethod, String paymentStatus, List<OrderLine> items,
-                               Long paymentSecondsLeft, String checkoutGroup) {}
+                               Long paymentSecondsLeft, String checkoutGroup) {
+public OrderSummary(String id,String shopName,BigDecimal totalAmount,String status,java.time.LocalDateTime createdDate,Long itemCount) { this(id,shopName,totalAmount,status,createdDate,itemCount,null,null,null,null,null,List.of(),null,null); }
+}
 
     public record OrderDetailResponse(String id, String shopId, String shopName, String status,
                                       BigDecimal subTotal, BigDecimal shippingFee, BigDecimal totalAmount,
@@ -32,7 +49,9 @@ public class CustomerOrderService {
                                       List<OrderItemResponse> items, DeliveryInfo delivery,
                                       String orderType, BigDecimal discountAmount, String recipientName,
                                       String recipientPhone, String deliveryAddress,
-                                      List<PaymentLine> payments, List<RefundLine> refunds) {}
+                                      List<PaymentLine> payments, List<RefundLine> refunds,
+CustomOrderWorkflowService.Design customDesign,String shopNote,String cancelReason,boolean needsDeliveryAddress,
+BigDecimal shippingDiscountAmount,String couponCode,String shippingCouponCode) {}
 
     /** Một lần thanh toán của đơn (cọc / phần còn lại / toàn bộ), dùng cho hóa đơn. */
     public record PaymentLine(String paymentType, String paymentMethod, BigDecimal amount, String status,
@@ -50,6 +69,10 @@ public class CustomerOrderService {
 
     public record Results(List<OrderSummary> content, int page, int totalPages, long totalElements) {}
 
+    private final ProductRepository products;
+    private final UserRepository users;
+    private final CouponService vouchers;
+    private final CustomOrderWorkflowService customWorkflow;
     /** Một giao dịch trong lịch sử giao dịch của khách (mọi đơn). */
     public record TransactionLine(String orderId, String shopName, String paymentType, String paymentMethod,
                                   BigDecimal amount, String status, String invoiceNumber, String gatewayTransactionNo,
@@ -72,7 +95,8 @@ public class CustomerOrderService {
                                 PaymentRepository payments, DeliveryRepository deliveries,
                                 GhnService ghn,
                                 ProductImageRepository productImages, DeliverySync deliverySync,
-                                RefundRepository refunds) {
+                                RefundRepository refunds, ProductRepository products,UserRepository users,CouponService vouchers,CustomOrderWorkflowService customWorkflow) {
+this.products=products;this.users=users;this.vouchers=vouchers;this.customWorkflow=customWorkflow;
         this.refunds = refunds;
         this.addresses = addresses;
         this.orders = orders;
@@ -165,8 +189,8 @@ private static ResponseStatusException notFound() {
                         .map(p -> p.getStatus().name()).orElse(null);
         Long secondsLeft = null;
         if (o.getStatus() == OrderStatus.PENDING && "ONLINE".equals(method) && !"SUCCESS".equals(paymentStatus)
-                && o.getCreatedDate() != null) {
-            long elapsed = java.time.Duration.between(o.getCreatedDate(), java.time.LocalDateTime.now()).getSeconds();
+                && o.getPaymentWindowStart() != null) {
+            long elapsed = java.time.Duration.between(o.getPaymentWindowStart(), java.time.LocalDateTime.now()).getSeconds();
             secondsLeft = Math.max(0, SePayGatewayService.PAYMENT_WINDOW_MINUTES * 60 - elapsed);
         }
         return new OrderSummary(o.getId(), o.getShop().getName(), o.getTotalAmount(), o.getStatus().name(),
@@ -203,7 +227,8 @@ private static ResponseStatusException notFound() {
                 order.getStatus().name(), order.getSubTotal(), order.getShippingFee(), order.getTotalAmount(),
                 order.getCreatedDate(), order.getCustomerNote(), items, delivery,
                 order.getOrderType() == null ? null : order.getOrderType().name(), order.getDiscountAmount(),
-                order.getRecipientName(), order.getRecipientPhone(), address, paymentLines, refundLines);
+                order.getRecipientName(), order.getRecipientPhone(), address, paymentLines, refundLines,customWorkflow.design(order),order.getShopNote(),order.getCancelReason(),!CustomOrderWorkflowService.hasCarrierAddress(a),
+order.getShippingDiscountAmount(),order.getCouponCode(),order.getShippingCouponCode());
     }
 
         public BigDecimal calculateShippingFeeForOrder(String customerId, String orderId) {
@@ -233,4 +258,86 @@ private static ResponseStatusException notFound() {
                 return new DeliveryInfo(delivery.getTrackingCode(), delivery.getDeliveryPartnerId(),
                                 delivery.getStatus().name(), delivery.getGhnStatus());
         }
+    @Transactional
+    public BigDecimal calculateFee(String customerId, CheckoutRequest req) {
+        Product product = products.findById(req.productId())
+                .filter(p -> p.getStatus() == ProductStatus.ACTIVE)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Sản phẩm không bán nữa."));
+        return quote(product.getShop(), destination(customerId, req.addressId()));
+    }
+    private Address destination(String customerId, String addressId) {
+        Address address = addresses.findByIdAndUserId(addressId, customerId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Địa chỉ không tồn tại hoặc không thuộc về bạn."));
+        if (address.getGhnDistrictId() == null || address.getGhnWardCode() == null)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Địa chỉ chưa có mã quận/huyện và phường/xã GHN. Hãy lưu lại địa chỉ trong hồ sơ.");
+        return address;
+    }
+    @Transactional
+    public CheckoutResponse checkout(String customerId, CheckoutRequest req) {
+        // Load product + validate
+        Product product = products.findByIdForUpdate(req.productId())
+                .filter(p -> p.getStatus() == ProductStatus.ACTIVE)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Sản phẩm không còn được bán."));
+        Shop shop = product.getShop();
+        if (shop.getStatus() != ShopStatus.ACTIVE)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cửa hàng hiện không hoạt động.");
+        if (product.getType() != ProductType.CUSTOM && product.getStock() < req.quantity())
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Sản phẩm không đủ số lượng. Hiện còn " + product.getStock() + " sản phẩm.");
+
+        Address customerAddr = destination(customerId, req.addressId());
+
+        // Calculate fees
+        BigDecimal subTotal = product.getPrice().multiply(BigDecimal.valueOf(req.quantity()));
+        BigDecimal shippingFee = quote(shop, customerAddr);
+        BigDecimal totalAmount = subTotal.add(shippingFee);
+
+        // Lock product and decrement stock (chỉ áp dụng với hoa có sẵn)
+        Product locked = products.findByIdForUpdate(product.getId()).orElseThrow(CustomerOrderService::notFound);
+        if (locked.getType() != ProductType.CUSTOM) {
+            if (locked.getStock() < req.quantity())
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Sản phẩm vừa hết hàng. Vui lòng thử lại.");
+            locked.setStock(locked.getStock() - req.quantity());
+        }
+
+        // Build entities
+        String orderId = UUID.randomUUID().toString();
+        User customer = users.findById(customerId).orElseThrow(CustomerOrderService::notFound);
+        Order order = new Order();
+        order.setId(orderId);
+        order.setCustomer(customer);
+        order.setShop(shop);
+        order.setDeliveryAddress(customerAddr);
+        order.setOrderType(OrderType.STANDARD);
+        order.setSubTotal(subTotal);
+        order.setShippingFee(shippingFee);
+        order.setTotalAmount(totalAmount);
+        var voucherResult=vouchers.apply(order,context(product,req.quantity(),shippingFee),req.couponCode(),req.shippingCouponCode());
+        totalAmount=voucherResult.totalAmount();
+        if(req.expectedTotal()!=null && totalAmount.compareTo(req.expectedTotal())!=0)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Giá hoặc ưu đãi đã thay đổi. Vui lòng kiểm tra lại tổng thanh toán.");
+        order.setStatus(OrderStatus.PENDING);
+        order.setCreatedBy(customerId);
+        order.setLastModifyBy(customerId);
+
+        OrderDetail detail = OrderDetail.builder().id(UUID.randomUUID().toString()).order(order)
+                .product(product).price(product.getPrice()).quantity(req.quantity()).createdBy(customerId).build();
+
+        Payment payment = Payment.builder().id(UUID.randomUUID().toString()).order(order)
+                .paymentType(PaymentType.FULL).paymentMethod(PaymentMethod.COD).amount(totalAmount)
+                .status(PaymentStatus.PENDING).createdBy(customerId).build();
+
+        orders.save(order);
+        orderDetails.save(detail);
+        payments.save(payment);
+        return new CheckoutResponse(orderId, subTotal, shippingFee, totalAmount, OrderStatus.PENDING.name(), order.getDiscountAmount(),order.getShippingDiscountAmount());
+    }
+    private CouponService.Context context(Product product,int quantity,BigDecimal shippingFee) {
+        BigDecimal subtotal=product.getPrice().multiply(BigDecimal.valueOf(quantity));
+        return new CouponService.Context(product.getShop().getId(),subtotal,shippingFee,Map.of(product.getId(),subtotal));
+    }
+    public CouponService.Preview previewVouchers(String customerId,CheckoutRequest req) {
+        var product=products.findById(req.productId()).filter(p -> p.getStatus()==ProductStatus.ACTIVE && p.getShop().getStatus()==ShopStatus.ACTIVE)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,"Sản phẩm không còn được bán."));
+        return vouchers.preview(context(product,req.quantity(),quote(product.getShop(),destination(customerId,req.addressId()))),req.couponCode(),req.shippingCouponCode());
+    }
 }

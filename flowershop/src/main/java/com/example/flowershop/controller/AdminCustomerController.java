@@ -21,15 +21,15 @@ public class AdminCustomerController {
     public AdminCustomerController(AdminCustomerService customers) { this.customers=customers; }
     public record BlockRequest(@NotNull(message="Cần chỉ định blocked là true hoặc false") Boolean blocked) {}
     @GetMapping
-    public AdminCustomerService.CustomerPage list(@RequestParam(defaultValue="") String q,
-            @RequestParam(defaultValue="") String status,@RequestParam(defaultValue="0") int page,@RequestParam(defaultValue="10") int size) {
+    public AdminCustomerService.CustomerPage list(@RequestParam(name = "q", defaultValue="") String q,
+            @RequestParam(name = "status", defaultValue="") String status,@RequestParam(name = "page", defaultValue="0") int page,@RequestParam(name = "size", defaultValue="10") int size) {
         return customers.list(q,status,page,size);
     }
     @GetMapping("/{id}")
-    public CustomerResponse detail(@PathVariable String id) { return customers.detail(id); }
+    public CustomerResponse detail(@PathVariable(name = "id") String id) { return customers.detail(id); }
     @PutMapping("/{id}/blocked")
     @Parameter(name="X-CSRF-TOKEN",in=ParameterIn.HEADER,required=true)
-    public CustomerResponse block(@PathVariable String id,@Valid @RequestBody BlockRequest request,
+    public CustomerResponse block(@PathVariable(name = "id") String id,@Valid @RequestBody BlockRequest request,
                                   @AuthenticationPrincipal CurrentUser admin) {
         return customers.setBlocked(id,request.blocked(),admin.id());
     }

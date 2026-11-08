@@ -47,27 +47,27 @@ public class CustomerChatController {
     }
 
     @GetMapping("/sessions/{id}/messages")
-    public List<MessageDto> messages(@AuthenticationPrincipal CurrentUser user, @PathVariable String id,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime before,
-            @RequestParam(defaultValue = "30") int size) {
+    public List<MessageDto> messages(@AuthenticationPrincipal CurrentUser user, @PathVariable(name = "id") String id,
+            @RequestParam(name = "before", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime before,
+            @RequestParam(name = "size", defaultValue = "30") int size) {
         return chat.history(id, user.id(), before, size);
     }
 
     @PostMapping("/sessions/{id}/messages") @ResponseStatus(HttpStatus.CREATED)
     @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
-    public MessageDto send(@AuthenticationPrincipal CurrentUser user, @PathVariable String id, @Valid @RequestBody SendInput body) {
+    public MessageDto send(@AuthenticationPrincipal CurrentUser user, @PathVariable(name = "id") String id, @Valid @RequestBody SendInput body) {
         return chat.send(id, user.id(), body);
     }
 
     @PostMapping("/sessions/{id}/read") @ResponseStatus(HttpStatus.NO_CONTENT)
     @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
-    public void read(@AuthenticationPrincipal CurrentUser user, @PathVariable String id) {
+    public void read(@AuthenticationPrincipal CurrentUser user, @PathVariable(name = "id") String id) {
         chat.markRead(id, user.id());
     }
 
     @PostMapping("/sessions/{id}/images")
     @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
-    public Map<String, String> image(@AuthenticationPrincipal CurrentUser user, @PathVariable String id,
+    public Map<String, String> image(@AuthenticationPrincipal CurrentUser user, @PathVariable(name = "id") String id,
                                      @RequestParam("file") MultipartFile file) {
         return Map.of("url", chat.uploadImage(id, user.id(), file));
     }

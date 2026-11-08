@@ -31,5 +31,9 @@ public class MakeOrdersRequest {
         @NotEmpty(message = "Danh sách cartItemIds không được trống")
         private List<String> cartItemIds;
         private String couponId;
+        @Size(max=50)
+        private String shippingCouponCode;
+        @jakarta.validation.constraints.DecimalMin("1")
+        private java.math.BigDecimal expectedTotal;
     }
 }

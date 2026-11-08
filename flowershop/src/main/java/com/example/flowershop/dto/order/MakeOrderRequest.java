@@ -22,6 +22,12 @@ public class MakeOrderRequest {
     // Tuỳ chọn
     private String couponId;
 
+    @Size(max = 50)
+    private String shippingCouponCode;
+
+    @jakarta.validation.constraints.DecimalMin("1")
+    private java.math.BigDecimal expectedTotal;
+
     // Phương thức thanh toán: "COD" hoặc "ONLINE" (mặc định ONLINE nếu null)
     private String paymentMethod;
 

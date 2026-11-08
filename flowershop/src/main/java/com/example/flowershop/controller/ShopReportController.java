@@ -23,10 +23,10 @@ public class ShopReportController {
     }
 
     @GetMapping
-    public ShopReportService.ReportResult report(@PathVariable String shopId,
+    public ShopReportService.ReportResult report(@PathVariable(name = "shopId") String shopId,
             @AuthenticationPrincipal CurrentUser user,
-            @RequestParam(defaultValue = "MONTH") String period,
-            @RequestParam(required = false) String value) {
+            @RequestParam(name = "period", defaultValue = "MONTH") String period,
+            @RequestParam(name = "value", required = false) String value) {
         return reports.report(shopId, user.id(), period, value);
     }
 }

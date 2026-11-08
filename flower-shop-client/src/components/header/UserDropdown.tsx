@@ -1,5 +1,4 @@
 import { useClickOutside } from "@/hooks/useClickOutside";
-import { cn } from "@/utils";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { Dropdown } from "../ui/dropdown/Dropdown";
@@ -9,6 +8,7 @@ import AvatarEditDialog from "../UserProfile/AvatarEditDialog";
 
 // Trang cá nhân của khách (trước nằm ở sidebar): [đường dẫn, nhãn, path SVG]
 const CUSTOMER_LINKS: [string, string, string][] = [
+  ['/custom-orders', 'Yêu cầu đặt hoa riêng', 'M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10Z'],
   ['/transactions', 'Lịch sử giao dịch', 'M3 7h18v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7Zm0 0a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2M3 11h18M7 15h4'],
   ['/occasions', 'Dịp đặc biệt', 'M7 3v3M17 3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z'],
   ['/following-shops', 'Cửa hàng đang theo dõi', 'M4 10v9a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-9M3 10l1.5-5h15L21 10M3 10h18M3 10a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0M10 20v-5h4v5'],

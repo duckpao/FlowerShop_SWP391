@@ -7,6 +7,7 @@ import paymentService from '../services/paymentService';
 import PageMeta from '../components/common/PageMeta';
 import PageBreadCrumb from '../components/common/PageBreadCrumb';
 import Button from '../components/ui/button/Button';
+import ShopVoucherPicker from '../components/checkout/ShopVoucherPicker';
 
 /** Định dạng số tiền sang VND kiểu Việt Nam (vd 150.000 ₫); null/undefined coi như 0. */
 const formatPrice = amount =>
@@ -56,6 +57,8 @@ export default function CheckoutPage() {
   const [paymentMethod, setPaymentMethod] = useState('ONLINE');
   const [orderLoading, setOrderLoading] = useState(false);
   const [orderError, setOrderError] = useState('');
+  const [voucherSelections, setVoucherSelections] = useState({});
+  const [voucherPreviews, setVoucherPreviews] = useState({});
 
   // Luôn lấy giỏ mới nhất khi vào trang để giá/tồn kho không bị cũ
   useEffect(() => { fetchCart(); }, [fetchCart]);
@@ -135,6 +138,8 @@ export default function CheckoutPage() {
   // Chỉ cho đặt khi shop nào cũng đã có phí ship (tránh đặt với phí thiếu)
   const feesReady = shopGroups.length > 0 && shopGroups.every(group => shippingFees[group.shopId] != null);
   const totalShipping = shopGroups.reduce((sum, group) => sum + (shippingFees[group.shopId] || 0), 0);
+  const vouchersReady = shopGroups.length > 0 && shopGroups.every(group => voucherPreviews[group.shopId]);
+  const totalPayable = shopGroups.reduce((sum, group) => sum + Number(voucherPreviews[group.shopId]?.totalAmount ?? (group.subtotal + (shippingFees[group.shopId] || 0))), 0);
 
   /**
    * Xử lý bấm "Đặt hàng":
@@ -146,13 +151,13 @@ export default function CheckoutPage() {
    */
   const handlePlaceOrder = async () => {
     // Chặn double-click và các trạng thái chưa hợp lệ (nút cũng bị disable, đây là lớp bảo vệ thứ hai)
-    if (orderLoading || loading || feeLoading || !feesReady || !userId || requestedIds.length === 0 || missingItems || selectedItems.length === 0) return;
+    if (orderLoading || loading || feeLoading || !feesReady || !vouchersReady || !userId || requestedIds.length === 0 || missingItems || selectedItems.length === 0) return;
     if (shopIds.some(id => !id) || hasOverStockItem) return;
     if (!recipientName.trim() || !phone.trim()) {
       setOrderError('Vui lòng nhập tên và số điện thoại người nhận.');
       return;
     }
-    
+
 
     setOrderLoading(true);
     setOrderError('');
@@ -166,6 +171,9 @@ export default function CheckoutPage() {
         shops: shopGroups.map(group => ({
           shopId: group.shopId,
           cartItemIds: group.items.map(item => item.id),
+          couponId: voucherSelections[group.shopId]?.couponCode || null,
+          shippingCouponCode: voucherSelections[group.shopId]?.shippingCouponCode || null,
+          expectedTotal: voucherPreviews[group.shopId]?.totalAmount,
         })),
       });
       const query = created.map(order => 'order=' + encodeURIComponent(order.id)).join('&');
@@ -282,15 +290,16 @@ export default function CheckoutPage() {
             ))}
             <div className="space-y-2 border-t border-gray-100 pt-4 text-sm dark:border-white/5">
               <div className="flex justify-between text-gray-600 dark:text-gray-400"><span>Số lượng</span><span>{selectedQuantity} sản phẩm</span></div>
+              {shopGroups.map(group => <div key={group.shopId} className="space-y-2"><h3 className="font-semibold">Ưu đãi — {group.shopName}</h3><ShopVoucherPicker shopId={group.shopId} context={feesReady ? { mode: 'cart', userId, shopId: group.shopId, deliveryAddressId: selectedAddressId, cartItemIds: group.items.map(item => item.id), revision: group.items.map(item => `${item.id}:${item.quantity}:${item.itemTotal}`).join('|') } : null} selections={voucherSelections} setSelections={setVoucherSelections} setPreviews={setVoucherPreviews} disabled={orderLoading} /></div>)}
               <div className="flex justify-between text-gray-600 dark:text-gray-400"><span>Tạm tính</span><span>{formatPrice(selectedTotal)}</span></div>
               <div className="flex justify-between text-gray-600 dark:text-gray-400"><span>Số đơn hàng</span><span>{shopGroups.length} đơn (tách theo shop)</span></div>
               <div className="flex justify-between text-gray-600 dark:text-gray-400"><span>Tổng phí vận chuyển</span><span>{feesReady ? formatPrice(totalShipping) : '—'}</span></div>
-              <div className="flex justify-between border-t border-gray-100 pt-3 text-base font-bold text-gray-900 dark:border-white/5 dark:text-white"><span>Tổng tạm tính</span><span className="text-brand-600 dark:text-brand-400">{formatPrice(selectedTotal + totalShipping)}</span></div>
+              <div className="flex justify-between border-t border-gray-100 pt-3 text-base font-bold text-gray-900 dark:border-white/5 dark:text-white"><span>Tổng sau ưu đãi</span><span className="text-brand-600 dark:text-brand-400">{formatPrice(totalPayable)}</span></div>
               <p className="text-xs text-gray-500 dark:text-gray-400">Số tiền cuối cùng được tính lại trên máy chủ khi đặt hàng.</p>
             </div>
             {hasOverStockItem && <p role="alert" className="rounded-lg bg-error-50 p-3 text-sm text-error-600">Có sản phẩm vượt quá tồn kho. Vui lòng điều chỉnh trong giỏ.</p>}
             {orderError && <p role="alert" className="rounded-lg bg-error-50 p-3 text-sm text-error-600">{orderError}</p>}
-            <Button type="button" onClick={handlePlaceOrder} disabled={orderLoading || loading || addressesLoading || feeLoading || !feesReady || !selectedAddressId || hasOverStockItem} className="w-full justify-center py-3.5 text-base font-bold">
+            <Button type="button" onClick={handlePlaceOrder} disabled={orderLoading || loading || addressesLoading || feeLoading || !feesReady || !vouchersReady || !selectedAddressId || hasOverStockItem} className="w-full justify-center py-3.5 text-base font-bold">
               {orderLoading ? 'Đang xử lý…' : paymentMethod === 'ONLINE' ? 'Thanh toán online →' : 'Xác nhận đặt hàng COD'}
             </Button>
             <p className="text-center text-xs text-gray-400 dark:text-gray-500">Thông tin thanh toán được bảo vệ an toàn</p>

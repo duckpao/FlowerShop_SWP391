@@ -6,7 +6,7 @@ import { useCartContext } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 
 // SePay redirect về đây khi khách bấm quay lại/hủy trên cổng. Đơn KHÔNG bị hủy: chuyển sang /payment/pending để khách trả lại;
-// đơn chỉ hủy khi quá 10 phút (scheduler) hoặc khách tự bấm hủy đơn. Đã trả tiền rồi thì sang trang thành công.
+// đơn chỉ hủy khi quá 1 phút (scheduler) hoặc khách tự bấm hủy đơn. Đã trả tiền rồi thì sang trang thành công.
 export default function PaymentCancelPage() {
   const [searchParams] = useSearchParams();
   // Chốt mã hóa đơn 1 lần; ưu tiên query của SePay, dự phòng mã đã lưu lúc tạo giao dịch (redirectToSePay)
@@ -50,7 +50,7 @@ export default function PaymentCancelPage() {
           navigate(`/payment/error?invoice_number=${encodeURIComponent(invoiceNumber)}`, { replace: true });
           return;
         }
-        // Cọc/phần còn lại: đơn không có hạn 10 phút, trả lại từ trang chi tiết đơn
+        // Cọc/phần còn lại: đơn không có hạn 1 phút, trả lại từ trang chi tiết đơn
         if (data?.paymentType === 'DEPOSIT' || data?.paymentType === 'FINAL') {
           navigate(`/orders/${encodeURIComponent(data.orderId)}`, { replace: true });
           return;

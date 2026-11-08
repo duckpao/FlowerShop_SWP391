@@ -36,7 +36,7 @@ public class AdminCatalogController {
 
     @PutMapping("/categories/{id}")
     @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
-    public AdminCatalogService.CategoryResult update(@PathVariable String id,
+    public AdminCatalogService.CategoryResult update(@PathVariable(name = "id") String id,
             @AuthenticationPrincipal CurrentUser admin,
             @Valid @RequestBody AdminCatalogService.CategoryInput body) {
         return service.updateCategory(id, admin.id(), body);
@@ -45,7 +45,7 @@ public class AdminCatalogController {
     /** Xóa danh mục chưa có sản phẩm nào; trả 409 nếu đã có sản phẩm. */
     @DeleteMapping("/categories/{id}") @ResponseStatus(HttpStatus.NO_CONTENT)
     @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
-    public void delete(@PathVariable String id) { service.deleteCategory(id); }
+    public void delete(@PathVariable(name = "id") String id) { service.deleteCategory(id); }
 
     /** Đổi tên một nhóm menu cho tất cả danh mục trong nhóm; trả số danh mục đã đổi. */
     @PutMapping("/category-groups")
@@ -56,16 +56,16 @@ public class AdminCatalogController {
     }
 
     @GetMapping("/products")
-    public CatalogService.Results products(@RequestParam(defaultValue = "") String q,
-            @RequestParam(required = false) String shopId,
-            @RequestParam(defaultValue = "") String status,
-            @RequestParam(defaultValue = "0") int page) {
+    public CatalogService.Results products(@RequestParam(name = "q", defaultValue = "") String q,
+            @RequestParam(name = "shopId", required = false) String shopId,
+            @RequestParam(name = "status", defaultValue = "") String status,
+            @RequestParam(name = "page", defaultValue = "0") int page) {
         return service.products(q, shopId, status, page);
     }
 
     @PutMapping("/products/{id}/hidden")
     @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
-    public ProductCardAssembler.ProductCard hide(@PathVariable String id,
+    public ProductCardAssembler.ProductCard hide(@PathVariable(name = "id") String id,
             @AuthenticationPrincipal CurrentUser admin,
             @Valid @RequestBody AdminCatalogService.HiddenInput body) {
         return service.setHidden(id, body.hidden(), admin.id());

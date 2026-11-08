@@ -22,10 +22,10 @@ public class PaymentTimeoutScheduler {
     private final SePayGatewayService sePayGatewayService;
 
     /**
-     * Cronjob chạy định kỳ mỗi 30 giây (fixedDelay = 30000ms) để kiểm tra và tự động hủy các đơn hàng online:
-     * - Trạng thái PENDING: quá hạn thanh toán 10 phút (SePayGatewayService.PAYMENT_WINDOW_MINUTES).
-     * - Trạng thái AWAITING_DEPOSIT: quá hạn chuyển cọc 24 giờ (SePayGatewayService.DEPOSIT_DEADLINE_HOURS).
-     * 
+     * Cronjob chạy định kỳ mỗi 5 giây (fixedDelay = 5000ms) để kiểm tra và tự động hủy các đơn hàng online:
+     * - Trạng thái PENDING: quá hạn thanh toán 1 phút (SePayGatewayService.PAYMENT_WINDOW_MINUTES).
+     * - Trạng thái AWAITING_DEPOSIT: quá hạn chuyển cọc 1 phút (SePayGatewayService.DEPOSIT_DEADLINE_MINUTES).
+     *
      * Luồng thực thi:
      * 1. Tính mốc thời gian threshold timeout.
      * 2. Quét cơ sở dữ liệu lấy danh sách đơn PENDING và AWAITING_DEPOSIT quá hạn.
@@ -35,18 +35,18 @@ public class PaymentTimeoutScheduler {
      *    - Cập nhật Order status -> CANCELLED, Payment status -> EXPIRED.
      *    - Hoàn trả lại tồn kho sản phẩm cho Shop (orderService.restoreCancelledOrderItems).
      */
-    @Scheduled(fixedDelay = 30000)
+    @Scheduled(fixedDelay = 5000)
     public void scanAndCancelExpiredOrders() {
-        // Mốc thời gian timeout cho đơn thanh toán toàn bộ (10 phút trước)
+        // Mốc thời gian timeout cho đơn thanh toán toàn bộ (1 phút trước)
         LocalDateTime threshold = LocalDateTime.now().minusMinutes(SePayGatewayService.PAYMENT_WINDOW_MINUTES);
-        
-        // Quét lấy danh sách đơn PENDING quá hạn thanh toán 10 phút
+
+        // Quét lấy danh sách đơn PENDING quá hạn thanh toán 1 phút
         List<Order> expiredOrders = new ArrayList<>(
-                orderRepository.findByStatusAndCreatedDateBefore(OrderStatus.PENDING, threshold));
-                
-        // Quét tiếp lấy danh sách đơn AWAITING_DEPOSIT quá hạn đặt cọc 24 giờ
-        expiredOrders.addAll(orderRepository.findByStatusAndCreatedDateBefore(OrderStatus.AWAITING_DEPOSIT,
-                LocalDateTime.now().minusHours(SePayGatewayService.DEPOSIT_DEADLINE_HOURS)));
+                orderRepository.findByStatusAndPaymentWindowStartBefore(OrderStatus.PENDING, threshold));
+
+        // Quét tiếp lấy danh sách đơn AWAITING_DEPOSIT quá hạn đặt cọc 1 phút
+        expiredOrders.addAll(orderRepository.findByStatusAndPaymentWindowStartBefore(OrderStatus.AWAITING_DEPOSIT,
+                LocalDateTime.now().minusMinutes(SePayGatewayService.DEPOSIT_DEADLINE_MINUTES)));
 
         if (!expiredOrders.isEmpty()) {
             log.info("Tìm thấy {} đơn hàng chờ thanh toán/chờ cọc quá hạn, tiến hành hủy tự động...", expiredOrders.size());

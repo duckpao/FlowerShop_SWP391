@@ -1,6 +1,6 @@
 package com.example.flowershop.controller;
 
-import com.example.flowershop.dto.order.OrderResponse;
+import com.example.flowershop.dto.order.*;
 import com.example.flowershop.service.OrderService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -32,7 +32,7 @@ public class OrderController {
      */
     @PostMapping("/{userId}/batch")
     public ResponseEntity<List<OrderResponse>> makeOrders(
-            @PathVariable String userId,
+            @PathVariable("userId") String userId,
             @Valid @RequestBody com.example.flowershop.dto.order.MakeOrdersRequest request,
             @AuthenticationPrincipal CurrentUser currentUser) {
         requireOwner(userId, currentUser);
@@ -40,16 +40,25 @@ public class OrderController {
     }
 
     /**
-     * Tạo đơn đặt cọc từ yêu cầu hoa tùy chỉnh đã được shop báo giá; sau đó frontend mở SePay với paymentType DEPOSIT.
+     * Create a deposit order from a request accepted and priced by the shop.
      * POST /api/orders/{userId}/custom/{requestId}
      */
     @PostMapping("/{userId}/custom/{requestId}")
     public ResponseEntity<OrderResponse> makeCustomOrder(
-            @PathVariable String userId, @PathVariable String requestId,
+            @PathVariable("userId") String userId, @PathVariable("requestId") String requestId,
             @Valid @RequestBody com.example.flowershop.dto.order.MakeCustomOrderRequest request,
             @AuthenticationPrincipal CurrentUser currentUser) {
         requireOwner(userId, currentUser);
         return ResponseEntity.status(HttpStatus.CREATED).body(orderService.makeCustomOrder(userId, requestId, request));
+    }
+
+    @PostMapping("/{userId}/custom/{requestId}/voucher-preview")
+    public com.example.flowershop.service.CouponService.Preview customVouchers(
+            @PathVariable("userId") String userId, @PathVariable("requestId") String requestId,
+            @Valid @RequestBody MakeCustomOrderRequest request,
+            @AuthenticationPrincipal CurrentUser currentUser) {
+        requireOwner(userId,currentUser);
+        return orderService.previewCustomVouchers(userId,requestId,request);
     }
 
     /**
@@ -58,7 +67,7 @@ public class OrderController {
      */
     @PostMapping("/{userId}/{orderId}/cancel")
     public ResponseEntity<Void> cancelOrder(
-            @PathVariable String userId, @PathVariable String orderId,
+            @PathVariable("userId") String userId, @PathVariable("orderId") String orderId,
             @RequestBody(required = false) java.util.Map<String, String> body,
             @AuthenticationPrincipal CurrentUser currentUser) {
         requireOwner(userId, currentUser);
@@ -74,10 +83,38 @@ public class OrderController {
      */
     @GetMapping("/{userId}/shipping-fee")
     public ResponseEntity<java.util.Map<String, java.math.BigDecimal>> estimateShippingFee(
-            @PathVariable String userId, @RequestParam String shopId, @RequestParam String addressId,
+            @PathVariable("userId") String userId, @RequestParam(name = "shopId") String shopId, @RequestParam(name = "addressId") String addressId,
             @AuthenticationPrincipal CurrentUser currentUser) {
         requireOwner(userId, currentUser);
         return ResponseEntity.ok(java.util.Map.of("shippingFee", orderService.estimateShippingFee(userId, shopId, addressId)));
+    }
+    @PostMapping("/{userId}/voucher-preview")
+    public com.example.flowershop.service.CouponService.Preview vouchers(@PathVariable("userId") String userId,
+            @Valid @RequestBody MakeOrderRequest request, @AuthenticationPrincipal CurrentUser currentUser) {
+        requireOwner(userId,currentUser);
+        return orderService.previewVouchers(userId,request);
+    }
+    @PostMapping("/{userId}")
+    public ResponseEntity<OrderResponse> makeOrder(
+            @PathVariable(name = "userId") String userId,
+            @Valid @RequestBody MakeOrderRequest request, @AuthenticationPrincipal CurrentUser currentUser
+    ) {
+        requireOwner(userId, currentUser);
+        OrderResponse response = orderService.makeOrder(userId, request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+    @PostMapping("/{userId}/shipping-fee")
+    public java.util.Map<String, Object> shippingFee(
+            @PathVariable(name = "userId") String userId,
+            @Valid @RequestBody ShippingFeeRequest request, @AuthenticationPrincipal CurrentUser currentUser
+    ) {
+        requireOwner(userId, currentUser);
+        return java.util.Map.of("shippingFee", orderService.quoteShippingFee(userId, request));
+    }
+    @GetMapping("/{userId}")
+    public ResponseEntity<List<OrderResponse>> getOrderHistory(@PathVariable(name = "userId") String userId, @AuthenticationPrincipal CurrentUser currentUser) {
+        requireOwner(userId, currentUser);
+        return ResponseEntity.ok(orderService.getOrderHistory(userId));
     }
 }
 

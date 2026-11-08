@@ -37,6 +37,7 @@ type NavItem = {
 };
 
 const adminNavItems: NavItem[] = [
+{ name: 'Mã giảm giá của sàn', path: '/admin/vouchers', icon: <ListIcon fontSize={24} /> },
   { name: 'Tổng quan', path: '/admin', icon: <GridIcon fontSize={24} /> },
   { name: 'Quản lý người dùng', path: '/admin/users', icon: <UserCircleIcon fontSize={24} /> },
   { name: 'Quản lý các shop', path: '/admin/shops', icon: <BoxCubeIcon fontSize={24} /> },
@@ -45,6 +46,8 @@ const adminNavItems: NavItem[] = [
 ];
 
 const managerNavItems: NavItem[] = [
+  { name: 'Gói đăng ký Pro', path: '/shop-admin/subscription', icon: <ListIcon fontSize={24} /> },
+  { name: 'Mã giảm giá của shop', path: '/shop-admin/vouchers', icon: <ListIcon fontSize={24} /> },
   { name: 'Bài chăm sóc hoa', path: '/shop-admin/blogs', icon: <NotebookPen size={24} /> },
   { name: 'Yêu cầu đặt hoa riêng', path: '/shop-admin/custom-orders', icon: <Flower2 size={24} /> },
   { name: 'Tổng quan', path: '/shop-admin', icon: <LayoutDashboard size={24} /> },

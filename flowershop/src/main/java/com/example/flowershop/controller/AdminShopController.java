@@ -18,14 +18,14 @@ public class AdminShopController {
     private final AdminShopService shops;
     public AdminShopController(AdminShopService shops) { this.shops=shops; }
     @GetMapping
-    public AdminShopService.ShopPage list(@RequestParam(defaultValue="") String q,@RequestParam(defaultValue="") String status,
-                                        @RequestParam(defaultValue="0") int page,@RequestParam(defaultValue="10") int size) {
+    public AdminShopService.ShopPage list(@RequestParam(name = "q", defaultValue="") String q,@RequestParam(name = "status", defaultValue="") String status,
+                                        @RequestParam(name = "page", defaultValue="0") int page,@RequestParam(name = "size", defaultValue="10") int size) {
         return shops.list(q,status,page,size);
     }
-    @GetMapping("/{id}") public ShopResponse detail(@PathVariable String id) { return shops.detail(id); }
+    @GetMapping("/{id}") public ShopResponse detail(@PathVariable(name = "id") String id) { return shops.detail(id); }
     @PutMapping("/{id}/{action:approve|block|unblock}")
     @Parameter(name="X-CSRF-TOKEN",in=ParameterIn.HEADER,required=true)
-    public ShopResponse transition(@PathVariable String id,@PathVariable String action,@AuthenticationPrincipal CurrentUser admin) {
+    public ShopResponse transition(@PathVariable(name = "id") String id,@PathVariable(name = "action") String action,@AuthenticationPrincipal CurrentUser admin) {
         return shops.transition(id,action,admin.id());
     }
 }

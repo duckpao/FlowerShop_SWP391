@@ -15,7 +15,7 @@ public class ManagerApplicationController {
     @GetMapping("/api/account/manager-applications")
     public List<ManagerApplicationService.Result> mine(@AuthenticationPrincipal CurrentUser u) {return service.mine(u.id());}
     @GetMapping("/api/admin/shops/applications") @PreAuthorize("hasRole('ADMIN')")
-    public ManagerApplicationService.Results list(@RequestParam(defaultValue="PENDING") String status,@RequestParam(defaultValue="0") int page) {return service.list(status,page);}
+    public ManagerApplicationService.Results list(@RequestParam(name = "status", defaultValue="PENDING") String status,@RequestParam(name = "page", defaultValue="0") int page) {return service.list(status,page);}
     @PutMapping("/api/admin/shops/applications/{id}") @PreAuthorize("hasRole('ADMIN')")
-    public ManagerApplicationService.Result decide(@PathVariable String id,@AuthenticationPrincipal CurrentUser u,@Valid @RequestBody ManagerApplicationService.Decision body) {return service.decide(id,u.id(),body);}
+    public ManagerApplicationService.Result decide(@PathVariable(name = "id") String id,@AuthenticationPrincipal CurrentUser u,@Valid @RequestBody ManagerApplicationService.Decision body) {return service.decide(id,u.id(),body);}
 }

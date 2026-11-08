@@ -1,6 +1,7 @@
 package com.example.flowershop.controller;
 
 import com.example.flowershop.service.CustomFlowerOrderService;
+import com.example.flowershop.service.CustomFlowerCatalogService;
 import com.example.flowershop.entity.enums.CustomOrderStatus;
 import com.example.flowershop.dto.auth.CurrentUser;
 import jakarta.validation.Valid;
@@ -13,7 +14,10 @@ import java.math.BigDecimal;
 @RestController
 public class CustomFlowerOrderController {
     private final CustomFlowerOrderService service;
-    public CustomFlowerOrderController(CustomFlowerOrderService service){this.service=service;}
+    private final CustomFlowerCatalogService catalog;
+    public CustomFlowerOrderController(CustomFlowerOrderService service,CustomFlowerCatalogService catalog){this.service=service;this.catalog=catalog;}
+    @GetMapping("/api/public/custom-orders/options")
+    public java.util.List<CustomFlowerCatalogService.Option> options(){return catalog.catalog();}
     @GetMapping("/api/public/custom-orders/suggestions")
     public CustomFlowerOrderService.Suggestions suggestions(@RequestParam("budget") BigDecimal budget,
             @RequestParam(name="quantity", defaultValue="1") int quantity,@RequestParam(name="shopId", required=false) String shopId,

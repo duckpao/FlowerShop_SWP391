@@ -1,3 +1,7 @@
+import CustomerQuoteActions from '../components/customFlowers/CustomerQuoteActions'
+import CustomerCustomAddress from '../components/customFlowers/CustomerCustomAddress'
+import { OrderDesignPanel } from '../components/customFlowers/OrderDesignPanel'
+import OrderDiscountSummary from '../components/checkout/OrderDiscountSummary'
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router'
 import { useAuth } from '../context/AuthContext'
@@ -25,7 +29,7 @@ const paidAmount = order => (order.payments || [])
     .reduce((sum, p) => sum + Number(p.amount || 0), 0)
 
 /** Chưa giao cho GHN thì khách còn hủy được (backend kiểm tra lại). */
-const cancellableStatuses = ['PENDING', 'AWAITING_DEPOSIT', 'DEPOSIT_PAID', 'PROCESSING']
+const cancellableStatuses = ['PENDING', 'AWAITING_DEPOSIT', 'DEPOSIT_PAID', 'PROCESSING','AWAITING_QUOTE','QUOTED']
 
 const trackingSteps = [
     'Cửa hàng đang chuẩn bị đơn hàng',
@@ -138,6 +142,7 @@ export default function CustomerOrderDetailView() {
         <PageBreadCrumb pageTitle={`Chi tiết đơn #${order.id.substring(0,8)}`} />
         <div className="max-w-3xl mx-auto space-y-6">
             <ComponentCard title={`Đơn hàng từ ${order.shopName}`}>
+<OrderDesignPanel order={order} /><CustomerCustomAddress order={order} onChanged={async () => setOrder(await customerOrderService.detail(id))} /><CustomerQuoteActions order={order} user={user} onChanged={async () => setOrder(await customerOrderService.detail(id))} /><OrderDiscountSummary order={order} />
                 <div className="flex justify-between items-center mb-4">
                     <Badge color={statusColors[order.status]||'primary'}>{statusLabels[order.status]||order.status}</Badge>
                     <span className="text-sm text-gray-500">{new Date(order.createdDate).toLocaleString('vi-VN')}</span>

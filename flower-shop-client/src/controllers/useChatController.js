@@ -3,6 +3,8 @@ import { chatApi } from '../services/chatService'
 import { chatSocket } from '../services/chatSocket'
 import { catalogService } from '../services/catalogService'
 import { customFlowerService } from '../services/customFlowerService'
+import { customerOrderService } from '../services/customerOrderService'
+import { managerOrderService } from '../services/managerOrderService'
 
 const PAGE = 30
 
@@ -14,8 +16,15 @@ async function describeContext(scope, type, id) {
         const p = await catalogService.detail(id)
         return { type, id, name: p.name, price: p.price, imageUrl: p.imageUrl || p.images?.[0] || null }
     }
-    const r = scope.kind === 'shop' ? await customFlowerService.shopDetail(scope.shopId, id) : await customFlowerService.detail(id)
-    return { type, id, name: customOrderLabel(id), price: r.budget, status: r.status }
+    try {
+        const order = scope.kind === 'shop' ? await managerOrderService.detail(scope.shopId, id) : await customerOrderService.detail(id)
+        if (order.orderType !== 'CUSTOM') throw new Error('Đơn hàng này không phải đơn hoa riêng.')
+        return { type, id, orderId: order.id, name: `Đơn hoa riêng #${id.replace(/-/g, '').slice(0, 8).toUpperCase()}`, price: order.customDesign?.budget ?? order.subTotal, status: order.status }
+    } catch (error) {
+        if (error.status !== 404) throw error
+        const r = scope.kind === 'shop' ? await customFlowerService.shopDetail(scope.shopId, id) : await customFlowerService.detail(id)
+        return { type, id, orderId: r.orderId, name: customOrderLabel(id), price: r.budget, status: r.status }
+    }
 }
 
 /**

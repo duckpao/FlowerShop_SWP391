@@ -10,7 +10,7 @@ public class FrontendController {
         "/", "/login", "/account", "/home", "/favorites", "/cart", "/checkout",
         "/invitations/accept",
         "/products", "/products/**",
-        "/budget-flowers", "/custom-orders", "/custom-orders/new",
+        "/custom-orders", "/custom-orders/new",
         "/shops/**",
         "/orders", "/orders/**",
         "/admin", "/admin/**",

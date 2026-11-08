@@ -25,7 +25,7 @@ và quản lý danh mục của Admin. Cần chạy migration `flowershop/sql/01
 
 ## Database cho các chức năng trên nhánh Quangdv
 
-Sau khi khởi tạo database mới, cần chạy các migration trong `flowershop/sql/` theo thứ tự `001` đến `021` (mỗi số một file duy nhất) trên database `flower_shop_db`. Migration `011_online_cod_payment_methods.sql` quy chuẩn dữ liệu cũ về hai phương thức `ONLINE` và `COD`. Migration `012_order_recipient.sql` bổ sung thông tin người nhận đơn hàng.
+Sau khi gộp master và feature/dung, đối chiếu migration bằng **tên file đầy đủ**, không chỉ số đầu file vì có các migration trùng số từ hai nhánh. Xem [thứ tự migration sau merge](flowershop/sql/MIGRATION_ORDER.md). Database mới dùng `database.sql` đã gộp; database local có dữ liệu đã được sao lưu và cập nhật bằng `027_sync_schema.sql` và `029_merge_custom_order_schema.sql`. Không chạy lại hàng loạt các ALTER lịch sử trên database đang dùng.
 
 ### Lỗi font tiếng Việt trong dữ liệu mẫu
 
@@ -60,7 +60,7 @@ Backend kết nối tới MySQL tại `localhost:3306`, database `flower_shop_db
 Đảm bảo MySQL đã chạy và database `flower_shop_db` đã được tạo trước khi khởi động backend. Cấu hình kết nối nằm trong `flowershop/src/main/resources/application.properties`.
 
 ---
- 
+
 ## 🚀 Hướng dẫn chạy Backend (Spring Boot)
 
 Backend cung cấp các **RESTful API** và kết nối tới MySQL local.

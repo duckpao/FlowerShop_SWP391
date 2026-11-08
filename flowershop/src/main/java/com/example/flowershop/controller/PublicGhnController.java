@@ -17,9 +17,9 @@ public class PublicGhnController {
 
     /** Step 2: districts of a province. */
     @GetMapping("/provinces/{id}/districts")
-    public List<GhnService.Option> districts(@PathVariable int id) { return ghn.districts(id); }
+    public List<GhnService.Option> districts(@PathVariable(name = "id") int id) { return ghn.districts(id); }
 
     /** Step 3: wards of a district; the id is a ward code. */
     @GetMapping("/districts/{id}/wards")
-    public List<GhnService.Option> wards(@PathVariable int id) { return ghn.wards(id); }
+    public List<GhnService.Option> wards(@PathVariable(name = "id") int id) { return ghn.wards(id); }
 }

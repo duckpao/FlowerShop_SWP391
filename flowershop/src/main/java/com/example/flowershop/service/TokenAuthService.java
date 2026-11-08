@@ -62,8 +62,8 @@ public class TokenAuthService {
     public Tokens login(LoginRequest request) {
         if(captcha.required(request.email())) captcha.verify(request.email(),"login",request.captchaId(),request.captchaAnswer());
         String id =users.findUserIdByEmail(request.email().strip().toLowerCase(Locale.ROOT)).orElse(null);
-        User user= id == null ? 
-        null : 
+        User user= id == null ?
+        null :
         users.findByIdForUpdate(id).orElse(null);
         if (user == null || user.getPasswordHash() == null) {
             captcha.failed(request.email());

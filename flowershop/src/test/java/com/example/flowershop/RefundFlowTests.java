@@ -31,10 +31,10 @@ class RefundFlowTests {
 
     private ManagerOrderService managerOrders() {
         when(shops.findById("shop-1")).thenReturn(Optional.of(shop));
-        when(orders.findByIdAndShopId("order-1", "shop-1")).thenReturn(Optional.of(order));
+        when(orders.findByIdAndShopIdForUpdate("order-1", "shop-1")).thenReturn(Optional.of(order));
         return new ManagerOrderService(orders, mock(OrderDetailRepository.class), mock(DeliveryRepository.class),
                 payments, shops, mock(AddressRepository.class), mock(GhnService.class), mock(DeliverySync.class),
-                refunds, notifications);
+                refunds, notifications,mock(CouponService.class),mock(CustomOrderWorkflowService.class),mock(ProductRepository.class));
     }
 
     private Payment payment(PaymentStatus status, String amount) {

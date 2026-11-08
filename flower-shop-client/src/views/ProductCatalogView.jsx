@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo } from 'react';
+import FeaturedProducts from '../components/products/FeaturedProducts'
 import { useSearchParams } from 'react-router';
 import { useCatalogController } from '../controllers/useCatalogController';
 import { useFavoriteToggle } from '../controllers/useFavoritesController';
@@ -55,6 +56,7 @@ export default function ProductCatalogView({ auth, shops, isEmbedded = false }) 
 
   return (
     <section id="products" className={isEmbedded ? 'space-y-6' : 'mx-auto w-full max-w-7xl py-8 space-y-8 px-4 sm:px-6'}>
+      {!isEmbedded && <FeaturedProducts />}
       {/* Section Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>

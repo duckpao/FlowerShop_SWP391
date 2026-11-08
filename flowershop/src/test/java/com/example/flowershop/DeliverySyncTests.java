@@ -25,7 +25,7 @@ class DeliverySyncTests {
         Payment cod = Payment.builder().paymentMethod(PaymentMethod.COD).paymentType(PaymentType.FINAL).status(PaymentStatus.PENDING).build();
         when(payments.findByOrderId("o-1")).thenReturn(List.of(deposit, failedRetry, cod));
 
-        new DeliverySync(payments).apply(order, Delivery.builder().build(),
+        new DeliverySync(payments,mock(com.example.flowershop.service.CouponService.class)).apply(order, Delivery.builder().build(),
                 new GhnService.Tracking("delivered", DeliveryStatus.DELIVERED), "ghn");
 
         assertThat(order.getStatus()).isEqualTo(OrderStatus.COMPLETED);

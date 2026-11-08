@@ -51,7 +51,7 @@ public class PaymentController {
      * POST /api/payments/sepay/cancel/{invoiceNumber} — trả {"paid": true} nếu thực ra đã thanh toán (không hủy được).
      */
     @PostMapping("/payments/sepay/cancel/{invoiceNumber}")
-    public Map<String, Boolean> cancelCheckout(@PathVariable String invoiceNumber,
+    public Map<String, Boolean> cancelCheckout(@PathVariable("invoiceNumber") String invoiceNumber,
                                                @AuthenticationPrincipal CurrentUser currentUser) {
         return Map.of("paid", sePayGatewayService.cancelCheckout(invoiceNumber, currentUser.id()));
     }
@@ -62,7 +62,7 @@ public class PaymentController {
      */
     @GetMapping("/payments/status-by-invoice/{invoiceNumber}")
     public ResponseEntity<PaymentStatusResponse> getPaymentByInvoice(
-            @PathVariable String invoiceNumber,
+            @PathVariable("invoiceNumber") String invoiceNumber,
             @AuthenticationPrincipal CurrentUser currentUser
     ) {
         return ResponseEntity.ok(sePayGatewayService.getStatusByInvoice(invoiceNumber, currentUser.id()));
@@ -73,7 +73,7 @@ public class PaymentController {
      * GET /api/payments/status-by-order/{orderId}
      */
     @GetMapping("/payments/status-by-order/{orderId}")
-    public ResponseEntity<PaymentStatusResponse> getPaymentByOrder(@PathVariable String orderId, @AuthenticationPrincipal CurrentUser currentUser) {
+    public ResponseEntity<PaymentStatusResponse> getPaymentByOrder(@PathVariable("orderId") String orderId, @AuthenticationPrincipal CurrentUser currentUser) {
         return ResponseEntity.ok(paymentService.checkPaymentStatus(orderId, currentUser.id()));
     }
 }

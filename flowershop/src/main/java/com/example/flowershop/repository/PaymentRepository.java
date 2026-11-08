@@ -1,41 +1,56 @@
 package com.example.flowershop.repository;
 
-import com.example.flowershop.entity.Payment;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.jpa.repository.EntityGraph;
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Modifying;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
-
-import java.util.List;
-import java.util.Optional;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import com.example.flowershop.entity.Payment;
+import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import java.util.*;
 
-public interface PaymentRepository extends JpaRepository<Payment, String> {
-    List<Payment> findByOrderId(String orderId);
+/** Explicit Hibernate queries; Spring does not generate this repository. */
+@Repository
+public class PaymentRepository extends HibernateRepository<Payment> {
+    public PaymentRepository() { super(Payment.class); }
 
-    Optional<Payment> findTopByOrderIdOrderByCreatedDateDesc(String orderId);
+    public Page<Payment> findByOrderCustomerId(String customerId, Pageable pageable) {
+        return page("e.order.customer.id = :customerId", Map.of("customerId", customerId), pageable);
+    }
 
-    Optional<Payment> findByInvoiceNumber(String invoiceNumber);
+    @Transactional
+    public Optional<Payment> findByInvoiceNumberForUpdate(String invoiceNumber) {
+        return locked("e.invoiceNumber = :invoiceNumber", Map.of("invoiceNumber", invoiceNumber));
+    }
 
-    List<Payment> findByGroupInvoice(String groupInvoice);
+    public List<Payment> findByOrderId(String orderId) {
+        return list("e.order.id = :orderId", Map.of("orderId", orderId));
+    }
 
-    /** Lịch sử giao dịch của khách; nạp sẵn order + shop để khỏi N+1 khi map tên shop. */
-    @EntityGraph(attributePaths = {"order", "order.shop"})
-    Page<Payment> findByOrderCustomerId(String customerId, Pageable pageable);
+    public Optional<Payment> findTopByOrderIdOrderByCreatedDateDesc(String orderId) {
+        return first("e.order.id = :orderId", Map.of("orderId", orderId), Sort.by(Sort.Order.desc("createdDate"), Sort.Order.asc("id")));
+    }
 
-    /** Cập nhật thẳng trong DB để không ghi đè SUCCESS mà IPN vừa commit. */
-    @Modifying
-    @Query("UPDATE Payment p SET p.status = com.example.flowershop.entity.enums.PaymentStatus.FAILED, p.lastModifyBy = :actor "
-            + "WHERE p.order.id = :orderId AND p.status = com.example.flowershop.entity.enums.PaymentStatus.PENDING")
-    int failPendingByOrderId(@Param("orderId") String orderId, @Param("actor") String actor);
+    public Optional<Payment> findByGatewayTransactionNo(String gatewayTransactionNo) {
+        return one("e.gatewayTransactionNo = :value", Collections.singletonMap("value", gatewayTransactionNo));
+    }
 
-    @Query("SELECT COALESCE(SUM(p.amount), 0) FROM Payment p WHERE p.order.shop.id = :shopId "
-            + "AND p.status = com.example.flowershop.entity.enums.PaymentStatus.SUCCESS "
-            + "AND p.lastModifyDate >= :start AND p.lastModifyDate < :end")
-    BigDecimal sumSuccessfulAmountForReport(@Param("shopId") String shopId,
-            @Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
+    public boolean existsByGatewayTransactionNo(String gatewayTransactionNo) {
+        return countWhere("e.gatewayTransactionNo = :value", Collections.singletonMap("value", gatewayTransactionNo)) > 0;
+    }
+
+    public Optional<Payment> findByInvoiceNumber(String invoiceNumber) {
+        return one("e.invoiceNumber = :value", Collections.singletonMap("value", invoiceNumber));
+    }
+
+    public boolean existsByInvoiceNumber(String invoiceNumber) {
+        return countWhere("e.invoiceNumber = :value", Collections.singletonMap("value", invoiceNumber)) > 0;
+    }
+public List<Payment> findByGroupInvoice(String groupInvoice) { return list("e.groupInvoice = :invoice", Map.of("invoice",groupInvoice)); }
+@org.springframework.transaction.annotation.Transactional
+public int failPendingByOrderId(String orderId, String actor) { return session().createMutationQuery("UPDATE Payment p SET p.status = com.example.flowershop.entity.enums.PaymentStatus.FAILED, p.lastModifyBy = :actor WHERE p.order.id = :orderId AND p.status = com.example.flowershop.entity.enums.PaymentStatus.PENDING").setParameter("orderId",orderId).setParameter("actor",actor).executeUpdate(); }
+
+public BigDecimal sumSuccessfulAmountForReport(String shopId, LocalDateTime start, LocalDateTime end) { return session().createSelectionQuery("SELECT COALESCE(SUM(p.amount), 0) FROM Payment p WHERE p.order.shop.id = :shopId AND p.status = com.example.flowershop.entity.enums.PaymentStatus.SUCCESS AND p.lastModifyDate >= :start AND p.lastModifyDate < :end",BigDecimal.class).setParameter("shopId",shopId).setParameter("start",start).setParameter("end",end).getSingleResult(); }
+
 }
