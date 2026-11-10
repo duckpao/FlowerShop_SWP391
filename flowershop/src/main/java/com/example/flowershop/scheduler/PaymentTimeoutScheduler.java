@@ -23,8 +23,8 @@ public class PaymentTimeoutScheduler {
 
     /**
      * Cronjob chạy định kỳ mỗi 5 giây (fixedDelay = 5000ms) để kiểm tra và tự động hủy các đơn hàng online:
-     * - Trạng thái PENDING: quá hạn thanh toán 1 phút (SePayGatewayService.PAYMENT_WINDOW_MINUTES).
-     * - Trạng thái AWAITING_DEPOSIT: quá hạn chuyển cọc 1 phút (SePayGatewayService.DEPOSIT_DEADLINE_MINUTES).
+     * - Trạng thái PENDING: quá hạn thanh toán 10 phút (SePayGatewayService.PAYMENT_WINDOW_MINUTES).
+     * - Trạng thái AWAITING_DEPOSIT: quá hạn chuyển cọc 24 giờ (SePayGatewayService.DEPOSIT_DEADLINE_MINUTES).
      *
      * Luồng thực thi:
      * 1. Tính mốc thời gian threshold timeout.
@@ -37,14 +37,14 @@ public class PaymentTimeoutScheduler {
      */
     @Scheduled(fixedDelay = 5000)
     public void scanAndCancelExpiredOrders() {
-        // Mốc thời gian timeout cho đơn thanh toán toàn bộ (1 phút trước)
+        // Mốc thời gian timeout cho đơn thanh toán toàn bộ (10 phút trước)
         LocalDateTime threshold = LocalDateTime.now().minusMinutes(SePayGatewayService.PAYMENT_WINDOW_MINUTES);
 
-        // Quét lấy danh sách đơn PENDING quá hạn thanh toán 1 phút
+        // Quét lấy danh sách đơn PENDING quá hạn thanh toán 10 phút
         List<Order> expiredOrders = new ArrayList<>(
                 orderRepository.findByStatusAndPaymentWindowStartBefore(OrderStatus.PENDING, threshold));
 
-        // Quét tiếp lấy danh sách đơn AWAITING_DEPOSIT quá hạn đặt cọc 1 phút
+        // Quét tiếp lấy danh sách đơn AWAITING_DEPOSIT quá hạn đặt cọc 24 giờ
         expiredOrders.addAll(orderRepository.findByStatusAndPaymentWindowStartBefore(OrderStatus.AWAITING_DEPOSIT,
                 LocalDateTime.now().minusMinutes(SePayGatewayService.DEPOSIT_DEADLINE_MINUTES)));
 

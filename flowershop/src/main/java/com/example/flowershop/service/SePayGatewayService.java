@@ -45,12 +45,12 @@ public class SePayGatewayService {
 
     /** Giá trị payment_method SePay chấp nhận (null = để khách chọn trên cổng). */
     private static final Set<String> SEPAY_PAYMENT_METHODS = Set.of("CARD", "BANK_TRANSFER", "NAPAS_BANK_TRANSFER");
-    private static final String EXPIRED_REASON = "Quá hạn 1 phút không quét mã thanh toán";
-    private static final String DEPOSIT_EXPIRED_REASON = "Quá hạn 1 phút không thanh toán tiền cọc";
+    private static final String EXPIRED_REASON = "Quá hạn 10 phút không quét mã thanh toán";
+    private static final String DEPOSIT_EXPIRED_REASON = "Quá hạn 24 giờ không thanh toán tiền cọc";
     /** Thời hạn thanh toán tiền cọc kể từ lúc tạo đơn AWAITING_DEPOSIT. */
-    public static final long DEPOSIT_DEADLINE_MINUTES = 1;
+    public static final long DEPOSIT_DEADLINE_MINUTES = 24 * 60;
     /** Thời hạn thanh toán đơn thường kể từ lúc tạo đơn (kiểu Shopee: hủy giao dịch vẫn giữ đơn tới hết hạn). */
-    public static final long PAYMENT_WINDOW_MINUTES = 1;
+    public static final long PAYMENT_WINDOW_MINUTES = 10;
 
     private final OrderRepository orderRepository;
     private final PaymentRepository paymentRepository;
@@ -92,7 +92,7 @@ public class SePayGatewayService {
         return clean.length() >= 8 ? clean.substring(0, 8) : clean;
     }
 
-    /** Đơn đã quá hạn thanh toán chưa: AWAITING_DEPOSIT quá 1 phút, PENDING quá 1 phút kể từ lúc tạo. */
+    /** Đơn đã quá hạn thanh toán chưa: AWAITING_DEPOSIT quá 24 giờ, PENDING quá 10 phút kể từ lúc tạo. */
     private static boolean isExpired(Order order) {
         if (order.getCreatedDate() == null) return false;
         java.time.LocalDateTime now = java.time.LocalDateTime.now();
@@ -102,9 +102,9 @@ public class SePayGatewayService {
         return order.getStatus() == OrderStatus.PENDING && !order.getPaymentWindowStart().plusMinutes(PAYMENT_WINDOW_MINUTES).isAfter(now);
     }
 
-    /** Thời hạn hiển thị cho người dùng: đơn custom (đặt cọc) 1 phút, đơn thường 1 phút. */
+    /** Thời hạn hiển thị cho người dùng: đơn custom (đặt cọc) 24 giờ, đơn thường 10 phút. */
     static String expiryText(Order order) {
-        return order.getStatus() == OrderStatus.AWAITING_DEPOSIT ? DEPOSIT_DEADLINE_MINUTES + " phút" : "1 phút";
+        return order.getStatus() == OrderStatus.AWAITING_DEPOSIT ? DEPOSIT_DEADLINE_MINUTES / 60 + " giờ" : PAYMENT_WINDOW_MINUTES + " phút";
     }
 
     /** Tiền cọc yêu cầu: depositAmount nếu > 0, ngược lại 50% tổng. Dùng chung cho createPayment và status. */
@@ -174,8 +174,8 @@ public class SePayGatewayService {
         // Không hủy tại đây: scheduler sẽ hủy phía SePay trước rồi mới nhả hàng.
         if (isExpired(order)) {
             throw ApiException.badRequest(order.getStatus() == OrderStatus.AWAITING_DEPOSIT
-                    ? "Đơn hàng đã hết hạn đặt cọc (quá " + DEPOSIT_DEADLINE_MINUTES + " phút)."
-                    : "Đơn hàng đã hết hạn thanh toán (quá 1 phút).");
+                    ? "Đơn hàng đã hết hạn đặt cọc (quá " + DEPOSIT_DEADLINE_MINUTES / 60 + " giờ)."
+                    : "Đơn hàng đã hết hạn thanh toán (quá 10 phút).");
         }
         if (order.getStatus() != OrderStatus.PENDING && order.getStatus() != OrderStatus.DEPOSIT_PAID
                 && order.getStatus() != OrderStatus.AWAITING_DEPOSIT) {
@@ -349,7 +349,7 @@ public class SePayGatewayService {
                 throw ApiException.badRequest("Đơn " + getShortOrderCode(id) + " không còn chờ thanh toán.");
             }
             if (isExpired(order)) {
-                throw ApiException.badRequest("Đơn " + getShortOrderCode(id) + " đã hết hạn thanh toán (quá 1 phút).");
+                throw ApiException.badRequest("Đơn " + getShortOrderCode(id) + " đã hết hạn thanh toán (quá 10 phút).");
             }
             List<Payment> orderPayments = paymentRepository.findByOrderId(id);
             if (orderPayments.stream().anyMatch(p -> p.getPaymentMethod() == PaymentMethod.COD)) {
@@ -429,7 +429,7 @@ public class SePayGatewayService {
         if (order.getStatus() != OrderStatus.PENDING) return false;
 
         // Khách chủ động bấm Hủy ở SePay: đóng giao dịch trước, kiểm tra lại phòng trường hợp vừa trả xong, rồi hủy đơn.
-        // Các sự cố không gọi về trang hủy (back trình duyệt, mất mạng, đóng tab) thì đơn vẫn được giữ tới hết 1 phút.
+        // Các sự cố không gọi về trang hủy (back trình duyệt, mất mạng, đóng tab) thì đơn vẫn được giữ tới hết 10 phút.
         cancelAtSePay(invoiceNumber);
         if (reconcileWithSePayGateway(invoiceNumber)) return true;
         return !orderService.cancelPendingOrder(order.getId(), "Khách hàng hủy giao dịch tại cổng SePay", authenticatedUserId);
@@ -460,7 +460,7 @@ public class SePayGatewayService {
     public void expireUnpaidOrder(String orderId) {
         var current=orderRepository.findById(orderId).orElse(null);
         if(current==null || !isExpired(current)) return;
-        // Đơn COD (kể cả đơn "mua ngay" của CustomerOrderService) không có bước thanh toán online → không hết hạn sau 1 phút.
+        // Đơn COD (kể cả đơn "mua ngay" của CustomerOrderService) không có bước thanh toán online → không hết hạn sau 10 phút.
         List<Payment> orderPayments = paymentRepository.findByOrderId(orderId);
         if (orderPayments.stream().anyMatch(p -> p.getPaymentMethod() == PaymentMethod.COD)) {
             return;
@@ -705,7 +705,7 @@ public class SePayGatewayService {
                 .filter(m -> m.getStatus() == PaymentStatus.SUCCESS && m.getOrder().getStatus() != OrderStatus.CANCELLED)
                 .map(Payment::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
         String message = allPaid ? "Thanh toán thành công qua SePay Gateway!"
-                : allCancelled ? "Các đơn hàng đã bị hủy do quá thời gian thanh toán (1 phút)."
+                : allCancelled ? "Các đơn hàng đã bị hủy do quá thời gian thanh toán (10 phút)."
                 : "Đang chờ thanh toán...";
         Payment first = members.get(0);
         return PaymentStatusResponse.builder()

@@ -477,7 +477,7 @@ single.setShippingCouponCode(part.getShippingCouponCode()); single.setExpectedTo
     }
 
     /**
-     * Tự động hủy đơn hàng quá hạn chưa thanh toán (PENDING/AWAITING_DEPOSIT 1 phút).
+     * Tự động hủy đơn hàng quá hạn chưa thanh toán (PENDING 10 phút, AWAITING_DEPOSIT 24 giờ).
      * Hoàn lại tồn kho cho từng sản phẩm, hoàn lại coupon (nếu có), và hủy các payment pending.
      */
     @Transactional
