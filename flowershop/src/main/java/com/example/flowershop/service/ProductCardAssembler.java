@@ -29,6 +29,7 @@ public class ProductCardAssembler {
 
     private final ProductImageRepository images;
     private final ProductReviewRepository reviews;
+    @org.springframework.beans.factory.annotation.Autowired private ProductQuotaService quota;
 
     public ProductCardAssembler(ProductImageRepository images, ProductReviewRepository reviews) {
         this.images = images;
@@ -37,7 +38,7 @@ public class ProductCardAssembler {
 
     /** Quy tắc hiển thị công khai duy nhất, dùng chung toàn hệ thống. */
     public static boolean visible(Product p) {
-        return p.getStatus() == ProductStatus.ACTIVE && !p.isAdminHidden()
+        return !p.isDeleted() && p.getStatus() == ProductStatus.ACTIVE && !p.isAdminHidden()
                 && p.getShop().getStatus() == ShopStatus.ACTIVE;
     }
 
@@ -73,12 +74,13 @@ public class ProductCardAssembler {
         List<String> ids = products.stream().map(Product::getId).toList();
         Map<String, String> image = primaryImages(ids);
         Map<String, double[]> rating = ratings(ids);
+        Set<String> allowed=quota.allowedIds(products);
         return products.stream().map(p -> {
             double[] summary = rating.getOrDefault(p.getId(), new double[]{0d, 0d});
             return new ProductCard(p.getId(), p.getName(), p.getType(), p.getPrice(), p.getStock(), p.getStatus(),
                     p.getShop().getId(), p.getShop().getName(), p.getCategory().getId(),
                     p.getCategory().getName(), image.get(p.getId()),
-                    Math.round(summary[0] * 10) / 10.0, (long) summary[1], visible(p), p.isAdminHidden());
+                    Math.round(summary[0] * 10) / 10.0, (long) summary[1], visible(p) && allowed.contains(p.getId()), p.isAdminHidden());
         }).toList();
     }
 }

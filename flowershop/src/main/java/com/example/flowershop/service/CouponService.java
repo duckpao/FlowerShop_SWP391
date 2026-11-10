@@ -18,7 +18,7 @@ public class CouponService {
             @NotNull CouponTarget target, @NotNull DiscountType discountType,
             @NotNull @DecimalMin("0.01") @Digits(integer=10,fraction=2) BigDecimal discountValue,
             @NotNull @DecimalMin("0") @Digits(integer=10,fraction=2) BigDecimal minOrderValue,
-            @NotNull @DecimalMin("20000") @DecimalMax("70000") @Digits(integer=5,fraction=0) BigDecimal maxDiscountValue,
+            @NotNull @DecimalMin(value="0",inclusive=false) @DecimalMax("100000") @Digits(integer=6,fraction=0) BigDecimal maxDiscountValue,
             @NotNull LocalDateTime startDate, @NotNull LocalDateTime endDate,
             @NotNull @Min(1) Integer usageLimit, @NotNull CouponStatus status, String productId) {}
     public record View(String id, String code, String shopId, CouponTarget target, DiscountType discountType,
@@ -66,8 +66,8 @@ public class CouponService {
         if(!input.endDate().isAfter(input.startDate())) throw ApiException.badRequest("Ngày kết thúc phải sau ngày bắt đầu.");
         if(input.discountType()==DiscountType.PERCENTAGE && input.discountValue().compareTo(new BigDecimal("100"))>0)
             throw ApiException.badRequest("Phần trăm giảm phải lớn hơn 0 và không quá 100%.");
-        if(input.maxDiscountValue().compareTo(new BigDecimal("20000"))<0 || input.maxDiscountValue().compareTo(new BigDecimal("70000"))>0)
-            throw ApiException.badRequest("Trần giảm phải từ 20.000 đến 70.000 đồng.");
+        if(input.maxDiscountValue().signum()<=0 || input.maxDiscountValue().compareTo(new BigDecimal("100000"))>0)
+            throw ApiException.badRequest("Trần giảm phải lớn hơn 0 và không quá 100.000 đồng.");
         String code=input.code().strip().toUpperCase(Locale.ROOT);
         coupons.findByCodeIgnoreCase(code).filter(c -> !c.getId().equals(id)).ifPresent(c -> {
             throw ApiException.badRequest("Mã giảm giá đã tồn tại.");
@@ -98,7 +98,7 @@ public class CouponService {
         if(c.getUsedCount()>=c.getUsageLimit()) return "Mã đã hết lượt sử dụng";
         if(c.getShop()!=null && (!c.getShop().getId().equals(ctx.shopId()) || c.getTarget()!=CouponTarget.ORDER)) return "Mã không áp dụng cho shop này";
         if(c.getDiscountValue()==null || c.getDiscountValue().signum()<=0 || c.getMaxDiscountValue()==null
-                || c.getMaxDiscountValue().compareTo(new BigDecimal("20000"))<0 || c.getMaxDiscountValue().compareTo(new BigDecimal("70000"))>0
+                || c.getMaxDiscountValue().signum()<=0 || c.getMaxDiscountValue().compareTo(new BigDecimal("100000"))>0
                 || (c.getDiscountType()==DiscountType.PERCENTAGE && c.getDiscountValue().compareTo(new BigDecimal("100"))>0)) return "Mã chưa được cấu hình hợp lệ";
         if(ctx.subTotal().compareTo(c.getMinOrderValue())<0) return "Đơn chưa đạt giá trị tối thiểu";
         if(c.getTarget()==CouponTarget.PRODUCT && (c.getProduct()==null || !ctx.productTotals().containsKey(c.getProduct().getId()))) return "Đơn không có sản phẩm áp dụng";

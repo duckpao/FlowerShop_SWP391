@@ -8,7 +8,7 @@ public class ShopPlan {
     @Column(nullable=false,length=100) private String name;
     @Column(name="duration_months",nullable=false) private int durationMonths;
     @Column(nullable=false,precision=12,scale=2) private BigDecimal price;
-    @Column(name="monthly_product_limit") private Integer monthlyProductLimit;
+    @Column(name="product_limit") private Integer productLimit;
     @Column(name="featured_limit",nullable=false) private int featuredLimit;
     @Column(nullable=false) private boolean enabled;
 }

@@ -207,7 +207,7 @@ export default function ProductsView({ shop, manage = false }) {
                       )}
                     </div>
                     {!manage && <span>{ratingLabel(p)}</span>}
-                    {manage && <span className="font-medium text-gray-700 dark:text-gray-300">{productStatusLabels[p.status] || p.status}</span>}
+                    {manage && <span className={p.quotaBlocked ? 'font-semibold text-error-500' : 'font-medium text-gray-700 dark:text-gray-300'}>{p.quotaBlocked ? 'Bị khóa: vượt giới hạn gói — cần nâng cấp hoặc xóa bớt sản phẩm' : productStatusLabels[p.status] || p.status}</span>}
                   </div>
                   
                   {manage && (
@@ -220,7 +220,7 @@ export default function ProductsView({ shop, manage = false }) {
                           size="sm"
                           variant="outline"
                           className="flex-1 text-emerald-600 hover:bg-emerald-50 hover:border-emerald-200 dark:text-emerald-400 dark:hover:bg-emerald-500/10"
-                          disabled={disabled}
+                          disabled={disabled || p.quotaBlocked}
                           onClick={() => c.unhide(p.id)}
                         >
                           Bỏ ẩn
@@ -236,6 +236,7 @@ export default function ProductsView({ shop, manage = false }) {
                           Ẩn
                         </Button>
                       )}
+                      <Button size="sm" variant="outline" disabled={disabled} onClick={() => c.remove(p.id)} className="text-error-500">Xóa</Button>
                     </div>
                   )}
                 </div>

@@ -44,6 +44,21 @@ class SubscriptionGatewayTests {
         var checkout=gateway.subscriptionCheckout("SUB-test",new BigDecimal("59000"),"owner","http://localhost/shop-admin/subscription");
         assertThat(checkout.fields()).containsEntry("order_amount","59000").containsEntry("currency","VND");
         assertThat(checkout.fields().get("success_url")).startsWith("http://localhost/shop-admin/subscription?");
+        assertThat(checkout.fields()).containsEntry("success_url","http://localhost/shop-admin/subscription?invoice_number=SUB-test&result=success")
+                .containsEntry("error_url","http://localhost/shop-admin/subscription?invoice_number=SUB-test&result=error")
+                .containsEntry("cancel_url","http://localhost/shop-admin/subscription?invoice_number=SUB-test&result=cancel");
         assertThat(checkout.fields().get("signature")).isEqualTo(SePaySignatureUtil.generateSignature(checkout.fields(),"secret-test"));
+    }
+    @Test void sandboxCredentialsAreTrimmedAndFormUsesDocumentedFieldOrder() {
+        ReflectionTestUtils.setField(gateway,"merchantId"," SP-TEST-demo ");
+        ReflectionTestUtils.setField(gateway,"secretKey"," secret-test ");
+        ReflectionTestUtils.setField(gateway,"checkoutUrl"," https://pay-sandbox.sepay.vn/v1/checkout/init ");
+        ReflectionTestUtils.invokeMethod(gateway,"normalizeConfiguration");
+        var checkout=gateway.subscriptionCheckout("SUB-test",new BigDecimal("59000"),"owner","http://localhost/shop-admin/subscription");
+        assertThat(checkout.checkoutUrl()).isEqualTo("https://pay-sandbox.sepay.vn/v1/checkout/init");
+        assertThat(checkout.fields()).containsEntry("merchant","SP-TEST-demo");
+        assertThat(checkout.fields().get("signature")).isEqualTo(SePaySignatureUtil.generateSignature(checkout.fields(),"secret-test"));
+        assertThat(checkout.fields().keySet()).containsExactly("order_amount","merchant","currency","operation",
+                "order_description","order_invoice_number","customer_id","success_url","error_url","cancel_url","signature");
     }
 }

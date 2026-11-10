@@ -12,6 +12,16 @@ public class AdminShopPlanController {
     public AdminShopPlanController(ShopPlanService plans){this.plans=plans;}
     @GetMapping("/api/admin/shop-plans")
     public List<ShopPlanService.Plan> plans(@AuthenticationPrincipal CurrentUser admin){return plans.adminPlans(admin.id());}
+    @PostMapping("/api/admin/shop-plans")
+    public ShopPlanService.Plan create(@AuthenticationPrincipal CurrentUser admin,@Valid @RequestBody ShopPlanService.PlanInput input){return plans.savePlan(admin.id(),null,input);}
+    @PutMapping("/api/admin/shop-plans/{id}")
+    public ShopPlanService.Plan update(@AuthenticationPrincipal CurrentUser admin,@PathVariable("id") String id,@Valid @RequestBody ShopPlanService.PlanInput input){return plans.savePlan(admin.id(),id,input);}
+    @DeleteMapping("/api/admin/shop-plans/{id}")
+    public void remove(@AuthenticationPrincipal CurrentUser admin,@PathVariable("id") String id){plans.removePlan(admin.id(),id);}
+    @GetMapping("/api/admin/shops/{shopId}/subscription/products")
+    public List<ShopPlanService.ManagedProduct> products(@AuthenticationPrincipal CurrentUser admin,@PathVariable("shopId") String shopId){return plans.adminProducts(shopId,admin.id());}
+    @PutMapping("/api/admin/shops/{shopId}/subscription/featured/{productId}")
+    public void feature(@AuthenticationPrincipal CurrentUser admin,@PathVariable("shopId") String shopId,@PathVariable("productId") String productId,@Valid @RequestBody ShopPlanService.Feature input){plans.adminFeature(shopId,admin.id(),productId,input.featured());}
     @GetMapping("/api/admin/shops/{shopId}/subscription")
     public ShopPlanService.AdminStatus detail(@PathVariable("shopId") String shopId,@AuthenticationPrincipal CurrentUser admin){return plans.adminStatus(shopId,admin.id());}
     @PostMapping("/api/admin/shops/{shopId}/subscription/activate")

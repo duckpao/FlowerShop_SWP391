@@ -283,11 +283,51 @@ class CouponTests {
         mvc.perform(get("/api/admin/vouchers")).andExpect(status().isUnauthorized());
         mvc.perform(get("/api/admin/vouchers").header("Authorization","Bearer shop")).andExpect(status().isForbidden());
         mvc.perform(get("/api/shop/mine/"+otherShop.getId()+"/vouchers").header("Authorization","Bearer shop")).andExpect(status().isNotFound());
-        mvc.perform(csrf(post("/api/admin/vouchers"),"admin").content(body("ORDER",19000))).andExpect(status().isBadRequest());
-        mvc.perform(csrf(post("/api/admin/vouchers"),"admin").content(body("ORDER",71000))).andExpect(status().isBadRequest());
+        mvc.perform(csrf(post("/api/admin/vouchers"),"admin").content(body("ORDER",0))).andExpect(status().isBadRequest());
+        mvc.perform(csrf(post("/api/admin/vouchers"),"admin").content(body("ORDER",100001))).andExpect(status().isBadRequest());
         mvc.perform(csrf(post("/api/shop/mine/"+shop.getId()+"/vouchers"),"shop").content(body("SHIPPING",20000))).andExpect(status().isBadRequest());
         mvc.perform(csrf(post("/api/admin/vouchers"),"admin").content(body("SHIPPING",20000))).andExpect(status().isCreated()).andExpect(jsonPath("$.shopId").isEmpty());
         mvc.perform(csrf(post("/api/admin/vouchers"),"customer").content(body("ORDER",20000))).andExpect(status().isForbidden());
+    }
+    @Test void capAcceptsOneDongThroughOneHundredThousandAndCheckoutUsesNewCap() throws Exception {
+        for(int cap:new int[]{1,19000,71000,100000}) {
+            mvc.perform(csrf(post("/api/admin/vouchers"),"admin").content(body("ORDER",cap).replace("TEST20","CAP"+cap)))
+                    .andExpect(status().isCreated()).andExpect(jsonPath("$.maxDiscountValue").value(cap));
+        }
+        for(int cap:new int[]{-1,0,100001}) {
+            mvc.perform(csrf(post("/api/admin/vouchers"),"admin").content(body("ORDER",cap)))
+                    .andExpect(status().isBadRequest());
+            assertThatThrownBy(()->service.save(admin.getId(),null,null,input(CouponTarget.ORDER,Integer.toString(cap)))).isInstanceOf(ApiException.class);
+        }
+        coupon("SMALLCAP",CouponTarget.ORDER,"100","1");
+        coupon("MAXCAP",CouponTarget.ORDER,"100","100000");
+        assertThat(service.preview(ctx(),"SMALLCAP",null).discountAmount()).isEqualByComparingTo("1");
+        assertThat(service.preview(ctx(),"MAXCAP",null).discountAmount()).isEqualByComparingTo("100000");
+        var result=customerOrders.checkout(customer.getId(),new CustomerOrderService.CheckoutRequest(destination.getId(),product.getId(),1,"","MAXCAP",null));
+        assertThat(result.discountAmount()).isEqualByComparingTo("100000");
+        assertThat(result.totalAmount()).isEqualByComparingTo("430000");
+    }
+    @Test void merchandisePreviewWorksWithoutAddressButCannotBypassCheckoutShipping() throws Exception {
+        var code=coupon("ADDRESSFREE",CouponTarget.ORDER,"10","20000");
+        coupon("SHIPADDRESS",CouponTarget.SHIPPING,"100","30000");
+        var item=cart.saveAndFlush(CartItem.builder().id(id()).user(customer).product(product).quantity(1).build());
+        var body=new HashMap<String,Object>();
+        body.put("shopId",shop.getId()); body.put("cartItemIds",List.of(item.getId()));
+        body.put("couponId",code.getCode()); body.put("merchandiseOnly",true);
+        String path="/api/orders/"+customer.getId()+"/voucher-preview";
+        mvc.perform(csrf(post(path),"customer").content(json.writeValueAsString(body)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.discountAmount").value(20000))
+                .andExpect(jsonPath("$.totalAmount").value(480000))
+                .andExpect(jsonPath("$.shippingVouchers[0].eligible").value(false));
+        verify(ghn,never()).calculateFee(anyInt(),anyString(),anyInt(),anyString(),anyInt());
+        assertThat(coupons.findById(code.getId()).orElseThrow().getUsedCount()).isZero();
+        body.put("shippingCouponCode","SHIPADDRESS");
+        mvc.perform(csrf(post(path),"customer").content(json.writeValueAsString(body))).andExpect(status().isBadRequest());
+        body.remove("shippingCouponCode");
+        mvc.perform(csrf(post("/api/orders/"+customer.getId()),"customer").content(json.writeValueAsString(body)))
+                .andExpect(status().isBadRequest());
+        body.put("merchandiseOnly",false);
+        mvc.perform(csrf(post(path),"customer").content(json.writeValueAsString(body))).andExpect(status().isBadRequest());
     }
     @Test void checkoutApiRejectsForgedHighVoucherWithShipping() throws Exception {
         coupon("LOW",CouponTarget.ORDER,"10","20000"); coupon("HIGH",CouponTarget.ORDER,"20","70000"); coupon("SHIP",CouponTarget.SHIPPING,"100","30000");

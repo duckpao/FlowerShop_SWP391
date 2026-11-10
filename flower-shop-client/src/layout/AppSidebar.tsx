@@ -37,6 +37,7 @@ type NavItem = {
 };
 
 const adminNavItems: NavItem[] = [
+  { name: 'Quản lý gói Pro', path: '/admin/shop-plans', icon: <ListIcon fontSize={24} /> },
 { name: 'Mã giảm giá của sàn', path: '/admin/vouchers', icon: <ListIcon fontSize={24} /> },
   { name: 'Tổng quan', path: '/admin', icon: <GridIcon fontSize={24} /> },
   { name: 'Quản lý người dùng', path: '/admin/users', icon: <UserCircleIcon fontSize={24} /> },

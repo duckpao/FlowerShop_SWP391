@@ -44,7 +44,7 @@ public class SubscriptionReminderService {
     }
     private String message(ShopSubscription s) {
         return "Gói Pro của "+s.getShop().getName()+" hết hạn lúc "+s.getEndsAt().format(DateTimeFormatter.ofPattern("HH:mm dd/MM/yyyy"))
-                +". Gia hạn để tiếp tục đăng không giới hạn và dùng 10 vị trí sản phẩm nổi bật.";
+                +". Gia hạn để tiếp tục sử dụng quyền đăng sản phẩm và sản phẩm nổi bật theo gói của shop.";
     }
     @Transactional
     public void deliver(String id) {

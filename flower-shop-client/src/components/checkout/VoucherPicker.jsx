@@ -9,7 +9,7 @@ export default function VoucherPicker({ context, value, onChange, onPreview, dis
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [retry, setRetry] = useState(0)
-  const request = context ? JSON.stringify({ ...context, couponCode: value.couponCode || '', shippingCouponCode: value.shippingCouponCode || '' }) : ''
+  const request = context ? JSON.stringify({ ...context, couponCode: value.couponCode || '', shippingCouponCode: context.merchandiseOnly ? '' : value.shippingCouponCode || '' }) : ''
   useEffect(() => {
     let active = true
     setData(null); setError(''); onPreview(null)
@@ -47,7 +47,9 @@ export default function VoucherPicker({ context, value, onChange, onPreview, dis
     {data && <>
       {data.bestSaving > 0 && <div className="rounded-lg bg-brand-50 p-3 text-sm dark:bg-brand-500/10"><p>Gợi ý tiết kiệm nhất: <strong>{[data.recommendedOrderCode, data.recommendedShippingCode].filter(Boolean).join(' + ')}</strong> — giảm {formatPrice(data.bestSaving)}</p>
         <button type="button" disabled={disabled || busy} className="mt-2 font-semibold text-brand-600" onClick={() => onChange({ couponCode: data.recommendedOrderCode || '', shippingCouponCode: data.recommendedShippingCode || '' })}>Dùng ưu đãi tốt nhất</button></div>}
-      {renderChoices(data.shippingVouchers, 'shippingCouponCode', 'Giảm phí giao hàng')}
+      {context?.merchandiseOnly
+        ? <p role="status" className="text-sm text-gray-500">Bạn có thể chọn mã giảm tiền hàng trước. Cần địa chỉ hợp lệ và phí giao hàng để chọn mã phí ship và thanh toán. Tổng bên dưới chưa gồm phí giao hàng.</p>
+        : renderChoices(data.shippingVouchers, 'shippingCouponCode', 'Giảm phí giao hàng')}
       {renderChoices(data.orderVouchers, 'couponCode', 'Giảm tiền hàng / sản phẩm')}
       <div className="space-y-1 border-t border-gray-200 pt-3 text-sm dark:border-gray-700" aria-live="polite">
         <p className="flex justify-between"><span>Giảm tiền hàng</span><strong>−{formatPrice(data.discountAmount)}</strong></p>

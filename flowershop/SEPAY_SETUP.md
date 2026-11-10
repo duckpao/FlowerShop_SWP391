@@ -1,38 +1,40 @@
-# Tài khoản nhận tiền SePay
+# SePay Sandbox cho demo
 
-Tài khoản nhận tiền theo yêu cầu:
+Ứng dụng dùng Sandbox cho thanh toán đơn hoa, tiền cọc và gói Pro.
+Giao dịch giả lập không chuyển tiền thật, không cần liên kết ngân hàng thật.
 
-- Ngân hàng: MB Bank.
-- Số tài khoản: `828112004`.
-- Chủ tài khoản: Phạm Thanh Dũng.
+## Cấu hình
 
-Đã kiểm tra trên SePay: tài khoản thụ hưởng của Gateway Production là
-`828112004 - PHAM THANH DUNG`, ngân hàng MBBank. Merchant ID: `SP-LIVE-PT779375`.
-File local đã được tạo với merchant và endpoint Production tương ứng.
-Secret Key Production đã được cấu hình trong file local được Git bỏ qua.
-Khởi động lại backend để nạp cấu hình. Chưa thực hiện giao dịch thanh toán thật
-để kiểm tra toàn bộ luồng.
-
-## Kết nối với ứng dụng
-
-Ứng dụng dùng SePay Payment Gateway cho thanh toán đơn hàng và gói Pro.
-Ngân hàng nhận tiền do cấu hình merchant trên SePay quyết định. Thông tin trong
-tài liệu này không tự thay đổi tài khoản nhận tiền của merchant đang dùng.
-
-1. Đăng nhập https://my.sepay.vn và liên kết tài khoản MB Bank nêu trên.
-2. Cấu hình phương thức QR chuyển khoản tại https://my.sepay.vn/pg/payment-methods
-   và kích hoạt Production cho tài khoản nhận tiền này.
-3. Lấy Merchant ID và Secret Key tương ứng; điền vào file local
-   `flowershop/application-sepay-local.properties` (file đã được Git bỏ qua):
+Điền thông tin merchant Sandbox vào `flowershop/application-sepay-local.properties`
+(file này đã được Git bỏ qua):
 
 ```properties
-sepay.merchant-id=SP-LIVE-PT779375
-sepay.secret-key=SECRET_KEY_TU_SEPAY
-sepay.checkout-url=https://pay.sepay.vn/v1/checkout/init
-sepay.api-base-url=https://pgapi.sepay.vn
+sepay.merchant-id=MERCHANT_ID_SANDBOX_CUA_BAN
+sepay.secret-key=SECRET_KEY_SANDBOX_CUA_BAN
+sepay.checkout-url=https://pay-sandbox.sepay.vn/v1/checkout/init
+sepay.api-base-url=https://pgapi-sandbox.sepay.vn
 ```
 
-Không commit file chứa Secret Key. Khởi động lại backend sau khi cập nhật.
-Kiểm tra tài khoản nhận tiền trên màn hình thanh toán của SePay trước khi chuyển tiền.
+Thay giá trị mẫu bằng thông tin Sandbox thực tế; không dùng khóa Production.
+Hoặc giữ placeholder trong file local và đặt biến môi trường
+`SEPAY_SANDBOX_MERCHANT_ID`, `SEPAY_SANDBOX_SECRET_KEY`.
+Không commit Secret Key. Khởi động lại backend sau khi cập nhật.
 
-Hướng dẫn chính thức: https://developer.sepay.vn/vi/cong-thanh-toan/bat-dau
+## URL quay về
+
+`app.frontend-base-url` mặc định là `http://localhost:5173` cho Vite.
+SePay quay về `/shop-admin/subscription` khi thanh toán Pro thành công, lỗi hoặc hủy.
+Nếu dùng tên miền khác, đặt `FRONTEND_BASE_URL` là URL frontend mà trình duyệt truy cập.
+Chỉ đặt cổng 8080 khi backend thực sự phục vụ cả bản build frontend.
+
+## Chạy demo
+
+1. Tạo đơn hoa, đơn đặt cọc hoặc chọn gói Pro như bình thường.
+2. Kiểm tra host trang thanh toán là `pay-sandbox.sepay.vn`.
+3. Dùng chức năng giả lập thanh toán của SePay Sandbox để hoàn tất giao dịch.
+4. Backend đối soát qua `pgapi-sandbox.sepay.vn` và cập nhật trạng thái.
+
+Không dùng ứng dụng ngân hàng thật để chuyển tiền demo.
+Redirect về frontend không tự xác nhận đã thanh toán; backend vẫn xác minh từ SePay.
+
+Tài liệu chính thức: https://developer.sepay.vn/vi/cong-thanh-toan/sandbox

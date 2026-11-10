@@ -72,6 +72,9 @@ public class Product {
     @Builder.Default
     @Column(name = "admin_hidden", nullable = false)
     private boolean adminHidden = false;
+    @Builder.Default
+    @Column(name = "deleted", nullable = false)
+    private boolean deleted = false;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status")

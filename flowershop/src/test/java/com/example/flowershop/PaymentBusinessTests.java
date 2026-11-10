@@ -133,8 +133,8 @@ class PaymentBusinessTests {
         var result = service.createPayment(CreatePaymentRequest.builder().orderId(order.getId())
                 .paymentMethod("bank_transfer").build(), "customer-1");
 
-        assertThat(result.getFields().keySet()).containsExactly("merchant", "operation", "payment_method",
-                "order_amount", "currency", "order_invoice_number", "order_description", "customer_id",
+        assertThat(result.getFields().keySet()).containsExactly("order_amount", "merchant", "currency", "operation",
+                "order_description", "order_invoice_number", "customer_id", "payment_method",
                 "success_url", "error_url", "cancel_url", "signature");
         assertThat(result.getFields().get("payment_method")).isEqualTo("BANK_TRANSFER");
     }

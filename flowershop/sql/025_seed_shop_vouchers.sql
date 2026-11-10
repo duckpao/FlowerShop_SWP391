@@ -21,7 +21,7 @@ LEFT JOIN (
     WHERE shop_id IS NOT NULL AND target='ORDER' AND deleted=FALSE AND status='ACTIVE'
       AND start_date<=NOW() AND end_date>NOW() AND used_count<usage_limit
       AND discount_type='PERCENTAGE' AND discount_value>0 AND discount_value<=100
-      AND max_discount_value BETWEEN 20000 AND 70000
+      AND max_discount_value > 0 AND max_discount_value <= 100000
     GROUP BY shop_id
 ) existing ON existing.shop_id=s.id
 WHERE v.slot<=GREATEST(0, 3-COALESCE(existing.usable_count, 0))
