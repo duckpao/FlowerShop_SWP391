@@ -73,7 +73,7 @@ public class SePayGatewayService {
     @Value("${sepay.checkout-url:https://pay-sandbox.sepay.vn/v1/checkout/init}")
     private String checkoutUrl;
 
-    @Value("${sepay.api-base-url:https://pgapi.sepay.vn}")
+    @Value("${sepay.api-base-url:https://pgapi-sandbox.sepay.vn}")
     private String apiBaseUrl;
 
     @Value("${sepay.success-url:http://localhost:8080/payment/success}")
@@ -84,6 +84,15 @@ public class SePayGatewayService {
 
     @Value("${sepay.cancel-url:http://localhost:8080/payment/cancel}")
     private String cancelUrl;
+
+    /** Properties/environment variables may contain spaces accidentally pasted with credentials. */
+    @jakarta.annotation.PostConstruct
+    void normalizeConfiguration() {
+        merchantId = merchantId == null ? "" : merchantId.strip();
+        secretKey = secretKey == null ? "" : secretKey.strip();
+        checkoutUrl = checkoutUrl.strip();
+        apiBaseUrl = apiBaseUrl.strip();
+    }
 
     /** Mã đơn rút gọn: 8 ký tự hex đầu của UUID viết hoa, dùng đặt tên invoice và mô tả giao dịch. */
     private String getShortOrderCode(String orderId) {
@@ -302,17 +311,17 @@ public class SePayGatewayService {
     private Map<String, String> signedCheckoutFields(String invoiceNumber, long amount, String description,
                                                      String customerId, String paymentMethod) {
         Map<String, String> fields = new LinkedHashMap<>();
-        fields.put("merchant", merchantId);
-        fields.put("operation", "PURCHASE");
-        if (paymentMethod != null) {
-            fields.put("payment_method", paymentMethod);
-        }
         fields.put("order_amount", String.valueOf(amount));
+        fields.put("merchant", merchantId);
         fields.put("currency", "VND");
-        fields.put("order_invoice_number", invoiceNumber);
+        fields.put("operation", "PURCHASE");
         fields.put("order_description", description);
+        fields.put("order_invoice_number", invoiceNumber);
         if (customerId != null) {
             fields.put("customer_id", customerId);
+        }
+        if (paymentMethod != null) {
+            fields.put("payment_method", paymentMethod);
         }
         fields.put("success_url", successUrl + "?invoice_number=" + invoiceNumber);
         fields.put("error_url", errorUrl + "?invoice_number=" + invoiceNumber);

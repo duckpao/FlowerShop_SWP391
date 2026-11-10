@@ -84,13 +84,15 @@ export default function ShopSubscriptionView({ auth }) {
   if (!auth?.user) return <p>Vui lòng <Link to="/login?next=%2Fshop-admin%2Fsubscription">đăng nhập</Link>.</p>
   if (auth.user.role !== 'SHOP') return <p>Chỉ chủ shop được quản lý gói đăng ký.</p>
   return <main className="mx-auto max-w-6xl space-y-6">
-    <header><h1 className="text-2xl font-bold">Gói đăng ký của shop</h1><p className="mt-2 text-gray-500">Pro: đăng sản phẩm không giới hạn và chọn tối đa 10 sản phẩm nổi bật.</p></header>
+    <header><h1 className="text-2xl font-bold">Gói đăng ký của shop</h1><p className="mt-2 text-gray-500">Chọn gói phù hợp với số sản phẩm và số vị trí nổi bật bạn cần.</p></header>
     {error && <p role="alert" className="rounded-xl bg-error-50 p-4 text-error-600">{error}</p>}
     {notice && <p role="status" className="rounded-xl bg-brand-50 p-4 text-brand-700">{notice}</p>}
     {status && <section className="rounded-xl border border-gray-200 p-5 dark:border-gray-700">
-      <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-semibold">Gói hiện tại: {status.pro ? 'Pro' : 'Free'}</h2><button type="button" onClick={reload} disabled={busy} className="rounded-lg border px-3 py-2 text-sm">Kiểm tra / Tải lại</button></div>
+      <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-semibold">Gói hiện tại: {status.planName}</h2><button type="button" onClick={reload} disabled={busy} className="rounded-lg border px-3 py-2 text-sm">Kiểm tra / Tải lại</button></div>
       {status.expiresAt && <p className="mt-2">{status.pro ? 'Hiệu lực đến' : 'Pro đã hết hạn lúc'}: {date(status.expiresAt)}</p>}
-      <p className="mt-2">Đã tạo {status.createdThisMonth} sản phẩm trong tháng này · {status.pro ? 'Không giới hạn lượt đăng' : 'Free tối đa 5 sản phẩm/tháng'}</p>
+      <p className="mt-2">Đang có {status.productCount}/{status.productLimit ?? 'không giới hạn'} sản phẩm · {status.featuredLimit} vị trí nổi bật</p>
+      {status.productLimit != null && status.productCount > status.productLimit && <p role="alert" className="mt-2 text-sm font-semibold text-error-500">{status.productCount - status.productLimit} sản phẩm vượt giới hạn đang bị khóa bán. Hãy nâng cấp gói hoặc xóa bớt sản phẩm. Hệ thống ưu tiên các sản phẩm được tạo trước.</p>}
+      <p className="mt-2 text-sm text-gray-500">Giới hạn tính cả sản phẩm ẩn, không đặt lại theo tháng. Xóa sản phẩm sẽ giải phóng chỗ.</p>
       <p className="mt-2 text-sm text-gray-500">Gia hạn trước hạn sẽ cộng tiếp thời gian còn lại. Khi hết hạn, shop trở về Free; sản phẩm vẫn được giữ, quyền nổi bật dừng.</p>
     </section>}
     {!shop && !error && <p role="status">Đang tải cửa hàng. Cửa hàng cần được duyệt và đang hoạt động để mua gói.</p>}
@@ -98,7 +100,7 @@ export default function ShopSubscriptionView({ auth }) {
     <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5" aria-label="Các gói đăng ký">
       {plans.map(plan => <article key={plan.id} className="flex flex-col rounded-xl border border-gray-200 p-5 dark:border-gray-700">
         <h2 className="font-semibold">{plan.name}</h2><p className="my-4 text-xl font-bold text-brand-600">{formatPrice(plan.price)}</p>
-        <p className="text-sm">{plan.monthlyProductLimit == null ? 'Đăng không giới hạn' : plan.monthlyProductLimit + ' sản phẩm/tháng'}</p>
+        <p className="text-sm">{plan.productLimit == null ? 'Sản phẩm không giới hạn' : 'Tối đa ' + plan.productLimit + ' sản phẩm'}</p>
         <p className="mt-2 mb-5 text-sm">{plan.featuredLimit ? plan.featuredLimit + ' sản phẩm nổi bật' : 'Không có sản phẩm nổi bật'}</p>
         {plan.durationMonths > 0 ? <button type="button" className="mt-auto rounded-lg bg-brand-600 px-3 py-2 text-white disabled:opacity-50" disabled={!shop || shop.status !== 'ACTIVE' || busy} onClick={() => buy(plan.id)}>{busy ? 'Đang xử lý…' : status?.pro ? 'Gia hạn qua SePay' : 'Đăng ký qua SePay'}</button> : <p className="mt-auto text-sm text-gray-500">Gói mặc định</p>}
       </article>)}

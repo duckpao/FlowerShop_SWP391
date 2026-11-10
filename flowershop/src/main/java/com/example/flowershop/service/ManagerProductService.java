@@ -65,7 +65,7 @@ public class ManagerProductService {
             ProductStatus status,
             ProductType type,
             boolean adminHidden,
-            List<String> images) {
+            List<String> images,boolean quotaBlocked) {
     }
 
     public record Results(List<Result> content, int page, int totalPages, long totalElements) {
@@ -93,6 +93,8 @@ public class ManagerProductService {
     private final CloudinaryService cloudinary;
     private final ShopProductNotificationService notifications;
     private final ShopPlanService shopPlans;
+    @jakarta.persistence.PersistenceContext private jakarta.persistence.EntityManager entityManager;
+    @org.springframework.beans.factory.annotation.Autowired private ProductQuotaService quota;
 
     public ManagerProductService(ShopRepository s, ProductRepository p, CategoryRepository c,
             ProductImageRepository i, ProductVideoRepository v, CloudinaryService cloud,
@@ -149,7 +151,7 @@ public class ManagerProductService {
                 product.getStatus(),
                 product.getType(),
                 product.isAdminHidden(),
-                imageUrls);
+                imageUrls,!quota.allowed(product));
     }
 
     private Results response(Page<Product> page) {
@@ -233,6 +235,7 @@ public class ManagerProductService {
         if (id == null) shopPlans.assertCanCreate(shop);
         var product = id == null ? new Product()
                 : products.findByIdAndShopId(id, shopId).orElseThrow(ManagerProductService::missing);
+        if(id!=null && status==ProductStatus.ACTIVE) quota.requireAllowed(product);
         var existingImages = id == null || (primaryImageId == null && uploadedImages.isEmpty())
                 ? List.<ProductImage>of()
                 : images.findByProductIdOrderByDisplayOrderAscIdAsc(product.getId());
@@ -329,11 +332,21 @@ public class ManagerProductService {
         product.setStatus(ProductStatus.INACTIVE);
         product.setLastModifyBy(actor);
     }
+    /** Preserve order/review foreign keys while removing the item from the shop's quota. */
+    @Transactional
+    public void remove(String shopId, String id, String actor) {
+        owned(shopId,actor,true);
+        var product=products.findByIdAndShopId(id,shopId).orElseThrow(ManagerProductService::missing);
+        product.setDeleted(true);product.setStatus(ProductStatus.INACTIVE);product.setLastModifyBy(actor);
+        // The featured row is no longer useful and must not occupy a paid slot.
+        entityManager.createQuery("delete from FeaturedProduct f where f.id = :id").setParameter("id",id).executeUpdate();
+    }
 
     @Transactional
     public void unhide(String shopId, String id, String actor) {
         owned(shopId, actor, true);
         var product = products.findByIdAndShopId(id, shopId).orElseThrow(ManagerProductService::missing);
+        quota.requireAllowed(product);
         product.setStatus(ProductStatus.ACTIVE);
         product.setLastModifyBy(actor);
         notifications.published(product);

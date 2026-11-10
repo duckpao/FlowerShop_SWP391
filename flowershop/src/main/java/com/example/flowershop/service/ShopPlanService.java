@@ -18,8 +18,11 @@ import java.util.*;
 
 @Service @Transactional(readOnly=true)
 public class ShopPlanService {
-    public record Plan(String id,String name,int durationMonths,BigDecimal price,Integer monthlyProductLimit,int featuredLimit) {}
-    public record Status(boolean pro,LocalDateTime expiresAt,long createdThisMonth,Integer monthlyLimit,int featuredLimit,List<String> featuredProductIds) {}
+    public record Plan(String id,String name,int durationMonths,BigDecimal price,Integer productLimit,int featuredLimit,boolean enabled) {}
+    public record PlanInput(@NotBlank @Size(max=100) String name,@Min(1) @Max(120) int durationMonths,
+            @NotNull @DecimalMin("1") @Digits(integer=10,fraction=2) BigDecimal price,
+            @Min(1) Integer productLimit,@Min(0) @Max(10000) int featuredLimit,boolean enabled) {}
+    public record Status(boolean pro,LocalDateTime expiresAt,long productCount,Integer productLimit,int featuredLimit,List<String> featuredProductIds,String planName) {}
     public record Purchase(@NotBlank @Size(max=20) String planId) {}
     public record Checkout(String invoiceNumber,BigDecimal amount,String checkoutUrl,Map<String,String> fields) {}
     public record PaymentStatus(String invoiceNumber,String status,BigDecimal amount,LocalDateTime confirmedAt) {}
@@ -31,6 +34,7 @@ public class ShopPlanService {
     public record PendingPayment(String invoiceNumber,String planName,int durationMonths,BigDecimal amount,String status,LocalDateTime createdAt) {}
     public record Activation(String id,String planName,int durationMonths,String source,String actorName,String note,LocalDateTime startsAt,LocalDateTime endsAt,LocalDateTime createdAt) {}
     public record AdminStatus(Status subscription,List<PendingPayment> payments,List<Activation> history) {}
+    public record ManagedProduct(String id,String name,boolean featured,boolean eligible) {}
     private final ShopPlanRepository plans;
     private final ShopSubscriptionRepository subscriptions;
     private final ShopPlanPaymentRepository payments;
@@ -46,6 +50,7 @@ public class ShopPlanService {
     private final String frontend;
     private final UserRepository users;
     private final ShopProActivationRepository activations;
+    @org.springframework.beans.factory.annotation.Autowired private ProductQuotaService quota;
     public ShopPlanService(ShopPlanRepository plans,ShopSubscriptionRepository subscriptions,ShopPlanPaymentRepository payments,
             ShopProductPostingRepository postings,FeaturedProductRepository featured,ShopRepository shops,ProductRepository products,
             ProductCardAssembler cards,NotificationService notifications,ShopPlanClock clock,SePayGatewayService gateway,
@@ -68,25 +73,27 @@ public class ShopPlanService {
     private boolean active(ShopSubscription s) { return s!=null && s.getEndsAt()!=null && s.getEndsAt().isAfter(clock.now()); }
     public List<Plan> plans() {
         return plans.findAll(Sort.by("durationMonths")).stream().filter(ShopPlan::isEnabled)
-                .map(p->new Plan(p.getId(),p.getName(),p.getDurationMonths(),p.getPrice(),p.getMonthlyProductLimit(),p.getFeaturedLimit())).toList();
+                .map(this::planView).toList();
     }
+    private Plan planView(ShopPlan p) { return new Plan(p.getId(),p.getName(),p.getDurationMonths(),p.getPrice(),p.getProductLimit(),p.getFeaturedLimit(),p.isEnabled()); }
     public Status status(String shopId,String actor) {
         owned(shopId,actor,false);
         return statusForShop(shopId);
     }
     private Status statusForShop(String shopId) {
         var s=subscriptions.forShop(shopId).orElse(null); boolean pro=active(s);
-        return new Status(pro,s==null?null:s.getEndsAt(),used(shopId),pro?null:5,pro?10:0,
-                pro?featured.forShop(shopId).stream().map(FeaturedProduct::getId).toList():List.of());
+        return new Status(pro,s==null?null:s.getEndsAt(),used(shopId),pro?s.getPlan().getProductLimit():Integer.valueOf(5),pro?s.getPlan().getFeaturedLimit():0,
+                pro?featured.forShop(shopId).stream().map(FeaturedProduct::getId).toList():List.of(),pro?s.getPlan().getName():"Free");
     }
     private long used(String shopId) {
-        var start=clock.now().toLocalDate().withDayOfMonth(1).atStartOfDay();
-        return postings.inMonth(shopId,start,start.plusMonths(1));
+        return products.countForShop(shopId);
     }
     /** Caller already holds the shop write lock; repeated create requests cannot exceed the quota. */
     public void assertCanCreate(Shop shop) {
-        if(!active(subscriptions.forShop(shop.getId()).orElse(null)) && used(shop.getId())>=5)
-            throw invalid("Gói Free chỉ được tạo tối đa 5 sản phẩm/tháng. Vui lòng đăng ký Pro để tiếp tục.");
+        var s=subscriptions.forShop(shop.getId()).orElse(null);
+        Integer limit=active(s)?s.getPlan().getProductLimit():Integer.valueOf(5);
+        if(limit!=null && used(shop.getId())>=limit)
+            throw invalid("Gói hiện tại giới hạn "+limit+" sản phẩm. Hãy xóa sản phẩm hoặc mua gói có giới hạn cao hơn.");
     }
     @Transactional
     public void recordCreation(Product product) {
@@ -146,7 +153,28 @@ public class ShopPlanService {
             throw invalid("Cửa hàng và chủ shop phải đang hoạt động để kích hoạt Pro.");
         return shop;
     }
-    public List<Plan> adminPlans(String actor) { requireAdmin(actor);return plans(); }
+    public List<Plan> adminPlans(String actor) {
+        requireAdmin(actor);return plans.findAll(Sort.by("durationMonths")).stream().map(this::planView).toList();
+    }
+    @Transactional
+    public Plan savePlan(String actor,String id,PlanInput input) {
+        requireAdmin(actor);
+        if("FREE".equals(id)) throw invalid("Gói Free cố định 5 sản phẩm và không có sản phẩm nổi bật.");
+        if(input.productLimit()!=null && input.featuredLimit()>input.productLimit())
+            throw invalid("Số sản phẩm nổi bật không được vượt giới hạn sản phẩm.");
+        var p=id==null?ShopPlan.builder().id("PRO"+UUID.randomUUID().toString().replace("-","").substring(0,17)).build()
+                :plans.findLocked(id).orElseThrow(ShopPlanService::missing);
+        p.setName(input.name().strip());p.setDurationMonths(input.durationMonths());p.setPrice(input.price());
+        p.setProductLimit(input.productLimit());p.setFeaturedLimit(input.featuredLimit());p.setEnabled(input.enabled());
+        return planView(plans.saveAndFlush(p));
+    }
+    /** Retain references from payments/history; existing subscriptions keep their paid term. */
+    @Transactional
+    public void removePlan(String actor,String id) {
+        requireAdmin(actor);
+        if("FREE".equals(id)) throw invalid("Không thể xóa gói Free.");
+        plans.findLocked(id).orElseThrow(ShopPlanService::missing).setEnabled(false);
+    }
     public AdminStatus adminStatus(String shopId,String actor) {
         requireAdmin(actor);adminShop(shopId,false);
         var pending=payments.pendingForShop(shopId).stream().map(p->new PendingPayment(p.getInvoiceNumber(),p.getPlan().getName(),p.getDurationMonths(),p.getAmount(),p.getStatus(),p.getCreatedAt())).toList();
@@ -191,18 +219,43 @@ public class ShopPlanService {
                 "Gói Pro có hiệu lực đến "+s.getEndsAt().toLocalDate()+".","/shop-admin/subscription");
     }
     public List<String> pendingInvoices() { return payments.pendingInvoices(clock.now()); }
+    public List<ManagedProduct> adminProducts(String shopId,String actor) {
+        requireAdmin(actor);adminShop(shopId,false);
+        var selected=new HashSet<>(featured.forShop(shopId).stream().map(FeaturedProduct::getId).toList());
+        return products.findByShopId(shopId,org.springframework.data.domain.Pageable.unpaged()).getContent().stream()
+                .map(p->new ManagedProduct(p.getId(),p.getName(),selected.contains(p.getId()),ProductCardAssembler.visible(p) && quota.allowed(p) && p.getStock()>0 && p.getCategory().getStatus()==CategoryStatus.ACTIVE)).toList();
+    }
+    @Transactional
+    public void adminFeature(String shopId,String actor,String productId,boolean enabled) {
+        requireAdmin(actor);var shop=adminShop(shopId,true);
+        feature(shopId,shop.getOwner().getId(),productId,enabled);
+    }
     @Transactional
     public void feature(String shopId,String actor,String productId,boolean enabled) {
         var shop=owned(shopId,actor,true);
         var product=products.findByIdAndShopId(productId,shopId).orElseThrow(ShopPlanService::missing);
         var old=featured.findById(productId).orElse(null);
         if(!enabled) { if(old!=null)featured.delete(old); return; }
-        if(!active(subscriptions.forShop(shopId).orElse(null))) throw invalid("Chỉ gói Pro còn hạn được đưa sản phẩm lên nổi bật.");
+        var subscription=subscriptions.forShop(shopId).orElse(null);
+        if(!active(subscription)) throw invalid("Chỉ gói Pro còn hạn được đưa sản phẩm lên nổi bật.");
+        quota.requireAllowed(product);
         if(!ProductCardAssembler.visible(product) || product.getStock()<1 || product.getCategory().getStatus()!=CategoryStatus.ACTIVE)
             throw invalid("Chỉ sản phẩm đang bán, còn hàng và không bị ẩn mới được chọn nổi bật.");
         if(old!=null) return;
-        if(featured.countForShop(shopId)>=10) throw invalid("Mỗi shop Pro được chọn tối đa 10 sản phẩm nổi bật.");
+        int limit=subscription.getPlan().getFeaturedLimit();
+        if(featured.countForShop(shopId)>=limit) throw invalid("Gói hiện tại chỉ cho phép "+limit+" sản phẩm nổi bật.");
         featured.save(FeaturedProduct.builder().id(productId).product(product).shop(shop).featuredAt(clock.now()).build());
     }
-    public List<ProductCardAssembler.ProductCard> featured() { return cards.cards(featured.visible(clock.now()).stream().map(FeaturedProduct::getProduct).toList()); }
+    public List<ProductCardAssembler.ProductCard> featured() {
+        Map<String,Set<String>> allowed=new HashMap<>();
+        var visible=featured.visible(clock.now()).stream().filter(f->{
+            var ids=allowed.computeIfAbsent(f.getShop().getId(),shopId->{
+                var s=subscriptions.forShop(shopId).orElse(null);
+                if(!active(s)) return Set.of();
+                return new HashSet<>(featured.forShop(shopId).stream().limit(s.getPlan().getFeaturedLimit()).map(FeaturedProduct::getId).toList());
+            });
+            return ids.contains(f.getId()) && quota.allowed(f.getProduct());
+        }).limit(60).map(FeaturedProduct::getProduct).toList();
+        return cards.cards(visible);
+    }
 }

@@ -3,7 +3,11 @@ import { API_BASE } from '../apiBase'
 const base = shop => `/api/shop/mine/${encodeURIComponent(shop)}/subscription`
 export const shopPlanService = {
   adminPlans: () => authService.authenticatedRequest('/api/admin/shop-plans'),
+  savePlan: (id, body) => authService.authenticatedRequest(`/api/admin/shop-plans${id ? `/${encodeURIComponent(id)}` : ''}`, { method: id ? 'PUT' : 'POST', body }),
+  removePlan: id => authService.authenticatedRequest(`/api/admin/shop-plans/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   adminStatus: shop => authService.authenticatedRequest(`/api/admin/shops/${encodeURIComponent(shop)}/subscription`),
+  adminProducts: shop => authService.authenticatedRequest(`/api/admin/shops/${encodeURIComponent(shop)}/subscription/products`),
+  adminFeature: (shop, product, featured) => authService.authenticatedRequest(`/api/admin/shops/${encodeURIComponent(shop)}/subscription/featured/${encodeURIComponent(product)}`, { method: 'PUT', body: { featured } }),
   adminGrant: (shop, body) => authService.authenticatedRequest(`/api/admin/shops/${encodeURIComponent(shop)}/subscription/activate`, { method: 'POST', body }),
   adminConfirm: (shop, invoice, note) => authService.authenticatedRequest(`/api/admin/shops/${encodeURIComponent(shop)}/subscription/payments/${encodeURIComponent(invoice)}/confirm`, { method: 'POST', body: { note } }),
   plans: () => authService.authenticatedRequest('/api/shop/plans'),

@@ -19,6 +19,8 @@ public class ManagerProductController {
     @PutMapping("/{id}") public ManagerProductService.Result update(@PathVariable(name = "shopId") String shopId,@PathVariable(name = "id") String id,@AuthenticationPrincipal CurrentUser u,@Valid @RequestPart("product") ManagerProductService.SaveProductInput body,@RequestParam(name = "images", required=false) List<MultipartFile> images,@RequestParam(name = "videos", required=false) List<MultipartFile> videos) {return service.save(shopId,id,u.id(),body,images,videos);}
     @DeleteMapping("/{id}") @ResponseStatus(org.springframework.http.HttpStatus.NO_CONTENT)
     public void hide(@PathVariable(name = "shopId") String shopId,@PathVariable(name = "id") String id,@AuthenticationPrincipal CurrentUser u) {service.hide(shopId,id,u.id());}
+    @DeleteMapping("/{id}/remove") @ResponseStatus(org.springframework.http.HttpStatus.NO_CONTENT)
+    public void remove(@PathVariable("shopId") String shopId,@PathVariable("id") String id,@AuthenticationPrincipal CurrentUser u) {service.remove(shopId,id,u.id());}
     @PutMapping("/{id}/unhide") @ResponseStatus(org.springframework.http.HttpStatus.NO_CONTENT)
     public void unhide(@PathVariable(name = "shopId") String shopId,@PathVariable(name = "id") String id,@AuthenticationPrincipal CurrentUser u) {service.unhide(shopId,id,u.id());}
     @PatchMapping("/{id}/unhide") @ResponseStatus(org.springframework.http.HttpStatus.NO_CONTENT)

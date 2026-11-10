@@ -15,6 +15,7 @@ import com.example.flowershop.entity.enums.ProductStatus;
 @Repository
 public class ProductRepository extends HibernateRepository<Product> {
     public ProductRepository() { super(Product.class); }
+    public long countForShop(String shopId) { return countWhere("e.shop.id = :shopId and e.deleted = false",Map.of("shopId",shopId)); }
 
     @Transactional
     public Optional<Product> findByIdForUpdate(String id) {
@@ -22,15 +23,15 @@ public class ProductRepository extends HibernateRepository<Product> {
     }
 
     public Page<Product> findByShopId(String shopId, Pageable pageable) {
-        return page("e.shop.id = :shopId", Map.of("shopId", shopId), pageable);
+        return page("e.shop.id = :shopId and e.deleted = false", Map.of("shopId", shopId), pageable);
     }
 
     public Page<Product> findByShopIdAndStatus(String shopId, ProductStatus status, Pageable pageable) {
-        return page("e.shop.id = :shopId and e.status = :status", Map.of("shopId", shopId, "status", status), pageable);
+        return page("e.shop.id = :shopId and e.deleted = false and e.status = :status", Map.of("shopId", shopId, "status", status), pageable);
     }
 
     public Optional<Product> findByIdAndShopId(String id, String shopId) {
-        return one("e.id = :id and e.shop.id = :shopId", Map.of("id", id, "shopId", shopId));
+        return one("e.id = :id and e.shop.id = :shopId and e.deleted = false", Map.of("id", id, "shopId", shopId));
     }
 
     public List<Object[]> countVisibleByCategory() {

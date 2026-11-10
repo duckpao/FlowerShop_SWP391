@@ -218,6 +218,7 @@ CREATE TABLE Products (
     product_type ENUM('READY_MADE', 'CUSTOM') NOT NULL DEFAULT 'READY_MADE',
     status ENUM('ACTIVE', 'INACTIVE', 'OUT_OF_STOCK') DEFAULT 'ACTIVE',
     admin_hidden BOOLEAN NOT NULL DEFAULT FALSE,
+    deleted BOOLEAN NOT NULL DEFAULT FALSE,
     created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_by VARCHAR(36),
     last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -748,7 +749,7 @@ LEFT JOIN (
     WHERE shop_id IS NOT NULL AND target='ORDER' AND deleted=FALSE AND status='ACTIVE'
       AND start_date<=NOW() AND end_date>NOW() AND used_count<usage_limit
       AND discount_type='PERCENTAGE' AND discount_value>0 AND discount_value<=100
-      AND max_discount_value BETWEEN 20000 AND 70000
+      AND max_discount_value > 0 AND max_discount_value <= 100000
     GROUP BY shop_id
 ) existing ON existing.shop_id=s.id
 WHERE v.slot<=GREATEST(0, 3-COALESCE(existing.usable_count, 0))
@@ -923,7 +924,7 @@ CREATE TABLE IF NOT EXISTS Shop_Plans (
     name VARCHAR(100) NOT NULL,
     duration_months INT NOT NULL,
     price DECIMAL(12,2) NOT NULL,
-    monthly_product_limit INT NULL,
+    product_limit INT NULL,
     featured_limit INT NOT NULL,
     enabled BOOLEAN NOT NULL DEFAULT TRUE
 );
@@ -983,12 +984,12 @@ CREATE TABLE IF NOT EXISTS Subscription_Reminders (
 );
 -- 3-month discount = 1 - 149000/(59000*3) = 15.8192%.
 -- Same discount for 6/12 months: 298000 / 596000 VND.
-INSERT INTO Shop_Plans(id,name,duration_months,price,monthly_product_limit,featured_limit,enabled) VALUES
+INSERT INTO Shop_Plans(id,name,duration_months,price,product_limit,featured_limit,enabled) VALUES
 ('FREE','Free',0,0,5,0,TRUE),
-('PRO1','Pro 1 tháng',1,59000,NULL,10,TRUE),
-('PRO3','Pro 3 tháng',3,149000,NULL,10,TRUE),
-('PRO6','Pro 6 tháng',6,298000,NULL,10,TRUE),
-('PRO12','Pro 1 năm',12,596000,NULL,10,TRUE)
+('PRO1','Pro 1 tháng',1,59000,15,3,TRUE),
+('PRO3','Pro 3 tháng',3,149000,25,5,TRUE),
+('PRO6','Pro 6 tháng',6,298000,40,8,TRUE),
+('PRO12','Pro 1 năm',12,596000,NULL,15,TRUE)
 ON DUPLICATE KEY UPDATE id=Shop_Plans.id;
 INSERT IGNORE INTO Shop_Product_Postings(id,shop_id,posted_at)
 SELECT id,shop_id,COALESCE(created_date,NOW()) FROM Products;

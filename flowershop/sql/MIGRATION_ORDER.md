@@ -32,6 +32,8 @@ Các migration của feature/dung đã được áp dụng trước khi merge, k
 
 ## Database tạo mới
 
+Gói Pro cấu hình: database đang có dữ liệu chạy thêm `033_configurable_shop_plans.sql` (đổi cột giới hạn thành `product_limit`, thêm `Products.deleted`, cập nhật quyền lợi gói seed). Database local đã được sao lưu và áp dụng migration này. Xem `../CONFIGURABLE_PRO_PLANS.md`.
+
 Dùng `database.sql` đã gộp: gồm schema master, danh mục đặt riêng, voucher, dữ liệu mẫu, trạng thái báo giá và thời điểm bắt đầu thanh toán. Không cần chạy lại chuỗi ALTER lịch sử sau khi import file này. Chỉ dùng `022_custom_order_workflow.sql` nếu chủ động muốn chuyển các yêu cầu cũ chưa chuyển; không cần cho yêu cầu mới tạo trực tiếp ở Orders.
 
 ## Nhóm số trùng cũ
