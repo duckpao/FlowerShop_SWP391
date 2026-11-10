@@ -42,7 +42,7 @@ function DepositAction({ request, userId, addresses }) {
       {addresses.map(a => <option key={a.id} value={a.id}>{[a.addressLine, a.ward, a.district, a.city].filter(Boolean).join(', ')}</option>)}
     </select>
     <VoucherPicker context={selected ? { mode: 'deposit', userId, requestId: request.id, deliveryAddressId: selected, revision: `${request.design.quotedPrice}:${request.design.depositPercent}` } : null} value={vouchers} onChange={setVouchers} onPreview={setPreview} disabled={busy} />
-    <p className="text-xs text-gray-500">Trả trước {request.design.depositPercent != null ? `${request.design.depositPercent}% tiền hoa sau giảm giá` : '50% tổng tiền sau ưu đãi'} qua SePay để shop bắt đầu làm hoa. Phần còn lại thanh toán khi nhận hàng (COD). Quá 1 phút chưa cọc thì đơn tự hủy.</p>
+    <p className="text-xs text-gray-500">Trả trước {request.design.depositPercent != null ? `${request.design.depositPercent}% tiền hoa sau giảm giá` : '50% tổng tiền sau ưu đãi'} qua SePay để shop bắt đầu làm hoa. Phần còn lại thanh toán khi nhận hàng (COD). Quá 24 giờ chưa cọc thì đơn tự hủy.</p>
     {preview && <p className="text-sm font-semibold">Tiền cọc: {formatPrice(request.design.depositPercent != null ? Math.round((Number(request.design.quotedPrice) - Number(preview.discountAmount)) * request.design.depositPercent / 100) : Math.round(Number(preview.totalAmount) / 2))}</p>}
     {error && <p role="alert" className="message error">{error} {error.includes('đã có đơn') && <Link className="underline" to="/orders">Xem đơn hàng</Link>}</p>}
     <button type="button" className={customButton} disabled={busy || !selected || !preview} onClick={deposit}>{busy ? 'Đang chuyển…' : 'Đặt cọc'}</button>
