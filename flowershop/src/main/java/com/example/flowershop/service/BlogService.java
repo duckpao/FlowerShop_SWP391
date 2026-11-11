@@ -147,6 +147,14 @@ public class BlogService {
         blog.setLastModifyBy(actor);
     }
 
+    @Transactional
+    public void publish(String shopId, String id, String actor) {
+        owned(shopId, actor, true);
+        Blog blog = blogs.findByIdAndShopId(id, shopId).orElseThrow(BlogService::missing);
+        blog.setStatus(BlogStatus.PUBLISHED);
+        blog.setLastModifyBy(actor);
+    }
+
     private Shop owned(String shopId, String actor, boolean write) {
         Shop shop = shops.findById(shopId).orElseThrow(BlogService::missing);
         if (!shop.getOwner().getId().equals(actor)) {

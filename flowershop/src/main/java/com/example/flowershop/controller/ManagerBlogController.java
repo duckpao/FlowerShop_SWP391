@@ -44,6 +44,13 @@ public class ManagerBlogController {
         return service.save(shopId, id, user.id(), input, images);
     }
 
+    @PutMapping("/{id}/publish")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void publish(@PathVariable(name = "shopId") String shopId, @PathVariable(name = "id") String id,
+            @AuthenticationPrincipal CurrentUser user) {
+        service.publish(shopId, id, user.id());
+    }
+
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void hide(@PathVariable(name = "shopId") String shopId, @PathVariable(name = "id") String id,
