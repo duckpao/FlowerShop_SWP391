@@ -85,7 +85,7 @@ const AppSidebar: React.FC = () => {
     ? adminNavItems
     : [...managerNavItems.map(item => item.path === '/shop-admin/orders' ? { ...item, badge: queueCount }
          : item.path === '/shop-admin/chat' ? { ...item, badge: chatUnread } : item),
-       ...(user?.role === 'SHOP_STAFF' ? [{ name: 'Đơn hủy cần hoàn tiền', path: '/shop-admin/refunds', icon: <ListIcon fontSize={24} /> } as NavItem] : [])];
+       ...(user?.role === 'SHOP_STAFF' || user?.role === 'SHOP' ? [{ name: 'Đơn hủy cần hoàn tiền', path: '/shop-admin/refunds', icon: <ListIcon fontSize={24} /> } as NavItem] : [])];
 
   useEffect(() => {
     if (location.pathname.startsWith('/shop-admin')) {

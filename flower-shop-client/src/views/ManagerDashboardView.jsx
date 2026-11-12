@@ -136,7 +136,7 @@ export default function ManagerDashboardView({
     </div>
   );
 
-  if (path === "/shop-admin/refunds") return <StaffRefundsView />;
+  if (path === "/shop-admin/refunds") return <StaffRefundsView role={user?.role} />;
   if (user?.role === 'SHOP_STAFF') {
     return <ManagerShopsView role="SHOP_STAFF" />;
   }

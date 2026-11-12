@@ -11,32 +11,32 @@ const statusLabels = { REQUESTED: 'Chờ liên hệ', APPROVED: 'Đã liên hệ
 const statusColors = { REQUESTED: 'warning', APPROVED: 'info', PROCESSED: 'success', REJECTED: 'error' }
 
 /**
- * Trang Staff: đơn đã hủy cần hoàn tiền. Staff gọi khách theo SĐT rồi đánh dấu tiến độ:
+ * Trang chủ shop và Staff: đơn đã hủy cần hoàn tiền. Người xử lý gọi khách theo SĐT rồi đánh dấu tiến độ:
  * Chờ liên hệ -> Đã liên hệ -> Đã hoàn tiền (hoặc Từ chối).
  */
-export default function StaffRefundsView() {
+export default function StaffRefundsView({ role = 'SHOP_STAFF' }) {
     const [shop, setShop] = useState(null)
     const [refunds, setRefunds] = useState(null)
     const [busy, setBusy] = useState(false)
     const [error, setError] = useState('')
 
-    // Staff làm cho shop nào: GET /api/staff/shops, lấy shop đầu tiên
+    // Shop của chủ shop hoặc shop staff đang làm: lấy shop đầu tiên
     useEffect(() => {
-        managerShopService.list('SHOP_STAFF')
+        managerShopService.list(role)
             .then(shops => shops.length ? setShop(shops[0]) : setError('Bạn chưa thuộc cửa hàng nào.'))
             .catch(e => setError(e.message))
     }, [])
 
     const load = async () => {
         setBusy(true); setError('')
-        try { setRefunds(await staffRefundService.list(shop.id)) } catch (e) { setError(e.message) } finally { setBusy(false) }
+        try { setRefunds(await staffRefundService.list(shop.id, role)) } catch (e) { setError(e.message) } finally { setBusy(false) }
     }
     useEffect(() => { if (shop) load() }, [shop?.id])
 
     const setStatus = async (id, status) => {
         setBusy(true); setError('')
         try {
-            const updated = await staffRefundService.setStatus(shop.id, id, status)
+            const updated = await staffRefundService.setStatus(shop.id, id, status, role)
             setRefunds(list => list.map(r => r.id === id ? updated : r))
         } catch (e) { setError(e.message) } finally { setBusy(false) }
     }

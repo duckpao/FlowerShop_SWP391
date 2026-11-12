@@ -30,7 +30,7 @@ public class SecurityConfig {
 
         http
                 .cors(Customizer.withDefaults())
-                .csrf(csrf -> csrf.ignoringRequestMatchers("/api/webhook/sepay", "/ws/**"))
+                .csrf(csrf -> csrf.ignoringRequestMatchers("/ws/**"))
                 .sessionManagement(session -> session.sessionCreationPolicy(org.springframework.security.config.http.SessionCreationPolicy.STATELESS))
                 .addFilterBefore(new com.example.flowershop.security.JwtAuthenticationFilter(tokenAuth),
                         org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter.class)
@@ -46,7 +46,6 @@ public class SecurityConfig {
                                 "/products", "/products/*", "/favorites", "/saved-blogs", "/shops/*", "/floral-care", "/floral-care/*", "/checkout", "/orders", "/orders/*",
                                 "/cart", "/home", "/occasions", "/chat", "/payment/**", "/invitations/accept").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/public/shops", "/api/public/shops/*", "/api/public/shops/*/products", "/api/public/products", "/api/public/products/*", "/api/public/categories", "/api/public/blogs", "/api/public/blogs/*", "/api/public/ghn/provinces", "/api/public/ghn/provinces/*/districts", "/api/public/ghn/districts/*/wards").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/payments/sepay/ipn", "/api/sepay/ipn", "/api/webhook/sepay").permitAll()
                         .requestMatchers("/ws/**").permitAll() // JWT được kiểm tra ở bước STOMP CONNECT
                         .requestMatchers("/api/cart/**", "/api/orders/**", "/api/payments/**", "/api/payment/**", "/api/sepay/checkout/**").hasRole("CUSTOMER")
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
