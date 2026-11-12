@@ -1,0 +1,59 @@
+@startuml
+title Notify Upcoming Occasion via Email - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+participant "Spring Scheduler" as T #FFF1C9
+participant OccasionReminderJob as J #DCECFF
+participant OccasionReminderService as S #DCECFF
+participant CustomerOccasionRepository as R #FFF1C9
+participant OccasionSchedule as SC #DCECFF
+participant HtmlMailSender as H #DCECFF
+participant "SMTP server" as SMTP #FFE0E0
+participant NotificationService as N #DCECFF
+actor Customer
+database MySQL
+
+T -> J : run() every 15 minutes (first run after 1 minute)
+J -> S : sendDueReminders(now)
+S -> R : findReminderCandidates(today)
+R -> MySQL : SELECT CustomerOccasions not yet reminded
+MySQL --> R : candidates
+loop each occasion
+  S -> SC : isDue(occasion, now)
+  alt not due yet
+    SC --> S : false, skip
+  else due
+    S -> SC : nextOccurrence(occasion, today)
+    S -> S : when = today, tomorrow or "after N days"
+    alt customer email present and verified
+      S -> H : send(email, "Sắp đến" + title, html)
+      H -> SMTP : send message
+      alt mail failed
+        H --> S : false
+        S -> S : keep for the next scan, not marked reminded
+      else mail sent
+        SMTP --> Customer : reminder email with product link
+        H --> S : true
+      end
+    end
+    opt mail sent or customer has no email
+      S -> N : notifyUser(customer, title, message, "/shops")
+      N -> MySQL : INSERT Notification
+      S -> MySQL : set lastRemindedFor, reminderSent unless recurringYearly
+    end
+  end
+end
+S --> J : number of reminders sent
+J -> J : log "Sent N occasion reminder(s)"
+
+@enduml

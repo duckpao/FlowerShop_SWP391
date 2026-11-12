@@ -1,0 +1,64 @@
+@startuml
+title Assign Order to Delivery - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor "Shop Manager" as M
+participant "Manager Order Page" as UI #EADCFF
+participant ManagerOrderController as C #D8F3DC
+participant ManagerOrderService as S #DCECFF
+participant GhnService as G #FFE0E0
+participant DeliverySync as DS #DCECFF
+participant "GHN API" as API #FFE0E0
+database MySQL
+
+== Create waybill ==
+M -> UI : click Ship
+UI -> C : POST /api/shop/mine/{shopId}/orders/{id}/ship
+C -> S : ship(shopId, actor, orderId)
+S -> MySQL : load Order, shop pickup Address, recipient Address, OrderDetails, Payments
+alt status is not PROCESSING or DEPOSIT_PAID, or address or phone missing
+  S --> C : 400 with reason
+else valid
+  S -> S : codAmount = total - paid
+  opt remaining amount and no COD payment yet
+    S -> MySQL : INSERT Payment(FINAL, COD, PENDING)
+  end
+  S -> G : createOrder(toName, toPhone, toPlace, fromName, fromPhone, fromPlace, cod, product, qty, price)
+  G -> API : POST /shipping-order/create
+  API --> G : order_code
+  G --> S : CreateOrderResult(orderCode)
+  S -> MySQL : INSERT Delivery(GHN, trackingCode, PENDING, ready_to_pick)
+  S -> MySQL : UPDATE Order status = DELIVERING
+  S --> C : ShipResult(trackingCode)
+end
+C --> UI : { trackingCode }
+UI --> M : show tracking code
+
+== Refresh delivery status ==
+M -> UI : click Refresh
+UI -> C : POST /{id}/refresh-status
+C -> S : refreshStatus(shopId, actor, orderId)
+S -> MySQL : load Order and Delivery
+S -> G : track(trackingCode)
+G -> API : GET shipping-order/detail
+API --> G : ghn status
+G --> S : Tracking(ghnStatus, DeliveryStatus)
+S -> DS : apply(order, delivery, tracking, actor)
+alt order is DELIVERING
+  DS -> DS : delivered to COMPLETED and COD payment SUCCESS
+  DS -> DS : returned to REFUNDED, cancel to CANCELLED
+end
+S --> C : DeliveryInfo
+C --> UI : JSON
+
+@enduml

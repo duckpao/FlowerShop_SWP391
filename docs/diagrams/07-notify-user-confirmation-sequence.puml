@@ -1,0 +1,50 @@
+@startuml
+title Notify User Confirmation via Email - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor Customer
+actor "Shop Manager" as M
+participant OrderService as OS #DCECFF
+participant ManagerOrderService as MOS #DCECFF
+participant OrderStatusListener as L #DCECFF
+participant OrderMailSender as MAIL #DCECFF
+participant HtmlMailSender as H #DCECFF
+participant "SMTP server" as SMTP #FFE0E0
+database MySQL
+
+== Order receipt after checkout ==
+Customer -> OS : place order (checkout)
+OS -> MySQL : INSERT Orders, Order_Details
+OS --> MAIL : publish OrderPlacedEvent(orderIds)
+note right of MAIL : after the transaction commits, run asynchronously
+MAIL -> MySQL : read orders, details, payments (read-only transaction)
+alt customer email missing or not verified
+  MAIL -> MAIL : skip, no mail
+else can mail
+  MAIL -> MAIL : buildReceipt(orderIds)
+  MAIL -> H : send(email, subject, html)
+  H -> SMTP : send message
+  SMTP --> Customer : receipt email
+end
+
+== Confirmation after the shop confirms ==
+M -> MOS : confirm(shopId, actor, orderId)
+MOS -> MySQL : UPDATE Orders status PENDING to PROCESSING
+MySQL --> L : @PostUpdate
+L --> MAIL : OrderStatusChangedEvent(PENDING to PROCESSING)
+MAIL -> MAIL : buildStatusMail: "Đơn hàng đã được xác nhận"
+MAIL -> H : send(email, subject, html)
+H -> SMTP : send message
+SMTP --> Customer : confirmation email with order link
+
+@enduml

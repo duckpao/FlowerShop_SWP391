@@ -1,0 +1,85 @@
+@startuml
+!pragma layout smetana
+title Refund management for shop - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+}
+hide empty members
+hide circle
+
+class StaffRefundController <<Controller>> {
+  list(shopId, user)
+  updateStatus(shopId, id, user, body)
+}
+class StaffRefundService <<Service>> {
+  -NEXT: Map<RefundStatus, Set<RefundStatus>>
+  list(shopId, actor): List<RefundResponse>
+  updateStatus(shopId, actor, refundId, status): RefundResponse
+}
+class ShopOperationGuard <<Service>> {
+  requireAccess(shopId, actorId)
+}
+class NotificationService <<Service>> {
+  notifyRefundRequested(refund)
+  notifyRefundResolved(refund)
+}
+class ManagerOrderService <<Service>> {
+  cancel(shopId, actor, orderId, reason)
+}
+interface RefundRepository <<Repository>> {
+  findByOrderShopIdOrderByCreatedDateDesc(shopId)
+}
+interface ShopStaffRepository <<Repository>>
+interface NotificationRepository <<Repository>>
+class Refund <<Entity>> {
+  id
+  amount
+  reason
+  gatewayRefundId
+  status
+}
+class Order <<Entity>> {
+  id
+  status
+}
+class Shop <<Entity>>
+class ShopStaff <<Entity>> {
+  active
+}
+enum RefundStatus {
+  REQUESTED
+  APPROVED
+  PROCESSED
+  REJECTED
+}
+
+StaffRefundController --> StaffRefundService
+StaffRefundService --> ShopOperationGuard
+StaffRefundService --> RefundRepository
+StaffRefundService --> NotificationService
+ShopOperationGuard --> ShopStaffRepository
+ManagerOrderService --> RefundRepository : creates REQUESTED refund
+ManagerOrderService --> NotificationService
+NotificationService --> NotificationRepository
+RefundRepository ..> Refund
+ShopStaffRepository ..> ShopStaff
+Refund "*" --> "1" Order
+Order "*" --> "1" Shop
+ShopStaff "*" --> "1" Shop
+Refund --> RefundStatus
+
+@enduml

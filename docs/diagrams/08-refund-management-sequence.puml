@@ -1,0 +1,70 @@
+@startuml
+title Refund management for shop - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor "Shop Manager" as M
+actor "Shop Staff" as ST
+actor Customer
+participant "Refund Page" as UI #EADCFF
+participant ManagerOrderService as MOS #DCECFF
+participant StaffRefundController as C #D8F3DC
+participant StaffRefundService as S #DCECFF
+participant ShopOperationGuard as G #DCECFF
+participant RefundRepository as R #FFF1C9
+participant NotificationService as N #DCECFF
+database MySQL
+
+== Refund request is created when the shop cancels a paid order ==
+M -> MOS : cancel(shopId, actor, orderId, reason)
+MOS -> MySQL : UPDATE Order status CANCELLED
+opt customer already paid
+  MOS -> R : save Refund(amount = paid, status REQUESTED)
+  MOS -> N : notifyRefundRequested(refund)
+  N -> MySQL : INSERT Notifications for shop staff
+end
+
+== Staff reviews the refund list ==
+ST -> UI : open refunds of the assigned shop
+UI -> C : GET /api/staff/shops/{shopId}/refunds
+C -> S : list(shopId, actor)
+S -> G : requireAccess(shopId, actor)
+G --> S : Shop (staff is active in the shop)
+S -> R : findByOrderShopIdOrderByCreatedDateDesc(shopId)
+R -> MySQL : SELECT Refunds JOIN Orders
+S --> C : List<RefundResponse>
+C --> UI : JSON
+UI --> ST : refund table
+
+== Staff updates the refund status ==
+ST -> UI : choose APPROVED, PROCESSED or REJECTED
+UI -> C : POST /{id}/status { status }
+C -> S : updateStatus(shopId, actor, refundId, status)
+S -> G : requireAccess(shopId, actor)
+S -> R : findById(refundId), must belong to shop
+alt not found
+  S --> C : 404
+else transition not allowed by NEXT map
+  S --> C : 400 cannot move from X to Y
+else allowed
+  S -> S : refund.status = next
+  S -> MySQL : UPDATE Refunds
+  opt next is PROCESSED or REJECTED
+    S -> N : notifyRefundResolved(refund)
+    N -> MySQL : INSERT Notification for customer
+    N --> Customer : in-app notification
+  end
+  S --> C : RefundResponse
+end
+C --> UI : JSON
+
+@enduml

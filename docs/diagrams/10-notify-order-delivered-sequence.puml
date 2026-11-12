@@ -1,0 +1,55 @@
+@startuml
+title Notify Order Delivered via Email - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor "Shop Manager" as M
+participant ManagerOrderService as S #DCECFF
+participant GhnService as G #FFE0E0
+participant DeliverySync as DS #DCECFF
+participant OrderStatusListener as L #DCECFF
+participant OrderMailSender as MAIL #DCECFF
+participant HtmlMailSender as H #DCECFF
+participant "SMTP server" as SMTP #FFE0E0
+actor Customer
+database MySQL
+
+M -> S : refreshStatus(shopId, actor, orderId)
+S -> G : track(trackingCode)
+G --> S : Tracking(ghnStatus = "delivered")
+S -> DS : apply(order, delivery, tracking, actor)
+DS -> DS : save delivery.ghnStatus and delivery.status
+alt order is DELIVERING and ghnStatus is delivered
+  DS -> DS : order.status = COMPLETED, COD payments = SUCCESS
+  S -> MySQL : commit UPDATE Orders, Deliveries, Payments
+  MySQL --> L : @PostUpdate
+  L -> L : statusSnapshot DELIVERING differs from COMPLETED
+  L --> MAIL : OrderStatusChangedEvent(DELIVERING to COMPLETED)
+  note right of MAIL : after commit, asynchronous
+  MAIL -> MySQL : read order, customer, pickup and delivery places, review state
+  alt customer email missing or not verified
+    MAIL -> MAIL : skip
+  else can mail
+    MAIL -> MAIL : buildStatusMail: "Giao hàng thành công"
+    MAIL -> H : send(email, subject, html with review link)
+    H -> SMTP : send message
+    SMTP --> Customer : delivered email
+  end
+else order not DELIVERING
+  DS --> S : status of Order unchanged, no mail
+end
+note over M, SMTP
+The same mail is sent when the manager sets the status
+manually with changeStatus(... COMPLETED).
+end note
+
+@enduml

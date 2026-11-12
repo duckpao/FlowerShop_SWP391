@@ -1,0 +1,68 @@
+@startuml
+title Order Management - list, filter, edit - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor "Shop Manager" as M
+participant "Manager Order Page" as UI #EADCFF
+participant ManagerOrderController as C #D8F3DC
+participant ManagerOrderService as S #DCECFF
+participant OrderRepository as R #FFF1C9
+participant GhnService as G #FFE0E0
+database MySQL
+
+== List and filter orders ==
+M -> UI : open order list, choose status filter
+UI -> C : GET /api/shop/mine/{shopId}/orders?page&status
+C -> S : list(shopId, actor, page, status)
+S -> S : owned(shopId, actor)
+alt status given
+  S -> R : findByShopIdAndStatus(shopId, status, pageable)
+else no filter
+  S -> R : findByShopId(shopId, pageable)
+end
+R -> MySQL : SELECT Orders ORDER BY createdDate DESC (20 per page)
+MySQL --> R : page of Orders
+S --> C : Results(content, page, totalPages, totalElements)
+C --> UI : JSON
+UI --> M : order table
+
+== Edit order: cancel before shipping ==
+M -> UI : cancel order with reason
+UI -> C : POST /{id}/cancel
+C -> S : cancel(shopId, actor, orderId, reason)
+S -> R : findByIdAndShopId(orderId, shopId)
+alt status is PENDING, AWAITING_DEPOSIT, DEPOSIT_PAID or PROCESSING
+  S -> S : set status CANCELLED, cancelReason
+  opt customer already paid
+    S -> S : create Refund(REQUESTED) and notify staff
+  end
+  S --> C : 200 OK
+else status already shipping or later
+  S --> C : 400 only before shipping
+end
+C --> UI : result
+
+== Edit order: update waybill on GHN ==
+M -> UI : change waybill note or weight
+UI -> C : POST /{id}/update-ghn
+C -> S : updateGhn(shopId, actor, orderId, body)
+S -> S : load Delivery (must have tracking code)
+S -> G : updateOrder(trackingCode, fields)
+G --> S : OK
+S --> C : 200 OK
+note over M, MySQL
+New orders are not created by the shop. They arrive from customer checkout
+(OrderService.makeOrders) and then appear in this list.
+end note
+
+@enduml

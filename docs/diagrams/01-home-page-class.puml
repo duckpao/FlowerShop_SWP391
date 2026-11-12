@@ -1,0 +1,95 @@
+@startuml
+!pragma layout smetana
+title Home Page - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+}
+hide empty members
+hide circle
+
+class HomeView <<View>> {
+  browseTab
+  selectBrowseTab(tab)
+}
+class useShopSearchController <<View>> {
+  shops
+  search(query)
+}
+class catalogService <<View>> {
+  browse(params)
+}
+class PublicCatalogController <<Controller>> {
+  browse(q, categoryId, shopId, sort, page, size)
+  detail(id)
+}
+class CatalogService <<Service>> {
+  browse(q, categoryId, shopId, sort, page, size)
+  detail(id)
+}
+class ProductCardAssembler <<Service>>
+class PublicShopController <<Controller>> {
+  search(q)
+  detail(id)
+}
+class NotificationController <<Controller>> {
+  mine(user)
+  unreadCount(user)
+}
+class NotificationService <<Service>> {
+  mine(userId)
+  unreadCount(userId)
+}
+interface ProductRepository <<Repository>>
+interface ShopRepository <<Repository>>
+interface NotificationRepository <<Repository>>
+class Product <<Entity>> {
+  id
+  name
+  price
+  stock
+  status
+}
+class Shop <<Entity>> {
+  id
+  name
+  description
+  logoUrl
+}
+class Notification <<Entity>> {
+  id
+  title
+  message
+  isRead
+}
+
+HomeView --> useShopSearchController
+HomeView --> catalogService
+catalogService ..> PublicCatalogController : GET /api/public/products
+useShopSearchController ..> PublicShopController : GET /api/public/shops
+HomeView ..> NotificationController : GET /api/account/notifications
+PublicCatalogController --> CatalogService
+CatalogService --> ProductCardAssembler
+CatalogService --> ProductRepository
+PublicShopController --> ShopRepository
+NotificationController --> NotificationService
+NotificationService --> NotificationRepository
+ProductRepository ..> Product
+ShopRepository ..> Shop
+NotificationRepository ..> Notification
+Product "*" --> "1" Shop
+
+@enduml

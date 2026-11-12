@@ -1,0 +1,44 @@
+@startuml
+title Home Page - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor User
+participant HomeView #EADCFF
+participant catalogService #EADCFF
+participant PublicCatalogController #D8F3DC
+participant CatalogService #DCECFF
+participant ProductRepository #FFF1C9
+participant PublicShopController #D8F3DC
+participant NotificationController #D8F3DC
+participant NotificationService #DCECFF
+database MySQL
+
+User -> HomeView : open "/" after login
+HomeView -> catalogService : browse(q, category, sort, page)
+catalogService -> PublicCatalogController : GET /api/public/products
+PublicCatalogController -> CatalogService : browse(q, categoryId, shopId, sort, page, size)
+CatalogService -> ProductRepository : find active products
+ProductRepository -> MySQL : SELECT Products
+MySQL --> ProductRepository : rows
+CatalogService --> PublicCatalogController : Results(ProductCard list)
+PublicCatalogController --> HomeView : JSON page of products
+HomeView -> PublicShopController : GET /api/public/shops?q=
+PublicShopController -> MySQL : search Shops by name
+PublicShopController --> HomeView : List<ShopCard>
+HomeView -> NotificationController : GET /api/account/notifications/unread-count
+NotificationController -> NotificationService : unreadCount(userId)
+NotificationService -> MySQL : count unread Notifications
+NotificationController --> HomeView : unread count
+HomeView --> User : hero, products and shops tabs, bell badge
+
+@enduml

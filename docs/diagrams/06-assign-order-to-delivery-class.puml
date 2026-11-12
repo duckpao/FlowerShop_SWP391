@@ -1,0 +1,91 @@
+@startuml
+!pragma layout smetana
+title Assign Order to Delivery - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+}
+hide empty members
+hide circle
+
+class ManagerOrderController <<Controller>> {
+  ship(shopId, id, user)
+  refreshStatus(shopId, id, user)
+}
+class ManagerOrderService <<Service>> {
+  ship(shopId, actor, orderId): ShipResult
+  refreshStatus(shopId, actor, orderId): DeliveryInfo
+}
+class GhnService <<External>> {
+  createOrder(toName, toPhone, toPlace, fromName, fromPhone, fromPlace, cod, product, qty, price): CreateOrderResult
+  track(orderCode): Tracking
+}
+class DeliverySync <<Service>> {
+  apply(order, delivery, tracking, actor)
+}
+interface OrderRepository <<Repository>>
+interface DeliveryRepository <<Repository>>
+interface PaymentRepository <<Repository>>
+interface AddressRepository <<Repository>>
+class Order <<Entity>> {
+  status
+  totalAmount
+  recipientName
+  recipientPhone
+}
+class Delivery <<Entity>> {
+  deliveryPartnerId
+  trackingCode
+  status
+  ghnStatus
+}
+class Payment <<Entity>> {
+  paymentMethod
+  status
+  amount
+}
+class Address <<Entity>> {
+  addressLine
+  ward
+  district
+  city
+  ghnDistrictId
+  ghnWardCode
+}
+enum DeliveryStatus {
+  PENDING
+  PICKED_UP
+  ON_THE_WAY
+  DELIVERED
+  FAILED
+  RETURNING
+  RETURNED
+}
+
+ManagerOrderController --> ManagerOrderService
+ManagerOrderService --> GhnService
+ManagerOrderService --> DeliverySync
+ManagerOrderService --> OrderRepository
+ManagerOrderService --> DeliveryRepository
+ManagerOrderService --> PaymentRepository
+ManagerOrderService --> AddressRepository
+DeliverySync --> PaymentRepository
+Delivery "0..1" --> "1" Order
+Payment "*" --> "1" Order
+Order "*" --> "0..1" Address : deliveryAddress
+Delivery --> DeliveryStatus
+
+@enduml
