@@ -283,7 +283,7 @@ export default function ProductsView({ shop, manage = false }) {
             <div className="grid min-w-0 grid-cols-1 gap-6 md:grid-cols-2">
               <div className="min-w-0 space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tên sản phẩm *</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tên sản phẩm</label>
                   <input name="name" required maxLength={255} value={c.form.name} onChange={e => updateFormField('name', e.target.value)} onBlur={() => validateField('name')}
                     aria-invalid={Boolean(fieldErrors.name)} aria-describedby={fieldErrors.name ? 'product-name-error' : undefined}
                     className={fieldClass(Boolean(fieldErrors.name))}
@@ -292,7 +292,7 @@ export default function ProductsView({ shop, manage = false }) {
                 </div>
                 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Danh mục *</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Danh mục</label>
                   <select name="categoryId" required value={c.form.categoryId} onChange={e => updateFormField('categoryId', e.target.value)} onBlur={() => validateField('categoryId')}
                     aria-invalid={Boolean(fieldErrors.categoryId)} aria-describedby={fieldErrors.categoryId ? 'product-category-error' : undefined}
                     className={fieldClass(Boolean(fieldErrors.categoryId))}>
@@ -305,7 +305,7 @@ export default function ProductsView({ shop, manage = false }) {
                 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Giá (VND) *</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Giá (VND)</label>
                     <input name="price" required type="number" min="0.01" max="9999999999.99" step="0.01" value={c.form.price} onChange={e => updateFormField('price', e.target.value)} onBlur={() => validateField('price')}
                       aria-invalid={Boolean(fieldErrors.price)} aria-describedby={fieldErrors.price ? 'product-price-error' : 'product-price-help'}
                       className={fieldClass(Boolean(fieldErrors.price))}
@@ -315,7 +315,7 @@ export default function ProductsView({ shop, manage = false }) {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      {c.form.type === 'CUSTOM' ? 'Tồn kho (Hàng đặt trước)' : 'Tồn kho *'}
+                      {c.form.type === 'CUSTOM' ? 'Tồn kho (Hàng đặt trước)' : 'Tồn kho'}
                     </label>
                     <input
                       name="stock"
