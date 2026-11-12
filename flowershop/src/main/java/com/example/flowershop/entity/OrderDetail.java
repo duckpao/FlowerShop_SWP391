@@ -29,6 +29,11 @@ public class OrderDetail {
     @JoinColumn(name = "product_id")
     private Product product;
 
+    /** Tên sản phẩm lúc mua: đổi tên sản phẩm sau này không làm đổi đơn cũ (SRS 3.3 Order Integrity). */
+    @Column(name = "product_name", length = 255)
+    private String productName;
+
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
     @Column(name = "custom_materials", columnDefinition = "json")
     private String customMaterials;
 
@@ -51,4 +56,9 @@ public class OrderDetail {
 
     @Column(name = "last_modify_by", length = 36)
     private String lastModifyBy;
+
+    /** Tên đã lưu lúc mua; đơn cũ chưa có thì lấy tên hiện tại của sản phẩm. */
+    public String snapshotName() {
+        return productName != null ? productName : product != null ? product.getName() : null;
+    }
 }

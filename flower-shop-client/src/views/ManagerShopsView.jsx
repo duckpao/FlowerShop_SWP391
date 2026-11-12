@@ -265,7 +265,7 @@ export default function ManagerShopsView({ role, section = "all" }) {
             <ProductsView key={`products-${c.selected.id}`} shop={c.selected} manage />
           )}
 
-          {role === "SHOP" && ["all", "orders"].includes(section) && (
+          {["all", "orders"].includes(section) && (
             <OrderQueueView key={`orders-${c.selected.id}`} shop={c.selected} />
           )}
         </div>

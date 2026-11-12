@@ -16,7 +16,11 @@ export function useAdminManagerApplicationsController() {
     let active = true
     setBusy(true)
     setSelectedId(null)
-    api.list(status, page).then(result => { if (active) { setData(result); setError('') } }).catch(e => { if (active) setError(e.message) }).finally(() => { if (active) setBusy(false) })
+    api.list(status, page).then(result => {
+      if (!active) return
+      if (page > 0 && page >= result.totalPages) { setPage(Math.max(0, result.totalPages - 1)); return }
+      setData(result); setError('')
+    }).catch(e => { if (active) setError(e.message) }).finally(() => { if (active) setBusy(false) })
     return () => { active = false }
   }, [status, page, revision])
   async function decide(id, approve) {

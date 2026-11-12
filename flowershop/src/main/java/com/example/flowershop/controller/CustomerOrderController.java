@@ -5,6 +5,8 @@ import com.example.flowershop.service.CustomerOrderService;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.enums.ParameterIn;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -15,45 +17,89 @@ import org.springframework.web.bind.annotation.*;
 @SecurityRequirement(name = "bearerAuth")
 public class CustomerOrderController {
     private final CustomerOrderService service;
-    public CustomerOrderController(CustomerOrderService service) { this.service = service; }
+    private final com.example.flowershop.service.CustomerRefundService refunds;
+    public CustomerOrderController(CustomerOrderService service, com.example.flowershop.service.CustomerRefundService refunds) {
+        this.service = service;
+        this.refunds = refunds;
+    }
+
+    /** SRS 5.2: khách gửi yêu cầu hoàn tiền cho đơn đã thanh toán. */
+    @PostMapping("/{id}/refunds") @ResponseStatus(HttpStatus.CREATED)
+    @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
+    public com.example.flowershop.service.CustomerRefundService.RefundResult requestRefund(@AuthenticationPrincipal CurrentUser user,
+            @PathVariable(name = "id") String id, @Valid @RequestBody com.example.flowershop.service.CustomerRefundService.RefundInput body) {
+        return refunds.request(user.id(), id, body);
+    }
+
+    @PostMapping("/{id}/refunds/{refundId}/cancel")
+    @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
+    public com.example.flowershop.service.CustomerRefundService.RefundResult cancelRefund(@AuthenticationPrincipal CurrentUser user,
+            @PathVariable(name = "id") String id, @PathVariable(name = "refundId") String refundId) {
+        return refunds.cancel(user.id(), id, refundId);
+    }
+
+    @PostMapping("/{id}/refunds/images")
+    @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
+    public java.util.Map<String, String> uploadRefundImage(@AuthenticationPrincipal CurrentUser user, @PathVariable(name = "id") String id,
+            @RequestParam("file") org.springframework.web.multipart.MultipartFile file) {
+        return java.util.Map.of("url", refunds.uploadEvidence(user.id(), id, file));
+    }
+
+    @PostMapping("/voucher-preview")
+    public com.example.flowershop.service.CouponService.Preview vouchers(@AuthenticationPrincipal CurrentUser user,
+            @Valid @RequestBody CustomerOrderService.CheckoutRequest req) {
+        return service.previewVouchers(user.id(),req);
+    }
+
+    @PostMapping("/fee")
+    public java.util.Map<String, Object> fee(@AuthenticationPrincipal CurrentUser user,
+                                             @RequestBody CustomerOrderService.CheckoutRequest req) {
+        return java.util.Map.of("shippingFee", service.calculateFee(user.id(), req));
+    }
+
+    @PostMapping("/checkout")
+    @ResponseStatus(HttpStatus.CREATED)
+    @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
+    public CustomerOrderService.CheckoutResponse checkout(@AuthenticationPrincipal CurrentUser user,
+                                                          @Valid @RequestBody CustomerOrderService.CheckoutRequest req) {
+        return service.checkout(user.id(), req);
+    }
 
     @GetMapping
     public CustomerOrderService.Results list(@AuthenticationPrincipal CurrentUser user,
-                                             @RequestParam(defaultValue = "0") int page,
-                                             @RequestParam(required = false) String status) {
+                                             @RequestParam(name = "page", defaultValue = "0") int page,
+                                             @RequestParam(name = "status", required = false) String status) {
         return service.list(user.id(), page, status);
-    }
-
-    /** Tóm tắt các đơn theo id (màn chờ thanh toán / đặt hàng thành công). GET /api/customer/orders/by-ids?ids=a,b */
-    @GetMapping("/by-ids")
-    public java.util.List<CustomerOrderService.OrderSummary> byIds(@AuthenticationPrincipal CurrentUser user,
-                                                         @RequestParam java.util.List<String> ids) {
-        return service.byIds(user.id(), ids);
     }
 
     /** Lịch sử giao dịch (mọi lần thanh toán) của khách. GET /api/customer/orders/transactions?page= */
     @GetMapping("/transactions")
     public CustomerOrderService.TransactionResults transactions(@AuthenticationPrincipal CurrentUser user,
-                                                                @RequestParam(defaultValue = "0") int page) {
+            @RequestParam(name = "page", defaultValue = "0") int page) {
         return service.transactions(user.id(), page);
     }
 
     @GetMapping("/{id}")
     public CustomerOrderService.OrderDetailResponse detail(@AuthenticationPrincipal CurrentUser user,
-                                                           @PathVariable String id) {
+                                                           @PathVariable(name = "id") String id) {
         return service.detail(user.id(), id);
     }
 
     @GetMapping("/{id}/shipping-fee")
     public CustomerOrderService.ShippingFeeResponse shippingFee(@AuthenticationPrincipal CurrentUser user,
-                                                                @PathVariable String id) {
+                                                                @PathVariable(name = "id") String id) {
         return new CustomerOrderService.ShippingFeeResponse(service.calculateShippingFeeForOrder(user.id(), id));
     }
 
     @PostMapping("/{id}/refresh-tracking")
     @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
     public CustomerOrderService.DeliveryInfo refreshTracking(@AuthenticationPrincipal CurrentUser user,
-                                                              @PathVariable String id) {
+                                                              @PathVariable(name = "id") String id) {
         return service.refreshTracking(user.id(), id);
+    }
+    @GetMapping("/by-ids")
+    public java.util.List<CustomerOrderService.OrderSummary> byIds(@AuthenticationPrincipal CurrentUser user,
+                                                         @RequestParam(name = "ids") java.util.List<String> ids) {
+        return service.byIds(user.id(), ids);
     }
 }

@@ -1,39 +1,44 @@
 package com.example.flowershop.repository;
 
-import com.example.flowershop.entity.OrderDetail;
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
-
-import java.util.Collection;
-import java.util.List;
+import java.util.*;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import com.example.flowershop.entity.OrderDetail;
+import org.springframework.stereotype.Repository;
+import org.springframework.data.domain.Sort;
+import java.util.*;
 
-public interface OrderDetailRepository extends JpaRepository<OrderDetail, String> {
-    List<OrderDetail> findByOrderId(String orderId);
+/** Explicit Hibernate queries; Spring does not generate this repository. */
+@Repository
+public class OrderDetailRepository extends HibernateRepository<OrderDetail> {
+    public OrderDetailRepository() { super(OrderDetail.class); }
 
-    /** Số lượng sản phẩm mà chính khách này đang giữ trong các đơn PENDING (kho đã bị trừ nhưng giỏ vẫn còn). */
-    @Query("SELECT COALESCE(SUM(d.quantity), 0) FROM OrderDetail d WHERE d.order.customer.id = :userId "
-            + "AND d.order.status = com.example.flowershop.entity.enums.OrderStatus.PENDING AND d.product.id = :productId")
-    int sumPendingQuantity(@Param("userId") String userId, @Param("productId") String productId);
+    public List<OrderDetail> findByOrderId(String orderId) {
+        return list("e.order.id = :orderId", Map.of("orderId", orderId));
+    }
 
-    /** Các đơn PENDING của khách có chứa một trong những sản phẩm này. */
-    @Query("SELECT DISTINCT d.order.id FROM OrderDetail d WHERE d.order.customer.id = :userId "
-            + "AND d.order.status = com.example.flowershop.entity.enums.OrderStatus.PENDING AND d.product.id IN :productIds")
-    List<String> findPendingOrderIds(@Param("userId") String userId, @Param("productIds") Collection<String> productIds);
+    public List<OrderDetail> findByOrderIdIn(Collection<String> orderIds) {
+        if (orderIds.isEmpty()) return List.of(); return list("e.order.id in :orderIds", Map.of("orderIds", orderIds));
+    }
 
-    List<OrderDetail> findByOrderIdIn(Collection<String> orderIds);
+    public Optional<OrderDetail> findCustomDesignByOrderId(String orderId) {
+        return first("e.order.id = :orderId and e.customMaterials is not null", Map.of("orderId", orderId), Sort.by("id"));
+    }
 
-    @Query("SELECT d.product.id, d.product.name, "
-            + "SUM(CASE WHEN d.order.status = com.example.flowershop.entity.enums.OrderStatus.COMPLETED THEN d.quantity ELSE 0 END), "
-            + "SUM(CASE WHEN d.order.status = com.example.flowershop.entity.enums.OrderStatus.REFUNDED THEN d.quantity ELSE 0 END), "
-            + "COUNT(DISTINCT CASE WHEN d.order.status = com.example.flowershop.entity.enums.OrderStatus.COMPLETED THEN d.order.id ELSE NULL END), "
-            + "COUNT(DISTINCT CASE WHEN d.order.status = com.example.flowershop.entity.enums.OrderStatus.REFUNDED THEN d.order.id ELSE NULL END) "
-            + "FROM OrderDetail d WHERE d.order.shop.id = :shopId AND d.product IS NOT NULL "
-            + "AND d.order.createdDate >= :start AND d.order.createdDate < :end "
-            + "AND d.order.status IN (com.example.flowershop.entity.enums.OrderStatus.COMPLETED, "
-            + "com.example.flowershop.entity.enums.OrderStatus.REFUNDED) "
-            + "GROUP BY d.product.id, d.product.name ORDER BY d.product.name")
-    List<Object[]> productPerformanceForReport(@Param("shopId") String shopId,
-            @Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
+    public Map<String, Long> countByOrderIds(Collection<String> orderIds) {
+        if (orderIds.isEmpty()) return Map.of();
+        var rows = session().createSelectionQuery(
+                "select e.order.id, count(e) from OrderDetail e where e.order.id in :ids group by e.order.id", Object[].class)
+                .setParameterList("ids", orderIds).getResultList();
+        Map<String, Long> counts = new HashMap<>();
+        for (Object[] row : rows) counts.put((String) row[0], ((Number) row[1]).longValue());
+        return counts;
+    }
+
+public int sumPendingQuantity(String userId, String productId) { return session().createSelectionQuery("SELECT COALESCE(SUM(d.quantity), 0) FROM OrderDetail d WHERE d.order.customer.id = :userId AND d.order.status = com.example.flowershop.entity.enums.OrderStatus.PENDING AND d.product.id = :productId",Long.class).setParameter("userId",userId).setParameter("productId",productId).getSingleResult().intValue(); }
+
+public List<String> findPendingOrderIds(String userId, Collection<String> productIds) { return session().createSelectionQuery("SELECT DISTINCT d.order.id FROM OrderDetail d WHERE d.order.customer.id = :userId AND d.order.status = com.example.flowershop.entity.enums.OrderStatus.PENDING AND d.product.id IN :productIds",String.class).setParameter("userId",userId).setParameterList("productIds",productIds).getResultList(); }
+
+public List<Object[]> productPerformanceForReport(String shopId, LocalDateTime start, LocalDateTime end) { return session().createSelectionQuery("SELECT d.product.id, d.product.name, SUM(CASE WHEN d.order.status = com.example.flowershop.entity.enums.OrderStatus.COMPLETED THEN d.quantity ELSE 0 END), SUM(CASE WHEN d.order.status = com.example.flowershop.entity.enums.OrderStatus.REFUNDED THEN d.quantity ELSE 0 END), COUNT(DISTINCT CASE WHEN d.order.status = com.example.flowershop.entity.enums.OrderStatus.COMPLETED THEN d.order.id ELSE NULL END), COUNT(DISTINCT CASE WHEN d.order.status = com.example.flowershop.entity.enums.OrderStatus.REFUNDED THEN d.order.id ELSE NULL END) FROM OrderDetail d WHERE d.order.shop.id = :shopId AND d.product IS NOT NULL AND d.order.createdDate >= :start AND d.order.createdDate < :end AND d.order.status IN (com.example.flowershop.entity.enums.OrderStatus.COMPLETED, com.example.flowershop.entity.enums.OrderStatus.REFUNDED) GROUP BY d.product.id, d.product.name ORDER BY d.product.name",Object[].class).setParameter("shopId",shopId).setParameter("start",start).setParameter("end",end).getResultList(); }
+
 }

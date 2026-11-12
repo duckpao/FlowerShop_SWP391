@@ -44,7 +44,7 @@ public class OccasionController {
     /** PUT /api/customer/occasions/{id} */
     @PutMapping("/{id}")
     @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
-    public OccasionService.OccasionResponse update(@AuthenticationPrincipal CurrentUser user, @PathVariable String id,
+    public OccasionService.OccasionResponse update(@AuthenticationPrincipal CurrentUser user, @PathVariable(name = "id") String id,
                                                    @Valid @RequestBody OccasionService.OccasionRequest request) {
         return occasions.update(user.id(), id, request);
     }
@@ -53,7 +53,7 @@ public class OccasionController {
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
-    public void delete(@AuthenticationPrincipal CurrentUser user, @PathVariable String id) {
+    public void delete(@AuthenticationPrincipal CurrentUser user, @PathVariable(name = "id") String id) {
         occasions.delete(user.id(), id);
     }
 }

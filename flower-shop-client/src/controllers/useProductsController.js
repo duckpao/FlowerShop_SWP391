@@ -132,6 +132,11 @@ export function useProductsController(shopId, manage) {
       return run(async () => { await api.hide(shopId, id); setNotice('Đã ẩn sản phẩm.') })
     }
   }
+  const remove = async id => {
+    if (await confirm({ title: 'Xóa sản phẩm', message: 'Xóa sản phẩm khỏi danh sách để giải phóng giới hạn gói? Sản phẩm đã xóa không thể hiện lại; lịch sử đơn hàng vẫn được giữ.', confirmLabel: 'Xóa' })) {
+      return run(async () => { await api.remove(shopId, id); if (editing === id) { setEditing(null) } setNotice('Đã xóa sản phẩm và giải phóng chỗ trong gói.') })
+    }
+  }
 
   const unhide = id => {
     if (window.confirm('Hiện lại sản phẩm này trên cửa hàng?')) {
@@ -202,7 +207,7 @@ export function useProductsController(shopId, manage) {
   }
 
   return {
-    data, categories, form, setForm, editing, page, setPage, busy, error, notice, save, hide, unhide, edit,
+    data, categories, form, setForm, editing, page, setPage, busy, error, notice, save, hide, remove, unhide, edit,
     mediaImages, imagePreviews, uploadingImages, uploadingImageName, imageSelectionError, setImageFiles, setPrimaryImage, setPrimaryExistingImage,
     deleteImage,
     mediaVideos, videoPreviews, uploadingVideos, uploadingVideoName, videoSelectionError, setVideoFiles, deleteVideo,

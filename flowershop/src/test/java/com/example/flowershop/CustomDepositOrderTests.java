@@ -36,7 +36,7 @@ class CustomDepositOrderTests {
     private final EntityManager em = mock(EntityManager.class);
     private final OrderService service = new OrderService(orders, details, mock(CartItemRepository.class),
             mock(UserRepository.class), addresses, mock(ProductRepository.class), mock(PaymentRepository.class),
-            mock(CouponRepository.class), mock(ShopRepository.class), ghn, mock(NotificationService.class),
+            mock(com.example.flowershop.service.CouponService.class), mock(ShopRepository.class), ghn, mock(NotificationService.class),
             mock(org.springframework.context.ApplicationEventPublisher.class),
             mock(com.example.flowershop.repository.RefundRepository.class));
 

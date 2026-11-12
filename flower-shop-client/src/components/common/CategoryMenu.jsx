@@ -85,8 +85,7 @@ export default function CategoryMenu() {
     // Đặt hoa riêng chỉ dành cho khách hàng (khách vãng lai bấm vào sẽ được mời đăng nhập)
     const links = [
         ['/shops', 'Cửa hàng'],
-        ['/budget-flowers', 'Hoa theo ngân sách'],
-        ...(!user || user.role === 'CUSTOMER' ? [['/custom-orders', 'Đặt hoa theo yêu cầu']] : []),
+        ...(!user || user.role === 'CUSTOMER' ? [['/custom-orders/new', 'Đặt hoa theo yêu cầu']] : []),
         ['/floral-care', 'Cẩm nang chăm hoa'],
     ]
 

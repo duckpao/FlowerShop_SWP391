@@ -30,9 +30,11 @@ public class CustomOrderRequest {
     @JoinColumn(name = "shop_id", nullable = false)
     private Shop shop;
 
-    @Column(name = "budget", nullable = false, precision = 12, scale = 2)
+    // Historical customer budgets remain readable; new requests wait for a shop quote.
+    @Column(name = "budget", precision = 12, scale = 2)
     private BigDecimal budget;
 
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
     @Column(name = "desired_components", columnDefinition = "json")
     private String desiredComponents;
 

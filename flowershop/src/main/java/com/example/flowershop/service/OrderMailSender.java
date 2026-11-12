@@ -140,7 +140,7 @@ public class OrderMailSender {
                 .append(esc(order.getShop().getName())).append("</p>")
                 .append("<table style=\"width:100%;border-collapse:collapse;font-size:14px\">");
         for (OrderDetail d : details.findByOrderId(order.getId())) {
-            String name = d.getProduct() != null ? d.getProduct().getName() : "Hoa đặt theo yêu cầu";
+            String name = java.util.Objects.requireNonNullElse(d.snapshotName(), "Hoa đặt theo yêu cầu");
             sb.append("<tr><td style=\"padding:4px 0\">").append(esc(name)).append(" × ").append(d.getQuantity())
                     .append("</td><td style=\"text-align:right\">")
                     .append(money(d.getPrice().multiply(BigDecimal.valueOf(d.getQuantity())))).append("</td></tr>");

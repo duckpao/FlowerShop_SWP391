@@ -30,7 +30,7 @@ class CustomerCancelOrderTests {
     private final NotificationService notifications = mock(NotificationService.class);
     private final OrderService service = new OrderService(orders, details, mock(CartItemRepository.class),
             mock(UserRepository.class), mock(AddressRepository.class), products, payments,
-            mock(CouponRepository.class), mock(ShopRepository.class), mock(GhnService.class), notifications,
+            mock(com.example.flowershop.service.CouponService.class), mock(ShopRepository.class), mock(GhnService.class), notifications,
             mock(org.springframework.context.ApplicationEventPublisher.class), refunds);
 
     private final User customer = User.builder().id("c-1").build();

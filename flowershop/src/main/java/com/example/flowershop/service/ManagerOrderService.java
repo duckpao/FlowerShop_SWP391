@@ -29,15 +29,18 @@ public class ManagerOrderService {
 
     /** Tóm tắt đơn hàng hiển thị trong danh sách bảng */
     public record OrderSummary(String id, String customerName, String customerPhone,
-                               BigDecimal totalAmount, String status, java.time.LocalDateTime createdDate) {}
+                               BigDecimal totalAmount, String status, java.time.LocalDateTime createdDate,String orderType) {
+public OrderSummary(String id,String customerName,String customerPhone,BigDecimal totalAmount,String status,java.time.LocalDateTime createdDate) { this(id,customerName,customerPhone,totalAmount,status,createdDate,null); }
+}
 
     /** Chi tiết đầy đủ của đơn hàng hiển thị trong modal xem chi tiết */
     public record OrderDetailResponse(String id, String customerId, String customerName, String customerPhone,
-                                      String recipientName, String recipientPhone, String deliveryAddress, 
+                                      String recipientName, String recipientPhone, String deliveryAddress,
                                       String shopAddress, String status, BigDecimal subTotal,
                                       BigDecimal shippingFee, BigDecimal totalAmount,
                                       java.time.LocalDateTime createdDate, String note,
-                                      List<OrderItemResponse> items, DeliveryInfo delivery, PaymentInfo payment) {}
+                                      List<OrderItemResponse> items, DeliveryInfo delivery, PaymentInfo payment,String orderType,CustomOrderWorkflowService.Design customDesign,String shopNote,String cancelReason,
+BigDecimal discountAmount,BigDecimal shippingDiscountAmount,String couponCode,String shippingCouponCode) {}
 
     /** Thông tin từng món hàng trong đơn */
     public record OrderItemResponse(String productId, String productName, BigDecimal price, Integer quantity) {}
@@ -62,14 +65,19 @@ public class ManagerOrderService {
     private final AddressRepository addresses;
     private final GhnService ghn;
     private final DeliverySync deliverySync;
+    private final CouponService vouchers;
+    private final CustomOrderWorkflowService customWorkflow;
     private final RefundRepository refunds;
     private final NotificationService notifications;
+    private final ProductRepository products;
 
     public ManagerOrderService(OrderRepository orders, OrderDetailRepository orderDetails,
                                DeliveryRepository deliveries, PaymentRepository payments,
                                ShopRepository shops, AddressRepository addresses, GhnService ghn,
                                DeliverySync deliverySync, RefundRepository refunds,
-                               NotificationService notifications) {
+                               NotificationService notifications,CouponService vouchers,CustomOrderWorkflowService customWorkflow,ProductRepository products) {
+        this.products=products;
+this.vouchers=vouchers;this.customWorkflow=customWorkflow;
         this.orders = orders;
         this.orderDetails = orderDetails;
         this.deliveries = deliveries;
@@ -104,16 +112,19 @@ public class ManagerOrderService {
     }
 
     /**
-     * Kiểm tra quyền sở hữu của người thao tác (actor) đối với shopId.
+     * Kiểm tra người thao tác (actor) là chủ hoặc nhân viên đang làm của shopId.
      * Đảm bảo người dùng chỉ có thể quản lý đúng shop thuộc quyền của mình.
      */
     private Shop owned(String shopId, String actor) {
         Shop s = shops.findById(shopId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy shop."));
-        if (!s.getOwner().getId().equals(actor))
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Bạn không sở hữu shop này.");
+        // SRS: chủ shop hoặc nhân viên đang làm tại shop được xử lý đơn
+        if (!s.getOwner().getId().equals(actor)
+                && !staff.findByShopIdAndUserId(shopId, actor).map(com.example.flowershop.entity.ShopStaff::isActive).orElse(false))
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Bạn không có quyền với shop này.");
         return s;
     }
+    @org.springframework.beans.factory.annotation.Autowired private com.example.flowershop.repository.ShopStaffRepository staff;
 
     /**
      * Lấy danh sách tất cả đơn hàng của shop theo phân trang và lọc theo trạng thái nếu có.
@@ -134,7 +145,7 @@ public class ManagerOrderService {
         }
         var content = result.map(o -> new OrderSummary(o.getId(),
                 o.getCustomer().getFullName(), o.getCustomer().getPhone(),
-                o.getTotalAmount(), o.getStatus().name(), o.getCreatedDate())).toList();
+                o.getTotalAmount(), o.getStatus().name(), o.getCreatedDate(),o.getOrderType().name())).toList();
         return new Results(content, page, result.getTotalPages(), result.getTotalElements());
     }
 
@@ -147,6 +158,11 @@ public class ManagerOrderService {
         return buildDetail(o);
     }
 
+    /** SRS 4.4: Admin xem chi tiết mọi đơn hàng (chỉ đọc). */
+    public OrderDetailResponse adminDetail(String orderId) {
+        return buildDetail(orders.findById(orderId).orElseThrow(ManagerOrderService::notFound));
+    }
+
     /**
      * Xác nhận đơn hàng: Chuyển trạng thái từ PENDING (Chờ xác nhận) sang PROCESSING (Đang chuẩn bị).
      * Lúc này shop bắt đầu làm hoa, chưa gọi API vận chuyển GHN.
@@ -154,7 +170,8 @@ public class ManagerOrderService {
     @Transactional
     public void confirm(String shopId, String actor, String orderId) {
         owned(shopId, actor);
-        Order o = orders.findByIdAndShopId(orderId, shopId).orElseThrow(ManagerOrderService::notFound);
+        Order o = orders.findByIdAndShopIdForUpdate(orderId, shopId).orElseThrow(ManagerOrderService::notFound);
+        if(o.getOrderType()==OrderType.CUSTOM && o.getStatus()==OrderStatus.PENDING) throw new ResponseStatusException(HttpStatus.CONFLICT,"Khách cần hoàn tất thanh toán trước khi chuẩn bị hoa.");
         if (o.getStatus() != OrderStatus.PENDING)
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Chỉ đơn hàng PENDING mới có thể xác nhận.");
         o.setStatus(OrderStatus.PROCESSING);
@@ -174,9 +191,11 @@ public class ManagerOrderService {
     @Transactional
     public ShipResult ship(String shopId, String actor, String orderId) {
         owned(shopId, actor);
-        Order o = orders.findByIdAndShopId(orderId, shopId).orElseThrow(ManagerOrderService::notFound);
+        Order o = orders.findByIdAndShopIdForUpdate(orderId, shopId).orElseThrow(ManagerOrderService::notFound);
         if (o.getStatus() != OrderStatus.PROCESSING && o.getStatus() != OrderStatus.DEPOSIT_PAID)
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Chỉ đơn hàng PROCESSING hoặc đã đặt cọc mới có thể gửi GHN.");
+        if(deliveries.findByOrderId(orderId).isPresent())
+            throw new ResponseStatusException(HttpStatus.CONFLICT,"Đơn đã có vận đơn. Vui lòng kiểm tra trạng thái GHN.");
 
         // Lấy địa chỉ kho/shop gửi hàng
         var shopAddrs = addresses.findByShopIdAndUserIsNullOrderByCreatedDateAscIdAsc(shopId);
@@ -196,7 +215,7 @@ public class ManagerOrderService {
         String productName = "Hoa tươi"; int quantity = 1, price = o.getTotalAmount().intValue();
         if (!details.isEmpty()) {
             var d = details.get(0);
-            productName = d.getProduct() != null ? d.getProduct().getName() : "Hoa tươi";
+            productName = java.util.Objects.requireNonNullElse(d.snapshotName(), "Hoa tươi");
             quantity = d.getQuantity(); price = d.getPrice().intValue();
         }
 
@@ -286,8 +305,11 @@ public class ManagerOrderService {
     @Transactional
     public StatusResult changeStatus(String shopId, String actor, String orderId, String target) {
         owned(shopId, actor);
-        Order o = orders.findByIdAndShopId(orderId, shopId).orElseThrow(ManagerOrderService::notFound);
+        Order o = orders.findByIdAndShopIdForUpdate(orderId, shopId).orElseThrow(ManagerOrderService::notFound);
         OrderStatus next;
+        if(o.getOrderType()==OrderType.CUSTOM && (o.getStatus()==OrderStatus.AWAITING_QUOTE || o.getStatus()==OrderStatus.QUOTED || o.getStatus()==OrderStatus.PENDING || o.getStatus()==OrderStatus.AWAITING_DEPOSIT)
+                && !"CANCELLED".equalsIgnoreCase(target))
+            throw new ResponseStatusException(HttpStatus.CONFLICT,"Đơn hoa riêng cần báo giá, khách đồng ý và chọn/thanh toán trước khi chuẩn bị hoa.");
         try {
             next = OrderStatus.valueOf(target == null ? "" : target.toUpperCase());
         } catch (IllegalArgumentException e) {
@@ -295,6 +317,14 @@ public class ManagerOrderService {
         }
         if (o.getStatus() == next)
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Đơn đã ở trạng thái này.");
+        if(o.getStatus()==OrderStatus.CANCELLED || o.getStatus()==OrderStatus.REFUNDED)
+            throw new ResponseStatusException(HttpStatus.CONFLICT,"Đơn đã đóng, không thể mở lại bằng chuyển trạng thái thủ công.");
+        if(Set.of(OrderStatus.AWAITING_QUOTE,OrderStatus.QUOTED,OrderStatus.AWAITING_DEPOSIT,OrderStatus.DEPOSIT_PAID).contains(next))
+            throw new ResponseStatusException(HttpStatus.CONFLICT,"Trạng thái báo giá và đặt cọc được cập nhật qua luồng thiết kế/thanh toán.");
+        if(next==OrderStatus.CANCELLED) {
+            cancel(shopId,actor,orderId,"Shop chuyển trạng thái thủ công.");
+            return new StatusResult(next.name(),null);
+        }
 
         Delivery d = deliveries.findByOrderId(orderId).orElse(null);
         String warning = null;
@@ -328,6 +358,7 @@ public class ManagerOrderService {
         if (next == OrderStatus.CANCELLED && (o.getCancelReason() == null || o.getCancelReason().isBlank()))
             o.setCancelReason("Shop chuyển trạng thái thủ công.");
         o.setStatus(next);
+        if(next==OrderStatus.CANCELLED) vouchers.release(o);
         o.setLastModifyBy(actor);
         return new StatusResult(next.name(), warning);
     }
@@ -343,7 +374,7 @@ public class ManagerOrderService {
      */
     public QueueCount queueCount(String shopId, String actor) {
         owned(shopId, actor);
-        long count = orders.countByShopIdAndStatusIn(shopId, List.of(OrderStatus.PENDING, OrderStatus.AWAITING_DEPOSIT));
+        long count = orders.countByShopIdAndStatusIn(shopId, List.of(OrderStatus.PENDING,OrderStatus.AWAITING_DEPOSIT,OrderStatus.AWAITING_QUOTE));
         return new QueueCount(count);
     }
 
@@ -355,14 +386,25 @@ public class ManagerOrderService {
     @Transactional
     public void cancel(String shopId, String actor, String orderId, String reason) {
         owned(shopId, actor);
-        Order o = orders.findByIdAndShopId(orderId, shopId).orElseThrow(ManagerOrderService::notFound);
+        Order o = orders.findByIdAndShopIdForUpdate(orderId, shopId).orElseThrow(ManagerOrderService::notFound);
         if (o.getStatus() != OrderStatus.PENDING && o.getStatus() != OrderStatus.AWAITING_DEPOSIT
-                && o.getStatus() != OrderStatus.DEPOSIT_PAID && o.getStatus() != OrderStatus.PROCESSING) {
+                && o.getStatus() != OrderStatus.DEPOSIT_PAID && o.getStatus() != OrderStatus.PROCESSING && o.getStatus()!=OrderStatus.AWAITING_QUOTE && o.getStatus()!=OrderStatus.QUOTED) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Chỉ có thể hủy đơn hàng trước khi bắt đầu giao.");
         }
         o.setStatus(OrderStatus.CANCELLED);
         o.setCancelReason(reason);
         o.setLastModifyBy(actor);
+
+        for(var item:orderDetails.findByOrderId(orderId).stream()
+                .filter(line->line.getProduct()!=null).sorted(Comparator.comparing(line->line.getProduct().getId())).toList()) {
+            products.findByIdForUpdate(item.getProduct().getId()).ifPresent(product->{
+                if(product.getType()!=ProductType.CUSTOM) {
+                    product.setStock(product.getStock()+item.getQuantity());product.setLastModifyBy(actor);
+                }
+            });
+        }
+        vouchers.release(o);
+        payments.failPendingByOrderId(orderId,actor);
 
         BigDecimal paid = paidAmount(orderId);
         if (paid.signum() > 0) {
@@ -385,7 +427,7 @@ public class ManagerOrderService {
         Order o = orders.findByIdAndShopId(orderId, shopId).orElseThrow(ManagerOrderService::notFound);
         Delivery d = deliveries.findByOrderId(orderId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Đơn hàng chưa có vận đơn GHN để cập nhật."));
-        
+
         try {
             ghn.updateOrder(d.getTrackingCode(), body);
         } catch (Exception e) {
@@ -404,17 +446,17 @@ public class ManagerOrderService {
     private OrderDetailResponse buildDetail(Order o) {
         var items = orderDetails.findByOrderId(o.getId()).stream()
                 .map(d -> new OrderItemResponse(d.getProduct() != null ? d.getProduct().getId() : null,
-                        d.getProduct() != null ? d.getProduct().getName() : null, d.getPrice(), d.getQuantity()))
+                        d.snapshotName(), d.getPrice(), d.getQuantity()))
                 .toList();
         DeliveryInfo di = deliveries.findByOrderId(o.getId())
                 .map(d -> new DeliveryInfo(d.getTrackingCode(), d.getDeliveryPartnerId(), d.getStatus().name(), d.getGhnStatus())).orElse(null);
         PaymentInfo pi = payments.findByOrderId(o.getId()).stream().findFirst()
                 .map(p -> new PaymentInfo(p.getId(), p.getPaymentMethod().name(), p.getStatus().name(), p.getAmount())).orElse(null);
-        
+
         // Định dạng địa chỉ người nhận
         var a = o.getDeliveryAddress();
-        String toAddr = a != null ? (a.getAddressLine() != null ? a.getAddressLine() : "") + ", " + 
-                                    (a.getWard() != null ? a.getWard() : "") + ", " + 
+        String toAddr = a != null ? (a.getAddressLine() != null ? a.getAddressLine() : "") + ", " +
+                                    (a.getWard() != null ? a.getWard() : "") + ", " +
                                     (a.getDistrict() != null ? a.getDistrict() : "") + ", " + (a.getCity() != null ? a.getCity() : "") : "";
         toAddr = toAddr.replaceAll("null, ", "").replaceAll("^, ", "").replaceAll(", $", "");
 
@@ -425,8 +467,8 @@ public class ManagerOrderService {
             Address shopAddr = shopAddrs.stream().filter(addr -> Boolean.TRUE.equals(addr.getIsDefault())).findFirst()
                     .orElse(shopAddrs.isEmpty() ? null : shopAddrs.get(0));
             if (shopAddr != null) {
-                fromAddr = (shopAddr.getAddressLine() != null ? shopAddr.getAddressLine() : "") + ", " + 
-                           (shopAddr.getWard() != null ? shopAddr.getWard() : "") + ", " + 
+                fromAddr = (shopAddr.getAddressLine() != null ? shopAddr.getAddressLine() : "") + ", " +
+                           (shopAddr.getWard() != null ? shopAddr.getWard() : "") + ", " +
                            (shopAddr.getDistrict() != null ? shopAddr.getDistrict() : "") + ", " + (shopAddr.getCity() != null ? shopAddr.getCity() : "");
                 fromAddr = fromAddr.replaceAll("null, ", "").replaceAll("^, ", "").replaceAll(", $", "");
             }
@@ -435,11 +477,35 @@ public class ManagerOrderService {
         String toName = o.getRecipientName() != null && !o.getRecipientName().isBlank() ? o.getRecipientName() : (o.getCustomer() != null ? o.getCustomer().getFullName() : "Khách hàng");
         String toPhone = o.getRecipientPhone() != null && !o.getRecipientPhone().isBlank() ? o.getRecipientPhone() : (o.getCustomer() != null ? o.getCustomer().getPhone() : "");
 
-        return new OrderDetailResponse(o.getId(), o.getCustomer() != null ? o.getCustomer().getId() : null, 
+        return new OrderDetailResponse(o.getId(), o.getCustomer() != null ? o.getCustomer().getId() : null,
                 o.getCustomer() != null ? o.getCustomer().getFullName() : null,
                 o.getCustomer() != null ? o.getCustomer().getPhone() : null,
-                toName, toPhone, toAddr, fromAddr, o.getStatus().name(), 
-                o.getSubTotal(), o.getShippingFee(), o.getTotalAmount(), 
-                o.getCreatedDate(), null, items, di, pi);
+                toName, toPhone, toAddr, fromAddr, o.getStatus().name(),
+                o.getSubTotal(), o.getShippingFee(), o.getTotalAmount(),
+                o.getCreatedDate(),o.getCustomerNote(),items,di,pi,o.getOrderType().name(),customWorkflow.design(o),o.getShopNote(),o.getCancelReason(),o.getDiscountAmount(),o.getShippingDiscountAmount(),o.getCouponCode(),o.getShippingCouponCode());
+    }
+    public Results queue(String shopId, String actor, int page, String status) {
+        owned(shopId, actor);
+        Pageable pageable = PageRequest.of(page, 20, Sort.by(Sort.Order.desc("createdDate"), Sort.Order.asc("id")));
+        Page<Order> result;
+        List<OrderStatus> queueStatuses = List.of(OrderStatus.PENDING, OrderStatus.AWAITING_DEPOSIT, OrderStatus.DEPOSIT_PAID, OrderStatus.PROCESSING, OrderStatus.AWAITING_QUOTE, OrderStatus.QUOTED);
+
+        if (status != null && !status.isBlank()) {
+            try {
+                OrderStatus st = OrderStatus.valueOf(status.toUpperCase());
+                if (!queueStatuses.contains(st)) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Trạng thái không thuộc danh sách chờ xử lý.");
+                }
+                result = orders.findByShopIdAndStatus(shopId, st, pageable);
+            } catch (IllegalArgumentException e) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Trạng thái không hợp lệ: " + status);
+            }
+        } else {
+            result = orders.findByShopIdAndStatusIn(shopId, queueStatuses, pageable);
+        }
+        var content = result.map(o -> new OrderSummary(o.getId(),
+                o.getCustomer().getFullName(), o.getCustomer().getPhone(),
+                o.getTotalAmount(), o.getStatus().name(), o.getCreatedDate(), o.getOrderType().name())).toList();
+        return new Results(content, page, result.getTotalPages(), result.getTotalElements());
     }
 }

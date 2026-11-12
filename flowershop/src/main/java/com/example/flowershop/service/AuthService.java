@@ -115,7 +115,7 @@ public class AuthService {
     }
 
     @Transactional(noRollbackFor = InvalidOtpException.class)
-    public void verify(String email, String code) 
+    public void verify(String email, String code)
     { verify(email,code,null,null); }
 
     @Transactional(noRollbackFor = InvalidOtpException.class)

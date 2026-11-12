@@ -4,6 +4,8 @@ import { customFlowerService } from '../services/customFlowerService'
 import { accountService } from '../services/accountService'
 import orderService from '../services/orderService'
 import paymentService from '../services/paymentService'
+import VoucherPicker from '../components/checkout/VoucherPicker'
+import { formatPrice } from '../models/productModel'
 import { CustomRequestCard, customButton } from '../components/customFlowers/CustomFlowerParts'
 import '../styles/custom-flowers.css'
 
@@ -15,12 +17,18 @@ const ChatLink = ({ request }) => request.status === 'REJECTED' ? null
 function DepositAction({ request, userId, addresses }) {
   const [addressId, setAddressId] = useState('')
   const [busy, setBusy] = useState(false), [error, setError] = useState('')
+  const [vouchers, setVouchers] = useState({ couponCode: '', shippingCouponCode: '' })
+  const [preview, setPreview] = useState(null)
+  const [createdOrderId, setCreatedOrderId] = useState(null)
   if (request.status !== 'ACCEPTED' || request.design?.quotedPrice == null) return null
+  if (request.orderId || createdOrderId) return <Link className={`${customButton} mt-4 inline-flex`} to={`/orders/${request.orderId || createdOrderId}`}>Xem đơn hàng & tiếp tục thanh toán</Link>
   const selected = addressId || addresses.find(a => a.isDefault)?.id || addresses[0]?.id || ''
   const deposit = async () => {
+    if (busy || !preview) return
     setBusy(true); setError('')
     try {
-      const order = await orderService.makeCustomOrder(userId, request.id, { deliveryAddressId: selected })
+      const order = await orderService.makeCustomOrder(userId, request.id, { deliveryAddressId: selected, ...vouchers, expectedTotal: preview.totalAmount })
+      setCreatedOrderId(order.id)
       await paymentService.startSePayCheckout(order.id, 'DEPOSIT')
     } catch (e) {
       setError(e.message || 'Không thể đặt cọc. Vui lòng thử lại.')
@@ -33,9 +41,11 @@ function DepositAction({ request, userId, addresses }) {
     <select id={`deposit-address-${request.id}`} value={selected} onChange={e => setAddressId(e.target.value)} disabled={busy} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-white/10 dark:bg-gray-800">
       {addresses.map(a => <option key={a.id} value={a.id}>{[a.addressLine, a.ward, a.district, a.city].filter(Boolean).join(', ')}</option>)}
     </select>
-    <p className="text-xs text-gray-500">Tổng = báo giá + phí giao hàng GHN. Trả trước {request.design.depositPercent != null ? `${request.design.depositPercent}% giá hoa` : '50%'} online để shop bắt đầu làm hoa, phần còn lại thanh toán khi nhận hàng (COD). Quá 24 giờ chưa cọc thì đơn tự hủy.</p>
+    <VoucherPicker context={selected ? { mode: 'deposit', userId, requestId: request.id, deliveryAddressId: selected, revision: `${request.design.quotedPrice}:${request.design.depositPercent}` } : null} value={vouchers} onChange={setVouchers} onPreview={setPreview} disabled={busy} />
+    <p className="text-xs text-gray-500">Trả trước {request.design.depositPercent != null ? `${request.design.depositPercent}% tiền hoa sau giảm giá` : '50% tổng tiền sau ưu đãi'} qua SePay để shop bắt đầu làm hoa. Phần còn lại thanh toán khi nhận hàng (COD). Quá 24 giờ chưa cọc thì đơn tự hủy.</p>
+    {preview && <p className="text-sm font-semibold">Tiền cọc: {formatPrice(request.design.depositPercent != null ? Math.round((Number(request.design.quotedPrice) - Number(preview.discountAmount)) * request.design.depositPercent / 100) : Math.round(Number(preview.totalAmount) / 2))}</p>}
     {error && <p role="alert" className="message error">{error} {error.includes('đã có đơn') && <Link className="underline" to="/orders">Xem đơn hàng</Link>}</p>}
-    <button type="button" className={customButton} disabled={busy || !selected} onClick={deposit}>{busy ? 'Đang chuyển…' : 'Đặt cọc'}</button>
+    <button type="button" className={customButton} disabled={busy || !selected || !preview} onClick={deposit}>{busy ? 'Đang chuyển…' : 'Đặt cọc'}</button>
   </div>
 }
 
@@ -74,7 +84,7 @@ export default function CustomerCustomOrdersView({ auth }) {
       {openError && <p role="alert" className="message error">{openError}</p>}
       {opened && <div aria-label="Yêu cầu đang xem" className="rounded-2xl ring-2 ring-brand-500"><CustomRequestCard request={opened}><ChatLink request={opened} /><DepositAction request={opened} userId={auth.user.id} addresses={addresses} /></CustomRequestCard></div>}
       {busy && <p role="status">Đang tải yêu cầu…</p>}{error && <p role="alert" className="message error">{error}</p>}
-      {data?.totalElements === 0 && <p>Bạn chưa gửi yêu cầu nào. Hãy bắt đầu bằng ngân sách và loại hoa yêu thích.</p>}
+      {data?.totalElements === 0 && <p>Bạn chưa gửi yêu cầu nào. Hãy chọn loại hoa và thiết kế yêu thích để shop tư vấn, báo giá.</p>}
       {data?.content.filter(r => r.id !== openId).map(r => <CustomRequestCard key={r.id} request={r}><ChatLink request={r} /><DepositAction request={r} userId={auth.user.id} addresses={addresses} /></CustomRequestCard>)}
       {data && data.totalPages > 1 && <div className="catalog-actions"><button disabled={busy || page === 0} onClick={() => setPage(v => v - 1)}>Trang trước</button><span>{page + 1}/{data.totalPages}</span><button disabled={busy || page + 1 >= data.totalPages} onClick={() => setPage(v => v + 1)}>Trang sau</button></div>}
     </section></main>

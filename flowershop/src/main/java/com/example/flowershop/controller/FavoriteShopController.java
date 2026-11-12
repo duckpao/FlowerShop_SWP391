@@ -44,7 +44,7 @@ public class FavoriteShopController {
     @GetMapping("/{shopId}")
     public FavoriteShopService.FavoriteStatus status(
             @AuthenticationPrincipal CurrentUser user,
-            @PathVariable String shopId) {
+            @PathVariable(name = "shopId") String shopId) {
         return favorites.status(
                 user.id(),
                 shopId);
@@ -60,7 +60,7 @@ public class FavoriteShopController {
     @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
     public void add(
             @AuthenticationPrincipal CurrentUser user,
-            @PathVariable String shopId) {
+            @PathVariable(name = "shopId") String shopId) {
         favorites.add(
                 user.id(),
                 shopId);
@@ -76,7 +76,7 @@ public class FavoriteShopController {
     @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
     public void remove(
             @AuthenticationPrincipal CurrentUser user,
-            @PathVariable String shopId) {
+            @PathVariable(name = "shopId") String shopId) {
         favorites.remove(
                 user.id(),
                 shopId);

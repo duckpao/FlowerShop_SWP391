@@ -147,9 +147,23 @@ public class BlogService {
         blog.setLastModifyBy(actor);
     }
 
+    @Transactional
+    public void publish(String shopId, String id, String actor) {
+        owned(shopId, actor, true);
+        Blog blog = blogs.findByIdAndShopId(id, shopId).orElseThrow(BlogService::missing);
+        blog.setStatus(BlogStatus.PUBLISHED);
+        blog.setLastModifyBy(actor);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired private com.example.flowershop.repository.ShopStaffRepository staffRows;
+
+    private boolean activeStaff(String shopId, String actor) {
+        return staffRows.findByShopIdAndUserId(shopId, actor).map(com.example.flowershop.entity.ShopStaff::isActive).orElse(false);
+    }
+
     private Shop owned(String shopId, String actor, boolean write) {
         Shop shop = shops.findById(shopId).orElseThrow(BlogService::missing);
-        if (!shop.getOwner().getId().equals(actor)) {
+        if (!shop.getOwner().getId().equals(actor) && !activeStaff(shopId, actor)) {
             throw missing();
         }
         if (write && (shop.getStatus() != ShopStatus.ACTIVE

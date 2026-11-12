@@ -24,7 +24,7 @@ public class OccasionReminderJob {
 
     /**
      * Cronjob chạy định kỳ (mặc định mỗi 15 phút - 900.000 ms, khởi động sau 1 phút - 60.000 ms).
-     * 
+     *
      * Luồng thực thi:
      * 1. Gọi OccasionReminderService.sendDueReminders() kèm mốc thời gian hiện tại theo múi giờ hệ thống.
      * 2. Quét các dịp kỷ niệm/sự kiện đặc biệt của khách hàng đến hạn nhắc nhở.

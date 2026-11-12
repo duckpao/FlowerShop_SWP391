@@ -23,7 +23,7 @@ public class ProductReviewController {
     // Customer - lấy đánh giá của chính mình
     @GetMapping("/api/customer/products/{id}/reviews")
     @PreAuthorize("hasRole('CUSTOMER')")
-    public ProductReviewService.ReviewResult mine(@PathVariable String id,
+    public ProductReviewService.ReviewResult mine(@PathVariable(name = "id") String id,
             @AuthenticationPrincipal CurrentUser user) {
         return reviews.mine(id, user.id());
     }
@@ -32,7 +32,7 @@ public class ProductReviewController {
     @PreAuthorize("hasRole('CUSTOMER')")
     @ResponseStatus(HttpStatus.CREATED)
     @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
-    public ProductReviewService.ReviewResult write(@PathVariable String id,
+    public ProductReviewService.ReviewResult write(@PathVariable(name = "id") String id,
             @AuthenticationPrincipal CurrentUser user,
             @Valid @RequestBody ProductReviewService.ReviewInput body) {
         return reviews.write(id, user.id(), body);
@@ -41,7 +41,7 @@ public class ProductReviewController {
     @PutMapping("/api/customer/products/{id}/reviews")
     @PreAuthorize("hasRole('CUSTOMER')")
     @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
-    public ProductReviewService.ReviewResult update(@PathVariable String id,
+    public ProductReviewService.ReviewResult update(@PathVariable(name = "id") String id,
             @AuthenticationPrincipal CurrentUser user,
             @Valid @RequestBody ProductReviewService.ReviewInput body) {
         return reviews.update(id, user.id(), body);
@@ -51,15 +51,15 @@ public class ProductReviewController {
     @PreAuthorize("hasRole('CUSTOMER')")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
-    public void delete(@PathVariable String id, @AuthenticationPrincipal CurrentUser user) {
+    public void delete(@PathVariable(name = "id") String id, @AuthenticationPrincipal CurrentUser user) {
         reviews.delete(id, user.id());
     }
 
     @PutMapping("/api/shop/mine/{shopId}/reviews/{reviewId}/reply")
     @PreAuthorize("hasRole('SHOP')")
     @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
-    public ProductReviewService.ReviewResult reply(@PathVariable String shopId,
-            @PathVariable String reviewId, @AuthenticationPrincipal CurrentUser user,
+    public ProductReviewService.ReviewResult reply(@PathVariable(name = "shopId") String shopId,
+            @PathVariable(name = "reviewId") String reviewId, @AuthenticationPrincipal CurrentUser user,
             @Valid @RequestBody ProductReviewService.ReplyInput body) {
         return reviews.reply(shopId, reviewId, user.id(), body.reply());
     }

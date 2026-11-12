@@ -1,0 +1,9 @@
+.voucher-page { max-width: 1440px; margin: 0 auto; padding: 24px; display: grid; gap: 24px; }
+.voucher-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+.voucher-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.voucher-page label { display: grid; gap: 8px; font-size: 14px; }
+.voucher-page input, .voucher-page select { box-sizing: border-box; width: 100%; min-width: 0; height: 42px; border: 1px solid #d1d5db; border-radius: 8px; padding: 8px 12px; background: transparent; }
+.voucher-page input:focus, .voucher-page select:focus { outline: 2px solid #fda4af; outline-offset: 1px; }
+.voucher-page button:disabled { opacity: .5; cursor: not-allowed; }
+@media (max-width: 1000px) { .voucher-layout { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 540px) { .voucher-page { padding: 12px; } .voucher-form-grid { grid-template-columns: minmax(0, 1fr); } }

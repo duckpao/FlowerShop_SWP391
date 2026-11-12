@@ -1,5 +1,7 @@
 // Nhãn tiếng Việt cho trạng thái đơn hàng của hệ thống
 export const orderStatusLabels = {
+    AWAITING_QUOTE: 'Chờ shop báo giá',
+    QUOTED: 'Chờ khách đồng ý báo giá',
     PENDING: 'Chờ xác nhận',
     AWAITING_DEPOSIT: 'Chờ đặt cọc',
     DEPOSIT_PAID: 'Đã cọc',
@@ -12,6 +14,8 @@ export const orderStatusLabels = {
 
 // Màu Badge tương ứng với từng trạng thái đơn
 export const orderStatusColors = {
+    AWAITING_QUOTE: 'warning',
+    QUOTED: 'info',
     PENDING: 'warning',
     AWAITING_DEPOSIT: 'warning',
     DEPOSIT_PAID: 'info',
@@ -25,7 +29,11 @@ export const orderStatusColors = {
 // Các tab lọc đơn trong màn hình quản lý đơn hàng ('' = tất cả)
 export const orderTabs = [
     { id: '', label: 'Tất cả' },
+    { id: 'AWAITING_QUOTE', label: orderStatusLabels.AWAITING_QUOTE },
+    { id: 'QUOTED', label: orderStatusLabels.QUOTED },
     { id: 'PENDING', label: orderStatusLabels.PENDING },
+    { id: 'AWAITING_DEPOSIT', label: orderStatusLabels.AWAITING_DEPOSIT },
+    { id: 'DEPOSIT_PAID', label: orderStatusLabels.DEPOSIT_PAID },
     { id: 'PROCESSING', label: orderStatusLabels.PROCESSING },
     { id: 'DELIVERING', label: orderStatusLabels.DELIVERING },
     { id: 'COMPLETED', label: orderStatusLabels.COMPLETED },
@@ -34,6 +42,12 @@ export const orderTabs = [
 ]
 
 // Nhãn tiếng Việt cho mã trạng thái vận đơn GHN. Status codes as GHN reports them: https://developer.ghn.vn/en/docs/order/update
+export function manualOrderStatuses(order) {
+    if (['CANCELLED', 'REFUNDED'].includes(order.status)) return []
+    if (order.orderType === 'CUSTOM' && ['AWAITING_QUOTE', 'QUOTED', 'PENDING', 'AWAITING_DEPOSIT'].includes(order.status)) return ['CANCELLED']
+    return ['PENDING', 'PROCESSING', 'DELIVERING', 'COMPLETED', 'CANCELLED', 'REFUNDED'].filter(status => status !== order.status)
+}
+
 export const ghnStatusLabels = {
     ready_to_pick: 'Mới tạo, chờ lấy hàng',
     picking: 'Đang lấy hàng',

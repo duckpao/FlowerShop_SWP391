@@ -1,15 +1,42 @@
 package com.example.flowershop.repository;
 
+import java.util.*;
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import com.example.flowershop.entity.Address;
-import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+import org.springframework.data.domain.Sort;
+import java.util.*;
 
-import java.util.List;
+/** Explicit Hibernate queries; Spring does not generate this repository. */
+@Repository
+public class AddressRepository extends HibernateRepository<Address> {
+    public AddressRepository() { super(Address.class); }
 
-public interface AddressRepository extends JpaRepository<Address, String> {
+    public List<Address> findByUserId(String userId) {
+        return list("e.user.id = :userId", Map.of("userId", userId));
+    }
 
-    List<Address> findByUserId(String userId);
+    public Optional<Address> findByUserIdAndIsDefaultTrue(String userId) {
+        return one("e.user.id = :userId and e.isDefault = true", Map.of("userId", userId));
+    }
 
-    List<Address> findByShopIdAndUserIsNullOrderByCreatedDateAscIdAsc(String shopId);
+    public List<Address> findByShopIdAndUserIsNullOrderByCreatedDateAscIdAsc(String shopId) {
+        return list("e.shop.id = :shopId and e.user is null", Map.of("shopId", shopId), Sort.by("createdDate", "id"));
+    }
 
-    List<Address> findByUserIdAndShopIsNullOrderByCreatedDateAscIdAsc(String userId);
+    public List<Address> findByUserIdAndShopIsNullOrderByCreatedDateAscIdAsc(String userId) {
+        return list("e.user.id = :userId and e.shop is null", Map.of("userId", userId), Sort.by("createdDate", "id"));
+    }
+
+    public Optional<Address> findByIdAndUserId(String id, String userId) {
+        return one("e.id = :id and e.user.id = :userId", Map.of("id", id, "userId", userId));
+    }
+
+    public Optional<Address> findPickupByShopId(String shopId) {
+        return session().createSelectionQuery("from Address e where e.shop.id = :shopId and e.user is null "
+                + "order by case when e.isDefault = true then 0 else 1 end, e.createdDate asc, e.id asc", Address.class)
+                .setParameter("shopId", shopId).setMaxResults(1).uniqueResultOptional();
+    }
+
 }

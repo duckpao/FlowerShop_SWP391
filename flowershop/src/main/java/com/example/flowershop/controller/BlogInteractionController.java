@@ -21,19 +21,19 @@ public class BlogInteractionController {
     }
 
     @GetMapping("/api/public/blogs/{blogId}/engagement")
-    public BlogInteractionService.EngagementResult engagement(@PathVariable String blogId) {
+    public BlogInteractionService.EngagementResult engagement(@PathVariable(name = "blogId") String blogId) {
         return service.engagement(blogId);
     }
 
     @GetMapping("/api/public/blogs/{blogId}/comments")
-    public BlogInteractionService.CommentResults comments(@PathVariable String blogId,
-            @RequestParam(defaultValue = "0") int page) {
+    public BlogInteractionService.CommentResults comments(@PathVariable(name = "blogId") String blogId,
+            @RequestParam(name = "page", defaultValue = "0") int page) {
         return service.comments(blogId, page);
     }
 
     @GetMapping("/api/customer/blogs/{blogId}/interactions")
     @PreAuthorize("hasRole('CUSTOMER')")
-    public BlogInteractionService.InteractionResult mine(@PathVariable String blogId,
+    public BlogInteractionService.InteractionResult mine(@PathVariable(name = "blogId") String blogId,
             @AuthenticationPrincipal CurrentUser user) {
         return service.mine(blogId, user.id());
     }
@@ -42,34 +42,34 @@ public class BlogInteractionController {
     @PreAuthorize("hasRole('CUSTOMER')")
     public BlogService.Results saved(
             @AuthenticationPrincipal CurrentUser user,
-            @RequestParam(defaultValue = "0") int page) {
+            @RequestParam(name = "page", defaultValue = "0") int page) {
         return service.saved(user.id(), page);
     }
 
     @PutMapping("/api/customer/blogs/{blogId}/likes")
     @PreAuthorize("hasRole('CUSTOMER')")
-    public BlogInteractionService.InteractionResult like(@PathVariable String blogId,
+    public BlogInteractionService.InteractionResult like(@PathVariable(name = "blogId") String blogId,
             @AuthenticationPrincipal CurrentUser user) {
         return service.setInteraction(blogId, user.id(), InteractionType.LIKE, true);
     }
 
     @DeleteMapping("/api/customer/blogs/{blogId}/likes")
     @PreAuthorize("hasRole('CUSTOMER')")
-    public BlogInteractionService.InteractionResult unlike(@PathVariable String blogId,
+    public BlogInteractionService.InteractionResult unlike(@PathVariable(name = "blogId") String blogId,
             @AuthenticationPrincipal CurrentUser user) {
         return service.setInteraction(blogId, user.id(), InteractionType.LIKE, false);
     }
 
     @PutMapping("/api/customer/blogs/{blogId}/saves")
     @PreAuthorize("hasRole('CUSTOMER')")
-    public BlogInteractionService.InteractionResult save(@PathVariable String blogId,
+    public BlogInteractionService.InteractionResult save(@PathVariable(name = "blogId") String blogId,
             @AuthenticationPrincipal CurrentUser user) {
         return service.setInteraction(blogId, user.id(), InteractionType.SAVE, true);
     }
 
     @DeleteMapping("/api/customer/blogs/{blogId}/saves")
     @PreAuthorize("hasRole('CUSTOMER')")
-    public BlogInteractionService.InteractionResult unsave(@PathVariable String blogId,
+    public BlogInteractionService.InteractionResult unsave(@PathVariable(name = "blogId") String blogId,
             @AuthenticationPrincipal CurrentUser user) {
         return service.setInteraction(blogId, user.id(), InteractionType.SAVE, false);
     }
@@ -77,7 +77,7 @@ public class BlogInteractionController {
     @PostMapping("/api/customer/blogs/{blogId}/comments")
     @PreAuthorize("hasRole('CUSTOMER')")
     @ResponseStatus(HttpStatus.CREATED)
-    public BlogInteractionService.CommentResult addComment(@PathVariable String blogId,
+    public BlogInteractionService.CommentResult addComment(@PathVariable(name = "blogId") String blogId,
             @AuthenticationPrincipal CurrentUser user,
             @Valid @RequestBody BlogInteractionService.CommentInput input) {
         return service.addComment(blogId, user.id(), input);
@@ -86,7 +86,7 @@ public class BlogInteractionController {
     @DeleteMapping("/api/customer/blogs/{blogId}/comments/{commentId}")
     @PreAuthorize("hasRole('CUSTOMER')")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void deleteComment(@PathVariable String blogId, @PathVariable String commentId,
+    public void deleteComment(@PathVariable(name = "blogId") String blogId, @PathVariable(name = "commentId") String commentId,
             @AuthenticationPrincipal CurrentUser user) {
         service.deleteComment(blogId, commentId, user.id());
     }

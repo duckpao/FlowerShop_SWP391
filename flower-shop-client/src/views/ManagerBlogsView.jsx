@@ -67,7 +67,13 @@ export default function ManagerBlogsView({ shop }) {
         <div className="space-y-3 p-5">
           <div className="flex items-start justify-between gap-2"><h2 className="font-semibold text-gray-900 dark:text-white">{post.title}</h2><span className="shrink-0 rounded-full bg-gray-100 px-2 py-1 text-xs dark:bg-gray-800">{statusLabel[post.status]}</span></div>
           <p className="line-clamp-3 whitespace-pre-line text-sm text-gray-500 dark:text-gray-400">{post.content}</p>
-          <div className="flex flex-wrap gap-3 text-sm"><button onClick={() => c.openEdit(post)} className="font-medium text-brand-500">Chỉnh sửa</button>{post.status !== 'HIDDEN' && <button onClick={() => c.hide(post)} className="font-medium text-error-500">Ẩn bài</button>}{post.status === 'PUBLISHED' && <Link to={`/floral-care/${post.id}`} className="font-medium text-gray-600 dark:text-gray-300">Xem công khai</Link>}</div>
+          <div className="flex flex-wrap gap-3 text-sm">
+            <button type="button" disabled={c.busy} onClick={() => c.openEdit(post)} className="font-medium text-brand-500 disabled:opacity-50">Chỉnh sửa</button>
+            {post.status === 'HIDDEN'
+              ? <button type="button" disabled={c.busy} onClick={() => c.publish(post)} className="font-medium text-success-600 disabled:opacity-50">Công khai lại</button>
+              : <button type="button" disabled={c.busy} onClick={() => c.hide(post)} className="font-medium text-error-500 disabled:opacity-50">Ẩn bài</button>}
+            {post.status === 'PUBLISHED' && <Link to={`/floral-care/${post.id}`} className="font-medium text-gray-600 dark:text-gray-300">Xem công khai</Link>}
+          </div>
         </div>
       </article>)}
     </div>

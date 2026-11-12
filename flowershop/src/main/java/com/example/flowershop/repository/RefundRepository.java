@@ -15,6 +15,9 @@ public interface RefundRepository extends JpaRepository<Refund, String> {
 
     List<Refund> findByOrderIdOrderByCreatedDateAsc(String orderId);
 
+    org.springframework.data.domain.Page<Refund> findByStatus(com.example.flowershop.entity.enums.RefundStatus status,
+            org.springframework.data.domain.Pageable pageable);
+
     @Query("SELECT COALESCE(SUM(r.amount), 0) FROM Refund r WHERE r.order.shop.id = :shopId "
             + "AND r.status = com.example.flowershop.entity.enums.RefundStatus.PROCESSED "
             + "AND r.lastModifyDate >= :start AND r.lastModifyDate < :end")

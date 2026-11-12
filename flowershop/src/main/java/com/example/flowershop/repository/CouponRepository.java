@@ -1,16 +1,30 @@
 package com.example.flowershop.repository;
 
 import com.example.flowershop.entity.Coupon;
-import org.springframework.data.jpa.repository.JpaRepository;
-import java.util.Optional;
-import jakarta.persistence.LockModeType;
-import org.springframework.data.jpa.repository.Lock;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
+import org.springframework.data.domain.Sort;
+import java.util.*;
 
-public interface CouponRepository extends JpaRepository<Coupon, String> {
-    Optional<Coupon> findByCodeIgnoreCase(String code);
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("SELECT c FROM Coupon c WHERE LOWER(c.code) = LOWER(:code)")
-    Optional<Coupon> findByCodeForUpdate(@Param("code") String code);
+@Repository
+public class CouponRepository extends HibernateRepository<Coupon> {
+    public CouponRepository() { super(Coupon.class); }
+    public Optional<Coupon> findByCodeIgnoreCase(String code) {
+        return one("lower(e.code) = lower(:code)", Map.of("code", code));
+    }
+    public Optional<Coupon> findByCodeForUpdate(String code) {
+        return locked("lower(e.code) = lower(:code)", Map.of("code", code));
+    }
+    /** Mã còn ACTIVE nhưng đã quá ngày kết thúc. */
+    public List<Coupon> activeEndedBefore(java.time.LocalDateTime now) {
+        return list("e.deleted = false and e.status = :status and e.endDate < :now",
+                Map.of("status", com.example.flowershop.entity.enums.CouponStatus.ACTIVE, "now", now));
+    }
+    public Optional<Coupon> findLocked(String id) { return locked("e.id = :id", Map.of("id", id)); }
+    public List<Coupon> managed(String shopId) {
+        return list("e.deleted = false and " + (shopId == null ? "e.shop is null" : "e.shop.id = :shopId"),
+                shopId == null ? Map.of() : Map.of("shopId", shopId), Sort.by(Sort.Order.desc("createdDate"), Sort.Order.asc("id")));
+    }
+    public List<Coupon> available(String shopId) {
+        return list("e.deleted = false and (e.shop is null or e.shop.id = :shopId)", Map.of("shopId", shopId));
+    }
 }

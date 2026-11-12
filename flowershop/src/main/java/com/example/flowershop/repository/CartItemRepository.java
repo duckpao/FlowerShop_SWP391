@@ -3,6 +3,7 @@ package com.example.flowershop.repository;
 import com.example.flowershop.entity.CartItem;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import jakarta.persistence.LockModeType;
@@ -13,6 +14,10 @@ import java.util.Optional;
 public interface CartItemRepository extends JpaRepository<CartItem, String> {
 
     List<CartItem> findByUserId(String userId);
+
+    @Modifying
+    @Query("DELETE FROM CartItem item WHERE item.lastModifyDate < :cutoff")
+    int deleteNotModifiedSince(@Param("cutoff") java.time.LocalDateTime cutoff);
 
     Optional<CartItem> findByUserIdAndProductId(String userId, String productId);
     @Lock(LockModeType.PESSIMISTIC_WRITE)

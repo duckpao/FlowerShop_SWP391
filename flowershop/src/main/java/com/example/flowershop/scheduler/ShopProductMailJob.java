@@ -19,7 +19,7 @@ public class ShopProductMailJob {
     }
     /**
      * Cronjob chạy định kỳ mỗi 30 giây (30.000 ms, khởi động sau 30s) để xử lý hàng đợi mail thông báo sản phẩm mới.
-     * 
+     *
      * Luồng thực thi:
      * 1. Lấy danh sách tối đa 20 bản ghi mail đang đến hạn gửi (mails.due) theo cơ chế batch.
      * 2. Duyệt qua từng bản ghi và gọi ShopProductMailDelivery.deliver(id) để:

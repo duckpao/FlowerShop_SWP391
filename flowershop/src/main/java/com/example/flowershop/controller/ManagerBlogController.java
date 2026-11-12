@@ -14,7 +14,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/shop/mine/{shopId}/blogs")
-@PreAuthorize("hasRole('SHOP')")
+@PreAuthorize("hasAnyRole('SHOP', 'SHOP_STAFF')")
 @SecurityRequirement(name = "bearerAuth")
 public class ManagerBlogController {
     private final BlogService service;
@@ -24,29 +24,36 @@ public class ManagerBlogController {
     }
 
     @GetMapping
-    public BlogService.Results list(@PathVariable String shopId, @AuthenticationPrincipal CurrentUser user,
-            @RequestParam(defaultValue = "0") int page) {
+    public BlogService.Results list(@PathVariable(name = "shopId") String shopId, @AuthenticationPrincipal CurrentUser user,
+            @RequestParam(name = "page", defaultValue = "0") int page) {
         return service.listManaged(shopId, user.id(), page);
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public BlogService.Result create(@PathVariable String shopId, @AuthenticationPrincipal CurrentUser user,
+    public BlogService.Result create(@PathVariable(name = "shopId") String shopId, @AuthenticationPrincipal CurrentUser user,
             @Valid @RequestPart("blog") BlogService.Input input,
-            @RequestParam(required = false) List<MultipartFile> images) {
+            @RequestParam(name = "images", required = false) List<MultipartFile> images) {
         return service.save(shopId, null, user.id(), input, images);
     }
 
     @PutMapping("/{id}")
-    public BlogService.Result update(@PathVariable String shopId, @PathVariable String id,
+    public BlogService.Result update(@PathVariable(name = "shopId") String shopId, @PathVariable(name = "id") String id,
             @AuthenticationPrincipal CurrentUser user, @Valid @RequestPart("blog") BlogService.Input input,
-            @RequestParam(required = false) List<MultipartFile> images) {
+            @RequestParam(name = "images", required = false) List<MultipartFile> images) {
         return service.save(shopId, id, user.id(), input, images);
+    }
+
+    @PutMapping("/{id}/publish")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void publish(@PathVariable(name = "shopId") String shopId, @PathVariable(name = "id") String id,
+            @AuthenticationPrincipal CurrentUser user) {
+        service.publish(shopId, id, user.id());
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void hide(@PathVariable String shopId, @PathVariable String id,
+    public void hide(@PathVariable(name = "shopId") String shopId, @PathVariable(name = "id") String id,
             @AuthenticationPrincipal CurrentUser user) {
         service.hide(shopId, id, user.id());
     }

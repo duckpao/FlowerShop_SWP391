@@ -17,10 +17,10 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
-/** Chat phía chủ shop: /api/shop/mine/{shopId}/chat. ChatService kiểm tra người gọi là chủ shop của phiên. */
+/** Chat phía shop: /api/shop/mine/{shopId}/chat. ChatService kiểm tra người gọi là chủ hoặc staff của shop. */
 @RestController
 @RequestMapping("/api/shop/mine/{shopId}/chat")
-@PreAuthorize("hasRole('SHOP')")
+@PreAuthorize("hasAnyRole('SHOP', 'SHOP_STAFF')")
 @SecurityRequirement(name = "bearerAuth")
 public class ManagerChatController {
 
@@ -31,46 +31,46 @@ public class ManagerChatController {
     }
 
     @GetMapping("/sessions")
-    public List<SessionDto> sessions(@PathVariable String shopId, @AuthenticationPrincipal CurrentUser user) {
+    public List<SessionDto> sessions(@PathVariable(name = "shopId") String shopId, @AuthenticationPrincipal CurrentUser user) {
         return chat.shopSessions(shopId, user.id());
     }
 
     @PostMapping("/sessions")
     @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
-    public SessionDto open(@PathVariable String shopId, @AuthenticationPrincipal CurrentUser user,
+    public SessionDto open(@PathVariable(name = "shopId") String shopId, @AuthenticationPrincipal CurrentUser user,
                            @Valid @RequestBody OpenForShop body) {
         return body.orderId() != null ? chat.openForShopByOrder(shopId, user.id(), body.orderId())
                 : chat.openForShop(shopId, user.id(), body.customOrderId());
     }
 
     @GetMapping("/unread")
-    public Map<String, Long> unread(@PathVariable String shopId, @AuthenticationPrincipal CurrentUser user) {
+    public Map<String, Long> unread(@PathVariable(name = "shopId") String shopId, @AuthenticationPrincipal CurrentUser user) {
         return Map.of("count", chat.shopUnread(shopId, user.id()));
     }
 
     @GetMapping("/sessions/{id}/messages")
-    public List<MessageDto> messages(@PathVariable String shopId, @AuthenticationPrincipal CurrentUser user, @PathVariable String id,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime before,
-            @RequestParam(defaultValue = "30") int size) {
+    public List<MessageDto> messages(@PathVariable(name = "shopId") String shopId, @AuthenticationPrincipal CurrentUser user, @PathVariable(name = "id") String id,
+            @RequestParam(name = "before", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime before,
+            @RequestParam(name = "size", defaultValue = "30") int size) {
         return chat.history(id, user.id(), before, size);
     }
 
     @PostMapping("/sessions/{id}/messages") @ResponseStatus(HttpStatus.CREATED)
     @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
-    public MessageDto send(@PathVariable String shopId, @AuthenticationPrincipal CurrentUser user, @PathVariable String id,
+    public MessageDto send(@PathVariable(name = "shopId") String shopId, @AuthenticationPrincipal CurrentUser user, @PathVariable(name = "id") String id,
                            @Valid @RequestBody SendInput body) {
         return chat.send(id, user.id(), body);
     }
 
     @PostMapping("/sessions/{id}/read") @ResponseStatus(HttpStatus.NO_CONTENT)
     @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
-    public void read(@PathVariable String shopId, @AuthenticationPrincipal CurrentUser user, @PathVariable String id) {
+    public void read(@PathVariable(name = "shopId") String shopId, @AuthenticationPrincipal CurrentUser user, @PathVariable(name = "id") String id) {
         chat.markRead(id, user.id());
     }
 
     @PostMapping("/sessions/{id}/images")
     @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
-    public Map<String, String> image(@PathVariable String shopId, @AuthenticationPrincipal CurrentUser user, @PathVariable String id,
+    public Map<String, String> image(@PathVariable(name = "shopId") String shopId, @AuthenticationPrincipal CurrentUser user, @PathVariable(name = "id") String id,
                                      @RequestParam("file") MultipartFile file) {
         return Map.of("url", chat.uploadImage(id, user.id(), file));
     }

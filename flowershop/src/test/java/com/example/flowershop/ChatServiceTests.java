@@ -31,13 +31,20 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class ChatServiceTests {
     @MockitoBean JavaMailSender sender;
     @Autowired ChatService chat;
+    @Autowired ShopStaffRepository staffRows;
     @Autowired UserRepository users;
     @Autowired ShopRepository shops;
     @Autowired CategoryRepository categories;
     @Autowired ProductRepository products;
     @Autowired CustomOrderRequestRepository customOrders;
-    @Autowired AddressRepository addresses;
     @Autowired OrderRepository orders;
+    @Autowired OrderDetailRepository orderDetails;
+    @Autowired ChatSessionRepository sessions;
+    @Autowired ChatMessageRepository messages;
+    @Autowired NotificationRepository notifications;
+    @Autowired CustomerOccasionRepository occasions;
+    @Autowired jakarta.persistence.EntityManager entityManager;
+    @Autowired AddressRepository addresses;
 
     record Fixture(User owner, User customer, Shop shop, Product product) {}
 
@@ -64,11 +71,90 @@ class ChatServiceTests {
     }
 
     @Test
+    void historyBindsSessionAndDateAndHonorsPaging() {
+        var f=fixture();
+        var session=sessions.saveAndFlush(ChatSession.builder().id(UUID.randomUUID().toString()).customer(f.customer()).shop(f.shop()).build());
+        messages.saveAllAndFlush(List.of(
+                ChatMessage.builder().id(UUID.randomUUID().toString()).session(session).sender(f.customer()).senderType(SenderType.CUSTOMER).message("First").build(),
+                ChatMessage.builder().id(UUID.randomUUID().toString()).session(session).sender(f.owner()).senderType(SenderType.SHOP).message("Second").build()));
+        assertThat(messages.latest(session.getId(),org.springframework.data.domain.PageRequest.of(0,10))).hasSize(2);
+        assertThat(messages.olderThan(session.getId(),java.time.LocalDateTime.now().plusDays(1),org.springframework.data.domain.PageRequest.of(0,1))).hasSize(1);
+        assertThat(messages.olderThan(session.getId(),java.time.LocalDateTime.now().minusDays(1),org.springframework.data.domain.PageRequest.of(0,10))).isEmpty();
+    }
+
+    @Test
+    void markingNotificationsReadOnlyChangesTheSelectedUsersRows() {
+        var customer=user(UserRole.CUSTOMER); var other=user(UserRole.CUSTOMER);
+        var own=notifications.saveAndFlush(Notification.builder().id(UUID.randomUUID().toString()).user(customer).title("Own").build());
+        var unrelated=notifications.saveAndFlush(Notification.builder().id(UUID.randomUUID().toString()).user(other).title("Other").build());
+        notifications.markAllAsRead(customer.getId());
+        entityManager.clear();
+        assertThat(notifications.findById(own.getId()).orElseThrow().isRead()).isTrue();
+        assertThat(notifications.findById(unrelated.getId()).orElseThrow().isRead()).isFalse();
+    }
+
+    @Test
+    void reminderCandidatesBindDateAndExcludePastOrAlreadyRemindedOneOffEvents() {
+        var customer=user(UserRole.CUSTOMER); var today=java.time.LocalDate.now();
+        var recurring=occasions.saveAndFlush(CustomerOccasion.builder().id(UUID.randomUUID().toString()).customer(customer).title("Recurring").occasionDate(today.minusYears(1)).recurringYearly(true).reminderSent(true).build());
+        var future=occasions.saveAndFlush(CustomerOccasion.builder().id(UUID.randomUUID().toString()).customer(customer).title("Future").occasionDate(today.plusDays(2)).build());
+        occasions.saveAndFlush(CustomerOccasion.builder().id(UUID.randomUUID().toString()).customer(customer).title("Past").occasionDate(today.minusDays(2)).build());
+        occasions.saveAndFlush(CustomerOccasion.builder().id(UUID.randomUUID().toString()).customer(customer).title("Already reminded").occasionDate(today.plusDays(2)).reminderSent(true).build());
+        assertThat(occasions.findReminderCandidates(today)).extracting(CustomerOccasion::getId).containsExactlyInAnyOrder(recurring.getId(),future.getId());
+    }
+
+    @Test
+    void activeStaffAnswersShopChatButInactiveStaffCannot() {
+        var f = fixture();
+        var session = chat.openForCustomer(f.customer().getId(), f.shop().getId());
+        User worker = user(UserRole.SHOP_STAFF);
+        ShopStaff row = new ShopStaff();
+        row.setId(UUID.randomUUID().toString()); row.setShop(f.shop()); row.setUser(worker); row.setActive(true);
+        staffRows.saveAndFlush(row);
+
+        assertThat(chat.send(session.id(), worker.getId(), text("Shop xin chào")).senderType()).isEqualTo(SenderType.SHOP);
+        assertThat(chat.shopSessions(f.shop().getId(), worker.getId())).extracting(s -> s.id()).contains(session.id());
+
+        row.setActive(false);
+        staffRows.saveAndFlush(row);
+        assertThatThrownBy(() -> chat.send(session.id(), worker.getId(), text("x"))).isInstanceOf(ResponseStatusException.class);
+    }
+
+    @Test
     void openingTwiceReturnsTheSameSessionPerCustomerAndShop() {
         var f = fixture();
         var first = chat.openForCustomer(f.customer().getId(), f.shop().getId());
         var second = chat.openForCustomer(f.customer().getId(), f.shop().getId());
         assertThat(second.id()).isEqualTo(first.id());
+    }
+
+    @Test
+    void sharedCustomOrdersOpenChatAndLinkToTheirOrderWithoutLeakingAcrossCustomersOrShops() {
+        var f = fixture();
+        var order = orders.saveAndFlush(Order.builder().id(UUID.randomUUID().toString())
+                .customer(f.customer()).shop(f.shop()).orderType(OrderType.CUSTOM)
+                .status(OrderStatus.AWAITING_QUOTE).subTotal(BigDecimal.ZERO).totalAmount(BigDecimal.ZERO).build());
+        orderDetails.saveAndFlush(OrderDetail.builder().id(UUID.randomUUID().toString()).order(order)
+                .customMaterials("{\"budget\":500000,\"description\":\"Birthday\",\"preferences\":{\"quantity\":2}}")
+                .price(BigDecimal.ZERO).quantity(1).build());
+        var session = chat.openForShop(f.shop().getId(), f.owner().getId(), order.getId());
+        var sent = chat.send(session.id(), f.owner().getId(),
+                new SendInput("Design quote", null, new ContextInput(ChatContextType.CUSTOM_ORDER, order.getId())));
+        assertThat(sent.context()).containsEntry("orderId", order.getId()).containsEntry("status", "AWAITING_QUOTE");
+        assertThat(sent.context().get("price")).isNull();
+        order.setSubTotal(new BigDecimal("650000"));
+        order.setStatus(OrderStatus.QUOTED);
+        orders.saveAndFlush(order);
+        var quoted = chat.send(session.id(), f.owner().getId(),
+                new SendInput("Shop quote", null, new ContextInput(ChatContextType.CUSTOM_ORDER, order.getId())));
+        assertThat(new BigDecimal(quoted.context().get("price").toString())).isEqualByComparingTo("650000");
+        var other = fixture();
+        assertThatThrownBy(() -> chat.openForShop(other.shop().getId(), other.owner().getId(), order.getId()))
+                .isInstanceOf(ResponseStatusException.class);
+        var otherSession = chat.openForCustomer(other.customer().getId(), f.shop().getId());
+        assertThatThrownBy(() -> chat.send(otherSession.id(), other.customer().getId(),
+                new SendInput("Wrong customer", null, new ContextInput(ChatContextType.CUSTOM_ORDER, order.getId()))))
+                .isInstanceOf(ResponseStatusException.class);
     }
 
     @Test

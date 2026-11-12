@@ -58,6 +58,8 @@ public class PaymentService {
         } else if (order.getStatus() == OrderStatus.CANCELLED) {
             message = "Đơn hàng đã bị hủy do hết thời gian chờ thanh toán ("
                     + SePayGatewayService.expiryText(order) + ").";
+        } else if(order.getStatus()==OrderStatus.AWAITING_QUOTE || order.getStatus()==OrderStatus.QUOTED) {
+            message="Đơn hoa riêng đang chờ khách đồng ý báo giá.";
         } else {
             message = "Đang chờ thanh toán...";
         }

@@ -16,7 +16,11 @@ export function useAdminCustomersController() {
   useEffect(() => {
     let active = true
     setBusy(true); setError('')
-    api.list(params).then(value => { if (active) setData(value) })
+    api.list(params).then(value => {
+      if (!active) return
+      if (params.page > 0 && params.page >= value.totalPages) { setParams(p => ({ ...p, page: Math.max(0, value.totalPages - 1) })); return }
+      setData(value)
+    })
       .catch(e => { if (active) setError(e.message) }).finally(() => { if (active) setBusy(false) })
     return () => { active = false }
   }, [params, revision])

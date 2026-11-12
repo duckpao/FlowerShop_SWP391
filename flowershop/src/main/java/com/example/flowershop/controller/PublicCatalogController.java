@@ -20,24 +20,24 @@ public class PublicCatalogController {
     }
 
     @GetMapping("/products/{id}/reviews")
-    public ProductReviewService.Results reviews(@PathVariable String id,
-            @RequestParam(defaultValue = "0") int page) { return reviews.list(id, page); }
+    public ProductReviewService.Results reviews(@PathVariable(name = "id") String id,
+            @RequestParam(name = "page", defaultValue = "0") int page) { return reviews.list(id, page); }
 
     @GetMapping("/products")
-    public CatalogService.Results browse(@RequestParam(defaultValue = "") String q,
-            @RequestParam(required = false) String categoryId,
-            @RequestParam(required = false) String shopId,
-            @RequestParam(required = false) ProductType type,
-            @RequestParam(required = false) BigDecimal minPrice,
-            @RequestParam(required = false) BigDecimal maxPrice,
-            @RequestParam(defaultValue = "newest") String sort,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "12") int size) {
+    public CatalogService.Results browse(@RequestParam(name = "q", defaultValue = "") String q,
+            @RequestParam(name = "categoryId", required = false) String categoryId,
+            @RequestParam(name = "shopId", required = false) String shopId,
+            @RequestParam(name = "type", required = false) ProductType type,
+            @RequestParam(name = "minPrice", required = false) BigDecimal minPrice,
+            @RequestParam(name = "maxPrice", required = false) BigDecimal maxPrice,
+            @RequestParam(name = "sort", defaultValue = "newest") String sort,
+            @RequestParam(name = "page", defaultValue = "0") int page,
+            @RequestParam(name = "size", defaultValue = "12") int size) {
         return catalog.browse(q, categoryId, shopId, type, minPrice, maxPrice, sort, page, size);
     }
 
     @GetMapping("/products/{id}")
-    public CatalogService.ProductDetail detail(@PathVariable String id) { return catalog.detail(id); }
+    public CatalogService.ProductDetail detail(@PathVariable(name = "id") String id) { return catalog.detail(id); }
 
     @GetMapping("/categories")
     public List<CatalogService.CategoryCard> categories() { return catalog.categories(); }

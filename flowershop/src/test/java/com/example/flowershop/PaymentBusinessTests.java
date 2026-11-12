@@ -133,8 +133,8 @@ class PaymentBusinessTests {
         var result = service.createPayment(CreatePaymentRequest.builder().orderId(order.getId())
                 .paymentMethod("bank_transfer").build(), "customer-1");
 
-        assertThat(result.getFields().keySet()).containsExactly("merchant", "operation", "payment_method",
-                "order_amount", "currency", "order_invoice_number", "order_description", "customer_id",
+        assertThat(result.getFields().keySet()).containsExactly("order_amount", "merchant", "currency", "operation",
+                "order_description", "order_invoice_number", "customer_id", "payment_method",
                 "success_url", "error_url", "cancel_url", "signature");
         assertThat(result.getFields().get("payment_method")).isEqualTo("BANK_TRANSFER");
     }
@@ -170,6 +170,7 @@ class PaymentBusinessTests {
     @Test
     void expiredOrderPaidAtSePayIsNotCancelled() {
         SePayGatewayService service = spy(newGateway(orders, payments, refunds, orderService));
+        when(orders.findById("order-1")).thenReturn(Optional.of(Order.builder().id("order-1").status(OrderStatus.PENDING).createdDate(LocalDateTime.now().minusHours(25)).build()));
         Payment payment = Payment.builder().paymentMethod(PaymentMethod.ONLINE).invoiceNumber("invoice-1")
                 .status(PaymentStatus.PENDING).build();
         when(payments.findByOrderId("order-1")).thenReturn(List.of(payment));
@@ -183,6 +184,7 @@ class PaymentBusinessTests {
     @Test
     void expiredUnpaidOrderIsCancelled() {
         SePayGatewayService service = spy(newGateway(orders, payments, refunds, orderService));
+        when(orders.findById("order-1")).thenReturn(Optional.of(Order.builder().id("order-1").status(OrderStatus.PENDING).createdDate(LocalDateTime.now().minusHours(25)).build()));
         Payment payment = Payment.builder().paymentMethod(PaymentMethod.ONLINE).invoiceNumber("invoice-1")
                 .status(PaymentStatus.PENDING).build();
         when(payments.findByOrderId("order-1")).thenReturn(List.of(payment));
@@ -258,9 +260,9 @@ class PaymentBusinessTests {
     }
 
     @Test
-    void awaitingDepositOlderThan24hCannotBePaid() {
+    void awaitingDepositOlderThanOneMinuteCannotBePaid() {
         Order old = customOrder(OrderStatus.AWAITING_DEPOSIT, "400000", "0", LocalDateTime.now().minusHours(25));
-        Order fresh = customOrder(OrderStatus.AWAITING_DEPOSIT, "400000", "0", LocalDateTime.now().minusHours(23));
+        Order fresh = customOrder(OrderStatus.AWAITING_DEPOSIT, "400000", "0", LocalDateTime.now().minusSeconds(50));
 
         assertThatThrownBy(() -> pay(gatewayWithCheckoutConfig(), old, PaymentType.DEPOSIT))
                 .isInstanceOf(ApiException.class);
@@ -268,15 +270,15 @@ class PaymentBusinessTests {
     }
 
     @Test
-    void schedulerExpiresAwaitingDepositUsing24hThreshold() {
+    void schedulerExpiresAwaitingDepositUsingOneMinuteThreshold() {
         SePayGatewayService gateway = mock(SePayGatewayService.class);
         var scheduler = new com.example.flowershop.scheduler.PaymentTimeoutScheduler(orders, gateway);
         Order old = customOrder(OrderStatus.AWAITING_DEPOSIT, "400000", "0", LocalDateTime.now().minusHours(25));
         old.setId("old-order");
-        when(orders.findByStatusAndCreatedDateBefore(eq(OrderStatus.PENDING), any())).thenReturn(List.of());
-        when(orders.findByStatusAndCreatedDateBefore(eq(OrderStatus.AWAITING_DEPOSIT), any())).thenAnswer(inv -> {
+        when(orders.findByStatusAndPaymentWindowStartBefore(eq(OrderStatus.PENDING), any())).thenReturn(List.of());
+        when(orders.findByStatusAndPaymentWindowStartBefore(eq(OrderStatus.AWAITING_DEPOSIT), any())).thenAnswer(inv -> {
             LocalDateTime threshold = inv.getArgument(1);
-            // ngưỡng phải khoảng 24 giờ trước: đơn 25h tuổi bị bắt, đơn 23h tuổi thì không
+            // ngưỡng phải khoảng 24 giờ trước: đơn 25 giờ tuổi bị bắt, đơn 23 giờ tuổi thì không
             assertThat(threshold).isBefore(LocalDateTime.now().minusHours(23));
             assertThat(threshold).isAfter(LocalDateTime.now().minusHours(25));
             return List.of(old);
@@ -308,7 +310,7 @@ class PaymentBusinessTests {
                 mock(com.example.flowershop.repository.UserRepository.class),
                 mock(com.example.flowershop.repository.AddressRepository.class),
                 mock(com.example.flowershop.repository.ProductRepository.class), payments,
-                mock(com.example.flowershop.repository.CouponRepository.class), mock(com.example.flowershop.repository.ShopRepository.class),
+                mock(com.example.flowershop.service.CouponService.class), mock(com.example.flowershop.repository.ShopRepository.class),
                 mock(com.example.flowershop.service.GhnService.class),
                 notifications,
                 mock(org.springframework.context.ApplicationEventPublisher.class), refunds);

@@ -44,7 +44,10 @@ public class AccountService {
     public ProfileResponse updateProfile(String userId, ProfileRequest request) {
         User user = lock(userId);
         user.setFullName(request.fullName().strip());
-        user.setPhone(request.phone().strip());
+        String phone = request.phone().strip();
+        if (!phone.isEmpty() && users.existsByPhoneAndIdNot(phone, userId))
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Số điện thoại đã được dùng bởi tài khoản khác.");
+        user.setPhone(phone.isEmpty() ? null : phone); // NULL để cột phone được phép unique
         user.setLastModifyBy(userId);
         return ProfileResponse.from(user);
     }
@@ -119,7 +122,7 @@ public class AccountService {
         address.setIsPickup(Boolean.TRUE.equals(request.isPickup()));
         address.setIsReturn(Boolean.TRUE.equals(request.isReturn()));
         address.setLastModifyBy(userId);
-        
+
         boolean makeDefault = request.isDefault() || list.isEmpty() || Boolean.TRUE.equals(address.getIsDefault())
                 || list.stream().noneMatch(a -> Boolean.TRUE.equals(a.getIsDefault()));
         if (makeDefault)

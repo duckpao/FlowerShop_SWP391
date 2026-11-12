@@ -18,6 +18,7 @@ import java.math.BigDecimal;
 import java.util.UUID;
 import static org.assertj.core.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @SpringBootTest(properties={"spring.datasource.url=jdbc:h2:mem:customflowers;MODE=MySQL;DB_CLOSE_DELAY=-1",
@@ -34,14 +35,17 @@ class CustomFlowerOrderTests {
     @Autowired CategoryRepository categories;
     @Autowired ProductRepository products;
     @Autowired CustomOrderRequestRepository requests;
+    @Autowired OrderRepository orders;
+    @Autowired CustomFlowerOptionRepository options;
     @Autowired MockMvc mvc;
     @Autowired jakarta.validation.Validator validator;
     User owner,customer; Shop shop; Category category; Product rose;
     String id(){return UUID.randomUUID().toString();}
     User user(UserRole role){return users.saveAndFlush(User.builder().id(id()).email(id()+"@example.test").fullName("Test user").role(role).status(UserStatus.ACTIVE).isEmailVerified(true).build());}
     Product product(String name,int price,int stock){return products.saveAndFlush(Product.builder().id(id()).shop(shop).category(category).name(name).price(BigDecimal.valueOf(price)).stock(stock).build());}
-    RequestInput input(String reference){return new RequestInput(shop.getId(),new BigDecimal("300000"),2,"Pastel birthday bouquet",new Preferences("Rose","Pink","Birthday","Paper",null,reference));}
+    RequestInput input(String reference){return new RequestInput(shop.getId(),2,"Pastel birthday bouquet",new Preferences("Rose","Pink","Birthday","Paper",null,reference));}
     @BeforeEach void fixture(){
+        CustomFlowerCatalogFixture.seed(options);
         owner=user(UserRole.SHOP);customer=user(UserRole.CUSTOMER);
         shop=shops.saveAndFlush(Shop.builder().id(id()).owner(owner).name("Custom test shop").status(ShopStatus.ACTIVE).build());
         category=categories.saveAndFlush(Category.builder().id(id()).name("Flowers").status(CategoryStatus.ACTIVE).build());
@@ -57,9 +61,49 @@ class CustomFlowerOrderTests {
         assertThatThrownBy(()->service.detail(other.getId(),r.id())).isInstanceOf(ResponseStatusException.class);
         assertThat(rose.getStock()).isEqualTo(10);
     }
+    @Test void historicalRequestResolvesBothMigratedAndPreviouslyLinkedOrders(){
+        for (boolean migrated : new boolean[]{true, false}) {
+            var request = service.create(customer.getId(), input(null));
+            assertThat(request.orderId()).isNull();
+            var order = orders.saveAndFlush(com.example.flowershop.entity.Order.builder()
+                    .id(migrated ? request.id() : id()).customRequestId(migrated ? null : request.id())
+                    .customer(customer).shop(shop).orderType(OrderType.CUSTOM).status(OrderStatus.AWAITING_QUOTE)
+                    .subTotal(BigDecimal.ZERO).totalAmount(BigDecimal.ZERO).build());
+            assertThat(service.detail(customer.getId(), request.id()).orderId()).isEqualTo(order.getId());
+        }
+    }
+    @Test void catalogReflectsDatabaseChangesAndDisabledOptionsRemainVisible() throws Exception {
+        var added = CustomFlowerCatalogFixture.add(options, CustomFlowerOption.Group.ACCESSORY, "New accessory");
+        added.setDisabled(true);
+        added.setSortOrder(-1);
+        options.saveAndFlush(added);
+        mvc.perform(get("/api/public/custom-orders/options"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(added.getId()))
+                .andExpect(jsonPath("$[0].label").value("New accessory"))
+                .andExpect(jsonPath("$[0].group").value("ACCESSORY"))
+                .andExpect(jsonPath("$[0].disabled").value(true));
+    }
+    @Test void disabledRenamedOrUnknownChoicesCannotBeSubmittedButHistoryIsPreserved() {
+        var created = service.create(customer.getId(), input(null));
+        var paper = options.findAll().stream().filter(o -> o.getLabel().equals("Paper")).findFirst().orElseThrow();
+        paper.setDisabled(true);
+        options.saveAndFlush(paper);
+        assertThatThrownBy(() -> service.create(customer.getId(), input(null)))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("Paper");
+        paper.setLabel("New paper name");
+        options.saveAndFlush(paper);
+        assertThat(service.detail(customer.getId(), created.id()).design().wrapping()).isEqualTo("Paper");
+        var unknown = new RequestInput(shop.getId(), 1, null,
+                new Preferences("Not in database", null, null, null, null, null));
+        assertThatThrownBy(() -> service.create(customer.getId(), unknown)).isInstanceOf(IllegalArgumentException.class);
+        var wrongGroup = new RequestInput(shop.getId(), 1, null,
+                new Preferences("Birthday", null, null, null, null, null));
+        assertThatThrownBy(() -> service.create(customer.getId(), wrongGroup)).isInstanceOf(IllegalArgumentException.class);
+    }
     @Test void optionalDescriptionAndMultipleAccessoriesPersist(){
         for (String description : new String[]{null, "", "   ", "Đẹp"}) {
-            var input = new RequestInput(shop.getId(), new BigDecimal("300000"), 1, description,
+            var input = new RequestInput(shop.getId(), 1, description,
                     new Preferences(null, null, "Khác", "Giấy kraft, Ruy băng, Thiệp chúc mừng", null, null));
             assertThat(validator.validate(input)).isEmpty();
             var created = service.create(customer.getId(), input);
@@ -68,9 +112,14 @@ class CustomFlowerOrderTests {
             assertThat(saved.design().wrapping()).isEqualTo(input.preferences().wrapping());
             assertThat(saved.design().occasion()).isEqualTo("Khác");
         }
-        var tooLong = new RequestInput(shop.getId(), new BigDecimal("300000"), 1, "a".repeat(3001),
+        var tooLong = new RequestInput(shop.getId(), 1, "a".repeat(3001),
                 new Preferences(null, null, null, null, null, null));
         assertThat(validator.validate(tooLong)).anyMatch(v -> v.getPropertyPath().toString().equals("description"));
+    }
+    @Test void suggestionsAllowUpToFivePercentOverBudget(){
+        var within=product("Within five percent",156000,5);var over=product("Over five percent",158000,5);
+        var ids=service.suggestions(new BigDecimal("300000"),2,shop.getId(),"",0).content().stream().map(s->s.product().id()).toList();
+        assertThat(ids).contains(within.getId()).doesNotContain(over.getId());
     }
     @Test void filtersSuggestionsByBudgetQuantityVisibilityAndStock(){
         product("Too expensive",200000,10);product("No stock",90000,1);
@@ -85,7 +134,42 @@ class CustomFlowerOrderTests {
     }
     @Test void referenceIsRevalidatedAtSubmission(){
         rose.setPrice(new BigDecimal("200000"));products.saveAndFlush(rose);
+        var created=service.create(customer.getId(),input(rose.getId()));
+        assertThat(created.budget()).isNull();
+        assertThat(created.design().estimatedTotal()).isEqualByComparingTo("400000");
+        rose.setStock(1);products.saveAndFlush(rose);
         assertThatThrownBy(()->service.create(customer.getId(),input(rose.getId()))).isInstanceOf(ResponseStatusException.class);
+    }
+    @Test void customerSubmitsWithoutBudgetAndShopSetsThePrice(){
+        var created=service.create(customer.getId(),input(rose.getId()));
+        assertThat(created.budget()).isNull();
+        assertThat(validator.validate(input(rose.getId()))).isEmpty();
+        var accepted=service.decide(shop.getId(),owner.getId(),created.id(),
+                new Decision(CustomOrderStatus.ACCEPTED,"Custom design quote",new BigDecimal("750000"),30));
+        assertThat(accepted.design().quotedPrice()).isEqualByComparingTo("750000");
+        assertThat(requests.findById(created.id()).orElseThrow().getBudget()).isNull();
+    }
+    @Test void referenceSuggestionsDoNotRequireCustomerBudget() throws Exception {
+        product("Premium reference",900000,3);
+        mvc.perform(get("/api/public/custom-orders/suggestions").param("quantity","2").param("shopId",shop.getId()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(2))
+                .andExpect(jsonPath("$.content[0].estimatedTotal").value(1800000));
+    }
+    @Test void customerApiAcceptsDesignWithoutAnyBudgetField() throws Exception {
+        org.mockito.Mockito.when(tokenAuth.authenticate("customer-no-budget"))
+                .thenReturn(com.example.flowershop.dto.auth.CurrentUser.from(customer));
+        var csrf=mvc.perform(get("/api/auth/csrf")).andReturn();
+        var mapper=new com.fasterxml.jackson.databind.ObjectMapper();
+        var token=mapper.readTree(csrf.getResponse().getContentAsString());
+        var body=mapper.writeValueAsString(java.util.Map.of("shopId",shop.getId(),"quantity",2,
+                "description","","preferences",java.util.Map.of()));
+        mvc.perform(post("/api/customer/custom-orders")
+                .session((org.springframework.mock.web.MockHttpSession)csrf.getRequest().getSession())
+                .header(token.path("headerName").asText(),token.path("token").asText())
+                .header("Authorization","Bearer customer-no-budget")
+                .contentType("application/json").content(body))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.status").value("REQUESTED"))
+                .andExpect(jsonPath("$.budget").doesNotExist());
     }
     @Test void invalidBudgetAndQuantityAreRejected(){
         assertThatThrownBy(()->service.suggestions(BigDecimal.ZERO,1,null,"",0)).isInstanceOf(IllegalArgumentException.class);
@@ -101,9 +185,9 @@ class CustomFlowerOrderTests {
         assertThat(service.detail(customer.getId(),r.id()).status()).isEqualTo(CustomOrderStatus.ACCEPTED);
         assertThatThrownBy(()->service.decide(shop.getId(),owner.getId(),r.id(),new Decision(CustomOrderStatus.REJECTED,"Changed mind",null,null))).isInstanceOf(ResponseStatusException.class);
     }
-    @Test void rejectsOverBudgetQuoteAndUnauthorizedShop(){
+    @Test void rejectsInvalidQuoteAndUnauthorizedShop(){
         var r=service.create(customer.getId(),input(null));
-        assertThatThrownBy(()->service.decide(shop.getId(),owner.getId(),r.id(),new Decision(CustomOrderStatus.ACCEPTED,"Quote",new BigDecimal("300001"),30))).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(()->service.decide(shop.getId(),owner.getId(),r.id(),new Decision(CustomOrderStatus.ACCEPTED,"Quote",BigDecimal.ZERO,30))).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(()->service.decide(shop.getId(),owner.getId(),r.id(),new Decision(CustomOrderStatus.ACCEPTED,"Quote",null,30))).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(()->service.decide(shop.getId(),owner.getId(),r.id(),new Decision(CustomOrderStatus.ACCEPTED,"Quote",new BigDecimal("250000"),null))).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(()->service.shopRequests(shop.getId(),user(UserRole.SHOP).getId(),null,0)).isInstanceOf(ResponseStatusException.class);
@@ -115,7 +199,6 @@ class CustomFlowerOrderTests {
         assertThat(design.quantity()).isEqualTo(1);assertThat(design.flowers()).isEqualTo("Rose, Baby");assertThat(design.wrapping()).isEqualTo("Kraft");
     }
     @Test void publicSuggestionsAndPrivateApis() throws Exception {
-        mvc.perform(get("/budget-flowers")).andExpect(status().isOk()).andExpect(forwardedUrl("/index.html"));
         mvc.perform(get("/custom-orders/new")).andExpect(status().isOk()).andExpect(forwardedUrl("/index.html"));
         mvc.perform(get("/api/public/custom-orders/suggestions").param("budget","300000").param("quantity","2").param("shopId",shop.getId())).andExpect(status().isOk()).andExpect(jsonPath("$.content[0].estimatedTotal").value(200000));
         mvc.perform(get("/api/public/custom-orders/suggestions").param("budget","-1")).andExpect(status().isBadRequest());
@@ -139,10 +222,10 @@ class CustomFlowerOrderTests {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.content[0].id").value(r.id()));
     }
     @Test void rejectsPastDateAndOtherShopsReference(){
-        var past=new RequestInput(shop.getId(),new BigDecimal("300000"),1,"Birthday bouquet please",new Preferences(null,null,null,null,"2000-01-01",null));
+        var past=new RequestInput(shop.getId(),1,"Birthday bouquet please",new Preferences(null,null,null,null,"2000-01-01",null));
         assertThatThrownBy(()->service.create(customer.getId(),past)).isInstanceOf(IllegalArgumentException.class);
         var other=shops.saveAndFlush(Shop.builder().id(id()).owner(user(UserRole.SHOP)).name("Other shop").status(ShopStatus.ACTIVE).build());
-        var wrong=new RequestInput(other.getId(),new BigDecimal("300000"),1,"Birthday bouquet please",new Preferences(null,null,null,null,null,rose.getId()));
+        var wrong=new RequestInput(other.getId(),1,"Birthday bouquet please",new Preferences(null,null,null,null,null,rose.getId()));
         assertThatThrownBy(()->service.create(customer.getId(),wrong)).isInstanceOf(ResponseStatusException.class);
     }
 }

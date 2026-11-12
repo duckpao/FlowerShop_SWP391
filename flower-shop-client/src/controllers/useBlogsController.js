@@ -93,8 +93,16 @@ export function useBlogsController(shopId) {
     } catch (e) { setError(e.message) } finally { setBusy(false) }
   }
 
+  const publish = async post => {
+    setBusy(true); setError(''); setNotice('')
+    try {
+      await blogService.publish(shopId, post.id)
+      setNotice('Đã công khai lại bài viết. Người dùng có thể xem bài viết.'); setRevision(value => value + 1)
+    } catch (e) { setError(e.message) } finally { setBusy(false) }
+  }
+
   return {
     data, page, setPage, editing, form, setForm, imagePreviews, busy, error, notice,
-    openCreate, openEdit, close, save, hide, selectImages, removeNewImage, removeRetainedImage,
+    openCreate, openEdit, close, save, hide, publish, selectImages, removeNewImage, removeRetainedImage,
   }
 }

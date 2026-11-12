@@ -16,6 +16,7 @@ const base = shopId => `/api/shop/mine/${encodeURIComponent(shopId)}/orders`
  * Được dùng bởi: OrderQueueView, GhnSimulator.
  */
 export const managerOrderService = {
+    quote: (shopId, id, body) => authService.authenticatedRequest(`${base(shopId)}/${encodeURIComponent(id)}/quote`, { method: 'POST', body }),
     /**
      * Lấy danh sách tất cả các đơn hàng của shop (hỗ trợ phân trang và lọc theo trạng thái).
      * Gọi: GET /api/shop/mine/{shopId}/orders?page=&status= -> ManagerOrderController.list

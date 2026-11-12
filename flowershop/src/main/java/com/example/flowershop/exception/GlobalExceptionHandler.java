@@ -71,6 +71,20 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(new MessageResponse(exception.getMessage()));
     }
 
+    @ExceptionHandler(org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<MessageResponse> handleInvalidParameter(
+            org.springframework.web.method.annotation.MethodArgumentTypeMismatchException exception) {
+        return ResponseEntity.badRequest().body(new MessageResponse(
+                "Tham số '" + exception.getName() + "' không đúng định dạng."));
+    }
+
+    @ExceptionHandler(org.springframework.web.bind.MissingServletRequestParameterException.class)
+    public ResponseEntity<MessageResponse> handleMissingParameter(
+            org.springframework.web.bind.MissingServletRequestParameterException exception) {
+        return ResponseEntity.badRequest().body(new MessageResponse(
+                "Thiếu tham số '" + exception.getParameterName() + "'."));
+    }
+
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<MessageResponse> handleUnreadableBody(HttpMessageNotReadableException exception) {
         return ResponseEntity.badRequest().body(new MessageResponse("Dữ liệu JSON không hợp lệ."));

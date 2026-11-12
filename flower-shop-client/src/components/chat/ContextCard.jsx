@@ -1,10 +1,12 @@
 import { Link } from 'react-router-dom'
 import { formatPrice } from '../../models/productModel'
 import { customStatus } from '../customFlowers/CustomFlowerParts'
+import { orderStatusLabels } from '../../models/orderStatus'
 
 /** Đích khi bấm thẻ: sản phẩm mở trang sản phẩm, yêu cầu custom mở chi tiết theo phía người xem. */
 export function contextHref(ctx, side) {
     if (ctx.type === 'PRODUCT') return `/products/${encodeURIComponent(ctx.id)}`
+    if (ctx.orderId) return side === 'SHOP' ? `/shop-admin/orders?open=${encodeURIComponent(ctx.orderId)}` : `/orders/${encodeURIComponent(ctx.orderId)}`
     const base = side === 'SHOP' ? '/shop-admin/custom-orders' : '/custom-orders'
     return `${base}?open=${encodeURIComponent(ctx.id)}`
 }
@@ -28,8 +30,8 @@ export default function ContextCard({ ctx, side, label, onDismiss }) {
                     {label && <span className="block text-theme-xs text-gray-500 dark:text-gray-400">{label}</span>}
                     <span className="block truncate text-theme-sm font-medium text-gray-900 dark:text-white">{ctx.name}</span>
                     <span className="block text-theme-xs text-gray-600 dark:text-gray-400">
-                        {ctx.price != null && (isProduct ? formatPrice(ctx.price) : `Ngân sách ${formatPrice(ctx.price)}`)}
-                        {!isProduct && ctx.status && ` · ${customStatus[ctx.status] || ctx.status}`}
+                        {ctx.price != null ? (isProduct ? formatPrice(ctx.price) : `Giá shop báo ${formatPrice(ctx.price)}`) : !isProduct && 'Chờ shop báo giá'}
+                        {!isProduct && ctx.status && ` · ${orderStatusLabels[ctx.status] || customStatus[ctx.status] || ctx.status}`}
                     </span>
                 </span>
             </Link>
