@@ -18,7 +18,7 @@ export function OrderDesignPanel({ order }) {
     ].filter(([, value]) => value).map(([label, value]) => <div key={label}><dt className="text-gray-500">{label}</dt><dd className="whitespace-pre-wrap">{value}</dd></div>)}</dl>
     {order.status === 'AWAITING_QUOTE' && <p className="mt-3 text-sm text-gray-500">Chưa chốt giá. Phí giao hàng sẽ được tính cùng báo giá của shop.</p>}
     {order.cancelReason && <p className="mt-3 text-sm text-error-500">Lý do từ chối / hủy: {order.cancelReason}</p>}
-    {!design.legacy && <Link className="mt-3 inline-block text-sm font-semibold text-brand-600" to={user?.role === 'SHOP' ? `/shop-admin/chat?customOrderId=${encodeURIComponent(order.id)}` : `/chat?${new URLSearchParams({ shopId: order.shopId, customOrderId: order.id })}`}>Trao đổi về thiết kế này</Link>}
+    {!design.legacy && <Link className="mt-3 inline-block text-sm font-semibold text-brand-600" to={user?.role === 'SHOP' || user?.role === 'SHOP_STAFF' ? `/shop-admin/chat?customOrderId=${encodeURIComponent(order.id)}` : `/chat?${new URLSearchParams({ shopId: order.shopId, customOrderId: order.id })}`}>Trao đổi về thiết kế này</Link>}
   </section>
 }
 

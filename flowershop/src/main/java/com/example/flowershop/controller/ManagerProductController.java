@@ -7,7 +7,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.web.multipart.MultipartFile;
-@RestController @RequestMapping("/api/shop/mine/{shopId}/products") @PreAuthorize("hasRole('SHOP')")
+@RestController @RequestMapping("/api/shop/mine/{shopId}/products") @PreAuthorize("hasAnyRole('SHOP', 'SHOP_STAFF')")
 @io.swagger.v3.oas.annotations.security.SecurityRequirement(name="bearerAuth")
 public class ManagerProductController {
     private final ManagerProductService service;

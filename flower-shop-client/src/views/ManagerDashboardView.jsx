@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import { ChartColumn } from "lucide-react";
 import { managerShopService } from "../services/managerShopService";
 import ManagerShopsView from "./ManagerShopsView";
+import ProductsView from "./ProductsView";
 import ManagerCustomOrdersView from "./ManagerCustomOrdersView";
 import ManagerChatView from "./ManagerChatView";
 import ManagerBlogsView from "./ManagerBlogsView";
@@ -97,16 +98,21 @@ const quickActions = [
   },
 ];
 
+// SRS 4.4: staff được xem tổng quan, quản lý mặt hàng (không xóa), bài viết, đơn hàng, báo cáo và chat.
+const staffSections = ["products", "blogs", "orders", "reports", "chat"];
+
 export default function ManagerDashboardView({
   user,
   error,
   path,
 }) {
-  const current = quickActions.find((item) => item.href === path && item.section !== "chat");
+  const isStaff = user?.role === "SHOP_STAFF";
+  const actions = isStaff ? quickActions.filter((item) => staffSections.includes(item.section)) : quickActions;
+  const current = actions.find((item) => item.href === path && item.section !== "chat");
   const profile = path === "/shop-admin/profile";
   const customOrders = path === "/shop-admin/custom-orders";
   const chat = path === "/shop-admin/chat";
-  const needsShop = customOrders || chat || current?.section === "orders" || current?.section === "blogs" || current?.section === "reports";
+  const needsShop = customOrders || chat || current?.section === "products" || current?.section === "orders" || current?.section === "blogs" || current?.section === "reports";
 
   // Tải shop của Manager một lần, rồi truyền xuống các view con qua prop `shop`
   // (tương tự `user` do App truyền xuống). Mỗi Manager chỉ quản lý một shop.
@@ -114,10 +120,10 @@ export default function ManagerDashboardView({
   const [shopError, setShopError] = useState("");
   const [shopLoading, setShopLoading] = useState(true);
   useEffect(() => {
-    if (user?.role !== "SHOP") return;
+    if (user?.role !== "SHOP" && user?.role !== "SHOP_STAFF") return;
     let active = true;
     setShopLoading(true);
-    managerShopService.list("SHOP")
+    managerShopService.list(user.role)
       .then((shops) => {
         if (!active) return;
         setShop(shops[0] || null);
@@ -137,10 +143,8 @@ export default function ManagerDashboardView({
   );
 
   if (path === "/shop-admin/refunds") return <StaffRefundsView role={user?.role} />;
-  if (user?.role === 'SHOP_STAFF') {
-    return <ManagerShopsView role="SHOP_STAFF" />;
-  }
-  
+  if (isStaff && (customOrders || (!current && !chat && path !== "/shop-admin" && !profile))) return <div className="p-8 text-gray-500">Bạn không có quyền với mục này.</div>;
+
   return (
     <div className="w-full">
       {error && (
@@ -165,7 +169,7 @@ export default function ManagerDashboardView({
           
           <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Lối tắt chức năng</h3>
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
-            {quickActions.map((item) => (
+            {actions.map((item) => (
               <ComponentCard key={item.href} className="group hover:border-brand-300 transition-colors cursor-pointer">
                 <Link to={item.href} className="flex flex-col gap-4 p-2">
                   <div className={`flex h-12 w-12 items-center justify-center rounded-xl ${item.color}`}>
@@ -192,6 +196,8 @@ export default function ManagerDashboardView({
       
       {shopGate ? shopGate : chat ? <ManagerChatView user={user} shop={shop} /> : customOrders ? <ManagerCustomOrdersView user={user} shop={shop} /> : current && current.section === "blogs" ? (
         <ManagerBlogsView shop={shop} />
+      ) : current && current.section === "products" ? (
+        <ProductsView key={`products-${shop?.id}`} shop={shop} manage canDelete={!isStaff} />
       ) : current && current.section === "orders" ? (
         <OrderQueueView shop={shop} />
       ) : current && current.section === "reports" ? (

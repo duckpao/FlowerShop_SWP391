@@ -116,6 +116,11 @@ class CustomFlowerOrderTests {
                 new Preferences(null, null, null, null, null, null));
         assertThat(validator.validate(tooLong)).anyMatch(v -> v.getPropertyPath().toString().equals("description"));
     }
+    @Test void suggestionsAllowUpToFivePercentOverBudget(){
+        var within=product("Within five percent",156000,5);var over=product("Over five percent",158000,5);
+        var ids=service.suggestions(new BigDecimal("300000"),2,shop.getId(),"",0).content().stream().map(s->s.product().id()).toList();
+        assertThat(ids).contains(within.getId()).doesNotContain(over.getId());
+    }
     @Test void filtersSuggestionsByBudgetQuantityVisibilityAndStock(){
         product("Too expensive",200000,10);product("No stock",90000,1);
         var hidden=product("Hidden",80000,10);hidden.setAdminHidden(true);products.saveAndFlush(hidden);

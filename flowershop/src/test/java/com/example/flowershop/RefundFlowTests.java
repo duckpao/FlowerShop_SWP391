@@ -77,9 +77,9 @@ class RefundFlowTests {
         Refund r = refund(RefundStatus.REQUESTED);
         StaffRefundService service = staffService(r);
 
-        assertThat(service.updateStatus("shop-1", "staff-1", "r-1", "approved").status()).isEqualTo("APPROVED");
+        assertThat(service.updateStatus("shop-1", "staff-1", "r-1", "approved", null).status()).isEqualTo("APPROVED");
         verify(notifications, never()).notifyRefundResolved(any());   // mới liên hệ, chưa báo khách
-        assertThat(service.updateStatus("shop-1", "staff-1", "r-1", "PROCESSED").customerPhone()).isEqualTo("0901234567");
+        assertThat(service.updateStatus("shop-1", "staff-1", "r-1", "PROCESSED", null).customerPhone()).isEqualTo("0901234567");
         assertThat(r.getLastModifyBy()).isEqualTo("staff-1");
         verify(notifications).notifyRefundResolved(r);                // đã hoàn → báo khách
     }
@@ -87,18 +87,18 @@ class RefundFlowTests {
     @Test
     void staffCannotSkipContactStepOrReopenFinishedRefund() {
         StaffRefundService fresh = staffService(refund(RefundStatus.REQUESTED));
-        assertThatThrownBy(() -> fresh.updateStatus("shop-1", "staff-1", "r-1", "PROCESSED"))
+        assertThatThrownBy(() -> fresh.updateStatus("shop-1", "staff-1", "r-1", "PROCESSED", null))
                 .isInstanceOf(ResponseStatusException.class);
 
         StaffRefundService done = staffService(refund(RefundStatus.PROCESSED));
-        assertThatThrownBy(() -> done.updateStatus("shop-1", "staff-1", "r-1", "REJECTED"))
+        assertThatThrownBy(() -> done.updateStatus("shop-1", "staff-1", "r-1", "REJECTED", null))
                 .isInstanceOf(ResponseStatusException.class);
     }
 
     @Test
     void staffCannotTouchRefundOfAnotherShop() {
         StaffRefundService service = staffService(refund(RefundStatus.REQUESTED));
-        assertThatThrownBy(() -> service.updateStatus("shop-2", "staff-1", "r-1", "APPROVED"))
+        assertThatThrownBy(() -> service.updateStatus("shop-2", "staff-1", "r-1", "APPROVED", null))
                 .isInstanceOf(ResponseStatusException.class);
     }
 }

@@ -50,6 +50,7 @@ public class ChatService {
     private final CloudinaryService cloudinary;
     private final ApplicationEventPublisher events;
     private final ObjectMapper json = new ObjectMapper();
+    @org.springframework.beans.factory.annotation.Autowired private ShopStaffRepository staff;
 
     public ChatService(ChatSessionRepository sessions, ChatMessageRepository messages, ShopRepository shops,
                        UserRepository users, ProductRepository products, ProductImageRepository productImages,
@@ -137,17 +138,22 @@ public class ChatService {
                         .createdBy(customer.getId()).build()));
     }
 
-    /** Chủ shop duy nhất của cửa hàng mới được trả lời chat (Staff chưa hỗ trợ). */
+    /** Chủ shop hoặc nhân viên đang làm tại shop mới được trả lời chat. */
     private Shop requireOwner(String shopId, String ownerId) {
         Shop shop = shops.findById(shopId).orElseThrow(() -> status(HttpStatus.NOT_FOUND, "Không tìm thấy cửa hàng."));
-        if (!shop.getOwner().getId().equals(ownerId)) throw status(HttpStatus.FORBIDDEN, "Không có quyền truy cập cửa hàng này.");
+        if (!worksAt(shop, ownerId)) throw status(HttpStatus.FORBIDDEN, "Không có quyền truy cập cửa hàng này.");
         return shop;
     }
 
-    /** Xác định người đang xem là khách hay chủ shop của phiên; người ngoài bị từ chối. */
+    private boolean worksAt(Shop shop, String userId) {
+        return shop.getOwner().getId().equals(userId)
+                || staff.findByShopIdAndUserId(shop.getId(), userId).map(ShopStaff::isActive).orElse(false);
+    }
+
+    /** Xác định người đang xem là khách hay phía shop (chủ hoặc staff) của phiên; người ngoài bị từ chối. */
     public SenderType sideOf(ChatSession session, String userId) {
         if (session.getCustomer().getId().equals(userId)) return SenderType.CUSTOMER;
-        if (session.getShop().getOwner().getId().equals(userId)) return SenderType.SHOP;
+        if (worksAt(session.getShop(), userId)) return SenderType.SHOP;
         throw status(HttpStatus.FORBIDDEN, "Không có quyền truy cập cuộc trò chuyện này.");
     }
 

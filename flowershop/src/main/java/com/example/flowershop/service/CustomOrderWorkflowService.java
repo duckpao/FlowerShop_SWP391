@@ -41,6 +41,7 @@ public class CustomOrderWorkflowService {
     private final CouponService vouchers;
     private final NotificationService notifications;
     private final ObjectMapper json = new ObjectMapper();
+    @org.springframework.beans.factory.annotation.Autowired private ShopStaffRepository staff;
 
     public CustomOrderWorkflowService(OrderRepository orders, OrderDetailRepository details, PaymentRepository payments,
             AddressRepository addresses, ShopRepository shops, UserRepository users, CustomFlowerOrderService designs, GhnService ghn, CouponService vouchers, NotificationService notifications) {
@@ -57,7 +58,9 @@ public class CustomOrderWorkflowService {
         if (order.getOrderType() != OrderType.CUSTOM) throw invalid("Chức năng này chỉ dành cho đơn hoa theo yêu cầu.");
     }
     private void requireShop(Order order, String shopId, String actor) {
-        if (!order.getShop().getId().equals(shopId) || !order.getShop().getOwner().getId().equals(actor)) throw missing();
+        boolean member = order.getShop().getOwner().getId().equals(actor)
+                || staff.findByShopIdAndUserId(shopId, actor).map(ShopStaff::isActive).orElse(false);
+        if (!order.getShop().getId().equals(shopId) || !member) throw missing();
         if (order.getShop().getStatus() != ShopStatus.ACTIVE || order.getShop().getOwner().getStatus() != UserStatus.ACTIVE)
             throw invalid("Cửa hàng phải đang hoạt động.");
     }

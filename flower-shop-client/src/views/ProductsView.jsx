@@ -64,7 +64,7 @@ function FieldError({ id, message }) {
   return <p id={id} role="alert" className="mt-1 text-xs text-error-500">{message}</p>
 }
 
-export default function ProductsView({ shop, manage = false }) {
+export default function ProductsView({ shop, manage = false, canDelete = true }) {
   const c = useProductsController(shop.id, manage)
   const disabled = c.busy || shop.status !== 'ACTIVE'
   const [isFormOpen, setIsFormOpen] = useState(false)
@@ -236,7 +236,7 @@ export default function ProductsView({ shop, manage = false }) {
                           Ẩn
                         </Button>
                       )}
-                      <Button size="sm" variant="outline" disabled={disabled} onClick={() => c.remove(p.id)} className="text-error-500">Xóa</Button>
+                      {canDelete && <Button size="sm" variant="outline" disabled={disabled} onClick={() => c.remove(p.id)} className="text-error-500">Xóa</Button>}
                     </div>
                   )}
                 </div>

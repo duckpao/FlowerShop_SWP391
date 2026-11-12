@@ -14,7 +14,7 @@ export default function ManagerChatView({ user, shop }) {
     }), [params])
     const scope = useMemo(() => ({ kind: 'shop', shopId: shop?.id }), [shop?.id])
 
-    if (user?.role !== 'SHOP') return <p className="text-theme-sm text-gray-700 dark:text-gray-300">Chỉ chủ shop được trả lời tin nhắn của khách.</p>
+    if (user?.role !== 'SHOP' && user?.role !== 'SHOP_STAFF') return <p className="text-theme-sm text-gray-700 dark:text-gray-300">Chỉ chủ shop hoặc nhân viên shop được trả lời tin nhắn của khách.</p>
     return (
         <>
             <PageMeta title="Tin nhắn | Quản lý shop" description="Trả lời tin nhắn của khách hàng" />

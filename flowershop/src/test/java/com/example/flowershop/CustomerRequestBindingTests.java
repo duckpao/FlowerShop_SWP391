@@ -32,7 +32,7 @@ class CustomerRequestBindingTests {
 
     @BeforeEach void setup() {
         mvc = MockMvcBuilders.standaloneSetup(new FavoriteController(favorites),
-                        new CustomerOrderController(orders), new PublicCatalogController(catalog, reviews))
+                        new CustomerOrderController(orders, mock(com.example.flowershop.service.CustomerRefundService.class)), new PublicCatalogController(catalog, reviews))
                 .setCustomArgumentResolvers(new HandlerMethodArgumentResolver() {
                     @Override public boolean supportsParameter(MethodParameter parameter) {
                         return parameter.getParameterType() == CurrentUser.class;

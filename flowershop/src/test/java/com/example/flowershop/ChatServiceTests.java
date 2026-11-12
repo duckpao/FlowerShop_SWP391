@@ -31,6 +31,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class ChatServiceTests {
     @MockitoBean JavaMailSender sender;
     @Autowired ChatService chat;
+    @Autowired ShopStaffRepository staffRows;
     @Autowired UserRepository users;
     @Autowired ShopRepository shops;
     @Autowired CategoryRepository categories;
@@ -100,6 +101,23 @@ class ChatServiceTests {
         occasions.saveAndFlush(CustomerOccasion.builder().id(UUID.randomUUID().toString()).customer(customer).title("Past").occasionDate(today.minusDays(2)).build());
         occasions.saveAndFlush(CustomerOccasion.builder().id(UUID.randomUUID().toString()).customer(customer).title("Already reminded").occasionDate(today.plusDays(2)).reminderSent(true).build());
         assertThat(occasions.findReminderCandidates(today)).extracting(CustomerOccasion::getId).containsExactlyInAnyOrder(recurring.getId(),future.getId());
+    }
+
+    @Test
+    void activeStaffAnswersShopChatButInactiveStaffCannot() {
+        var f = fixture();
+        var session = chat.openForCustomer(f.customer().getId(), f.shop().getId());
+        User worker = user(UserRole.SHOP_STAFF);
+        ShopStaff row = new ShopStaff();
+        row.setId(UUID.randomUUID().toString()); row.setShop(f.shop()); row.setUser(worker); row.setActive(true);
+        staffRows.saveAndFlush(row);
+
+        assertThat(chat.send(session.id(), worker.getId(), text("Shop xin chào")).senderType()).isEqualTo(SenderType.SHOP);
+        assertThat(chat.shopSessions(f.shop().getId(), worker.getId())).extracting(s -> s.id()).contains(session.id());
+
+        row.setActive(false);
+        staffRows.saveAndFlush(row);
+        assertThatThrownBy(() -> chat.send(session.id(), worker.getId(), text("x"))).isInstanceOf(ResponseStatusException.class);
     }
 
     @Test

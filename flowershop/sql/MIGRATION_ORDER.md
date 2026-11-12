@@ -39,6 +39,10 @@ Các migration của feature/dung đã được áp dụng trước khi merge, k
 
 ## Database tạo mới
 
+Số điện thoại không trùng và tên sản phẩm lúc mua: database đang có dữ liệu chạy thêm `035_unique_user_phone.sql` (kiểm tra số trùng trước khi chạy, xem chú thích trong file) và `036_order_detail_product_name.sql`. `database.sql` đã gộp sẵn.
+
+Yêu cầu hoàn tiền của khách: database đang có dữ liệu chạy thêm `037_customer_refund_requests.sql` (thêm trạng thái `CANCELLED`, cột `description`, `evidence_images`, `shop_response` cho `Refunds`). `database.sql` đã gộp sẵn.
+
 Gói Pro cấu hình: database đang có dữ liệu chạy thêm `033_configurable_shop_plans.sql` (đổi cột giới hạn thành `product_limit`, thêm `Products.deleted`, cập nhật quyền lợi gói seed). Database local đã được sao lưu và áp dụng migration này. Xem `../CONFIGURABLE_PRO_PLANS.md`.
 
 Dùng `database.sql` đã gộp: gồm schema master, danh mục đặt riêng, voucher, dữ liệu mẫu, trạng thái báo giá và thời điểm bắt đầu thanh toán. Không cần chạy lại chuỗi ALTER lịch sử sau khi import file này. Chỉ dùng `022_custom_order_workflow.sql` nếu chủ động muốn chuyển các yêu cầu cũ chưa chuyển; không cần cho yêu cầu mới tạo trực tiếp ở Orders.

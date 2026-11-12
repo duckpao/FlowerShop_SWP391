@@ -18,7 +18,7 @@ import java.util.List;
 @SecurityRequirement(name = "bearerAuth")
 public class StaffRefundController {
 
-    public record StatusRequest(String status) {}
+    public record StatusRequest(String status, String note) {}
 
     private final StaffRefundService service;
 
@@ -34,6 +34,6 @@ public class StaffRefundController {
     @PostMapping("/{id}/status")
     public RefundResponse updateStatus(@PathVariable(name = "shopId") String shopId, @PathVariable(name = "id") String id,
                                        @RequestBody StatusRequest body, @AuthenticationPrincipal CurrentUser u) {
-        return service.updateStatus(shopId, u.id(), id, body.status());
+        return service.updateStatus(shopId, u.id(), id, body.status(), body.note());
     }
 }

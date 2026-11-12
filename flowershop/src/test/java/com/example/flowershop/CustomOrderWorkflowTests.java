@@ -49,6 +49,7 @@ class CustomOrderWorkflowTests {
     @Autowired CategoryRepository categories;
     @Autowired CustomFlowerOptionRepository options;
     @Autowired NotificationService notifications;
+    @Autowired ShopStaffRepository staffRows;
     @Autowired jakarta.persistence.EntityManager entityManager;
     User customer, owner;
     Shop shop;
@@ -273,6 +274,18 @@ class CustomOrderWorkflowTests {
         quote(id);
         assertThatThrownBy(() -> workflow.accept("other-customer", id, new CustomOrderWorkflowService.Accept(PaymentMethod.COD, new BigDecimal("380000"))))
                 .isInstanceOf(ResponseStatusException.class);
+    }
+    @Test void activeStaffCanQuoteButInactiveStaffCannot() {
+        var id=create().orderId();
+        var worker=user(UserRole.SHOP_STAFF);
+        ShopStaff row=new ShopStaff();
+        row.setId(id()); row.setShop(shop); row.setUser(worker); row.setActive(false);
+        staffRows.saveAndFlush(row);
+        var body=new CustomOrderWorkflowService.Quote(new BigDecimal("350000"), "");
+        assertThatThrownBy(() -> workflow.quote(shop.getId(), worker.getId(), id, body)).isInstanceOf(ResponseStatusException.class);
+        row.setActive(true); staffRows.saveAndFlush(row);
+        workflow.quote(shop.getId(), worker.getId(), id, body);
+        assertThat(orders.findById(id).orElseThrow().getStatus()).isEqualTo(OrderStatus.QUOTED);
     }
     @Test void migratedRequestRequiresOwnedDeliveryAddressBeforeQuote() {
         var id=create().orderId(); var order=orders.findById(id).orElseThrow();

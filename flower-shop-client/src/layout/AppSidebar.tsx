@@ -43,8 +43,14 @@ const adminNavItems: NavItem[] = [
   { name: 'Quản lý người dùng', path: '/admin/users', icon: <UserCircleIcon fontSize={24} /> },
   { name: 'Quản lý các shop', path: '/admin/shops', icon: <BoxCubeIcon fontSize={24} /> },
   { name: 'Danh mục & kiểm duyệt', path: '/admin/categories', icon: <TableIcon fontSize={24} /> },
+  { name: 'Đơn hàng', path: '/admin/orders', icon: <ListIcon fontSize={24} /> },
+  { name: 'Hoàn tiền', path: '/admin/refunds', icon: <ListIcon fontSize={24} /> },
+  { name: 'Đánh giá sản phẩm', path: '/admin/reviews', icon: <ListIcon fontSize={24} /> },
   { name: 'Xem khiếu nại', path: '#', icon: <ListIcon fontSize={24} /> }
 ];
+
+// SRS 4.4: staff chỉ dùng các chức năng vận hành, không vào shop, nhân sự, gói Pro, voucher.
+const staffNavPaths = ['/shop-admin', '/shop-admin/products', '/shop-admin/blogs', '/shop-admin/orders', '/shop-admin/reports', '/shop-admin/chat'];
 
 const managerNavItems: NavItem[] = [
   { name: 'Gói đăng ký Pro', path: '/shop-admin/subscription', icon: <ListIcon fontSize={24} /> },
@@ -81,17 +87,17 @@ const AppSidebar: React.FC = () => {
   const isAdmin = location.pathname.startsWith('/admin') && !location.pathname.startsWith('/shop-admin');
   const isManager = location.pathname.startsWith('/shop-admin');
   const chatScope = isManager ? { kind: 'shop', shopId: managerShopId } : null;
-  const chatUnread = useChatUnread(chatScope, user?.role === 'SHOP' ? user?.id : undefined);
+  const chatUnread = useChatUnread(chatScope, user?.role === 'SHOP' || user?.role === 'SHOP_STAFF' ? user?.id : undefined);
   const navItems = isAdmin
     ? adminNavItems
-    : [...managerNavItems.map(item => item.path === '/shop-admin/orders' ? { ...item, badge: queueCount }
+    : [...managerNavItems.filter(item => user?.role !== 'SHOP_STAFF' || staffNavPaths.includes(item.path)).map(item => item.path === '/shop-admin/orders' ? { ...item, badge: queueCount }
          : item.path === '/shop-admin/chat' ? { ...item, badge: chatUnread } : item),
        ...(user?.role === 'SHOP_STAFF' || user?.role === 'SHOP' ? [{ name: 'Đơn hủy cần hoàn tiền', path: '/shop-admin/refunds', icon: <ListIcon fontSize={24} /> } as NavItem] : [])];
 
   useEffect(() => {
     if (location.pathname.startsWith('/shop-admin')) {
       let active = true;
-      managerShopService.list("SHOP").then(shops => {
+      managerShopService.list(user?.role === "SHOP_STAFF" ? "SHOP_STAFF" : "SHOP").then(shops => {
         if (active && shops.length > 0) {
           setManagerShopId(shops[0].id);
           managerOrderService.getQueueCount(shops[0].id).then(res => {
@@ -101,7 +107,7 @@ const AppSidebar: React.FC = () => {
       }).catch(() => {});
       return () => { active = false; };
     }
-  }, [location.pathname]);
+  }, [location.pathname, user?.role]);
 
   // Auto-close sidebar on mobile after route change
   useEffect(() => {

@@ -7,8 +7,8 @@ import Button from '../components/ui/button/Button'
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '../components/ui/table'
 import ComponentCard from '../components/common/ComponentCard'
 
-const statusLabels = { REQUESTED: 'Chờ liên hệ', APPROVED: 'Đã liên hệ', PROCESSED: 'Đã hoàn tiền', REJECTED: 'Từ chối' }
-const statusColors = { REQUESTED: 'warning', APPROVED: 'info', PROCESSED: 'success', REJECTED: 'error' }
+const statusLabels = { REQUESTED: 'Chờ liên hệ', APPROVED: 'Đã liên hệ', PROCESSED: 'Đã hoàn tiền', REJECTED: 'Từ chối', CANCELLED: 'Khách đã hủy' }
+const statusColors = { REQUESTED: 'warning', APPROVED: 'info', PROCESSED: 'success', REJECTED: 'error', CANCELLED: 'light' }
 
 /**
  * Trang chủ shop và Staff: đơn đã hủy cần hoàn tiền. Người xử lý gọi khách theo SĐT rồi đánh dấu tiến độ:
@@ -19,6 +19,7 @@ export default function StaffRefundsView({ role = 'SHOP_STAFF' }) {
     const [refunds, setRefunds] = useState(null)
     const [busy, setBusy] = useState(false)
     const [error, setError] = useState('')
+    const [notes, setNotes] = useState({})
 
     // Shop của chủ shop hoặc shop staff đang làm: lấy shop đầu tiên
     useEffect(() => {
@@ -36,7 +37,7 @@ export default function StaffRefundsView({ role = 'SHOP_STAFF' }) {
     const setStatus = async (id, status) => {
         setBusy(true); setError('')
         try {
-            const updated = await staffRefundService.setStatus(shop.id, id, status, role)
+            const updated = await staffRefundService.setStatus(shop.id, id, status, role, notes[id])
             setRefunds(list => list.map(r => r.id === id ? updated : r))
         } catch (e) { setError(e.message) } finally { setBusy(false) }
     }
@@ -60,12 +61,22 @@ export default function StaffRefundsView({ role = 'SHOP_STAFF' }) {
                 <TableCell>{r.customerName || '-'}<br />{r.customerPhone ? <a className="text-brand-500" href={`tel:${r.customerPhone}`}>📞 {r.customerPhone}</a> : '-'}</TableCell>
                 <TableCell>{r.recipientName || '-'}<br />{r.recipientPhone && <a className="text-brand-500" href={`tel:${r.recipientPhone}`}>📞 {r.recipientPhone}</a>}</TableCell>
                 <TableCell>{formatPrice(r.amount)}</TableCell>
-                <TableCell className="text-sm text-gray-500">{r.reason}<br />{new Date(r.createdDate).toLocaleString('vi-VN')}</TableCell>
+                <TableCell className="text-sm text-gray-500">
+                    <span className="font-medium text-gray-700 dark:text-gray-300">{r.reason}</span>
+                    {r.description && <p className="whitespace-pre-wrap">{r.description}</p>}
+                    {r.images?.length > 0 && <p className="space-x-2">{r.images.map((url, i) => <a key={url} className="text-brand-500 underline" href={url} target="_blank" rel="noreferrer">Ảnh {i + 1}</a>)}</p>}
+                    {r.shopResponse && <p>Phản hồi: {r.shopResponse}</p>}
+                    {new Date(r.createdDate).toLocaleString('vi-VN')}
+                </TableCell>
                 <TableCell><Badge color={statusColors[r.status]}>{statusLabels[r.status] || r.status}</Badge></TableCell>
                 <TableCell className="text-right space-x-2">
                     {r.status === 'REQUESTED' && <Button size="sm" onClick={() => setStatus(r.id, 'APPROVED')} disabled={busy}>Đã liên hệ</Button>}
                     {r.status === 'APPROVED' && <Button size="sm" onClick={() => setStatus(r.id, 'PROCESSED')} disabled={busy}>Đã hoàn tiền</Button>}
-                    {(r.status === 'REQUESTED' || r.status === 'APPROVED') && <Button size="sm" variant="outline" onClick={() => setStatus(r.id, 'REJECTED')} disabled={busy}>Từ chối</Button>}
+                    {(r.status === 'REQUESTED' || r.status === 'APPROVED') && <>
+                        <input aria-label="Phản hồi cho khách khi từ chối" className="mt-2 w-48 rounded-lg border border-gray-300 px-2 py-1 text-sm dark:border-white/10 dark:bg-gray-800" maxLength={1000}
+                            placeholder="Lý do từ chối" value={notes[r.id] || ''} onChange={e => setNotes(n => ({ ...n, [r.id]: e.target.value }))} />
+                        <Button size="sm" variant="outline" onClick={() => setStatus(r.id, 'REJECTED')} disabled={busy || !notes[r.id]?.trim()}>Từ chối</Button>
+                    </>}
                 </TableCell>
             </TableRow>)}</TableBody></Table>
         </div>}

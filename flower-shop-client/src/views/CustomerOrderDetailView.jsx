@@ -20,8 +20,68 @@ const refundStatusLabels = {
     APPROVED: 'Cửa hàng đã liên hệ, đang hoàn tiền',
     PROCESSED: 'Đã hoàn tiền',
     REJECTED: 'Bị từ chối',
+    CANCELLED: 'Bạn đã hủy yêu cầu',
 }
-const refundStatusColors = { REQUESTED: 'warning', APPROVED: 'info', PROCESSED: 'success', REJECTED: 'error' }
+const refundStatusColors = { REQUESTED: 'warning', APPROVED: 'info', PROCESSED: 'success', REJECTED: 'error', CANCELLED: 'light' }
+const REFUND_REASONS = ['Đổi ý', 'Sai sản phẩm', 'Hoa bị dập, héo', 'Giao hàng trễ', 'Khác']
+const NEEDS_EVIDENCE = ['Sai sản phẩm', 'Hoa bị dập, héo']
+
+/** SRS 5.2: form khách gửi yêu cầu hoàn tiền (lý do, mô tả, tối đa 5 ảnh bằng chứng, mỗi ảnh ≤ 5 MB). */
+function RefundRequestForm({ orderId, amount, onDone }) {
+    const [reason, setReason] = useState(REFUND_REASONS[0])
+    const [description, setDescription] = useState('')
+    const [images, setImages] = useState([])
+    const [busy, setBusy] = useState(false)
+    const [error, setError] = useState('')
+    const upload = async files => {
+        const list = [...files].slice(0, 5 - images.length)
+        if (list.some(f => f.size > 5 * 1024 * 1024)) { setError('Mỗi ảnh tối đa 5 MB.'); return }
+        setBusy(true); setError('')
+        try {
+            const urls = []
+            for (const f of list) urls.push((await customerOrderService.uploadRefundImage(orderId, f)).url)
+            setImages(current => [...current, ...urls])
+        } catch (e) { setError(e.message || 'Không tải được ảnh.') } finally { setBusy(false) }
+    }
+    const submit = async e => {
+        e.preventDefault()
+        setBusy(true); setError('')
+        try { await customerOrderService.requestRefund(orderId, { reason, description, images }); onDone() }
+        catch (err) { setError(err.message || 'Không gửi được yêu cầu.'); setBusy(false) }
+    }
+    const needsImages = NEEDS_EVIDENCE.includes(reason)
+    return <form onSubmit={submit} className="mt-6 space-y-3 rounded-lg border border-gray-200 p-4 text-sm dark:border-white/10" aria-label="Yêu cầu hoàn tiền">
+        <h2 className="font-semibold">Yêu cầu hoàn tiền</h2>
+        <p className="text-gray-500">Số tiền dự kiến hoàn: <strong>{formatPrice(amount)}</strong> (cửa hàng xác nhận số tiền cuối cùng).</p>
+        <label className="block">Lý do
+            <select className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 dark:border-white/10 dark:bg-gray-800" value={reason} onChange={e => setReason(e.target.value)} disabled={busy}>
+                {REFUND_REASONS.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+        </label>
+        <label className="block">Mô tả{reason === 'Khác' ? ' (bắt buộc)' : ''}
+            <textarea className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 dark:border-white/10 dark:bg-gray-800" rows={3} maxLength={1000}
+                required={reason === 'Khác'} value={description} onChange={e => setDescription(e.target.value)} disabled={busy} />
+        </label>
+        <div>
+            <label className="block">Ảnh bằng chứng{needsImages ? ' (bắt buộc)' : ''}, tối đa 5 ảnh JPG/PNG
+                <input type="file" accept="image/jpeg,image/png" multiple className="mt-1 block" disabled={busy || images.length >= 5}
+                    onChange={e => { upload(e.target.files); e.target.value = '' }} />
+            </label>
+            {images.length > 0 && <div className="mt-2 flex flex-wrap gap-2">{images.map(url => <span key={url} className="relative">
+                <img src={url} alt="Ảnh bằng chứng" className="h-16 w-16 rounded object-cover" />
+                <button type="button" aria-label="Bỏ ảnh này" className="absolute -right-2 -top-2 rounded-full bg-white px-1 text-xs shadow" onClick={() => setImages(list => list.filter(x => x !== url))}>✕</button>
+            </span>)}</div>}
+        </div>
+        {error && <p role="alert" className="text-error-500">{error}</p>}
+        <button type="submit" className="rounded-lg bg-brand-500 px-4 py-2 font-medium text-white disabled:opacity-50" disabled={busy || (needsImages && images.length === 0)}>
+            {busy ? 'Đang gửi…' : 'Gửi yêu cầu hoàn tiền'}
+        </button>
+    </form>
+}
+
+/** Còn được hoàn = đã trả thành công − đã hoàn (server tính lại khi gửi yêu cầu). */
+const refundableAmount = order => paidAmount(order) - (order.refunds || [])
+    .filter(r => r.status === 'PROCESSED').reduce((sum, r) => sum + Number(r.amount || 0), 0)
 
 /** Tổng đã trả thành công (cọc + phần còn lại, hoặc toàn bộ); dùng để biết đơn đã có hóa đơn chưa. */
 const paidAmount = order => (order.payments || [])
@@ -74,6 +134,8 @@ export default function CustomerOrderDetailView() {
     const [cancelReason, setCancelReason] = useState('')
     const [cancelBusy, setCancelBusy] = useState(false)
     const [cancelError, setCancelError] = useState('')
+    const [reloadKey, setReloadKey] = useState(0)
+    const [refundError, setRefundError] = useState('')
 
     // Tải chi tiết đơn (customerOrderService.detail), rồi hỏi lại phí GHN hiện tại (customerOrderService.shippingFee)
     useEffect(() => {
@@ -94,7 +156,7 @@ export default function CustomerOrderDetailView() {
             .catch(e => { if (active) setError(e.message) })
             .finally(() => { if (active) setBusy(false) })
         return () => { active = false }
-    }, [user, id])
+    }, [user, id, reloadKey])
 
     // Cập nhật trạng thái giao hàng: customerOrderService.refreshTracking -> POST /api/customer/orders/{id}/refresh-tracking -> GHN
     const refreshTracking = async () => {
@@ -260,6 +322,11 @@ export default function CustomerOrderDetailView() {
                                         <Badge color={refundStatusColors[r.status] || 'primary'}>{refundStatusLabels[r.status] || r.status}</Badge>
                                     </div>
                                     {r.reason && <p className="mt-1 text-gray-600 dark:text-gray-300">{r.reason}</p>}
+                                    {r.description && <p className="mt-1 whitespace-pre-wrap text-gray-600 dark:text-gray-300">{r.description}</p>}
+                                    {r.images?.length > 0 && <div className="mt-2 flex flex-wrap gap-2">{r.images.map(url => <a key={url} href={url} target="_blank" rel="noreferrer"><img src={url} alt="Ảnh bằng chứng" className="h-14 w-14 rounded object-cover" /></a>)}</div>}
+                                    {r.status === 'REJECTED' && r.shopResponse && <p className="mt-1 text-error-500">Phản hồi của cửa hàng: {r.shopResponse}</p>}
+                                    {r.status === 'REQUESTED' && r.id && <button type="button" className="mt-1 text-xs text-error-500 underline"
+                                        onClick={() => customerOrderService.cancelRefund(order.id, r.id).then(() => setReloadKey(k => k + 1)).catch(e => setRefundError(e.message))}>Hủy yêu cầu</button>}
                                     <p className="mt-1 text-xs text-gray-500">
                                         Tạo lúc {new Date(r.createdDate).toLocaleString('vi-VN')}
                                         {r.status !== 'REQUESTED' && r.updatedDate && ` · Cập nhật ${new Date(r.updatedDate).toLocaleString('vi-VN')}`}
@@ -267,9 +334,15 @@ export default function CustomerOrderDetailView() {
                                 </li>
                             ))}
                         </ul>
+                        {refundError && <p role="alert" className="mt-2 text-sm text-error-500">{refundError}</p>}
                         <p className="mt-3 text-xs text-gray-500">Nhân viên cửa hàng sẽ gọi cho bạn để hoàn tiền. Bạn sẽ nhận thông báo khi tiền đã được hoàn.</p>
                     </section>
                 )}
+
+                {['COMPLETED', 'CANCELLED', 'REFUNDED'].includes(order.status)
+                    && !(order.refunds || []).some(r => r.status === 'REQUESTED' || r.status === 'APPROVED')
+                    && refundableAmount(order) > 0
+                    && <RefundRequestForm key={reloadKey} orderId={order.id} amount={refundableAmount(order)} onDone={() => setReloadKey(k => k + 1)} />}
 
                 {order.delivery && <div className="mt-4 p-3 rounded-lg bg-gray-50 dark:bg-white/5 text-sm">
                     <p><strong>Vận đơn:</strong> {order.delivery.trackingCode}</p>

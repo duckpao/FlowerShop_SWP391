@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.*;
  */
 @RestController
 @RequestMapping("/api/shop/mine/{shopId}/orders")
-@PreAuthorize("hasRole('SHOP')")
+@PreAuthorize("hasAnyRole('SHOP', 'SHOP_STAFF')")
 @SecurityRequirement(name = "bearerAuth")
 @Tag(name = "Shop quản lý và xử lý đơn hàng", description = "Chủ shop xem, xác nhận, hủy đơn và tạo/theo dõi vận đơn GHN")
 public class ManagerOrderController {

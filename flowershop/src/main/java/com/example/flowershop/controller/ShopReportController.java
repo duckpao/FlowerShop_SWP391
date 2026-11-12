@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/shop/mine/{shopId}/reports")
-@PreAuthorize("hasRole('SHOP')")
+@PreAuthorize("hasAnyRole('SHOP', 'SHOP_STAFF')")
 @SecurityRequirement(name = "bearerAuth")
 public class ShopReportController {
     private final ShopReportService reports;

@@ -11,6 +11,6 @@ export const staffRefundService = {
     // GET .../{shopId}/refunds: danh sách yêu cầu hoàn tiền của shop, mới nhất trước
     list: (shopId, role) => authService.authenticatedRequest(base(shopId, role)),
 
-    // POST .../{id}/status: APPROVED (đã liên hệ) | PROCESSED (đã hoàn tiền) | REJECTED (từ chối)
-    setStatus: (shopId, id, status, role) => authService.authenticatedRequest(`${base(shopId, role)}/${encodeURIComponent(id)}/status`, { method: 'POST', body: { status } }),
+    // POST .../{id}/status: APPROVED (đã liên hệ) | PROCESSED (đã hoàn tiền) | REJECTED (từ chối, kèm note phản hồi khách)
+    setStatus: (shopId, id, status, role, note) => authService.authenticatedRequest(`${base(shopId, role)}/${encodeURIComponent(id)}/status`, { method: 'POST', body: { status, note } }),
 }

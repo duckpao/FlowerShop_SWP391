@@ -63,6 +63,10 @@ public class OrderRepository extends HibernateRepository<Order> {
         return countWhere("e.shop.id = :shopId and e.status in :statuses", Map.of("shopId", shopId, "statuses", statuses));
     }
 
+    public Page<Order> findByStatus(OrderStatus status, Pageable pageable) {
+        return page("e.status = :status", Map.of("status", status), pageable);
+    }
+
     public Page<Order> findByShopId(String shopId, Pageable pageable) {
         return page("e.shop.id = :shopId", Map.of("shopId", shopId), pageable);
     }

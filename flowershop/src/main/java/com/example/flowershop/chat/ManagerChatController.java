@@ -17,10 +17,10 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
-/** Chat phía chủ shop: /api/shop/mine/{shopId}/chat. ChatService kiểm tra người gọi là chủ shop của phiên. */
+/** Chat phía shop: /api/shop/mine/{shopId}/chat. ChatService kiểm tra người gọi là chủ hoặc staff của shop. */
 @RestController
 @RequestMapping("/api/shop/mine/{shopId}/chat")
-@PreAuthorize("hasRole('SHOP')")
+@PreAuthorize("hasAnyRole('SHOP', 'SHOP_STAFF')")
 @SecurityRequirement(name = "bearerAuth")
 public class ManagerChatController {
 

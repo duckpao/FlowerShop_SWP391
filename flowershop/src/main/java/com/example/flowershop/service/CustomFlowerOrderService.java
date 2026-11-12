@@ -154,7 +154,8 @@ public class CustomFlowerOrderService {
             filters.add(cb.equal(root.get("status"),ProductStatus.ACTIVE));filters.add(cb.isFalse(root.get("adminHidden")));
             filters.add(cb.equal(root.join("shop").get("status"),ShopStatus.ACTIVE));
             filters.add(cb.greaterThan(root.get("price"),BigDecimal.ZERO));
-            if(budget!=null)filters.add(cb.le(cb.prod(root.<BigDecimal>get("price"),BigDecimal.valueOf(quantity)),budget));
+            // SRS 3.3 Budget Constraint: cho phép lệch +5% so với ngân sách
+            if(budget!=null)filters.add(cb.le(cb.prod(root.<BigDecimal>get("price"),BigDecimal.valueOf(quantity)),budget.multiply(new BigDecimal("1.05"))));
             filters.add(cb.greaterThanOrEqualTo(root.get("stock"),quantity));
             if(shopId!=null&&!shopId.isBlank())filters.add(cb.equal(root.get("shop").get("id"),shopId));
             if(!term.isEmpty())filters.add(cb.like(cb.lower(root.get("name")),"%"+term+"%",'!'));
