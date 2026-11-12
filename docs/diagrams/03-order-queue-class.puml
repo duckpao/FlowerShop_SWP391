@@ -1,0 +1,56 @@
+@startuml
+!pragma layout smetana
+title Order Queue - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+}
+hide empty members
+hide circle
+
+class ManagerOrderController <<Controller>> {
+  queueCount(shopId, user)
+  list(shopId, user, page, status)
+}
+class ManagerOrderService <<Service>> {
+  queueCount(shopId, actor): QueueCount
+  list(shopId, actor, page, status): Results
+}
+class QueueCount <<Service>> {
+  pendingCount
+}
+interface OrderRepository <<Repository>> {
+  countByShopIdAndStatusIn(shopId, statuses)
+  findByShopIdAndStatus(shopId, status, pageable)
+}
+class Order <<Entity>> {
+  id
+  totalAmount
+  status
+  createdDate
+}
+enum OrderStatus {
+  PENDING
+  AWAITING_DEPOSIT
+}
+
+ManagerOrderController --> ManagerOrderService
+ManagerOrderService --> OrderRepository
+ManagerOrderService ..> QueueCount : returns
+OrderRepository ..> Order
+Order --> OrderStatus
+
+@enduml

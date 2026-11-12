@@ -1,0 +1,83 @@
+@startuml
+!pragma layout smetana
+title Update Order Status - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+}
+hide empty members
+hide circle
+
+class ManagerOrderController <<Controller>> {
+  confirm(shopId, id, user)
+  setStatus(shopId, id, user, body)
+  cancel(shopId, id, user, body)
+}
+class ManagerOrderService <<Service>> {
+  confirm(shopId, actor, orderId)
+  changeStatus(shopId, actor, orderId, target): StatusResult
+  cancel(shopId, actor, orderId, reason)
+}
+class OrderStatusListener <<Service>> {
+  remember(order)
+  publishIfChanged(order)
+}
+class OrderStatusChangedEvent <<Service>> {
+  orderId
+  from
+  to
+}
+class OrderMailSender <<Service>> {
+  onStatusChanged(event)
+}
+interface OrderRepository <<Repository>>
+interface DeliveryRepository <<Repository>>
+interface PaymentRepository <<Repository>>
+class Order <<Entity>> {
+  id
+  status
+  statusSnapshot
+  cancelReason
+}
+class Delivery <<Entity>> {
+  ghnStatus
+  status
+}
+class Payment <<Entity>> {
+  status
+}
+enum OrderStatus {
+  PENDING
+  PROCESSING
+  DELIVERING
+  COMPLETED
+  CANCELLED
+  REFUNDED
+}
+
+ManagerOrderController --> ManagerOrderService
+ManagerOrderService --> OrderRepository
+ManagerOrderService --> DeliveryRepository
+ManagerOrderService --> PaymentRepository
+OrderRepository ..> Order
+DeliveryRepository ..> Delivery
+PaymentRepository ..> Payment
+Order --> OrderStatus
+Order ..> OrderStatusListener : @EntityListeners
+OrderStatusListener ..> OrderStatusChangedEvent : publishes
+OrderMailSender ..> OrderStatusChangedEvent : listens AFTER_COMMIT
+
+@enduml

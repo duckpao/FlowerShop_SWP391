@@ -87,6 +87,8 @@ export default function CategoryMenu() {
         ['/shops', 'Cửa hàng'],
         ...(!user || user.role === 'CUSTOMER' ? [['/custom-orders/new', 'Đặt hoa theo yêu cầu']] : []),
         ['/floral-care', 'Cẩm nang chăm hoa'],
+        // Lịch sử đơn hàng + theo dõi giao hàng GHN: trước chỉ có trong menu tài khoản nên khách khó tìm
+        ...(user?.role === 'CUSTOMER' ? [['/orders', 'Đơn hàng của tôi']] : []),
     ]
 
     return <nav aria-label="Điều hướng cửa hàng" onMouseLeave={scheduleClose} onMouseEnter={cancelClose}

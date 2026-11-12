@@ -1,0 +1,81 @@
+@startuml
+!pragma layout smetana
+title Notify User Confirmation via Email - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+}
+hide empty members
+hide circle
+
+class OrderService <<Service>> {
+  makeOrders(userId, request)
+}
+class OrderPlacedEvent <<Service>> {
+  orderIds
+}
+class ManagerOrderService <<Service>> {
+  confirm(shopId, actor, orderId)
+}
+class OrderStatusListener <<Service>> {
+  publishIfChanged(order)
+}
+class OrderStatusChangedEvent <<Service>> {
+  orderId
+  from
+  to
+}
+class OrderMailSender <<Service>> {
+  onPlaced(event) @Async
+  onStatusChanged(event) @Async
+  -buildReceipt(orderIds)
+  -buildStatusMail(event)
+  -canMail(customer)
+}
+class HtmlMailSender <<Service>> {
+  send(to, subject, html): boolean
+  url(path)
+  layout(heading, body, label, url)
+}
+interface OrderRepository <<Repository>>
+interface OrderDetailRepository <<Repository>>
+interface PaymentRepository <<Repository>>
+class Order <<Entity>> {
+  id
+  status
+  totalAmount
+}
+class User <<Entity>> {
+  email
+  fullName
+  isEmailVerified
+}
+class "SMTP server" as SMTP <<External>>
+
+OrderService ..> OrderPlacedEvent : publishes
+ManagerOrderService --> Order : status PROCESSING
+Order ..> OrderStatusListener : @EntityListeners
+OrderStatusListener ..> OrderStatusChangedEvent : publishes
+OrderMailSender ..> OrderPlacedEvent : listens AFTER_COMMIT
+OrderMailSender ..> OrderStatusChangedEvent : listens AFTER_COMMIT
+OrderMailSender --> OrderRepository
+OrderMailSender --> OrderDetailRepository
+OrderMailSender --> PaymentRepository
+OrderMailSender --> HtmlMailSender
+HtmlMailSender --> SMTP
+Order "*" --> "1" User : customer
+
+@enduml

@@ -1,0 +1,91 @@
+@startuml
+!pragma layout smetana
+title View Order Details - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+}
+hide empty members
+hide circle
+
+class ManagerOrderController <<Controller>> {
+  detail(shopId, id, user)
+}
+class ManagerOrderService <<Service>> {
+  detail(shopId, actor, orderId): OrderDetailResponse
+  -buildDetail(order)
+  -owned(shopId, actor)
+}
+class OrderDetailResponse <<Service>> {
+  id
+  customerName
+  customerPhone
+  recipientName
+  toAddress
+  fromAddress
+  items
+  delivery
+  payment
+}
+class OrderItemResponse <<Service>> {
+  productId
+  productName
+  price
+  quantity
+}
+class DeliveryInfo <<Service>> {
+  trackingCode
+  deliveryPartnerId
+  status
+  ghnStatus
+}
+class PaymentInfo <<Service>> {
+  method
+  status
+  amount
+}
+interface OrderRepository <<Repository>>
+interface OrderDetailRepository <<Repository>>
+interface DeliveryRepository <<Repository>>
+interface PaymentRepository <<Repository>>
+interface AddressRepository <<Repository>>
+class Order <<Entity>>
+class OrderDetail <<Entity>> {
+  price
+  quantity
+}
+class Delivery <<Entity>>
+class Payment <<Entity>>
+class Address <<Entity>>
+class Product <<Entity>>
+
+ManagerOrderController --> ManagerOrderService
+ManagerOrderService --> OrderRepository
+ManagerOrderService --> OrderDetailRepository
+ManagerOrderService --> DeliveryRepository
+ManagerOrderService --> PaymentRepository
+ManagerOrderService --> AddressRepository
+ManagerOrderService ..> OrderDetailResponse : builds
+OrderDetailResponse *-- OrderItemResponse
+OrderDetailResponse *-- DeliveryInfo
+OrderDetailResponse *-- PaymentInfo
+OrderDetail "*" --> "1" Order
+OrderDetail "*" --> "0..1" Product
+Delivery "0..1" --> "1" Order
+Payment "*" --> "1" Order
+Order "*" --> "0..1" Address : deliveryAddress
+
+@enduml

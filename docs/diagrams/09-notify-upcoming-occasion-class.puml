@@ -1,0 +1,82 @@
+@startuml
+!pragma layout smetana
+title Notify Upcoming Occasion via Email - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+}
+hide empty members
+hide circle
+
+class OccasionReminderJob <<Service>> {
+  @Scheduled every 15 minutes
+  run()
+}
+class OccasionReminderService <<Service>> {
+  sendDueReminders(now): int
+  -remind(occasion, today): boolean
+  -html(occasion, customer, when)
+}
+class OccasionSchedule <<Service>> {
+  {static} isDue(occasion, now)
+  {static} nextOccurrence(occasion, today)
+}
+class HtmlMailSender <<Service>> {
+  send(to, subject, html): boolean
+}
+class NotificationService <<Service>> {
+  notifyUser(user, title, message, link)
+}
+interface CustomerOccasionRepository <<Repository>> {
+  findReminderCandidates(today)
+}
+interface NotificationRepository <<Repository>>
+class CustomerOccasion <<Entity>> {
+  id
+  title
+  occasionDate
+  recurringYearly
+  notifyDaysBefore
+  notifyTime
+  reminderSent
+  lastRemindedFor
+}
+class User <<Entity>> {
+  email
+  fullName
+  isEmailVerified
+}
+class Notification <<Entity>> {
+  title
+  message
+  link
+  isRead
+}
+class "SMTP server" as SMTP <<External>>
+
+OccasionReminderJob --> OccasionReminderService
+OccasionReminderService --> CustomerOccasionRepository
+OccasionReminderService --> OccasionSchedule
+OccasionReminderService --> HtmlMailSender
+OccasionReminderService --> NotificationService
+NotificationService --> NotificationRepository
+HtmlMailSender --> SMTP
+CustomerOccasionRepository ..> CustomerOccasion
+NotificationRepository ..> Notification
+CustomerOccasion "*" --> "1" User : customer
+Notification "*" --> "1" User
+
+@enduml
