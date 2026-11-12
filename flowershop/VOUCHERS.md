@@ -22,7 +22,7 @@ Dữ liệu mẫu cho shop: chạy `sql/025_seed_shop_vouchers.sql` để bổ s
 
 ## Quy tắc tính
 
-- Hỗ trợ phần trăm (>0 đến 100%) hoặc số tiền cố định. Mỗi mã có ngày bắt đầu/kết thúc (giờ Việt Nam), đơn tối thiểu, lượt dùng tối đa, trạng thái và trần giảm nguyên đồng từ 20.000–70.000đ. Trần là giới hạn giảm, không phải mức giảm tối thiểu; ví dụ mã 1% của đơn 100.000đ giảm 1.000đ.
+- Hỗ trợ phần trăm (>0 đến 100%) hoặc số tiền cố định. Mỗi mã có ngày bắt đầu/kết thúc (giờ Việt Nam), đơn tối thiểu, lượt dùng tối đa, trạng thái và trần giảm nguyên đồng lớn hơn 0, tối đa 100.000đ. Trần là giới hạn giảm, không phải mức giảm tối thiểu; ví dụ mã 1% của đơn 100.000đ giảm 1.000đ.
 - Mã ORDER giảm trên tổng tiền hàng. Mã PRODUCT chỉ giảm trên các dòng của sản phẩm chỉ định, chiếm cùng ô mã tiền hàng. Mã SHIPPING giảm trên phí GHN; không giảm quá phí thực tế. Đơn hoa riêng được báo giá theo thiết kế, không coi mẫu tham khảo là sản phẩm đã mua để áp mã PRODUCT.
 - Mỗi đơn tối đa 1 mã tiền hàng/sản phẩm + 1 mã ship. Khi dùng mã ship, mã tiền hàng chỉ hợp lệ nếu số tiền giảm thực tế bằng mức thấp nhất trong các mã tiền hàng đang đủ điều kiện của đơn đó. Các mã đồng hạng thấp nhất đều dùng được. Loại trừ mã hết hạn, chưa bắt đầu, hết lượt, sai shop/sản phẩm, chưa đạt đơn tối thiểu, bị ngừng/xóa khỏi phép tìm mức thấp nhất.
 - Các mã tiền hàng khác vẫn xuất hiện, bị Disable và hiển thị chính xác `mã voucher không phù hợp`. Backend cũng từ chối tổ hợp này, kể cả gọi API trực tiếp.

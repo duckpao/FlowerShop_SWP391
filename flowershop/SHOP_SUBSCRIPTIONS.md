@@ -1,5 +1,7 @@
 # Gói đăng ký Free / Pro của shop
 
+> Quy tắc giới hạn trong tài liệu cũ dưới đây đã được thay thế bởi [CONFIGURABLE_PRO_PLANS.md](CONFIGURABLE_PRO_PLANS.md): Free tối đa 5 sản phẩm hiện có; Pro theo từng gói do admin cấu hình, không tính lượt theo tháng.
+
 Shop mở **Gói đăng ký Pro** tại `/shop-admin/subscription` để mua, gia hạn và chọn sản phẩm nổi bật.
 
 | Gói | Giá VND | Lượt tạo sản phẩm | Sản phẩm nổi bật đồng thời |

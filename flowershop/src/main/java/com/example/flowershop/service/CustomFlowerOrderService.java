@@ -21,6 +21,7 @@ import java.util.*;
 @Service
 @Transactional(readOnly=true)
 public class CustomFlowerOrderService {
+    @org.springframework.beans.factory.annotation.Autowired private ProductQuotaService quota;
     public record Preferences(@Size(max=200) String flowers, @Size(max=100) String colors,
             @Size(max=100) String occasion, @Size(max=200) String wrapping,
             @Size(max=10) String deliveryDate, @Size(max=36) String referenceProductId) {}
@@ -157,7 +158,7 @@ public class CustomFlowerOrderService {
             if(!term.isEmpty())filters.add(cb.like(cb.lower(root.get("name")),"%"+term+"%",'!'));
             return cb.and(filters.toArray(Predicate[]::new));
         };
-        var found=products.findAll(spec,PageRequest.of(page,12,Sort.by(Sort.Order.desc("price"),Sort.Order.asc("id"))));
+        var found=products.findAll(spec.and(quota.allowedSpecification()),PageRequest.of(page,12,Sort.by(Sort.Order.desc("price"),Sort.Order.asc("id"))));
         var content=cards.cards(found.getContent()).stream().map(p->{var total=p.price().multiply(BigDecimal.valueOf(quantity));return new Suggestion(p,total,budget.subtract(total));}).toList();
         return new Suggestions(content,page,found.getTotalPages(),found.getTotalElements(),budget,quantity);
     }

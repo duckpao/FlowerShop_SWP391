@@ -8,14 +8,14 @@ import java.util.*;
 public class SePaySignatureUtil {
 
     private static final List<String> SIGNED_FIELD_ORDER = List.of(
-            "merchant",
-            "operation",
-            "payment_method",
             "order_amount",
+            "merchant",
             "currency",
-            "order_invoice_number",
+            "operation",
             "order_description",
+            "order_invoice_number",
             "customer_id",
+            "payment_method",
             "success_url",
             "error_url",
             "cancel_url"
@@ -30,7 +30,7 @@ public class SePaySignatureUtil {
             List<String> signedPairs = new ArrayList<>();
             for (String fieldName : SIGNED_FIELD_ORDER) {
                 String value = fields.get(fieldName);
-                if (value != null && !value.isBlank()) {
+                if (value != null && !value.isEmpty() && !"0".equals(value)) {
                     signedPairs.add(fieldName + "=" + value);
                 }
             }

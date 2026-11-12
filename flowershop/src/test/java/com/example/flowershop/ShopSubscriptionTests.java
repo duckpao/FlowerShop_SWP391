@@ -49,6 +49,12 @@ class ShopSubscriptionTests {
     @Autowired UserRepository users;
     @Autowired ProductRepository products;
     @Autowired CategoryRepository categories;
+    @Autowired ProductQuotaService quota;
+    @Autowired CatalogService catalog;
+    @Autowired CartService cartService;
+    @Autowired CustomerOrderService customerOrders;
+    @Autowired OrderService cartOrders;
+    @Autowired CartItemRepository cartItems;
     @Autowired PlatformTransactionManager transactionManager;
     @Autowired MockMvc mvc;
     TransactionTemplate tx;
@@ -67,8 +73,9 @@ class ShopSubscriptionTests {
         when(mail.url(anyString())).thenAnswer(call->"http://localhost"+call.getArgument(0));
         tx.executeWithoutResult(t->{
             int[] months={0,1,3,6,12}; int[] prices={0,59000,149000,298000,596000}; String[] codes={"FREE","PRO1","PRO3","PRO6","PRO12"};
+            Integer[] limits={5,15,25,40,null};int[] featuredLimits={0,3,5,8,15};
             for(int i=0;i<months.length;i++) plans.saveAndFlush(ShopPlan.builder().id(codes[i]).name(codes[i]).durationMonths(months[i])
-                    .price(BigDecimal.valueOf(prices[i])).monthlyProductLimit(i==0?5:null).featuredLimit(i==0?0:10).enabled(true).build());
+                    .price(BigDecimal.valueOf(prices[i])).productLimit(limits[i]).featuredLimit(featuredLimits[i]).enabled(true).build());
             owner=users.saveAndFlush(User.builder().id(id()).email(id()+"@test.example").fullName("Owner").role(UserRole.SHOP).status(UserStatus.ACTIVE).isEmailVerified(true).build());
             admin=users.saveAndFlush(User.builder().id(id()).email(id()+"@test.example").fullName("Admin").role(UserRole.ADMIN).status(UserStatus.ACTIVE).isEmailVerified(true).build());
             customer=users.saveAndFlush(User.builder().id(id()).email(id()+"@test.example").role(UserRole.CUSTOMER).status(UserStatus.ACTIVE).isEmailVerified(true).build());
@@ -87,14 +94,116 @@ class ShopSubscriptionTests {
         when(gateway.capturedSubscriptionInvoice(invoice)).thenReturn(Optional.of(new SePayGatewayService.CapturedInvoice(invoice,amount,"TX-"+invoice)));
         service.reconcile(invoice);
     }
-    @Test void freeQuotaIsFiveNewProductsPerCalendarMonthAndEditsDoNotConsumeSlots() {
+    @Test void proCheckoutReturnsToFrontendSubscriptionPage() {
+        var invoice=buy("PRO1");
+        verify(gateway).subscriptionCheckout(eq(invoice),any(BigDecimal.class),eq(owner.getId()),
+                eq("http://localhost:5173/shop-admin/subscription"));
+    }
+    @Test void freeQuotaCountsExistingProductsIncludingHiddenAndDoesNotResetMonthly() {
         String product=null; for(int i=0;i<5;i++)product=create();
-        assertThat(service.status(shop.getId(),owner.getId()).createdThisMonth()).isEqualTo(5);
+        assertThat(service.status(shop.getId(),owner.getId()).productCount()).isEqualTo(5);
         assertThatThrownBy(this::create).isInstanceOf(ResponseStatusException.class).hasMessageContaining("5");
         manager.save(shop.getId(),product,owner.getId(),input());
         manager.hide(shop.getId(),product,owner.getId());
         assertThatThrownBy(this::create).isInstanceOf(ResponseStatusException.class);
-        now=now.plusMonths(1).withDayOfMonth(1); assertThat(create()).isNotBlank();
+        now=now.plusMonths(1).withDayOfMonth(1);
+        assertThatThrownBy(this::create).isInstanceOf(ResponseStatusException.class);
+    }
+    @Test void removalFreesQuotaButHidingDoesNotAndDeletedProductsCannotBeRestored() {
+        var ids=new ArrayList<String>();for(int i=0;i<5;i++)ids.add(create());
+        manager.hide(shop.getId(),ids.get(0),owner.getId());
+        assertThatThrownBy(this::create).isInstanceOf(ResponseStatusException.class);
+        manager.remove(shop.getId(),ids.get(0),owner.getId());
+        assertThat(service.status(shop.getId(),owner.getId()).productCount()).isEqualTo(4);
+        assertThat(tx.<Boolean>execute(t->products.findById(ids.get(0)).orElseThrow().isDeleted())).isTrue();
+        assertThatThrownBy(()->manager.unhide(shop.getId(),ids.get(0),owner.getId())).isInstanceOf(ResponseStatusException.class);
+        assertThat(create()).isNotBlank();
+        assertThat(service.status(shop.getId(),owner.getId()).productCount()).isEqualTo(5);
+    }
+    @Test void eachPlanEnforcesItsOwnProductAndFeaturedLimits() {
+        String[] codes={"PRO1","PRO3","PRO6","PRO12"};Integer[] limits={15,25,40,null};int[] slots={3,5,8,15};
+        var ids=new ArrayList<String>();
+        for(int i=0;i<codes.length;i++) {
+            capture(buy(codes[i]));
+            int target=limits[i]==null?45:limits[i];
+            while(ids.size()<target)ids.add(create());
+            if(limits[i]!=null)assertThatThrownBy(this::create).isInstanceOf(ResponseStatusException.class);
+            assertThat(service.status(shop.getId(),owner.getId()).productLimit()).isEqualTo(limits[i]);
+            assertThat(service.status(shop.getId(),owner.getId()).featuredLimit()).isEqualTo(slots[i]);
+            for(int j=0;j<slots[i];j++)service.feature(shop.getId(),owner.getId(),ids.get(j),true);
+            String extra=ids.get(slots[i]);
+            assertThatThrownBy(()->service.feature(shop.getId(),owner.getId(),extra,true)).isInstanceOf(ResponseStatusException.class);
+        }
+        for(var id:ids)service.feature(shop.getId(),owner.getId(),id,false);
+    }
+    @Test void adminCanConfigureCreateDisableAndReenablePlansWithoutChangingPendingInvoice() {
+        String invoice=buy("PRO1");
+        var input=new ShopPlanService.PlanInput("Custom Pro",2,new BigDecimal("89000"),2,1,true);
+        var custom=service.savePlan(admin.getId(),null,input);
+        assertThat(service.plans()).extracting(ShopPlanService.Plan::id).contains(custom.id());
+        assertThatThrownBy(()->service.savePlan(owner.getId(),null,input)).isInstanceOf(ResponseStatusException.class);
+        assertThatThrownBy(()->service.removePlan(admin.getId(),"FREE")).isInstanceOf(ResponseStatusException.class);
+        service.savePlan(admin.getId(),"PRO1",input);
+        capture(invoice);
+        assertThat(service.status(shop.getId(),owner.getId()).expiresAt()).isEqualTo(now.plusMonths(1));
+        assertThat(tx.<BigDecimal>execute(t->payments.invoice(invoice).orElseThrow().getAmount())).isEqualByComparingTo("59000");
+        var first=create();create();
+        assertThatThrownBy(this::create).isInstanceOf(ResponseStatusException.class);
+        service.adminFeature(shop.getId(),admin.getId(),first,true);
+        assertThat(service.adminProducts(shop.getId(),admin.getId())).filteredOn(p->p.id().equals(first)).allSatisfy(p->assertThat(p.featured()).isTrue());
+        service.removePlan(admin.getId(),"PRO1");
+        assertThatThrownBy(()->buy("PRO1")).isInstanceOf(ResponseStatusException.class);
+        assertThat(service.status(shop.getId(),owner.getId()).pro()).isTrue();
+        assertThat(service.plans()).extracting(ShopPlanService.Plan::id).doesNotContain("PRO1");
+        assertThat(service.adminPlans(admin.getId())).filteredOn(p->p.id().equals("PRO1")).allSatisfy(p->assertThat(p.enabled()).isFalse());
+        service.savePlan(admin.getId(),"PRO1",input);
+        assertThat(buy("PRO1")).isNotBlank();
+        service.adminFeature(shop.getId(),admin.getId(),first,false);
+    }
+    @Test void loweringLimitsPreservesProductsAndCapsPublicFeaturedResultsImmediately() {
+        capture(buy("PRO1"));var ids=List.of(create(),create(),create());
+        for(var id:ids)service.feature(shop.getId(),owner.getId(),id,true);
+        service.savePlan(admin.getId(),"PRO1",new ShopPlanService.PlanInput("Small",1,new BigDecimal("59000"),2,1,true));
+        assertThat(service.status(shop.getId(),owner.getId()).productCount()).isEqualTo(3);
+        assertThatThrownBy(this::create).isInstanceOf(ResponseStatusException.class);
+        assertThat(service.featured().stream().filter(p->ids.contains(p.id())).count()).isEqualTo(1);
+        for(var id:ids)service.feature(shop.getId(),owner.getId(),id,false);
+    }
+    @Test void importedProductsAreRestrictedForFreeAndEveryProPlanAndUnlockOnUpgrade() {
+        var ids=new ArrayList<String>();
+        for(int i=0;i<46;i++)ids.add(tx.execute(t->products.saveAndFlush(Product.builder().id(id()).shop(shop).category(category)
+                .name("Imported").price(new BigDecimal("100000")).stock(5).status(ProductStatus.ACTIVE).build()).getId()));
+        assertThat(catalog.browse("",null,shop.getId(),"newest",0,100).totalElements()).isEqualTo(5);
+        assertThat(manager.list(shop.getId(),owner.getId(),0).content()).filteredOn(ManagerProductService.Result::quotaBlocked).hasSize(20);
+        String blocked=ids.get(5);
+        var add=new com.example.flowershop.dto.cart.AddToCartRequest();add.setProductId(blocked);add.setQuantity(1);
+        assertThatThrownBy(()->cartService.addToCart(customer.getId(),add)).isInstanceOf(com.example.flowershop.exception.ApiException.class).hasMessageContaining("giới hạn");
+        assertThatThrownBy(()->customerOrders.checkout(customer.getId(),new CustomerOrderService.CheckoutRequest("unused",blocked,1,"")))
+                .isInstanceOf(com.example.flowershop.exception.ApiException.class).hasMessageContaining("giới hạn");
+        String item=tx.execute(t->cartItems.saveAndFlush(CartItem.builder().id(id()).user(customer)
+                .product(products.findById(blocked).orElseThrow()).quantity(1).build()).getId());
+        var preview=new com.example.flowershop.dto.order.MakeOrderRequest();preview.setShopId(shop.getId());preview.setCartItemIds(List.of(item));
+        assertThatThrownBy(()->cartOrders.previewVouchers(customer.getId(),preview,true))
+                .isInstanceOf(com.example.flowershop.exception.ApiException.class).hasMessageContaining("giới hạn");
+        assertThatThrownBy(()->catalog.detail(blocked)).isInstanceOf(ResponseStatusException.class);
+        assertThat(tx.<Boolean>execute(t->quota.allowed(products.findById(blocked).orElseThrow()))).isFalse();
+        assertThatThrownBy(()->manager.unhide(shop.getId(),blocked,owner.getId())).isInstanceOf(com.example.flowershop.exception.ApiException.class);
+        String[] codes={"PRO1","PRO3","PRO6","PRO12"};int[] limits={15,25,40,46};
+        for(int i=0;i<codes.length;i++) {
+            capture(buy(codes[i]));
+            assertThat(catalog.browse("",null,shop.getId(),"newest",0,100).totalElements()).isEqualTo(limits[i]);
+            if(limits[i]<46) {
+                var over=ids.get(limits[i]);
+                assertThatThrownBy(()->catalog.detail(over)).isInstanceOf(ResponseStatusException.class);
+                assertThatThrownBy(()->service.feature(shop.getId(),owner.getId(),over,true)).isInstanceOf(com.example.flowershop.exception.ApiException.class);
+            }
+        }
+        assertThat(catalog.detail(blocked).id()).isEqualTo(blocked);
+        now=service.status(shop.getId(),owner.getId()).expiresAt();
+        assertThat(catalog.browse("",null,shop.getId(),"newest",0,100).totalElements()).isEqualTo(5);
+        manager.remove(shop.getId(),ids.get(0),owner.getId());
+        assertThat(catalog.detail(blocked).id()).isEqualTo(blocked);
+        assertThat(service.status(shop.getId(),owner.getId()).productCount()).isEqualTo(45);
     }
     @Test void pendingCheckoutDoesNotGrantProAndVerifiedPaymentIsIdempotent() {
         String invoice=buy("PRO1");
@@ -219,14 +328,14 @@ class ShopSubscriptionTests {
         when(gateway.capturedSubscriptionInvoice(other)).thenReturn(Optional.of(new SePayGatewayService.CapturedInvoice("FORGED",new BigDecimal("149000"),"WRONG")));
         service.reconcile(other);assertThat(service.status(shop.getId(),owner.getId()).pro()).isFalse();
     }
-    @Test void proAllowsUnlimitedCreationAndOnlyTenFeaturedProductsAndExpiresImmediately() {
+    @Test void proHasConfiguredFeaturedLimitAndExpiresImmediately() {
         String first=create();
         assertThatThrownBy(()->service.feature(shop.getId(),owner.getId(),first,true)).isInstanceOf(ResponseStatusException.class);
         capture(buy("PRO1"));
         var ids=new ArrayList<String>();ids.add(first);for(int i=0;i<11;i++)ids.add(create());
-        for(int i=0;i<10;i++)service.feature(shop.getId(),owner.getId(),ids.get(i),true);
-        assertThatThrownBy(()->service.feature(shop.getId(),owner.getId(),ids.get(10),true)).isInstanceOf(ResponseStatusException.class);
-        assertThat(service.featured()).hasSize(10);
+        for(int i=0;i<3;i++)service.feature(shop.getId(),owner.getId(),ids.get(i),true);
+        assertThatThrownBy(()->service.feature(shop.getId(),owner.getId(),ids.get(3),true)).isInstanceOf(ResponseStatusException.class);
+        assertThat(service.featured()).hasSize(3);
         service.feature(shop.getId(),owner.getId(),first,false);
         service.feature(shop.getId(),owner.getId(),ids.get(10),true);
         now=service.status(shop.getId(),owner.getId()).expiresAt();
@@ -235,19 +344,18 @@ class ShopSubscriptionTests {
         capture(buy("PRO1"));
         assertThat(service.status(shop.getId(),owner.getId()).featuredProductIds()).isEmpty();
     }
-    @Test void expiredProReturnsToFiveNewProductsPerCalendarMonth() {
+    @Test void expiredProReturnsToFiveExistingProductsWithoutMonthlyReset() {
         capture(buy("PRO1"));
         now=service.status(shop.getId(),owner.getId()).expiresAt().minusHours(1);
         for(int i=0;i<3;i++)create();
         now=now.plusHours(1);
         var expired=service.status(shop.getId(),owner.getId());
         assertThat(expired.pro()).isFalse();
-        assertThat(expired.monthlyLimit()).isEqualTo(5);
-        assertThat(expired.createdThisMonth()).isEqualTo(3);
+        assertThat(expired.productLimit()).isEqualTo(5);
+        assertThat(expired.productCount()).isEqualTo(3);
         create();create();
         assertThatThrownBy(this::create).isInstanceOf(ResponseStatusException.class).hasMessageContaining("5");
         now=now.plusMonths(1).withDayOfMonth(1);
-        for(int i=0;i<5;i++)create();
         assertThatThrownBy(this::create).isInstanceOf(ResponseStatusException.class).hasMessageContaining("5");
     }
     @Test void reminderOnlyRunsInLastThreeValidDatesAtNineAndNineteenWithoutDuplicates() {

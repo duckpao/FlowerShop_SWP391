@@ -90,9 +90,9 @@ public class OrderController {
     }
     @PostMapping("/{userId}/voucher-preview")
     public com.example.flowershop.service.CouponService.Preview vouchers(@PathVariable("userId") String userId,
-            @Valid @RequestBody MakeOrderRequest request, @AuthenticationPrincipal CurrentUser currentUser) {
+            @Valid @RequestBody com.example.flowershop.dto.order.CartVoucherPreviewRequest request, @AuthenticationPrincipal CurrentUser currentUser) {
         requireOwner(userId,currentUser);
-        return orderService.previewVouchers(userId,request);
+        return orderService.previewVouchers(userId,request.toOrderRequest(),request.merchandiseOnly());
     }
     @PostMapping("/{userId}")
     public ResponseEntity<OrderResponse> makeOrder(

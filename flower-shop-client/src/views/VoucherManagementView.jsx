@@ -59,7 +59,7 @@ export default function VoucherManagementView() {
   }
   if (!['ADMIN', 'SHOP'].includes(user?.role)) return <p>Bạn không có quyền quản lý mã giảm giá.</p>
   return <main className="voucher-page">
-    <header><p className="text-sm text-brand-600">{admin ? 'Ưu đãi toàn sàn' : 'Ưu đãi cửa hàng'}</p><h1 className="text-2xl font-bold">Quản lý mã giảm giá</h1><p className="mt-2 text-sm text-gray-500">{admin ? 'Quản lý mã tiền hàng, phí giao hàng và sản phẩm của sàn.' : 'Mã của bạn chỉ giảm tiền đơn hàng tại cửa hàng đang chọn.'} Trần giảm mỗi mã từ 20.000đ đến 70.000đ.</p></header>
+    <header><p className="text-sm text-brand-600">{admin ? 'Ưu đãi toàn sàn' : 'Ưu đãi cửa hàng'}</p><h1 className="text-2xl font-bold">Quản lý mã giảm giá</h1><p className="mt-2 text-sm text-gray-500">{admin ? 'Quản lý mã tiền hàng, phí giao hàng và sản phẩm của sàn.' : 'Mã của bạn chỉ giảm tiền đơn hàng tại cửa hàng đang chọn.'} Trần giảm mỗi mã lớn hơn 0 và tối đa 100.000đ.</p></header>
     {!admin && <label>Cửa hàng<select value={shopId} disabled={busy} onChange={e => setShopId(e.target.value)}>{shops.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>}
     {error && <p role="alert" className="message error">{error}</p>}{notice && <p role="status" className="message success">{notice}</p>}
     {!admin && !loading && !shopId ? <p>Chưa có cửa hàng để tạo voucher.</p> : <div className="voucher-layout">
@@ -69,7 +69,7 @@ export default function VoucherManagementView() {
           <label>Áp dụng cho<select value={form.target} onChange={e => edit('target', e.target.value)}><option value="ORDER">Tiền đơn hàng</option>{admin && <><option value="SHIPPING">Phí giao hàng</option><option value="PRODUCT">Sản phẩm</option></>}</select></label>
           <label>Kiểu giảm<select value={form.discountType} onChange={e => edit('discountType', e.target.value)}><option value="PERCENTAGE">Phần trăm (%)</option><option value="FIXED_AMOUNT">Số tiền cố định (VND)</option></select></label>
           <label>{form.discountType === 'PERCENTAGE' ? 'Phần trăm giảm' : 'Số tiền giảm (VND)'}<input required type="number" min="0.01" step="0.01" max={form.discountType === 'PERCENTAGE' ? '100' : '9999999999.99'} value={form.discountValue} onChange={e => edit('discountValue', e.target.value)} /></label>
-          <label>Giảm tối đa (VND)<input required type="number" min="20000" max="70000" step="1000" value={form.maxDiscountValue} onChange={e => edit('maxDiscountValue', e.target.value)} /></label>
+          <label>Giảm tối đa (VND)<input required type="number" min="1" max="100000" step="1" value={form.maxDiscountValue} onChange={e => edit('maxDiscountValue', e.target.value)} /></label>
           <label>Đơn tối thiểu (VND)<input required type="number" min="0" step="1000" value={form.minOrderValue} onChange={e => edit('minOrderValue', e.target.value)} /></label>
           <label>Ngày bắt đầu<input required type="datetime-local" value={form.startDate} onChange={e => edit('startDate', e.target.value)} /></label>
           <label>Ngày kết thúc<input required type="datetime-local" min={form.startDate} value={form.endDate} onChange={e => edit('endDate', e.target.value)} /></label>

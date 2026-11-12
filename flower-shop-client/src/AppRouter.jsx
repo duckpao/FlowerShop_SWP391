@@ -1,4 +1,5 @@
 import VoucherManagementView from './views/VoucherManagementView'
+import AdminPlansView from './views/AdminPlansView'
 import { Toaster } from 'react-hot-toast';
 import AccountView from './views/AccountView';
 import { Navigate, Route, BrowserRouter as Router, Routes, useLocation } from "react-router";
@@ -93,6 +94,7 @@ function AppRouterContent() {
             <Route path="/cart" element={<CartPageWrapper />} />
             <Route path="/shop-admin/subscription" element={<ShopSubscriptionView auth={controller} />} />
             <Route path="/admin/vouchers" element={<VoucherManagementView />} />
+            <Route path="/admin/shop-plans" element={<AdminPlansView />} />
 <Route path="/shop-admin/vouchers" element={<VoucherManagementView />} />
             <Route path="/checkout" element={controller.busy ? <p role="status">Đang kiểm tra đăng nhập…</p> : <CheckoutPage />} />
             <Route path="/orders" element={<CustomerOrdersView />} />

@@ -9,6 +9,7 @@ export default function AdminShopSubscriptionPanel({ shop }) {
   const { confirm } = useConfirm()
   const [data, setData] = useState(null)
   const [plans, setPlans] = useState([])
+  const [products, setProducts] = useState([])
   const [planId, setPlanId] = useState('')
   const [note, setNote] = useState('')
   const [paymentNotes, setPaymentNotes] = useState({})
@@ -19,12 +20,21 @@ export default function AdminShopSubscriptionPanel({ shop }) {
   const allowed = shop.status === 'ACTIVE' && shop.owner?.status === 'ACTIVE' && shop.owner?.role === 'SHOP'
   useEffect(() => {
     let active = true
-    Promise.all([api.adminStatus(shop.id), api.adminPlans()]).then(([value, items]) => {
+    Promise.all([api.adminStatus(shop.id), api.adminPlans(), api.adminProducts(shop.id)]).then(([value, items, productItems]) => {
       if (!active) return
-      setData(value); setPlans(items.filter(p => p.durationMonths > 0))
+      setData(value); setPlans(items.filter(p => p.durationMonths > 0 && p.enabled))
+      setProducts(productItems)
     }).catch(e => { if (active) setError(e.message) })
     return () => { active = false }
   }, [shop.id])
+  async function toggleProduct(product) {
+    setBusy(true); setError('')
+    try {
+      await api.adminFeature(shop.id, product.id, !product.featured)
+      const [value, items] = await Promise.all([api.adminStatus(shop.id), api.adminProducts(shop.id)])
+      setData(value); setProducts(items)
+    } catch (e) { setError(e.message) } finally { setBusy(false) }
+  }
   async function reload() {
     setBusy(true); setError('')
     try { setData(await api.adminStatus(shop.id)) } catch (e) { setError(e.message) } finally { setBusy(false) }
@@ -58,6 +68,10 @@ export default function AdminShopSubscriptionPanel({ shop }) {
     {notice && <p role="status" className="text-sm text-success-600">{notice}</p>}
     {data && <p className="text-sm">Gói hiện tại: <strong>{data.subscription.pro ? 'Pro' : 'Free'}</strong>{data.subscription.expiresAt && ` · Hạn Pro: ${date(data.subscription.expiresAt)}`}</p>}
     {!allowed && <p className="text-sm text-warning-600">Shop và tài khoản chủ shop phải đang hoạt động trước khi kích hoạt Pro.</p>}
+    {data && <div className="space-y-2 border-t pt-3"><p className="text-sm">Sản phẩm: {data.subscription.productCount}/{data.subscription.productLimit ?? 'không giới hạn'} · Nổi bật: {data.subscription.featuredProductIds.length}/{data.subscription.featuredLimit}</p>
+      <h5 className="text-sm font-semibold">Admin chọn sản phẩm nổi bật cho shop</h5>
+      <div className="max-h-64 overflow-y-auto">{products.map(p => <label key={p.id} className="flex items-center gap-3 py-2 text-sm"><input type="checkbox" checked={p.featured} disabled={busy || !allowed || (!p.featured && (!p.eligible || !data.subscription.pro || data.subscription.featuredProductIds.length >= data.subscription.featuredLimit))} onChange={() => toggleProduct(p)} />{p.name}</label>)}</div>
+    </div>}
     {!!data?.payments.length && <div className="space-y-3"><h5 className="text-sm font-semibold">Giao dịch cần xác nhận</h5>{data.payments.map(payment => <div key={payment.invoiceNumber} className="rounded-lg border border-gray-200 p-3 dark:border-gray-700">
       <p className="break-all text-sm font-medium">{payment.invoiceNumber}</p><p className="mt-1 text-sm">{payment.planName} · {formatPrice(payment.amount)} · {payment.status === 'REVIEW' ? 'Cần kiểm tra' : 'Chờ xác nhận'}</p>
       <label className="mt-2 block text-sm">Ghi chú xác nhận<input maxLength={1000} value={paymentNotes[payment.invoiceNumber] || ''} disabled={busy || !allowed} onChange={e => setPaymentNotes(v => ({ ...v, [payment.invoiceNumber]: e.target.value }))} className="mt-1 w-full rounded-lg border p-2 dark:bg-gray-900" /></label>
