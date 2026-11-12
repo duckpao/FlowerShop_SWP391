@@ -25,6 +25,10 @@ export const blogService = {
     `${managedBase(shopId)}/${encodeURIComponent(id)}`,
     { method: 'DELETE' },
   ),
+  publish: (shopId, id) => authService.authenticatedRequest(
+    `${managedBase(shopId)}/${encodeURIComponent(id)}/publish`,
+    { method: 'PUT' },
+  ),
   publicList: ({ shopId = '', q = '', page = 0 } = {}) => {
     const params = new URLSearchParams({ page })
     if (shopId) params.set('shopId', shopId)
