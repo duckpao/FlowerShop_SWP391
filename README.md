@@ -16,6 +16,8 @@ Dự án được chia thành hai phần độc lập:
 
 ## Sản phẩm, đánh giá và yêu thích
 
+Đặt hoa riêng hiện không yêu cầu khách nhập ngân sách: khách chỉ chọn thiết kế, shop gửi báo giá và mức cọc để khách quyết định. Database cũ chạy `flowershop/sql/034_custom_orders_shop_quotation.sql`; xem [luồng shop báo giá](flowershop/CUSTOM_SHOP_QUOTATION.md).
+
 Danh sách sản phẩm toàn sàn, chi tiết kèm đánh giá, quản lý ảnh của Manager, sản phẩm yêu thích
 và quản lý danh mục của Admin. Cần chạy migration `flowershop/sql/016_product_catalog.sql` trước khi dùng.
 

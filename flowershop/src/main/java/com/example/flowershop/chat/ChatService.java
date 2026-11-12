@@ -271,10 +271,9 @@ public class ChatService {
                 if(o.getOrderType()!=OrderType.CUSTOM || !o.getShop().getId().equals(session.getShop().getId())
                         || !o.getCustomer().getId().equals(session.getCustomer().getId()))
                     throw status(HttpStatus.BAD_REQUEST,"Đơn hoa riêng không thuộc cuộc trò chuyện này.");
-                var design=customWorkflow.design(o);
                 snap.put("orderId",o.getId());
                 snap.put("name","Đơn hoa riêng #"+o.getId().replace("-","").substring(0,8).toUpperCase());
-                snap.put("price",design==null?o.getSubTotal():design.budget());
+                snap.put("price",o.getSubTotal()!=null&&o.getSubTotal().signum()>0?o.getSubTotal():null);
                 snap.put("status",o.getStatus().name());
                 return snap;
             }
@@ -283,7 +282,8 @@ public class ChatService {
                             && x.getCustomer().getId().equals(session.getCustomer().getId()))
                     .orElseThrow(() -> status(HttpStatus.BAD_REQUEST, "Yêu cầu custom không thuộc cuộc trò chuyện này."));
             snap.put("name", "Yêu cầu hoa custom #" + r.getId().replace("-", "").substring(0, 8).toUpperCase());
-            snap.put("price", r.getBudget());
+            var designSnapshot=readMap(r.getDesiredComponents());
+            snap.put("price", designSnapshot==null?null:designSnapshot.get("quotedPrice"));
             snap.put("status", r.getStatus().name());
             orders.findLinkedCustomOrder(r.getId(),r.getCustomer().getId(),r.getShop().getId()).ifPresent(o -> snap.put("orderId",o.getId()));
         }

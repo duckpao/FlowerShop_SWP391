@@ -245,7 +245,7 @@ class CouponTests {
     @Test void customQuoteAppliesVouchersOnlyAtAcceptance() {
         CustomFlowerCatalogFixture.seed(options);
         var low=coupon("LOW",CouponTarget.ORDER,"10","20000"); coupon("SHIP",CouponTarget.SHIPPING,"100","30000");
-        var design=new CustomFlowerOrderService.RequestInput(shop.getId(),money("500000"),1,"",new CustomFlowerOrderService.Preferences(null,null,null,null,null,null));
+        var design=new CustomFlowerOrderService.RequestInput(shop.getId(),1,"",new CustomFlowerOrderService.Preferences(null,null,null,null,null,null));
         var receipt=workflow.create(customer.getId(),new CustomOrderWorkflowService.CreateInput(destination.getId(),design));
         workflow.quote(shop.getId(),owner.getId(),receipt.orderId(),new CustomOrderWorkflowService.Quote(money("400000"),"Quote"));
         var preview=workflow.previewVouchers(customer.getId(),receipt.orderId(),new CustomOrderWorkflowService.VoucherInput("LOW","SHIP"));

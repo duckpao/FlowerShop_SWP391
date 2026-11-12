@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { staffApplicationService } from '../services/staffApplicationService'
 import { productService } from '../services/productService'
 import { customFlowerService } from '../services/customFlowerService'
-import { BudgetSuggestions, customButton } from '../components/customFlowers/CustomFlowerParts'
+import { ReferenceSuggestions, customButton } from '../components/customFlowers/CustomFlowerParts'
 import DeliveryDateSelect from '../components/customFlowers/DeliveryDateSelect'
 import '../styles/custom-flowers.css'
 
@@ -14,7 +14,7 @@ export default function CustomFlowerOrderView({ auth }) {
   const [catalogBusy, setCatalogBusy] = useState(true)
   const [catalogError, setCatalogError] = useState('')
   const [catalogVersion, setCatalogVersion] = useState(0)
-  const [form, setForm] = useState({ shopId: params.get('shopId') || '', budget: params.get('budget') || '', quantity: params.get('quantity') || '1', description: '', flowers: '', colors: '', occasion: '', wrapping: [], deliveryDate: '' })
+  const [form, setForm] = useState({ shopId: params.get('shopId') || '', quantity: params.get('quantity') || '1', description: '', flowers: '', colors: '', occasion: '', wrapping: [], deliveryDate: '' })
   const [selected, setSelected] = useState(null)
   const [saved, setSaved] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -35,7 +35,7 @@ export default function CustomFlowerOrderView({ auth }) {
     productService.detail(id).then(p => { if (active && p.shopId === params.get('shopId')) setSelected(p) }).catch(e => { if (active) setError(e.message) })
     return () => { active = false }
   }, [params])
-  const edit = (name, value) => { setForm(f => ({ ...f, [name]: value })); if (['shopId', 'budget', 'quantity'].includes(name)) setSelected(null) }
+  const edit = (name, value) => { setForm(f => ({ ...f, [name]: value })); if (['shopId', 'quantity'].includes(name)) setSelected(null) }
   const flowerOptions = options.filter(option => option.group === 'FLOWER')
   const occasionOptions = options.filter(option => option.group === 'OCCASION')
   const wrappingOptions = options.filter(option => ['WRAPPING', 'ACCESSORY'].includes(option.group))
@@ -43,10 +43,10 @@ export default function CustomFlowerOrderView({ auth }) {
   async function submit(e) {
     e.preventDefault(); if (busy || catalogBusy || catalogError) return; setBusy(true); setError('')
     try {
-      const { shopId, budget, quantity, description, ...preferences } = form
+      const { shopId, quantity, description, ...preferences } = form
       const enabledLabels = new Set(enabledWrappingOptions.map(option => option.label))
       const wrapping = preferences.wrapping.filter(label => enabledLabels.has(label)).join(', ')
-      const result = await customFlowerService.create({ shopId, budget: Number(budget), quantity: Number(quantity), description, preferences: { ...preferences, wrapping, referenceProductId: selected?.id || null } })
+      const result = await customFlowerService.create({ shopId, quantity: Number(quantity), description, preferences: { ...preferences, wrapping, referenceProductId: selected?.id || null } })
       if (!result?.id) throw new Error('Chưa nhận được mã yêu cầu. Vui lòng kiểm tra yêu cầu của tôi trước khi gửi lại.')
       setSaved(result)
     } catch (failure) { setError(failure.message) } finally { setBusy(false) }
@@ -57,13 +57,12 @@ export default function CustomFlowerOrderView({ auth }) {
   return <main className="catalog-page custom-flower-page">
     <header className="catalog-page-header"><div><p className="text-sm text-brand-600">Thiết kế theo ý bạn</p><h1>Đặt hoa theo yêu cầu riêng</h1></div><Link to="/custom-orders">Yêu cầu của tôi</Link></header>
     {saved ? <section className="catalog-panel space-y-4"><p role="status" className="message success">Đã gửi yêu cầu #{saved.id.slice(0, 8).toUpperCase()} · Chờ shop báo giá.</p><p>Shop sẽ xác nhận thiết kế, báo giá và mức cọc. Bạn chọn địa chỉ, voucher và thanh toán cọc sau khi đồng ý.</p><Link className={customButton} to={`/custom-orders?open=${saved.id}`}>Xem yêu cầu & báo giá</Link></section> : <>
-      <section className="catalog-panel custom-order-panel"><div className="custom-order-intro"><h2>Thiết kế bó hoa của bạn</h2><p>Chọn hoa và những chi tiết bạn yêu thích. Cửa hàng sẽ tư vấn và báo giá phù hợp với ngân sách.</p></div>
+      <section className="catalog-panel custom-order-panel"><div className="custom-order-intro"><h2>Thiết kế bó hoa của bạn</h2><p>Chọn hoa và những chi tiết bạn yêu thích. Cửa hàng sẽ tư vấn và gửi báo giá để bạn xem, đồng ý trước khi đặt cọc.</p></div>
         {error && <p role="alert" className="message error">{error}</p>}
         {catalogBusy && <p role="status">Đang tải các lựa chọn đặt hoa…</p>}
         {catalogError && <div role="alert" className="message error">{catalogError} <button type="button" onClick={() => setCatalogVersion(v => v + 1)}>Thử lại</button></div>}
         <form onSubmit={submit} onInvalidCapture={e => setError(`Vui lòng kiểm tra thông tin đặt hoa: ${e.target.validationMessage}`)}><fieldset disabled={busy || catalogBusy || !!catalogError} className="custom-order-fields">
-          <section className="custom-order-section"><h3><span>01</span> Thông tin đặt hoa</h3><div className="custom-order-grid custom-order-grid-three"><label>Cửa hàng *<select required value={form.shopId} onChange={e => edit('shopId', e.target.value)}><option value="">Chọn cửa hàng</option>{shops.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
-            <label>Ngân sách tiền hoa (VND)<input required type="number" min="1000" max="999999999" step="1000" value={form.budget} onChange={e => edit('budget', e.target.value)} /></label>
+          <section className="custom-order-section"><h3><span>01</span> Thông tin đặt hoa</h3><div className="custom-order-grid"><label>Cửa hàng *<select required value={form.shopId} onChange={e => edit('shopId', e.target.value)}><option value="">Chọn cửa hàng</option>{shops.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
             <label>Số bó/mẫu<input required type="number" min="1" max="100" step="1" value={form.quantity} onChange={e => edit('quantity', e.target.value)} /></label></div></section>
           <section className="custom-order-section"><h3><span>02</span> Phong cách & dịp tặng</h3><div className="custom-order-grid">
             <label>Loại hoa mong muốn<select value={form.flowers} onChange={e => edit('flowers', e.target.value)}><option value="">Chọn loại hoa</option>{flowerOptions.map(option => <option key={option.id} value={option.label} disabled={option.disabled}>{option.label}{option.disabled ? ' (Tạm ngưng)' : ''}</option>)}</select></label>
@@ -83,7 +82,7 @@ export default function CustomFlowerOrderView({ auth }) {
           <div className="custom-order-footer"><p>Gửi yêu cầu chưa phát sinh thanh toán.<br />Cửa hàng sẽ liên hệ để xác nhận thiết kế, giá và mức cọc.</p><button className={customButton} disabled={!form.shopId || busy}>{busy ? 'Đang gửi…' : 'Gửi yêu cầu cho shop'}</button></div>
         </fieldset></form>
       </section>
-      {form.shopId && <section className="catalog-panel"><BudgetSuggestions budget={form.budget} quantity={form.quantity} shopId={form.shopId} selectedId={selected?.id} onChoose={setSelected} /></section>}
+      {form.shopId && <section className="catalog-panel"><ReferenceSuggestions quantity={form.quantity} shopId={form.shopId} selectedId={selected?.id} onChoose={setSelected} /></section>}
     </>}
   </main>
 }

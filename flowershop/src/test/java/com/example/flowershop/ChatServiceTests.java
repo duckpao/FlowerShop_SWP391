@@ -123,7 +123,13 @@ class ChatServiceTests {
         var sent = chat.send(session.id(), f.owner().getId(),
                 new SendInput("Design quote", null, new ContextInput(ChatContextType.CUSTOM_ORDER, order.getId())));
         assertThat(sent.context()).containsEntry("orderId", order.getId()).containsEntry("status", "AWAITING_QUOTE");
-        assertThat(new BigDecimal(sent.context().get("price").toString())).isEqualByComparingTo("500000");
+        assertThat(sent.context().get("price")).isNull();
+        order.setSubTotal(new BigDecimal("650000"));
+        order.setStatus(OrderStatus.QUOTED);
+        orders.saveAndFlush(order);
+        var quoted = chat.send(session.id(), f.owner().getId(),
+                new SendInput("Shop quote", null, new ContextInput(ChatContextType.CUSTOM_ORDER, order.getId())));
+        assertThat(new BigDecimal(quoted.context().get("price").toString())).isEqualByComparingTo("650000");
         var other = fixture();
         assertThatThrownBy(() -> chat.openForShop(other.shop().getId(), other.owner().getId(), order.getId()))
                 .isInstanceOf(ResponseStatusException.class);

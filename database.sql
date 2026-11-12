@@ -431,7 +431,7 @@ CREATE TABLE Custom_Order_Requests (
     id VARCHAR(36) PRIMARY KEY,
     customer_id VARCHAR(36) NOT NULL,
     shop_id VARCHAR(36) NOT NULL,
-    budget DECIMAL(12, 2) NOT NULL,
+    budget DECIMAL(12, 2) NULL, -- ngân sách khách cũ; yêu cầu mới không nhập giá, shop báo giá sau
     desired_components JSON, -- {"flowers": ["Hoa hồng", "Hoa ly"], "wrapper": "Giấy Kraft"}
     description TEXT,
     status ENUM('REQUESTED', 'NEGOTIATING', 'ACCEPTED', 'REJECTED') DEFAULT 'REQUESTED',

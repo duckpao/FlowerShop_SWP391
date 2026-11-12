@@ -28,6 +28,6 @@ export default function LegacyCustomRequestEntry({ user, shop, authBusy = false 
   return <main className="catalog-page custom-flower-page"><h1>Yêu cầu hoa trước đây</h1>
     <p className="my-4">Đây là yêu cầu lưu theo luồng cũ, hiện chỉ xem lại. Yêu cầu mới được báo giá, thanh toán và giao hàng trong quản lý đơn hàng.</p>
     <CustomRequestCard request={request} />
-    <Link className="mt-4 inline-block text-brand-600" to={isShop ? '/shop-admin/orders' : `/custom-orders/new?${new URLSearchParams({ shopId: request.shopId, budget: String(request.budget) })}`}>{isShop ? 'Về quản lý đơn hàng' : 'Tạo yêu cầu theo luồng đơn hàng'}</Link>
+    <Link className="mt-4 inline-block text-brand-600" to={isShop ? '/shop-admin/orders' : `/custom-orders/new?${new URLSearchParams({ shopId: request.shopId })}`}>{isShop ? 'Về quản lý đơn hàng' : 'Tạo yêu cầu mới'}</Link>
   </main>
 }

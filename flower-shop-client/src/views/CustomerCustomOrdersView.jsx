@@ -84,7 +84,7 @@ export default function CustomerCustomOrdersView({ auth }) {
       {openError && <p role="alert" className="message error">{openError}</p>}
       {opened && <div aria-label="Yêu cầu đang xem" className="rounded-2xl ring-2 ring-brand-500"><CustomRequestCard request={opened}><ChatLink request={opened} /><DepositAction request={opened} userId={auth.user.id} addresses={addresses} /></CustomRequestCard></div>}
       {busy && <p role="status">Đang tải yêu cầu…</p>}{error && <p role="alert" className="message error">{error}</p>}
-      {data?.totalElements === 0 && <p>Bạn chưa gửi yêu cầu nào. Hãy bắt đầu bằng ngân sách và loại hoa yêu thích.</p>}
+      {data?.totalElements === 0 && <p>Bạn chưa gửi yêu cầu nào. Hãy chọn loại hoa và thiết kế yêu thích để shop tư vấn, báo giá.</p>}
       {data?.content.filter(r => r.id !== openId).map(r => <CustomRequestCard key={r.id} request={r}><ChatLink request={r} /><DepositAction request={r} userId={auth.user.id} addresses={addresses} /></CustomRequestCard>)}
       {data && data.totalPages > 1 && <div className="catalog-actions"><button disabled={busy || page === 0} onClick={() => setPage(v => v - 1)}>Trang trước</button><span>{page + 1}/{data.totalPages}</span><button disabled={busy || page + 1 >= data.totalPages} onClick={() => setPage(v => v + 1)}>Trang sau</button></div>}
     </section></main>

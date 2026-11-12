@@ -73,7 +73,7 @@ class CustomOrderWorkflowTests {
         when(tokenAuth.authenticate("shop-test")).thenReturn(com.example.flowershop.dto.auth.CurrentUser.from(owner));
     }
     CustomOrderWorkflowService.CreateInput input() {
-        var design=new CustomFlowerOrderService.RequestInput(shop.getId(), new BigDecimal("500000"), 3, "",
+        var design=new CustomFlowerOrderService.RequestInput(shop.getId(), 3, "",
                 new CustomFlowerOrderService.Preferences("Rose", "Pink", "Birthday", "Paper, Ribbon", null, reference.getId()));
         return new CustomOrderWorkflowService.CreateInput(destination.getId(), design);
     }
@@ -132,7 +132,7 @@ class CustomOrderWorkflowTests {
         details.saveAndFlush(line);
         entityManager.clear();
         var design=customerOrders.detail(customer.getId(),created.orderId()).customDesign();
-        assertThat(design.budget()).isEqualByComparingTo("500000");
+        assertThat(design.budget()).isNull();
         assertThat(design.preferences().quantity()).isEqualTo(3);
     }
     @Test void historicalDepositDesignWithoutEnvelopeRemainsReadable() {
@@ -264,12 +264,12 @@ class CustomOrderWorkflowTests {
         assertThat(detail.cancelReason()).isEqualTo("Cannot supply these flowers");
         assertThatThrownBy(() -> quote(id)).isInstanceOf(ResponseStatusException.class);
     }
-    @Test void rejectsCrossAccountChangesAndOverBudgetQuotes() {
+    @Test void rejectsCrossAccountChangesAndAllowsShopToSetPrice() {
         var id=create().orderId();
         assertThatThrownBy(() -> workflow.quote(shop.getId(), "other-owner", id, new CustomOrderWorkflowService.Quote(new BigDecimal("100"), "")))
                 .isInstanceOf(ResponseStatusException.class);
-        assertThatThrownBy(() -> workflow.quote(shop.getId(), owner.getId(), id, new CustomOrderWorkflowService.Quote(new BigDecimal("500001"), "")))
-                .isInstanceOf(ResponseStatusException.class);
+        workflow.quote(shop.getId(), owner.getId(), id, new CustomOrderWorkflowService.Quote(new BigDecimal("500001"), ""));
+        assertThat(orders.findById(id).orElseThrow().getSubTotal()).isEqualByComparingTo("500001");
         quote(id);
         assertThatThrownBy(() -> workflow.accept("other-customer", id, new CustomOrderWorkflowService.Accept(PaymentMethod.COD, new BigDecimal("380000"))))
                 .isInstanceOf(ResponseStatusException.class);

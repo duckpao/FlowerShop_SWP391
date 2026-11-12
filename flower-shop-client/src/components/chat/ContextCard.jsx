@@ -30,7 +30,7 @@ export default function ContextCard({ ctx, side, label, onDismiss }) {
                     {label && <span className="block text-theme-xs text-gray-500 dark:text-gray-400">{label}</span>}
                     <span className="block truncate text-theme-sm font-medium text-gray-900 dark:text-white">{ctx.name}</span>
                     <span className="block text-theme-xs text-gray-600 dark:text-gray-400">
-                        {ctx.price != null && (isProduct ? formatPrice(ctx.price) : `Ngân sách ${formatPrice(ctx.price)}`)}
+                        {ctx.price != null ? (isProduct ? formatPrice(ctx.price) : `Giá shop báo ${formatPrice(ctx.price)}`) : !isProduct && 'Chờ shop báo giá'}
                         {!isProduct && ctx.status && ` · ${orderStatusLabels[ctx.status] || customStatus[ctx.status] || ctx.status}`}
                     </span>
                 </span>
