@@ -44,6 +44,13 @@ public class OrderRepository extends HibernateRepository<Order> {
         return list("e.status = :status and e.createdDate < :threshold", Map.of("status", status, "threshold", threshold));
     }
 
+    /** Đơn DELIVERING đã giao xong (GHN delivered) từ trước mốc cutoff và chưa có yêu cầu hoàn tiền. */
+    public List<Order> deliveredBeforeWithoutRefund(LocalDateTime cutoff) {
+        return list("e.status = :status and exists (select 1 from Delivery d where d.order = e and d.status = :delivered"
+                        + " and d.lastModifyDate < :cutoff) and not exists (select 1 from Refund r where r.order = e)",
+                Map.of("status", OrderStatus.DELIVERING, "delivered", com.example.flowershop.entity.enums.DeliveryStatus.DELIVERED, "cutoff", cutoff));
+    }
+
     public boolean existsByDeliveryAddressId(String addressId) {
         return countWhere("e.deliveryAddress.id = :addressId", Map.of("addressId", addressId)) > 0;
     }

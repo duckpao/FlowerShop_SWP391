@@ -14,6 +14,11 @@ public class CouponRepository extends HibernateRepository<Coupon> {
     public Optional<Coupon> findByCodeForUpdate(String code) {
         return locked("lower(e.code) = lower(:code)", Map.of("code", code));
     }
+    /** Mã còn ACTIVE nhưng đã quá ngày kết thúc. */
+    public List<Coupon> activeEndedBefore(java.time.LocalDateTime now) {
+        return list("e.deleted = false and e.status = :status and e.endDate < :now",
+                Map.of("status", com.example.flowershop.entity.enums.CouponStatus.ACTIVE, "now", now));
+    }
     public Optional<Coupon> findLocked(String id) { return locked("e.id = :id", Map.of("id", id)); }
     public List<Coupon> managed(String shopId) {
         return list("e.deleted = false and " + (shopId == null ? "e.shop is null" : "e.shop.id = :shopId"),
