@@ -1,5 +1,12 @@
 # Migration sau khi gộp master và feature/dung
 
+## Đặt hoa riêng: shop báo giá, khách không nhập ngân sách
+
+Database đang dùng chạy `034_custom_orders_shop_quotation.sql` trước khi chạy backend mới.
+Cột `Custom_Order_Requests.budget` được phép NULL và chỉ giữ dữ liệu lịch sử.
+Yêu cầu mới chỉ chứa lựa chọn thiết kế/số lượng; giá được shop gửi trong `quotedPrice`.
+Không còn giới hạn báo giá theo ngân sách khách. `database.sql` đã cập nhật cho database tạo mới.
+
 ## Gói đăng ký shop
 
 Sau schema đã gộp, áp dụng thêm `030_shop_subscriptions.sql` để có Free/Pro, giao dịch mua gói, lượt tạo sản phẩm, sản phẩm nổi bật và lịch sử nhắc hạn.
