@@ -184,10 +184,12 @@ export default function CustomerOrderDetailView() {
                 setError('')
                 // Hệ thống không có webhook GHN: đơn đang giao thì hỏi GHN ngay khi mở trang để thanh theo dõi không bị cũ
                 if (data.status === 'DELIVERING' && data.delivery)
-                    customerOrderService.refreshTracking(id).then(delivery => { if (active) applyDelivery(delivery) }).catch(() => {})
+                    customerOrderService.refreshTracking(id)
+                        .then(delivery => { if (active) applyDelivery(delivery) })
+                        .catch(e => { if (active) setTrackingError(e.message || 'Không thể cập nhật trạng thái giao hàng từ GHN.') })
                 customerOrderService.shippingFee(id)
                     .then(result => { if (active) setShippingFee(result.shippingFee) })
-                    .catch(() => { if (active) setShippingFeeError('Không lấy được phí GHN hiện tại; đang hiển thị phí đã lưu của đơn.') })
+                    .catch(e => { if (active) setShippingFeeError(`${e.message || 'Không lấy được phí GHN hiện tại.'} Đang hiển thị phí đã lưu của đơn.`) })
             })
             .catch(e => { if (active) setError(e.message) })
             .finally(() => { if (active) setBusy(false) })
@@ -267,7 +269,10 @@ export default function CustomerOrderDetailView() {
                                 }`} aria-label={complete ? 'Hoàn tất' : problem ? 'Có sự cố' : current ? 'Đang xử lý' : 'Chưa hoàn tất'}>
                                     {complete ? '✓' : problem ? '!' : index + 1}
                                 </span>
-                                <span className={`text-sm ${complete || current ? 'font-medium text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400'}`}>{getStepLabel(order, index)}</span>
+                                <span className={`text-sm ${complete || current ? 'font-medium text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400'}`}>
+                                    {getStepLabel(order, index)}
+                                    <span className="ml-2 text-xs font-normal text-gray-500 dark:text-gray-400">({complete ? 'Hoàn tất' : problem ? 'Có sự cố' : current ? 'Đang xử lý' : 'Chưa hoàn tất'})</span>
+                                </span>
                             </li>
                         })}
                     </ol>
@@ -293,7 +298,7 @@ export default function CustomerOrderDetailView() {
                 <div className="space-y-1 text-sm">
                     <div className="flex justify-between"><span>Tạm tính:</span><span>{formatPrice(order.subTotal)}</span></div>
                     <div className="flex justify-between"><span>Phí ship (GHN):</span><span>{formatPrice(shippingFee ?? order.shippingFee)}</span></div>
-                    {shippingFeeError && <p className="text-xs text-gray-500" role="status">{shippingFeeError}</p>}
+                    {shippingFeeError && <p className="text-xs text-error-500" role="alert">{shippingFeeError}</p>}
                     {shippingFee !== null && Number(shippingFee) !== Number(order.shippingFee) && (
                         <p className="text-xs text-gray-500">Phí GHN hiện tại có thể khác phí đã chốt khi đặt hàng; tổng tiền đơn không thay đổi.</p>
                     )}

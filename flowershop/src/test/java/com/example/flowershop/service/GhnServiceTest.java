@@ -20,6 +20,7 @@ class GhnServiceTest {
     private final AtomicReference<String> lastBody = new AtomicReference<>();
     private final AtomicReference<String> lastShopId = new AtomicReference<>();
     private volatile String reply;
+    private volatile int replyStatus = 200;
 
     @BeforeEach
     void start() throws Exception {
@@ -29,7 +30,7 @@ class GhnServiceTest {
             lastBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
             lastShopId.set(exchange.getRequestHeaders().getFirst("ShopId"));
             byte[] out = reply.getBytes(StandardCharsets.UTF_8);
-            exchange.sendResponseHeaders(200, out.length);
+            exchange.sendResponseHeaders(replyStatus, out.length);
             exchange.getResponseBody().write(out);
             exchange.close();
         });
@@ -119,5 +120,37 @@ class GhnServiceTest {
                 () -> ghn().calculateFee(1, "1", 2, "2", 2000));
         assertEquals(502, e.getStatusCode().value());
         assertTrue(e.getReason().contains("không lấy được thông tin kho"));
+        assertTrue(e.getReason().startsWith("Lỗi từ GHN:"), "message must say the failure is GHN's");
+    }
+
+    @Test
+    void ghnGatewayHtmlPageIsReportedAsGhnOutageWithHttpStatus() {
+        replyStatus = 502;
+        reply = "<html><body>502 Bad Gateway</body></html>";
+        var e = assertThrows(org.springframework.web.server.ResponseStatusException.class,
+                () -> ghn().track("LAD1"));
+        assertEquals(502, e.getStatusCode().value());
+        assertTrue(e.getReason().contains("GHN"));
+        assertTrue(e.getReason().contains("502"));
+    }
+
+    @Test
+    void ghnServerErrorWithJsonBodyKeepsGhnReasonAndStatus() {
+        replyStatus = 503;
+        reply = "{\"code\":503,\"message\":\"Service Unavailable\",\"data\":null}";
+        var e = assertThrows(org.springframework.web.server.ResponseStatusException.class,
+                () -> ghn().calculateFee(1, "1", 2, "2", 2000));
+        assertEquals(502, e.getStatusCode().value());
+        assertTrue(e.getReason().contains("Service Unavailable"));
+        assertTrue(e.getReason().contains("503"));
+    }
+
+    @Test
+    void unreachableGhnIsReportedAsGhnConnectionFailure() {
+        server.stop(0);
+        var e = assertThrows(org.springframework.web.server.ResponseStatusException.class,
+                () -> ghn().track("LAD1"));
+        assertEquals(502, e.getStatusCode().value());
+        assertTrue(e.getReason().contains("GHN"));
     }
 }

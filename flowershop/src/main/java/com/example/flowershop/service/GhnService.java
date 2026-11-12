@@ -304,8 +304,14 @@ public class GhnService {
         } catch (ResponseStatusException e) {
             throw e;
         } catch (Exception e) {
-            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Không thể kết nối tới GHN.", e);
+            throw unreachable(e);
         }
+    }
+
+    /** GHN không trả lời được (mất kết nối, quá thời gian): báo rõ lỗi thuộc phía GHN để người dùng thấy trên màn hình. */
+    private static ResponseStatusException unreachable(Throwable cause) {
+        return new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                "Không thể kết nối tới GHN (đơn vị vận chuyển). Vui lòng thử lại sau ít phút.", cause);
     }
 
     /** Tạo request có sẵn header Token và ShopId. */
@@ -317,23 +323,37 @@ public class GhnService {
                 .header("ShopId", shopId);
     }
 
-    /** Sends the request and returns the body's {@code data}; anything but 200/200 becomes a 502. */
+    /**
+     * Sends the request and returns the body's {@code data}; anything but 200/200 becomes a 502 whose message
+     * says the failure is GHN's (the exception handler passes it to the client, which shows it on screen).
+     * A body that is not JSON (an HTML gateway page from GHN's 502/503) is reported with its HTTP status.
+     */
     private JsonNode send(HttpRequest request, String path) {
         try {
             HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-            JsonNode json = mapper.readTree(response.body());
-            if (response.statusCode() != 200 || json.path("code").asInt(-1) != 200)
-                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, failureMessage(json, path));
+            JsonNode json;
+            try {
+                json = mapper.readTree(response.body());
+            } catch (Exception notJson) {
+                json = null;
+            }
+            if (response.statusCode() != 200 || json == null || json.isMissingNode() || json.path("code").asInt(-1) != 200)
+                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, failureMessage(json, response.statusCode(), path));
             return json.path("data");
         } catch (ResponseStatusException e) {
             throw e;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw unreachable(e);
         } catch (Exception e) {
-            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Không thể kết nối tới GHN.", e);
+            throw unreachable(e);
         }
     }
 
-    /** Đổi lỗi GHN thành thông báo tiếng Việt dễ hiểu. */
-    private static String failureMessage(JsonNode json, String path) {
+    /** Đổi lỗi GHN thành thông báo tiếng Việt dễ hiểu, luôn nói rõ lỗi đến từ GHN. */
+    static String failureMessage(JsonNode json, int httpStatus, String path) {
+        if (json == null || json.isMissingNode() || json.isNull())
+            return "GHN đang gặp sự cố (HTTP " + httpStatus + "). Vui lòng thử lại sau ít phút.";
         String msg = json.path("message").asText("GHN " + path + " thất bại.");
         String codeMessage = json.path("code_message").asText("");
         if (msg.contains("inside_warehouse_route_by_address") || msg.contains("Connection not open")
@@ -341,6 +361,6 @@ public class GhnService {
             return "GHN đang lỗi định tuyến kho (inside_warehouse_route_by_address). Lỗi từ phía GHN, hãy thử lại sau ít phút.";
         if (codeMessage.contains("CLIENT_NOT_BELONG_OF_SHOP") || codeMessage.contains("CLIENT_NOT_OWNER_OF_SHOP"))
             return "Token GHN không thuộc ShopId đã cấu hình. Kiểm tra GHN_TOKEN và GHN_SHOP_ID.";
-        return msg;
+        return "Lỗi từ GHN: " + msg + (httpStatus >= 500 ? " (HTTP " + httpStatus + ")" : "");
     }
 }
