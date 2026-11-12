@@ -97,18 +97,43 @@ const trackingSteps = [
     'Đơn vị vận chuyển đã vận chuyển thành công đến khách hàng',
 ]
 
+// Trạng thái vận đơn khi giao không thành công / đang hoàn hàng: bước 3 hiện cảnh báo thay vì "đã giao"
+const PROBLEM_DELIVERY = ['FAILED', 'RETURNING', 'RETURNED']
+const isTrackingProblem = order => order.status === 'REFUNDED' || PROBLEM_DELIVERY.includes(order.delivery?.status)
+
+/**
+ * Bước đang sáng trên thanh theo dõi: 0 = shop chuẩn bị, 1 = đã giao GHN, 2 = đang vận chuyển, 3 = đã giao xong
+ * (mọi bước đều hoàn tất). -1 = chưa bắt đầu (chờ báo giá/đặt cọc) hoặc đã hủy.
+ * Ưu tiên trạng thái của ĐƠN trước trạng thái vận đơn: shop có thể đổi trạng thái thủ công (không có vận đơn)
+ * hoặc job tự hoàn tất đơn mà vận đơn vẫn còn trạng thái cũ.
+ */
 function getTrackingStage(order) {
     const deliveryStatus = order.delivery?.status
-    if (deliveryStatus === 'DELIVERED') return 3
+    if (['AWAITING_QUOTE', 'QUOTED', 'AWAITING_DEPOSIT', 'CANCELLED'].includes(order.status)) return -1
+    if (isTrackingProblem(order)) return 2
+    if (order.status === 'COMPLETED' || deliveryStatus === 'DELIVERED') return 3
     if (['PICKED_UP', 'ON_THE_WAY'].includes(deliveryStatus)) return 2
     if (order.status === 'DELIVERING') return 1
-    if (order.status === 'PROCESSING') return 0
-    return -1
+    return 0 // PENDING, DEPOSIT_PAID, PROCESSING: shop đang xử lý
+}
+
+function getStepLabel(order, index) {
+    if (index === 2 && isTrackingProblem(order)) {
+        if (order.status === 'REFUNDED' || order.delivery?.status === 'RETURNED') return 'Đơn hàng đã được hoàn về cửa hàng'
+        if (order.delivery?.status === 'RETURNING') return 'Đơn hàng đang được hoàn về cửa hàng'
+        return 'Đơn vị vận chuyển chưa giao được đơn hàng'
+    }
+    return trackingSteps[index]
 }
 
 function getTrackingMessage(order) {
     if (order.status === 'CANCELLED') return 'Đơn hàng đã bị hủy.'
     if (order.status === 'REFUNDED') return 'Đơn vị vận chuyển đã hoàn đơn hàng về cửa hàng.'
+    if (order.status === 'COMPLETED') return 'Đơn hàng đã được giao thành công.'
+    if (order.status === 'AWAITING_QUOTE') return 'Đơn hàng đang chờ cửa hàng báo giá.'
+    if (order.status === 'QUOTED') return 'Cửa hàng đã báo giá, đang chờ bạn đồng ý.'
+    if (order.status === 'AWAITING_DEPOSIT') return 'Đơn hàng đang chờ bạn đặt cọc.'
+    if (order.status === 'DEPOSIT_PAID') return 'Đã nhận tiền cọc, cửa hàng sẽ chuẩn bị đơn hàng.'
     if (order.status === 'PENDING') return 'Đơn hàng đang chờ cửa hàng xác nhận.'
     if (order.delivery?.status === 'DELIVERED') return 'Đơn vị vận chuyển đã giao hàng thành công.'
     if (order.delivery?.status === 'ON_THE_WAY') return 'Đơn vị vận chuyển đang giao hàng đến bạn.'
@@ -137,6 +162,14 @@ export default function CustomerOrderDetailView() {
     const [reloadKey, setReloadKey] = useState(0)
     const [refundError, setRefundError] = useState('')
 
+    // Ghi trạng thái vận đơn mới từ GHN vào đơn đang hiển thị (backend đã đồng bộ trạng thái đơn tương ứng)
+    const applyDelivery = delivery => setOrder(current => ({
+        ...current,
+        delivery,
+        ...(delivery.status === 'DELIVERED' ? { status: 'COMPLETED' } : {}),
+        ...(delivery.status === 'RETURNED' ? { status: 'REFUNDED' } : {}),
+    }))
+
     // Tải chi tiết đơn (customerOrderService.detail), rồi hỏi lại phí GHN hiện tại (customerOrderService.shippingFee)
     useEffect(() => {
         if (!user || !id) return
@@ -149,6 +182,9 @@ export default function CustomerOrderDetailView() {
                 setOrder(data)
                 setShippingFee(data.shippingFee)
                 setError('')
+                // Hệ thống không có webhook GHN: đơn đang giao thì hỏi GHN ngay khi mở trang để thanh theo dõi không bị cũ
+                if (data.status === 'DELIVERING' && data.delivery)
+                    customerOrderService.refreshTracking(id).then(delivery => { if (active) applyDelivery(delivery) }).catch(() => {})
                 customerOrderService.shippingFee(id)
                     .then(result => { if (active) setShippingFee(result.shippingFee) })
                     .catch(() => { if (active) setShippingFeeError('Không lấy được phí GHN hiện tại; đang hiển thị phí đã lưu của đơn.') })
@@ -163,13 +199,7 @@ export default function CustomerOrderDetailView() {
         setTrackingBusy(true)
         setTrackingError('')
         try {
-            const delivery = await customerOrderService.refreshTracking(id)
-            setOrder(current => ({
-                ...current,
-                delivery,
-                ...(delivery.status === 'DELIVERED' ? { status: 'COMPLETED' } : {}),
-                ...(delivery.status === 'RETURNED' ? { status: 'REFUNDED' } : {}),
-            }))
+            applyDelivery(await customerOrderService.refreshTracking(id))
         } catch (e) {
             setTrackingError(e.message || 'Không thể cập nhật trạng thái giao hàng.')
         } finally {
@@ -203,6 +233,7 @@ export default function CustomerOrderDetailView() {
         <PageMeta title={`Đơn #${order.id.substring(0,8)} | FlowerShop`} />
         <PageBreadCrumb pageTitle={`Chi tiết đơn #${order.id.substring(0,8)}`} />
         <div className="max-w-3xl mx-auto space-y-6">
+            <Link to="/orders" className="inline-flex text-sm font-medium text-brand-600 hover:underline dark:text-brand-400">&larr; Lịch sử đơn hàng</Link>
             <ComponentCard title={`Đơn hàng từ ${order.shopName}`}>
 <OrderDesignPanel order={order} /><CustomerCustomAddress order={order} onChanged={async () => setOrder(await customerOrderService.detail(id))} /><CustomerQuoteActions order={order} user={user} onChanged={async () => setOrder(await customerOrderService.detail(id))} /><OrderDiscountSummary order={order} />
                 <div className="flex justify-between items-center mb-4">
@@ -226,16 +257,17 @@ export default function CustomerOrderDetailView() {
                     </div>
                     {trackingError && <p className="mb-3 text-sm text-error-500" role="alert">{trackingError}</p>}
                     <ol className="space-y-3">
-                        {trackingSteps.map((label, index) => {
+                        {trackingSteps.map((_, index) => {
                             const complete = trackingStage === 3 || index < trackingStage
                             const current = index === trackingStage
-                            return <li key={label} className="flex items-start gap-3">
+                            const problem = current && isTrackingProblem(order)
+                            return <li key={index} className="flex items-start gap-3">
                                 <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
-                                    complete ? 'bg-success-600 text-white' : current ? 'bg-brand-600 text-white' : 'border border-gray-300 text-gray-500 dark:border-gray-600'
-                                }`} aria-label={complete ? 'Hoàn tất' : current ? 'Đang xử lý' : 'Chưa hoàn tất'}>
-                                    {complete ? '✓' : index + 1}
+                                    complete ? 'bg-success-600 text-white' : problem ? 'bg-warning-500 text-white' : current ? 'bg-brand-600 text-white' : 'border border-gray-300 text-gray-500 dark:border-gray-600'
+                                }`} aria-label={complete ? 'Hoàn tất' : problem ? 'Có sự cố' : current ? 'Đang xử lý' : 'Chưa hoàn tất'}>
+                                    {complete ? '✓' : problem ? '!' : index + 1}
                                 </span>
-                                <span className={`text-sm ${complete || current ? 'font-medium text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400'}`}>{label}</span>
+                                <span className={`text-sm ${complete || current ? 'font-medium text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400'}`}>{getStepLabel(order, index)}</span>
                             </li>
                         })}
                     </ol>
