@@ -12,7 +12,7 @@ CREATE TABLE Users (
     password_hash VARCHAR(255),
     google_id VARCHAR(255) UNIQUE,
     full_name VARCHAR(100),
-    phone VARCHAR(20),
+    phone VARCHAR(20) UNIQUE, -- SRS 3.3: không trùng số điện thoại (NULL nếu chưa nhập)
     role ENUM('ADMIN', 'SHOP', 'CUSTOMER', 'DELIVERY', 'SHOP_STAFF') NOT NULL, -- DELIVERY: giá trị cũ, giữ lại cho chức năng giao hàng sau này
     is_email_verified BOOLEAN DEFAULT FALSE,
     status ENUM('ACTIVE', 'INACTIVE', 'BANNED') DEFAULT 'ACTIVE',
@@ -344,6 +344,7 @@ CREATE TABLE Order_Details (
     id VARCHAR(36) PRIMARY KEY,
     order_id VARCHAR(36) NOT NULL,
     product_id VARCHAR(36),
+    product_name VARCHAR(255), -- Tên sản phẩm tại thời điểm mua
     custom_materials JSON, -- {"main_flower": "Hoa hồng đỏ", "wrapper_color": "Đen", "ribbon": "Trắng"}
     price DECIMAL(12, 2) NOT NULL, -- Đơn giá tại thời điểm mua
     quantity INT NOT NULL,
@@ -431,7 +432,7 @@ CREATE TABLE Custom_Order_Requests (
     id VARCHAR(36) PRIMARY KEY,
     customer_id VARCHAR(36) NOT NULL,
     shop_id VARCHAR(36) NOT NULL,
-    budget DECIMAL(12, 2) NOT NULL,
+    budget DECIMAL(12, 2) NULL, -- ngân sách khách cũ; yêu cầu mới không nhập giá, shop báo giá sau
     desired_components JSON, -- {"flowers": ["Hoa hồng", "Hoa ly"], "wrapper": "Giấy Kraft"}
     description TEXT,
     status ENUM('REQUESTED', 'NEGOTIATING', 'ACCEPTED', 'REJECTED') DEFAULT 'REQUESTED',
@@ -470,9 +471,12 @@ CREATE TABLE Refunds (
     order_id VARCHAR(36) NOT NULL,
     amount DECIMAL(12, 2) NOT NULL,
     reason TEXT NOT NULL,
+    description TEXT NULL,
+    evidence_images TEXT NULL,
+    shop_response TEXT NULL,
     gateway_refund_id VARCHAR(100),
     gateway_response JSON,
-    status ENUM('REQUESTED', 'APPROVED', 'PROCESSED', 'REJECTED') DEFAULT 'REQUESTED',
+    status ENUM('REQUESTED', 'APPROVED', 'PROCESSED', 'REJECTED', 'CANCELLED') DEFAULT 'REQUESTED',
     created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_by VARCHAR(36),
     last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

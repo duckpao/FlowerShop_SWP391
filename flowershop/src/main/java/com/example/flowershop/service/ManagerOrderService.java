@@ -112,16 +112,19 @@ this.vouchers=vouchers;this.customWorkflow=customWorkflow;
     }
 
     /**
-     * Kiểm tra quyền sở hữu của người thao tác (actor) đối với shopId.
+     * Kiểm tra người thao tác (actor) là chủ hoặc nhân viên đang làm của shopId.
      * Đảm bảo người dùng chỉ có thể quản lý đúng shop thuộc quyền của mình.
      */
     private Shop owned(String shopId, String actor) {
         Shop s = shops.findById(shopId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy shop."));
-        if (!s.getOwner().getId().equals(actor))
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Bạn không sở hữu shop này.");
+        // SRS: chủ shop hoặc nhân viên đang làm tại shop được xử lý đơn
+        if (!s.getOwner().getId().equals(actor)
+                && !staff.findByShopIdAndUserId(shopId, actor).map(com.example.flowershop.entity.ShopStaff::isActive).orElse(false))
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Bạn không có quyền với shop này.");
         return s;
     }
+    @org.springframework.beans.factory.annotation.Autowired private com.example.flowershop.repository.ShopStaffRepository staff;
 
     /**
      * Lấy danh sách tất cả đơn hàng của shop theo phân trang và lọc theo trạng thái nếu có.
@@ -153,6 +156,11 @@ this.vouchers=vouchers;this.customWorkflow=customWorkflow;
         owned(shopId, actor);
         Order o = orders.findByIdAndShopId(orderId, shopId).orElseThrow(ManagerOrderService::notFound);
         return buildDetail(o);
+    }
+
+    /** SRS 4.4: Admin xem chi tiết mọi đơn hàng (chỉ đọc). */
+    public OrderDetailResponse adminDetail(String orderId) {
+        return buildDetail(orders.findById(orderId).orElseThrow(ManagerOrderService::notFound));
     }
 
     /**
@@ -207,7 +215,7 @@ this.vouchers=vouchers;this.customWorkflow=customWorkflow;
         String productName = "Hoa tươi"; int quantity = 1, price = o.getTotalAmount().intValue();
         if (!details.isEmpty()) {
             var d = details.get(0);
-            productName = d.getProduct() != null ? d.getProduct().getName() : "Hoa tươi";
+            productName = java.util.Objects.requireNonNullElse(d.snapshotName(), "Hoa tươi");
             quantity = d.getQuantity(); price = d.getPrice().intValue();
         }
 
@@ -438,7 +446,7 @@ this.vouchers=vouchers;this.customWorkflow=customWorkflow;
     private OrderDetailResponse buildDetail(Order o) {
         var items = orderDetails.findByOrderId(o.getId()).stream()
                 .map(d -> new OrderItemResponse(d.getProduct() != null ? d.getProduct().getId() : null,
-                        d.getProduct() != null ? d.getProduct().getName() : null, d.getPrice(), d.getQuantity()))
+                        d.snapshotName(), d.getPrice(), d.getQuantity()))
                 .toList();
         DeliveryInfo di = deliveries.findByOrderId(o.getId())
                 .map(d -> new DeliveryInfo(d.getTrackingCode(), d.getDeliveryPartnerId(), d.getStatus().name(), d.getGhnStatus())).orElse(null);

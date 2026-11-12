@@ -31,6 +31,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class ChatServiceTests {
     @MockitoBean JavaMailSender sender;
     @Autowired ChatService chat;
+    @Autowired ShopStaffRepository staffRows;
     @Autowired UserRepository users;
     @Autowired ShopRepository shops;
     @Autowired CategoryRepository categories;
@@ -103,6 +104,23 @@ class ChatServiceTests {
     }
 
     @Test
+    void activeStaffAnswersShopChatButInactiveStaffCannot() {
+        var f = fixture();
+        var session = chat.openForCustomer(f.customer().getId(), f.shop().getId());
+        User worker = user(UserRole.SHOP_STAFF);
+        ShopStaff row = new ShopStaff();
+        row.setId(UUID.randomUUID().toString()); row.setShop(f.shop()); row.setUser(worker); row.setActive(true);
+        staffRows.saveAndFlush(row);
+
+        assertThat(chat.send(session.id(), worker.getId(), text("Shop xin chào")).senderType()).isEqualTo(SenderType.SHOP);
+        assertThat(chat.shopSessions(f.shop().getId(), worker.getId())).extracting(s -> s.id()).contains(session.id());
+
+        row.setActive(false);
+        staffRows.saveAndFlush(row);
+        assertThatThrownBy(() -> chat.send(session.id(), worker.getId(), text("x"))).isInstanceOf(ResponseStatusException.class);
+    }
+
+    @Test
     void openingTwiceReturnsTheSameSessionPerCustomerAndShop() {
         var f = fixture();
         var first = chat.openForCustomer(f.customer().getId(), f.shop().getId());
@@ -123,7 +141,13 @@ class ChatServiceTests {
         var sent = chat.send(session.id(), f.owner().getId(),
                 new SendInput("Design quote", null, new ContextInput(ChatContextType.CUSTOM_ORDER, order.getId())));
         assertThat(sent.context()).containsEntry("orderId", order.getId()).containsEntry("status", "AWAITING_QUOTE");
-        assertThat(new BigDecimal(sent.context().get("price").toString())).isEqualByComparingTo("500000");
+        assertThat(sent.context().get("price")).isNull();
+        order.setSubTotal(new BigDecimal("650000"));
+        order.setStatus(OrderStatus.QUOTED);
+        orders.saveAndFlush(order);
+        var quoted = chat.send(session.id(), f.owner().getId(),
+                new SendInput("Shop quote", null, new ContextInput(ChatContextType.CUSTOM_ORDER, order.getId())));
+        assertThat(new BigDecimal(quoted.context().get("price").toString())).isEqualByComparingTo("650000");
         var other = fixture();
         assertThatThrownBy(() -> chat.openForShop(other.shop().getId(), other.owner().getId(), order.getId()))
                 .isInstanceOf(ResponseStatusException.class);

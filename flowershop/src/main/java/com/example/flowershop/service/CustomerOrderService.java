@@ -58,8 +58,9 @@ BigDecimal shippingDiscountAmount,String couponCode,String shippingCouponCode) {
                               String invoiceNumber, String gatewayTransactionNo, java.time.LocalDateTime paidAt) {}
 
     /** Khoản hoàn tiền của đơn để khách theo dõi: REQUESTED → APPROVED → PROCESSED, hoặc REJECTED. */
-    public record RefundLine(BigDecimal amount, String reason, String status,
-                             java.time.LocalDateTime createdDate, java.time.LocalDateTime updatedDate) {}
+    public record RefundLine(String id, BigDecimal amount, String reason, String status,
+                             java.time.LocalDateTime createdDate, java.time.LocalDateTime updatedDate,
+                             String description, List<String> images, String shopResponse) {}
 
         public record ShippingFeeResponse(BigDecimal shippingFee) {}
 
@@ -177,7 +178,7 @@ private static ResponseStatusException notFound() {
         }
         var lines = details.stream().map(d -> new OrderLine(
                 d.getProduct() != null ? d.getProduct().getId() : null,
-                d.getProduct() != null ? d.getProduct().getName() : null,
+                d.snapshotName(),
                 d.getProduct() != null ? imageByProduct.get(d.getProduct().getId()) : null,
                 d.getPrice(), d.getQuantity())).toList();
         var orderPayments = payments.findByOrderId(o.getId());
@@ -206,7 +207,7 @@ private static ResponseStatusException notFound() {
         var items = orderDetails.findByOrderId(orderId).stream()
                 .map(d -> new OrderItemResponse(
                         d.getProduct() != null ? d.getProduct().getId() : null,
-                        d.getProduct() != null ? d.getProduct().getName() : null,
+                        d.snapshotName(),
                         d.getPrice(), d.getQuantity()))
                 .toList();
         DeliveryInfo delivery = deliveries.findByOrderId(orderId)
@@ -222,7 +223,8 @@ private static ResponseStatusException notFound() {
                         p.getStatus() == PaymentStatus.SUCCESS ? p.getLastModifyDate() : null))
                 .toList();
         var refundLines = refunds.findByOrderIdOrderByCreatedDateAsc(orderId).stream()
-                .map(r -> new RefundLine(r.getAmount(), r.getReason(), r.getStatus().name(), r.getCreatedDate(), r.getLastModifyDate()))
+                .map(r -> new RefundLine(r.getId(), r.getAmount(), r.getReason(), r.getStatus().name(), r.getCreatedDate(), r.getLastModifyDate(),
+                        r.getDescription(), CustomerRefundService.images(r), r.getShopResponse()))
                 .toList();
         return new OrderDetailResponse(order.getId(), order.getShop().getId(), order.getShop().getName(),
                 order.getStatus().name(), order.getSubTotal(), order.getShippingFee(), order.getTotalAmount(),
@@ -323,7 +325,7 @@ order.getShippingDiscountAmount(),order.getCouponCode(),order.getShippingCouponC
         order.setLastModifyBy(customerId);
 
         OrderDetail detail = OrderDetail.builder().id(UUID.randomUUID().toString()).order(order)
-                .product(product).price(product.getPrice()).quantity(req.quantity()).createdBy(customerId).build();
+                .product(product).productName(product.getName()).price(product.getPrice()).quantity(req.quantity()).createdBy(customerId).build();
 
         Payment payment = Payment.builder().id(UUID.randomUUID().toString()).order(order)
                 .paymentType(PaymentType.FULL).paymentMethod(PaymentMethod.COD).amount(totalAmount)

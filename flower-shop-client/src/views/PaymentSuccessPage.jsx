@@ -77,6 +77,14 @@ export default function PaymentSuccessPage() {
   }, [isConfirmed]);
   // Đơn đặt cọc: lần này trả DEPOSIT, phần còn lại GHN thu hộ khi giao (COD)
   const isDeposit = paymentData?.paymentType === 'DEPOSIT';
+  const [payingFinal, setPayingFinal] = useState(false);
+  const [finalError, setFinalError] = useState('');
+  // SRS 5.1.2: đơn đã cọc có thể trả nốt phần còn lại online thay vì trả COD khi nhận hàng
+  const payRemaining = async () => {
+    setPayingFinal(true); setFinalError('');
+    try { await paymentService.startSePayCheckout(paymentData.orderId, 'FINAL'); }
+    catch (e) { setFinalError(e?.message || 'Không mở được cổng thanh toán.'); setPayingFinal(false); }
+  };
   // Định dạng số tiền VND
   const formatPrice = (amount) =>
     new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount || 0);
@@ -148,7 +156,13 @@ export default function PaymentSuccessPage() {
               )}
             </div>
 
+            {finalError && <p role="alert" className="text-sm text-error-500">{finalError}</p>}
             <div className="flex flex-col sm:flex-row justify-center gap-3 pt-2">
+              {paymentData?.nextPaymentType === 'FINAL' && paymentData?.orderId && (
+                <Button onClick={payRemaining} disabled={payingFinal} className="w-full sm:w-auto px-8 py-3">
+                  {payingFinal ? 'Đang chuyển…' : 'Thanh toán phần còn lại'}
+                </Button>
+              )}
               <Link to="/" className="w-full sm:w-auto">
                 <Button className="w-full sm:w-auto px-8 py-3">
                   Tiếp tục mua sắm

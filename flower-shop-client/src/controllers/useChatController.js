@@ -19,11 +19,11 @@ async function describeContext(scope, type, id) {
     try {
         const order = scope.kind === 'shop' ? await managerOrderService.detail(scope.shopId, id) : await customerOrderService.detail(id)
         if (order.orderType !== 'CUSTOM') throw new Error('Đơn hàng này không phải đơn hoa riêng.')
-        return { type, id, orderId: order.id, name: `Đơn hoa riêng #${id.replace(/-/g, '').slice(0, 8).toUpperCase()}`, price: order.customDesign?.budget ?? order.subTotal, status: order.status }
+        return { type, id, orderId: order.id, name: `Đơn hoa riêng #${id.replace(/-/g, '').slice(0, 8).toUpperCase()}`, price: order.subTotal > 0 ? order.subTotal : null, status: order.status }
     } catch (error) {
         if (error.status !== 404) throw error
         const r = scope.kind === 'shop' ? await customFlowerService.shopDetail(scope.shopId, id) : await customFlowerService.detail(id)
-        return { type, id, orderId: r.orderId, name: customOrderLabel(id), price: r.budget, status: r.status }
+        return { type, id, orderId: r.orderId, name: customOrderLabel(id), price: r.design?.quotedPrice ?? null, status: r.status }
     }
 }
 

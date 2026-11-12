@@ -27,15 +27,7 @@ public class DeliverySync {
         delivery.setLastModifyBy(actor);
         if (order.getStatus() != OrderStatus.DELIVERING) return;
         switch (tracking.ghnStatus()) {
-            case "delivered" -> {
-                order.setStatus(OrderStatus.COMPLETED);
-                // Chỉ tiền GHN thu hộ; lần thanh toán online FAILED/hủy không được thành SUCCESS
-                payments.findByOrderId(order.getId()).stream()
-                        .filter(p -> p.getPaymentMethod() == PaymentMethod.COD).forEach(p -> {
-                    p.setStatus(PaymentStatus.SUCCESS);
-                    p.setLastModifyBy(actor);
-                });
-            }
+            case "delivered" -> complete(order, actor);
             case "returned" -> order.setStatus(OrderStatus.REFUNDED);
             case "cancel" -> {
                 vouchers.release(order);
@@ -44,6 +36,18 @@ public class DeliverySync {
             }
             default -> { return; }
         }
+        order.setLastModifyBy(actor);
+    }
+
+    /** Đơn đã giao xong: COMPLETED và đánh dấu khoản COD SUCCESS. Dùng chung với job tự hoàn tất. */
+    public void complete(Order order, String actor) {
+        order.setStatus(OrderStatus.COMPLETED);
+        // Chỉ tiền GHN thu hộ; lần thanh toán online FAILED/hủy không được thành SUCCESS
+        payments.findByOrderId(order.getId()).stream()
+                .filter(p -> p.getPaymentMethod() == PaymentMethod.COD).forEach(p -> {
+            p.setStatus(PaymentStatus.SUCCESS);
+            p.setLastModifyBy(actor);
+        });
         order.setLastModifyBy(actor);
     }
 }

@@ -11,12 +11,12 @@ export const customFlowerService = {
     if (!Array.isArray(body) || !body.length) throw new Error('Danh mục đặt hoa chưa được cấu hình. Vui lòng thử lại sau.')
     return body
   },
-  async suggestions({ budget, quantity = 1, shopId = '', q = '', page = 0 }) {
-    const params = new URLSearchParams({ budget: String(budget), quantity: String(quantity), q, page: String(page) })
+  async suggestions({ quantity = 1, shopId = '', q = '', page = 0 }) {
+    const params = new URLSearchParams({ quantity: String(quantity), q, page: String(page) })
     if (shopId) params.set('shopId', shopId)
     const response = await fetch(`${API_BASE}/api/public/custom-orders/suggestions?${params}`, { cache: 'no-store' })
     const body = await response.json().catch(() => ({}))
-    if (!response.ok) throw new Error(body.message || 'Không tải được mẫu hoa theo ngân sách.')
+    if (!response.ok) throw new Error(body.message || 'Không tải được mẫu hoa tham khảo.')
     return body
   },
   mine: page => authService.authenticatedRequest(`/api/customer/custom-orders?page=${page}`),

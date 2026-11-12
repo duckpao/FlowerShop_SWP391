@@ -160,10 +160,16 @@ public class ShopReportService {
                 comments, likes, saves, comments + likes + saves, ranked);
     }
 
+    @org.springframework.beans.factory.annotation.Autowired private com.example.flowershop.repository.ShopStaffRepository staffRows;
+
+    private boolean activeStaff(String shopId, String actor) {
+        return staffRows.findByShopIdAndUserId(shopId, actor).map(com.example.flowershop.entity.ShopStaff::isActive).orElse(false);
+    }
+
     private Shop owned(String shopId, String actor) {
         Shop shop = shops.findById(shopId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy shop."));
-        if (!shop.getOwner().getId().equals(actor)) {
+        if (!shop.getOwner().getId().equals(actor) && !activeStaff(shopId, actor)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Bạn không sở hữu shop này.");
         }
         return shop;

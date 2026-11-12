@@ -12,12 +12,13 @@ import java.util.List;
 
 /** Staff xem đơn hủy cần hoàn tiền của shop mình và cập nhật tiến độ xử lý. */
 @RestController
-@RequestMapping("/api/staff/shops/{shopId}/refunds")
-@PreAuthorize("hasRole('SHOP_STAFF')")
+// Hai đường dẫn: staff (/api/staff) và chủ shop (/api/shop/mine); SecurityConfig chặn role theo đường dẫn, guard kiểm tra quyền với shop
+@RequestMapping({"/api/staff/shops/{shopId}/refunds", "/api/shop/mine/{shopId}/refunds"})
+@PreAuthorize("hasAnyRole('SHOP', 'SHOP_STAFF')")
 @SecurityRequirement(name = "bearerAuth")
 public class StaffRefundController {
 
-    public record StatusRequest(String status) {}
+    public record StatusRequest(String status, String note) {}
 
     private final StaffRefundService service;
 
@@ -33,6 +34,6 @@ public class StaffRefundController {
     @PostMapping("/{id}/status")
     public RefundResponse updateStatus(@PathVariable(name = "shopId") String shopId, @PathVariable(name = "id") String id,
                                        @RequestBody StatusRequest body, @AuthenticationPrincipal CurrentUser u) {
-        return service.updateStatus(shopId, u.id(), id, body.status());
+        return service.updateStatus(shopId, u.id(), id, body.status(), body.note());
     }
 }

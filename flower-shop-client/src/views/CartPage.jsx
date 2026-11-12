@@ -4,12 +4,17 @@ import PageMeta from '../components/common/PageMeta';
 import PageBreadCrumb from '../components/common/PageBreadCrumb';
 import Button from '../components/ui/button/Button';
 import { TrashBinIcon } from '../icons';
+import { useConfirm } from '../components/ui/confirm/ConfirmProvider';
 
 /**
  * Trang giỏ hàng (/cart): nhận state/hàm từ useCart qua props, gom item theo shop, cho tick chọn món,
  * chỉnh số lượng (updateItem), xóa (removeItem) và chuyển sang /checkout với các món đã chọn.
  */
 export default function CartPage({ cart, loading, error, fetchCart, updateItem, removeItem, userId, user }) {
+  const { confirm } = useConfirm();
+  const confirmRemove = async (id) => {
+    if (await confirm({ title: 'Xóa sản phẩm', message: 'Xóa sản phẩm này khỏi giỏ hàng?', confirmLabel: 'Xóa', tone: 'danger' })) removeItem(id);
+  };
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   // ?item=<id> do trang checkout gửi lại khi bấm "Quay lại giỏ hàng" -> khôi phục các món đã tick
@@ -244,7 +249,7 @@ export default function CartPage({ cart, loading, error, fetchCart, updateItem, 
                             {/* Nút xóa */}
                             <button
                               type="button"
-                              onClick={() => removeItem(item.id)}
+                              onClick={() => confirmRemove(item.id)}
                               disabled={loading}
                               className="text-gray-400 hover:text-error-500 transition-colors p-1 rounded hover:bg-error-50 dark:hover:bg-error-500/10"
                               title="Xóa sản phẩm này"

@@ -19,7 +19,7 @@ public class CustomFlowerOrderController {
     @GetMapping("/api/public/custom-orders/options")
     public java.util.List<CustomFlowerCatalogService.Option> options(){return catalog.catalog();}
     @GetMapping("/api/public/custom-orders/suggestions")
-    public CustomFlowerOrderService.Suggestions suggestions(@RequestParam("budget") BigDecimal budget,
+    public CustomFlowerOrderService.Suggestions suggestions(@RequestParam(name="budget", required=false) BigDecimal budget,
             @RequestParam(name="quantity", defaultValue="1") int quantity,@RequestParam(name="shopId", required=false) String shopId,
             @RequestParam(name="q", defaultValue="") String q,@RequestParam(name="page", defaultValue="0") int page){return service.suggestions(budget,quantity,shopId,q,page);}
     @PostMapping("/api/customer/custom-orders") @PreAuthorize("hasRole('CUSTOMER')") @ResponseStatus(HttpStatus.CREATED)

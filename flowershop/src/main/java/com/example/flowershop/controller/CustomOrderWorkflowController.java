@@ -27,7 +27,7 @@ public class CustomOrderWorkflowController {
             @Valid @RequestBody CustomOrderWorkflowService.CreateInput body) { return workflow.create(user.id(), body); }
 
     @PostMapping("/api/shop/mine/{shopId}/orders/{id}/quote")
-    @PreAuthorize("hasRole('SHOP')")
+    @PreAuthorize("hasAnyRole('SHOP', 'SHOP_STAFF')")
     public void quote(@PathVariable("shopId") String shopId, @PathVariable("id") String id,
             @AuthenticationPrincipal CurrentUser user, @Valid @RequestBody CustomOrderWorkflowService.Quote body) {
         workflow.quote(shopId, user.id(), id, body);

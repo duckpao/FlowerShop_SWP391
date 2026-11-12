@@ -12,7 +12,7 @@ public class FrontendController {
         "/products", "/products/**",
         "/custom-orders", "/custom-orders/new",
         "/shops/**",
-        "/orders", "/orders/**",
+        "/orders", "/orders/**", "/dashboard",
         "/admin", "/admin/**",
         "/shop-admin", "/shop-admin/**",
         "/payment/**"

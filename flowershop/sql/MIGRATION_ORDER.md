@@ -1,5 +1,12 @@
 # Migration sau khi gộp master và feature/dung
 
+## Đặt hoa riêng: shop báo giá, khách không nhập ngân sách
+
+Database đang dùng chạy `034_custom_orders_shop_quotation.sql` trước khi chạy backend mới.
+Cột `Custom_Order_Requests.budget` được phép NULL và chỉ giữ dữ liệu lịch sử.
+Yêu cầu mới chỉ chứa lựa chọn thiết kế/số lượng; giá được shop gửi trong `quotedPrice`.
+Không còn giới hạn báo giá theo ngân sách khách. `database.sql` đã cập nhật cho database tạo mới.
+
 ## Gói đăng ký shop
 
 Sau schema đã gộp, áp dụng thêm `030_shop_subscriptions.sql` để có Free/Pro, giao dịch mua gói, lượt tạo sản phẩm, sản phẩm nổi bật và lịch sử nhắc hạn.
@@ -31,6 +38,10 @@ Các migration của feature/dung đã được áp dụng trước khi merge, k
 `027` và `029` chạy lại được. Không import lại toàn bộ `database.sql` lên database đang dùng.
 
 ## Database tạo mới
+
+Số điện thoại không trùng và tên sản phẩm lúc mua: database đang có dữ liệu chạy thêm `035_unique_user_phone.sql` (kiểm tra số trùng trước khi chạy, xem chú thích trong file) và `036_order_detail_product_name.sql`. `database.sql` đã gộp sẵn.
+
+Yêu cầu hoàn tiền của khách: database đang có dữ liệu chạy thêm `037_customer_refund_requests.sql` (thêm trạng thái `CANCELLED`, cột `description`, `evidence_images`, `shop_response` cho `Refunds`). `database.sql` đã gộp sẵn.
 
 Gói Pro cấu hình: database đang có dữ liệu chạy thêm `033_configurable_shop_plans.sql` (đổi cột giới hạn thành `product_limit`, thêm `Products.deleted`, cập nhật quyền lợi gói seed). Database local đã được sao lưu và áp dụng migration này. Xem `../CONFIGURABLE_PRO_PLANS.md`.
 

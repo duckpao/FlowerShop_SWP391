@@ -41,6 +41,7 @@ public class CustomOrderWorkflowService {
     private final CouponService vouchers;
     private final NotificationService notifications;
     private final ObjectMapper json = new ObjectMapper();
+    @org.springframework.beans.factory.annotation.Autowired private ShopStaffRepository staff;
 
     public CustomOrderWorkflowService(OrderRepository orders, OrderDetailRepository details, PaymentRepository payments,
             AddressRepository addresses, ShopRepository shops, UserRepository users, CustomFlowerOrderService designs, GhnService ghn, CouponService vouchers, NotificationService notifications) {
@@ -57,7 +58,9 @@ public class CustomOrderWorkflowService {
         if (order.getOrderType() != OrderType.CUSTOM) throw invalid("Chức năng này chỉ dành cho đơn hoa theo yêu cầu.");
     }
     private void requireShop(Order order, String shopId, String actor) {
-        if (!order.getShop().getId().equals(shopId) || !order.getShop().getOwner().getId().equals(actor)) throw missing();
+        boolean member = order.getShop().getOwner().getId().equals(actor)
+                || staff.findByShopIdAndUserId(shopId, actor).map(ShopStaff::isActive).orElse(false);
+        if (!order.getShop().getId().equals(shopId) || !member) throw missing();
         if (order.getShop().getStatus() != ShopStatus.ACTIVE || order.getShop().getOwner().getStatus() != UserStatus.ACTIVE)
             throw invalid("Cửa hàng phải đang hoạt động.");
     }
@@ -69,7 +72,7 @@ public class CustomOrderWorkflowService {
         var address = addresses.findByIdAndUserId(input.addressId(), actor).orElseThrow(CustomOrderWorkflowService::missing);
         // A design request must reach the shop even if its saved address still needs
         // carrier codes. Those codes are required when quoting shipping, not submitting.
-        var design = new Design(request.budget(), request.description(), designs.design(request));
+        var design = new Design(null, request.description(), designs.design(request));
         var order = Order.builder().id(UUID.randomUUID().toString()).customer(customer).shop(shop)
                 .deliveryAddress(address).recipientName(address.getRecipientName()).recipientPhone(address.getRecipientPhone())
                 .orderType(OrderType.CUSTOM).subTotal(BigDecimal.ZERO).totalAmount(BigDecimal.ZERO)
@@ -101,7 +104,7 @@ public class CustomOrderWorkflowService {
                 }
                 return new Design(budget,order.getCustomerNote(),designs.decode(tree.toString()),true);
             }
-            return new Design(tree.path("budget").decimalValue(), tree.path("description").isNull() ? null : tree.path("description").asText(),
+            return new Design(tree.path("budget").isNumber()?tree.path("budget").decimalValue():null, tree.path("description").isNull() ? null : tree.path("description").asText(),
                     designs.decode(tree.path("preferences").toString()));
         }
         catch (Exception e) { throw new IllegalStateException("Không đọc được thiết kế hoa riêng.", e); }
@@ -111,7 +114,7 @@ public class CustomOrderWorkflowService {
         var order=locked(id); requireCustom(order); requireShop(order, shopId, actor);
         if (order.getStatus()!=OrderStatus.AWAITING_QUOTE && order.getStatus()!=OrderStatus.QUOTED) throw invalid("Đơn không còn chờ báo giá.");
         var design=design(order);
-        if (design==null || quote.amount().compareTo(design.budget())>0) throw invalid("Giá hoa không được vượt ngân sách khách hàng.");
+        if (design==null) throw invalid("Không tìm thấy thiết kế để báo giá.");
         var pickup=addresses.findPickupByShopId(shopId).orElse(null);
         var destination=order.getDeliveryAddress();
         if (!hasCarrierAddress(destination))

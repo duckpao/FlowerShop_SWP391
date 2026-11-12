@@ -17,7 +17,33 @@ import org.springframework.web.bind.annotation.*;
 @SecurityRequirement(name = "bearerAuth")
 public class CustomerOrderController {
     private final CustomerOrderService service;
-    public CustomerOrderController(CustomerOrderService service) { this.service = service; }
+    private final com.example.flowershop.service.CustomerRefundService refunds;
+    public CustomerOrderController(CustomerOrderService service, com.example.flowershop.service.CustomerRefundService refunds) {
+        this.service = service;
+        this.refunds = refunds;
+    }
+
+    /** SRS 5.2: khách gửi yêu cầu hoàn tiền cho đơn đã thanh toán. */
+    @PostMapping("/{id}/refunds") @ResponseStatus(HttpStatus.CREATED)
+    @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
+    public com.example.flowershop.service.CustomerRefundService.RefundResult requestRefund(@AuthenticationPrincipal CurrentUser user,
+            @PathVariable(name = "id") String id, @Valid @RequestBody com.example.flowershop.service.CustomerRefundService.RefundInput body) {
+        return refunds.request(user.id(), id, body);
+    }
+
+    @PostMapping("/{id}/refunds/{refundId}/cancel")
+    @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
+    public com.example.flowershop.service.CustomerRefundService.RefundResult cancelRefund(@AuthenticationPrincipal CurrentUser user,
+            @PathVariable(name = "id") String id, @PathVariable(name = "refundId") String refundId) {
+        return refunds.cancel(user.id(), id, refundId);
+    }
+
+    @PostMapping("/{id}/refunds/images")
+    @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
+    public java.util.Map<String, String> uploadRefundImage(@AuthenticationPrincipal CurrentUser user, @PathVariable(name = "id") String id,
+            @RequestParam("file") org.springframework.web.multipart.MultipartFile file) {
+        return java.util.Map.of("url", refunds.uploadEvidence(user.id(), id, file));
+    }
 
     @PostMapping("/voucher-preview")
     public com.example.flowershop.service.CouponService.Preview vouchers(@AuthenticationPrincipal CurrentUser user,

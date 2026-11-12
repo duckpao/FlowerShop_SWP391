@@ -26,7 +26,6 @@ public class CustomFlowerOrderService {
             @Size(max=100) String occasion, @Size(max=200) String wrapping,
             @Size(max=10) String deliveryDate, @Size(max=36) String referenceProductId) {}
     public record RequestInput(@NotBlank @Size(max=36) String shopId,
-            @NotNull @DecimalMin("1.00") @Digits(integer=10,fraction=2) BigDecimal budget,
             @NotNull @Min(1) @Max(100) Integer quantity,
             @Size(max=3000) String description,
             @NotNull @Valid Preferences preferences) {}
@@ -67,7 +66,7 @@ public class CustomFlowerOrderService {
     private Shop ownedShop(String id,String actor){var s=shops.findById(id).filter(x->x.getOwner().getId().equals(actor)).orElseThrow(CustomFlowerOrderService::missing);return s;}
     private void validateMoney(BigDecimal budget,int quantity){
         if(budget==null||budget.compareTo(BigDecimal.ONE)<0||budget.compareTo(new BigDecimal("9999999999.99"))>0||budget.stripTrailingZeros().scale()>2)
-            throw new IllegalArgumentException("Ngân sách phải từ 1 đến 9.999.999.999,99 đồng, tối đa 2 số thập phân.");
+            throw new IllegalArgumentException("Số tiền phải từ 1 đến 9.999.999.999,99 đồng, tối đa 2 số thập phân.");
         if(quantity<1||quantity>100)throw new IllegalArgumentException("Số lượng từ 1 đến 100.");
     }
     private String encode(Design value){try{return json.writeValueAsString(value);}catch(JsonProcessingException e){throw new IllegalStateException("Không thể lưu thiết kế.",e);}}
@@ -92,7 +91,9 @@ public class CustomFlowerOrderService {
     private Result result(CustomOrderRequest r){return new Result(r.getId(),r.getShop().getId(),r.getShop().getName(),r.getCustomer().getFullName(),r.getBudget(),r.getDescription(),r.getStatus(),decode(r.getDesiredComponents()),r.getCreatedDate(),r.getLastModifyDate(),orders.findLinkedCustomOrder(r.getId(),r.getCustomer().getId(),r.getShop().getId()).map(Order::getId).orElse(null));}
     private Results results(Page<CustomOrderRequest> p){return new Results(p.getContent().stream().map(this::result).toList(),p.getNumber(),p.getTotalPages(),p.getTotalElements());}
     Design design(RequestInput input){
-        validateMoney(input.budget(),input.quantity());var p=input.preferences();
+        if(input.quantity()==null||input.quantity()<1||input.quantity()>100)
+            throw new IllegalArgumentException("Số lượng từ 1 đến 100.");
+        var p=input.preferences();
         catalog.validate(p);
         if(p.deliveryDate()!=null&&!p.deliveryDate().isBlank()){
             LocalDate date;try{date=LocalDate.parse(p.deliveryDate());}catch(java.time.format.DateTimeParseException e){throw new IllegalArgumentException("Ngày nhận hoa không hợp lệ.");}
@@ -104,7 +105,6 @@ public class CustomFlowerOrderService {
                     .filter(x->x.getShop().getId().equals(input.shopId())).orElseThrow(CustomFlowerOrderService::missing);
             if(product.getStock()==null||product.getStock()<input.quantity())throw conflict("Mẫu hoa tham khảo không đủ số lượng.");
             total=product.getPrice().multiply(BigDecimal.valueOf(input.quantity()));
-            if(total.compareTo(input.budget())>0)throw conflict("Mẫu hoa đã thay đổi giá hoặc vượt ngân sách. Hãy chọn lại.");
             productId=product.getId();name=product.getName();
         }
         return new Design(input.quantity(),clean(p.flowers()),clean(p.colors()),clean(p.occasion()),clean(p.wrapping()),clean(p.deliveryDate()),productId,name,total,null,null,null);
@@ -114,7 +114,7 @@ public class CustomFlowerOrderService {
         var shop=activeShop(input.shopId());
         var user=users.findByIdAndRoleAndStatus(actor, UserRole.CUSTOMER, UserStatus.ACTIVE).orElseThrow(CustomFlowerOrderService::missing);
         var request=CustomOrderRequest.builder().id(UUID.randomUUID().toString()).customer(user).shop(shop)
-                .budget(input.budget()).description(input.description() == null ? "" : input.description().strip()).desiredComponents(encode(design(input)))
+                .description(input.description() == null ? "" : input.description().strip()).desiredComponents(encode(design(input)))
                 .status(CustomOrderStatus.REQUESTED).createdBy(actor).lastModifyBy(actor).build();
         return result(requests.saveAndFlush(request));
     }
@@ -136,14 +136,16 @@ public class CustomFlowerOrderService {
         if(input.note()==null||input.note().isBlank())throw new IllegalArgumentException("Vui lòng nhập nội dung phản hồi cho khách.");
         if(input.status()==CustomOrderStatus.ACCEPTED&&input.quotedPrice()==null)throw new IllegalArgumentException("Cần báo giá tổng khi chấp nhận.");
         if(input.status()==CustomOrderStatus.ACCEPTED&&input.depositPercent()==null)throw new IllegalArgumentException("Cần báo mức cọc (10-100%) khi chấp nhận.");
-        if(input.quotedPrice()!=null){validateMoney(input.quotedPrice(),1);if(input.quotedPrice().compareTo(request.getBudget())>0)throw new IllegalArgumentException("Báo giá tổng không được vượt ngân sách của khách.");}
+        if(input.quotedPrice()!=null)validateMoney(input.quotedPrice(),1);
         var d=decode(request.getDesiredComponents());
         request.setDesiredComponents(encode(new Design(Math.max(1,d.quantity()),d.flowers(),d.colors(),d.occasion(),d.wrapping(),d.deliveryDate(),d.referenceProductId(),d.referenceProductName(),d.estimatedTotal(),clean(input.note()),input.quotedPrice(),input.depositPercent())));
         request.setStatus(input.status());request.setLastModifyBy(actor);
         return result(requests.saveAndFlush(request));
     }
     public Suggestions suggestions(BigDecimal budget,int quantity,String shopId,String q,int page){
-        validateMoney(budget,quantity);page(page);
+        if(quantity<1||quantity>100)throw new IllegalArgumentException("Số lượng từ 1 đến 100.");
+        if(budget!=null)validateMoney(budget,quantity);
+        page(page);
         if(q!=null&&q.length()>100)throw new IllegalArgumentException("Từ khóa tối đa 100 ký tự.");
         if(shopId!=null&&!shopId.isBlank())activeShop(shopId);
         String term=(q==null?"":q.strip().toLowerCase(Locale.ROOT)).replace("!","!!").replace("%","!%").replace("_","!_");
@@ -152,14 +154,15 @@ public class CustomFlowerOrderService {
             filters.add(cb.equal(root.get("status"),ProductStatus.ACTIVE));filters.add(cb.isFalse(root.get("adminHidden")));
             filters.add(cb.equal(root.join("shop").get("status"),ShopStatus.ACTIVE));
             filters.add(cb.greaterThan(root.get("price"),BigDecimal.ZERO));
-            filters.add(cb.le(cb.prod(root.<BigDecimal>get("price"),BigDecimal.valueOf(quantity)),budget));
+            // SRS 3.3 Budget Constraint: cho phép lệch +5% so với ngân sách
+            if(budget!=null)filters.add(cb.le(cb.prod(root.<BigDecimal>get("price"),BigDecimal.valueOf(quantity)),budget.multiply(new BigDecimal("1.05"))));
             filters.add(cb.greaterThanOrEqualTo(root.get("stock"),quantity));
             if(shopId!=null&&!shopId.isBlank())filters.add(cb.equal(root.get("shop").get("id"),shopId));
             if(!term.isEmpty())filters.add(cb.like(cb.lower(root.get("name")),"%"+term+"%",'!'));
             return cb.and(filters.toArray(Predicate[]::new));
         };
         var found=products.findAll(spec.and(quota.allowedSpecification()),PageRequest.of(page,12,Sort.by(Sort.Order.desc("price"),Sort.Order.asc("id"))));
-        var content=cards.cards(found.getContent()).stream().map(p->{var total=p.price().multiply(BigDecimal.valueOf(quantity));return new Suggestion(p,total,budget.subtract(total));}).toList();
+        var content=cards.cards(found.getContent()).stream().map(p->{var total=p.price().multiply(BigDecimal.valueOf(quantity));return new Suggestion(p,total,budget==null?null:budget.subtract(total));}).toList();
         return new Suggestions(content,page,found.getTotalPages(),found.getTotalElements(),budget,quantity);
     }
 }

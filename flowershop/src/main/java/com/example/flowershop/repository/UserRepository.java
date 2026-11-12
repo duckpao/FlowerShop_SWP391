@@ -19,6 +19,10 @@ public class UserRepository extends HibernateRepository<User> {
         return countWhere("e.email = :email", Map.of("email", email)) > 0;
     }
 
+    public boolean existsByPhoneAndIdNot(String phone, String id) {
+        return countWhere("e.phone = :phone and e.id <> :id", Map.of("phone", phone, "id", id)) > 0;
+    }
+
     public Optional<User> findByEmail(String email) {
         return one("e.email = :email", Map.of("email", email));
     }

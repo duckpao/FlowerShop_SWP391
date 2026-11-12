@@ -8,6 +8,7 @@ import AvatarEditDialog from "../UserProfile/AvatarEditDialog";
 
 // Trang cá nhân của khách (trước nằm ở sidebar): [đường dẫn, nhãn, path SVG]
 const CUSTOMER_LINKS: [string, string, string][] = [
+  ['/dashboard', 'Tổng quan', 'M4 4h7v7H4V4Zm9 0h7v7h-7V4ZM4 13h7v7H4v-7Zm9 0h7v7h-7v-7Z'],
   ['/custom-orders', 'Yêu cầu đặt hoa riêng', 'M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10Z'],
   ['/transactions', 'Lịch sử giao dịch', 'M3 7h18v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7Zm0 0a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2M3 11h18M7 15h4'],
   ['/occasions', 'Dịp đặc biệt', 'M7 3v3M17 3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z'],
