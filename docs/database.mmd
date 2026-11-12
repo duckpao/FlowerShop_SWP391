@@ -6,7 +6,7 @@ erDiagram
         varchar password_hash
         varchar google_id UK
         varchar full_name
-        varchar phone
+        varchar phone UK
         enum role "ADMIN,SHOP,CUSTOMER,DELIVERY,SHOP_STAFF"
         boolean is_email_verified
         enum status "ACTIVE,INACTIVE,BANNED"
@@ -150,6 +150,7 @@ erDiagram
         enum product_type "READY_MADE,CUSTOM"
         enum status "ACTIVE,INACTIVE,OUT_OF_STOCK"
         boolean admin_hidden
+        boolean deleted
     }
 
     Product_Images {
@@ -172,6 +173,9 @@ erDiagram
     Coupons {
         varchar id PK
         varchar shop_id FK
+        varchar target
+        varchar product_id FK
+        boolean deleted
         varchar code UK
         enum discount_type "PERCENTAGE,FIXED_AMOUNT"
         decimal discount_value
@@ -199,6 +203,11 @@ erDiagram
         varchar recipient_name
         varchar recipient_phone
         varchar coupon_id FK
+        varchar shipping_coupon_id FK
+        varchar coupon_code
+        varchar shipping_coupon_code
+        decimal shipping_discount_amount
+        boolean coupons_released
         enum order_type "STANDARD,CUSTOM"
         decimal sub_total
         decimal discount_amount
@@ -210,13 +219,15 @@ erDiagram
         text shop_note
         varchar checkout_group
         varchar custom_request_id
-        enum status "PENDING,AWAITING_DEPOSIT,DEPOSIT_PAID,PROCESSING,DELIVERING,COMPLETED,CANCELLED,REFUNDED"
+        datetime payment_started_at
+        enum status "PENDING,AWAITING_DEPOSIT,DEPOSIT_PAID,PROCESSING,DELIVERING,COMPLETED,CANCELLED,REFUNDED,AWAITING_QUOTE,QUOTED"
     }
 
     Order_Details {
         varchar id PK
         varchar order_id FK
         varchar product_id FK
+        varchar product_name
         json custom_materials
         decimal price
         int quantity
@@ -255,6 +266,14 @@ erDiagram
         boolean is_read
     }
 
+    Custom_Flower_Options {
+        varchar id PK
+        varchar option_group
+        varchar label
+        boolean disabled
+        int sort_order
+    }
+
     Custom_Order_Requests {
         varchar id PK
         varchar customer_id FK
@@ -283,9 +302,12 @@ erDiagram
         varchar order_id FK
         decimal amount
         text reason
+        text description
+        text evidence_images
+        text shop_response
         varchar gateway_refund_id
         json gateway_response
-        enum status "REQUESTED,APPROVED,PROCESSED,REJECTED"
+        enum status "REQUESTED,APPROVED,PROCESSED,REJECTED,CANCELLED"
     }
 
     Product_Reviews {
@@ -378,30 +400,73 @@ erDiagram
         datetime sent_at
     }
 
-    Notifications {
+    Shop_Plans {
         varchar id PK
-        varchar user_id FK
-        varchar title
-        text message
-        varchar link
-        boolean is_read
+        varchar name
+        int duration_months
+        decimal price
+        int product_limit
+        int featured_limit
+        boolean enabled
     }
 
-    Shop_Product_Publications {
-        varchar product_id PK
-        datetime published_at
+    Shop_Subscriptions {
+        varchar id PK
+        varchar shop_id FK,UK
+        varchar plan_id FK
+        datetime started_at
+        datetime ends_at
     }
 
-    Shop_Product_Mails {
+    Shop_Plan_Payments {
         varchar id PK
-        varchar product_id
-        varchar shop_id
-        varchar user_id
+        varchar shop_id FK
+        varchar plan_id FK
+        int duration_months
+        decimal amount
+        varchar invoice_number UK
         varchar status
+        datetime created_at
+        datetime confirmed_at
+        datetime last_checked_at
+        varchar transaction_no
+    }
+
+    Shop_Product_Postings {
+        varchar id PK
+        varchar shop_id FK
+        datetime posted_at
+    }
+
+    Featured_Products {
+        varchar product_id PK,FK
+        varchar shop_id FK
+        datetime featured_at
+    }
+
+    Subscription_Reminders {
+        varchar id PK
+        varchar subscription_id FK
+        datetime expected_end
+        date reminder_date
+        int hour_slot
+        varchar mail_status
         int attempts
         datetime next_attempt_at
+    }
+
+    Shop_Pro_Activations {
+        varchar id PK
+        varchar shop_id FK
+        varchar plan_id FK
+        int duration_months
+        varchar source
+        varchar payment_id FK,UK
+        varchar actor_id FK
+        varchar note
+        datetime starts_at
+        datetime ends_at
         datetime created_at
-        datetime sent_at
     }
 
     Users ||--o| Shops : "owner_id"
@@ -420,12 +485,14 @@ erDiagram
     Products ||--o{ Product_Images : "product_id"
     Products ||--o{ Product_Videos : "product_id"
     Shops |o--o{ Coupons : "shop_id"
+    Products |o--o{ Coupons : "product_id"
     Users ||--o{ Cart_Items : "user_id"
     Products ||--o{ Cart_Items : "product_id"
     Users ||--o{ Orders : "customer_id"
     Shops ||--o{ Orders : "shop_id"
-    Addresses ||--o{ Orders : "delivery_address_id"
+    Addresses |o--o{ Orders : "delivery_address_id"
     Coupons |o--o{ Orders : "coupon_id"
+    Coupons |o--o{ Orders : "shipping_coupon_id"
     Orders ||--o{ Order_Details : "order_id"
     Products |o--o{ Order_Details : "product_id"
     Orders ||--o{ Deliveries : "order_id"
@@ -453,3 +520,15 @@ erDiagram
     Blog_Comments |o--o{ Blog_Comments : "parent_comment_id"
     Users ||--o{ Customer_Occasions : "customer_id"
     Users ||--o{ Notifications : "user_id"
+    Shops ||--o| Shop_Subscriptions : "shop_id"
+    Shop_Plans ||--o{ Shop_Subscriptions : "plan_id"
+    Shops ||--o{ Shop_Plan_Payments : "shop_id"
+    Shop_Plans ||--o{ Shop_Plan_Payments : "plan_id"
+    Shops ||--o{ Shop_Product_Postings : "shop_id"
+    Products ||--o| Featured_Products : "product_id"
+    Shops ||--o{ Featured_Products : "shop_id"
+    Shop_Subscriptions ||--o{ Subscription_Reminders : "subscription_id"
+    Shops ||--o{ Shop_Pro_Activations : "shop_id"
+    Shop_Plans ||--o{ Shop_Pro_Activations : "plan_id"
+    Shop_Plan_Payments |o--o| Shop_Pro_Activations : "payment_id"
+    Users |o--o{ Shop_Pro_Activations : "actor_id"
