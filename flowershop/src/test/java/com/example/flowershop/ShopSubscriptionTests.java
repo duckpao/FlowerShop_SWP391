@@ -57,6 +57,7 @@ class ShopSubscriptionTests {
     @Autowired CartItemRepository cartItems;
     @Autowired PlatformTransactionManager transactionManager;
     @Autowired MockMvc mvc;
+    @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
     TransactionTemplate tx;
     User owner,customer,admin;
     Shop shop;
@@ -171,8 +172,12 @@ class ShopSubscriptionTests {
     }
     @Test void importedProductsAreRestrictedForFreeAndEveryProPlanAndUnlockOnUpgrade() {
         var ids=new ArrayList<String>();
-        for(int i=0;i<46;i++)ids.add(tx.execute(t->products.saveAndFlush(Product.builder().id(id()).shop(shop).category(category)
-                .name("Imported").price(new BigDecimal("100000")).stock(5).status(ProductStatus.ACTIVE).build()).getId()));
+        // Quota xếp hạng theo createdDate rồi tới id ngẫu nhiên: gán mốc khác nhau để thứ tự tạo là thứ tự xếp hạng.
+        for(int i=0;i<46;i++){int n=i;ids.add(tx.execute(t->{
+            var saved=products.saveAndFlush(Product.builder().id(id()).shop(shop).category(category)
+                    .name("Imported").price(new BigDecimal("100000")).stock(5).status(ProductStatus.ACTIVE).build());
+            jdbc.update("update Products set created_date=? where id=?",java.sql.Timestamp.valueOf(LocalDateTime.of(2026,1,1,0,0).plusSeconds(n)),saved.getId());
+            return saved.getId();}));}
         assertThat(catalog.browse("",null,shop.getId(),"newest",0,100).totalElements()).isEqualTo(5);
         assertThat(manager.list(shop.getId(),owner.getId(),0).content()).filteredOn(ManagerProductService.Result::quotaBlocked).hasSize(20);
         String blocked=ids.get(5);
