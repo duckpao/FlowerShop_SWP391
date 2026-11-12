@@ -1,9 +1,20 @@
 import { API_BASE } from '../apiBase'
 
-// GET không cần CSRF/JWT; lỗi HTTP được đổi thành Error có thông báo tiếng Việt
+// GET không cần CSRF/JWT; lỗi HTTP được đổi thành Error có thông báo tiếng Việt.
+// Backend trả 502 kèm lý do khi GHN lỗi: hiện nguyên lý do đó để người dùng biết lỗi nằm ở phía GHN.
 const get = async path => {
-    const res = await fetch(`${API_BASE}${path}`)
-    if (!res.ok) throw new Error(`Không tải được dữ liệu GHN ${path}.`)
+    let res
+    try {
+        res = await fetch(`${API_BASE}${path}`)
+    } catch {
+        throw new Error('Mất kết nối tới máy chủ. Vui lòng kiểm tra đường truyền.')
+    }
+    if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.message || (res.status === 502
+            ? 'GHN đang gặp sự cố, chưa tải được danh mục địa chỉ. Vui lòng thử lại sau ít phút.'
+            : 'Không tải được dữ liệu địa chỉ GHN.'))
+    }
     return res.json()
 }
 

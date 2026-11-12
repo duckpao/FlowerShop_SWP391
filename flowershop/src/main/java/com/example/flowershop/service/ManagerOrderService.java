@@ -386,6 +386,9 @@ this.vouchers=vouchers;this.customWorkflow=customWorkflow;
     @Transactional
     public void cancel(String shopId, String actor, String orderId, String reason) {
         owned(shopId, actor);
+        // SRS 8.4: shop hủy đơn phải nhập lý do (UI đã chặn, server kiểm tra lại)
+        if (reason == null || reason.isBlank())
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Vui lòng nhập lý do hủy đơn.");
         Order o = orders.findByIdAndShopIdForUpdate(orderId, shopId).orElseThrow(ManagerOrderService::notFound);
         if (o.getStatus() != OrderStatus.PENDING && o.getStatus() != OrderStatus.AWAITING_DEPOSIT
                 && o.getStatus() != OrderStatus.DEPOSIT_PAID && o.getStatus() != OrderStatus.PROCESSING && o.getStatus()!=OrderStatus.AWAITING_QUOTE && o.getStatus()!=OrderStatus.QUOTED) {
@@ -428,11 +431,8 @@ this.vouchers=vouchers;this.customWorkflow=customWorkflow;
         Delivery d = deliveries.findByOrderId(orderId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Đơn hàng chưa có vận đơn GHN để cập nhật."));
 
-        try {
-            ghn.updateOrder(d.getTrackingCode(), body);
-        } catch (Exception e) {
-            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Lỗi khi cập nhật vận đơn GHN: " + e.getMessage(), e);
-        }
+        // GhnService đã đổi mọi lỗi GHN thành ResponseStatusException có thông báo tiếng Việt; giữ nguyên để màn hình hiện đúng lý do
+        ghn.updateOrder(d.getTrackingCode(), body);
     }
 
     /**

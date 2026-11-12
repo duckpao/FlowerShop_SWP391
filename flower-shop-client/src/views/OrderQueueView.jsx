@@ -95,6 +95,8 @@ export default function OrderQueueView({ shop }) {
      * Gọi: managerOrderService.confirm -> POST .../orders/{id}/confirm
      */
     const confirmOrder = async orderId => {
+        // SRS 8.4: mọi thay đổi trạng thái của shop đều cần hộp thoại xác nhận
+        if (!await confirm({ title: 'Xác nhận đơn hàng', message: `Xác nhận đơn ${orderId.substring(0, 8)} và bắt đầu chuẩn bị hoa?`, confirmLabel: 'Xác nhận đơn' })) return
         setBusy(true); setError(''); setNotice('')
         try {
             await managerOrderService.confirm(shop.id, orderId)
