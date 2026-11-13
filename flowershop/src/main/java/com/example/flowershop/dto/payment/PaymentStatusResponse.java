@@ -33,7 +33,9 @@ public class PaymentStatusResponse {
     private BigDecimal depositAmount;
     private BigDecimal totalPaid;
     private BigDecimal remainingAmount;
-    /** "DEPOSIT" | "FINAL" | null: lần thanh toán tiếp theo frontend cần gọi. */
+    /** Outstanding cash collection already assigned to the delivery partner. */
+    private BigDecimal codAmount;
+    /** "DEPOSIT" | "FULL" | null: custom deposit orders settle the balance by COD. */
     private String nextPaymentType;
     /** Thanh toán gộp: mọi đơn thuộc giao dịch (orderId là đơn đầu tiên). */
     private java.util.List<String> orderIds;

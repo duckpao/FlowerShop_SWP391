@@ -32,7 +32,7 @@ export default function PaymentPendingPage() {
   }, [user, idsKey, reloadKey])
 
   // payable: còn hạn trả (backend chỉ trả paymentSecondsLeft cho đơn chưa trả và chưa hết hạn)
-  const payable = (orders || []).filter(o => o.paymentSecondsLeft != null)
+  const payable = (orders || []).filter(o => o.orderType !== 'CUSTOM' && o.paymentSecondsLeft != null)
   const paid = (orders || []).filter(o => o.paymentStatus === 'SUCCESS' && o.status !== 'CANCELLED')
   const cancelledOrders = (orders || []).filter(o => o.status === 'CANCELLED')
   // Nhiều đơn gộp 1 giao dịch -> lấy thời gian của đơn sắp hết hạn nhất

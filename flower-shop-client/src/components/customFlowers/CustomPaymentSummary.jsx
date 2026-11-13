@@ -1,10 +1,11 @@
 import { formatPrice } from '../../models/productModel'
 
-export default function CustomPaymentSummary({ preview, paymentType = 'DEPOSIT' }) {
+export default function CustomPaymentSummary({ preview, paymentType = 'DEPOSIT', children }) {
   const deposit = paymentType === 'DEPOSIT'
   const row = (label, amount, discount = false) => <div className="flex justify-between gap-4"><dt>{label}</dt><dd className="shrink-0 font-medium">{discount ? '−' : ''}{formatPrice(amount)}</dd></div>
   return <aside className="rounded-2xl border border-brand-100 bg-brand-50/40 p-5 dark:border-gray-700 dark:bg-gray-900" aria-label="Tóm tắt thanh toán custom" aria-live="polite">
     <h3 className="mb-5 text-lg font-semibold">Tóm tắt thanh toán</h3>
+    {children && <div className="mb-5">{children}</div>}
     {!preview ? <p className="text-sm text-gray-500">Chọn địa chỉ và chờ kiểm tra ưu đãi để xem số tiền chính xác.</p> : <>
       <dl className="space-y-3 text-sm text-gray-600 dark:text-gray-300">
         {row('Giá hoa shop báo', preview.subTotal)}

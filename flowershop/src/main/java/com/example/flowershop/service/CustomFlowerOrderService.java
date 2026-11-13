@@ -135,9 +135,12 @@ public class CustomFlowerOrderService {
         if(input.status()==CustomOrderStatus.REQUESTED)throw new IllegalArgumentException("Shop không thể chuyển về trạng thái mới gửi.");
         if(input.status()==CustomOrderStatus.ACCEPTED&&input.quotedPrice()==null)throw new IllegalArgumentException("Cần báo giá tổng khi chấp nhận.");
         if(input.status()==CustomOrderStatus.ACCEPTED&&input.depositPercent()==null)throw new IllegalArgumentException("Cần báo mức cọc (10-100%) khi chấp nhận.");
-        if(input.quotedPrice()!=null)validateMoney(input.quotedPrice(),1);
+        boolean rejected=input.status()==CustomOrderStatus.REJECTED;
+        BigDecimal quote=rejected?null:input.quotedPrice();
+        Integer deposit=rejected?null:input.depositPercent();
+        if(quote!=null)validateMoney(quote,1);
         var d=decode(request.getDesiredComponents());
-        request.setDesiredComponents(encode(new Design(Math.max(1,d.quantity()),d.flowers(),d.colors(),d.occasion(),d.wrapping(),d.deliveryDate(),d.referenceProductId(),d.referenceProductName(),d.estimatedTotal(),clean(input.note()),input.quotedPrice(),input.depositPercent())));
+        request.setDesiredComponents(encode(new Design(Math.max(1,d.quantity()),d.flowers(),d.colors(),d.occasion(),d.wrapping(),d.deliveryDate(),d.referenceProductId(),d.referenceProductName(),d.estimatedTotal(),clean(input.note()),quote,deposit)));
         request.setStatus(input.status());request.setLastModifyBy(actor);
         return result(requests.saveAndFlush(request));
     }

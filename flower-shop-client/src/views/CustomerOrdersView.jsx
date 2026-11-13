@@ -90,11 +90,13 @@ export default function CustomerOrdersView() {
         }
     }
     // Đơn hoa theo yêu cầu: trả cọc online (AWAITING_DEPOSIT); phần còn lại GHN thu hộ khi giao. Số tiền do server tính.
-    const payStep = async (order, type) => {
+    const payStep = async order => {
         setPayingId(order.id)
         setError('')
         try {
-            await paymentService.startSePayCheckout(order.id, type)
+            const progress = await paymentService.checkPaymentStatus(order.id)
+            if (!['DEPOSIT', 'FULL'].includes(progress.nextPaymentType)) throw new Error('Đơn không còn chờ thanh toán trực tuyến. Phần còn lại của đơn đặt cọc trả COD khi nhận hoa.')
+            await paymentService.startSePayCheckout(order.id, progress.nextPaymentType)
         } catch (e) {
             setError(e.message || 'Không thể tạo thanh toán. Vui lòng thử lại.')
             setPayingId('')
@@ -134,7 +136,7 @@ export default function CustomerOrdersView() {
 
             {groups.map(g => {
                 const multi = g.orders.length > 1
-                const payable = g.orders.filter(o => o.paymentSecondsLeft > 0)
+                const payable = g.orders.filter(o => o.orderType !== 'CUSTOM' && o.paymentSecondsLeft > 0)
                 const secondsLeft = payable.length ? Math.min(...payable.map(o => o.paymentSecondsLeft)) : null
                 const first = g.orders[0]
                 return <article key={g.key} className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-white/5 dark:bg-white/3">
@@ -183,8 +185,8 @@ export default function CustomerOrdersView() {
                                     <PayAction order={{ id: g.key, paymentSecondsLeft: secondsLeft, ids: payable.map(o => o.id) }}
                                         paying={payingId === g.key} onPay={payGroup} onExpire={refreshSoon} />
                                 )}
-                                {!multi && first.status === 'AWAITING_DEPOSIT' && (
-                                    <Button size="sm" disabled={payingId === first.id} onClick={() => payStep(first, 'DEPOSIT')}>{payingId === first.id ? 'Đang chuyển…' : 'Đặt cọc'}</Button>
+                                {!multi && (first.status === 'AWAITING_DEPOSIT' || (first.orderType === 'CUSTOM' && first.status === 'PENDING' && first.paymentMethod !== 'COD')) && (
+                                    <Button size="sm" disabled={payingId === first.id} onClick={() => payStep(first)}>{payingId === first.id ? 'Đang chuyển…' : first.status === 'AWAITING_DEPOSIT' ? 'Đặt cọc' : 'Tiếp tục thanh toán'}</Button>
                                 )}
                             </span>
                         </div>

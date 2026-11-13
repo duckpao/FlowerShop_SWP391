@@ -100,6 +100,18 @@ class CustomDepositOrderTests {
         verify(orders, never()).save(any());
     }
 
+    @Test void fullPaymentChoicePersistsPendingOrderAndStartsOnlineWindow() {
+        var input=body(); input.setPaymentType(com.example.flowershop.entity.enums.PaymentType.FULL);
+        input.setExpectedTotal(new BigDecimal("830000"));
+        var response=service.makeCustomOrder("c-1","req-1",input);
+        ArgumentCaptor<Order> saved=ArgumentCaptor.forClass(Order.class);
+        verify(orders).save(saved.capture());
+        assertThat(saved.getValue().getStatus()).isEqualTo(OrderStatus.PENDING);
+        assertThat(saved.getValue().getPaymentStartedAt()).isNotNull();
+        assertThat(response.getStatus()).isEqualTo("PENDING");
+        assertThat(response.getTotalAmount()).isEqualByComparingTo("830000");
+    }
+
     @Test
     void requestNotAcceptedOrOfAnotherCustomerIsRejected() {
         assertThatThrownBy(() -> service.makeCustomOrder("someone-else", "req-1", body())).isInstanceOf(ApiException.class);

@@ -5,6 +5,7 @@ import ManagerApplicationView from "./ManagerApplicationView";
 import ProductsView from "./ProductsView";
 import ProductCatalogView from "./ProductCatalogView";
 import HomeIntro from "../components/home/HomeIntro";
+import FeaturedProducts from "../components/products/FeaturedProducts";
 
 const statuses = {
   PENDING: "Chờ duyệt",
@@ -62,6 +63,8 @@ export default function HomeView({ auth }) {
           </div>
         </section>
 
+        {!c.selected && <FeaturedProducts />}
+
         {auth.error && (
           <div className="rounded-lg bg-error-50 dark:bg-error-500/10 p-4" role="alert">
             <p className="text-sm text-error-600 dark:text-error-500">{auth.error}</p>
@@ -104,7 +107,7 @@ export default function HomeView({ auth }) {
 
             {browseTab === "products" ? (
               <div id="products-panel" role="tabpanel" aria-label="Danh sách sản phẩm">
-                <ProductCatalogView auth={auth} shops={c.shops} />
+                <ProductCatalogView auth={auth} shops={c.shops} showFeatured={false} />
               </div>
             ) : (
               <section id="shops" role="tabpanel" aria-label="Danh sách cửa hàng" className="space-y-6">
