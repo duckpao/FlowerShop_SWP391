@@ -1,13 +1,16 @@
 import React from 'react';
 import { Link } from 'react-router';
+import { useAuth } from '@/context/AuthContext';
+import { homePathFor } from '@/utils/homePath';
 
 const PublicFooter: React.FC = () => {
+  const { user } = useAuth();
   return (
     <footer className="w-full bg-white border-t border-gray-200 dark:bg-gray-900 dark:border-gray-800 transition-colors duration-300 mt-auto">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-12">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           <div className="md:col-span-1">
-            <Link to="/" className="flex items-center gap-2 mb-4">
+            <Link to={homePathFor(user?.role)} className="flex items-center gap-2 mb-4">
               <span className="text-2xl font-bold text-brand-500 dark:text-brand-400">✿ FlowerShop</span>
             </Link>
             <p className="text-sm text-gray-500 dark:text-gray-400">

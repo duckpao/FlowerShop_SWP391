@@ -1,6 +1,5 @@
 import { useShopSearchController } from "../controllers/useShopSearchController";
 import { useEffect, useState } from "react";
-import ManagerNotificationsView from "./ManagerNotificationsView";
 import ManagerApplicationView from "./ManagerApplicationView";
 import ProductsView from "./ProductsView";
 import ProductCatalogView from "./ProductCatalogView";
@@ -70,8 +69,6 @@ export default function HomeView({ auth }) {
             <p className="text-sm text-error-600 dark:text-error-500">{auth.error}</p>
           </div>
         )}
-        
-        {auth.user?.role === "SHOP" && <ManagerNotificationsView />}
         
         {auth.user && ["CUSTOMER", "SHOP"].includes(auth.user.role) && (
           <ManagerApplicationView key={auth.user.id} user={auth.user} />

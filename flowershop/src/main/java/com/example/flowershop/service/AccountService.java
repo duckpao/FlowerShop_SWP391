@@ -105,9 +105,12 @@ public class AccountService {
             address = Address.builder().id(UUID.randomUUID().toString()).user(user).createdBy(userId).build();
         } else {
             address = find(list, id);
-            if (orders.existsByDeliveryAddressId(id))
-                throw inUse();
+            // Đơn chưa có vận đơn vẫn nhận hoa theo địa chỉ đã sửa; chỉ khóa khi có đơn đã tạo vận đơn / đang giao / đã xong.
+            if (orders.existsShippedByDeliveryAddressId(id))
+                throw lockedByShipment();
         }
+        String previousRecipientName = address.getRecipientName();
+        String previousRecipientPhone = address.getRecipientPhone();
         address.setAddressLine(request.addressLine().strip());
         address.setCity(request.city().strip());
         address.setDistrict(request.district().strip());
@@ -131,7 +134,30 @@ public class AccountService {
                 a.setLastModifyBy(userId);
             });
         address.setIsDefault(makeDefault);
-        return AddressResponse.from(addresses.save(address));
+        Address saved = addresses.save(address);
+        if (id != null) followRecipientChange(saved, previousRecipientName, previousRecipientPhone, userId);
+        return AddressResponse.from(saved);
+    }
+
+    /**
+     * Người nhận của đơn được chép từ địa chỉ lúc đặt hàng. Khi sửa tên/SĐT người nhận của địa chỉ, các đơn chưa có vận đơn
+     * đang dùng đúng giá trị cũ đó được cập nhật theo; giá trị khách đã tự nhập riêng cho đơn thì giữ nguyên.
+     */
+    private void followRecipientChange(Address address, String previousName, String previousPhone, String actor) {
+        for (Order order : orders.findNotShippedByDeliveryAddressId(address.getId())) {
+            boolean changed = false;
+            if (Objects.equals(order.getRecipientName(), previousName)
+                    && !Objects.equals(previousName, address.getRecipientName())) {
+                order.setRecipientName(address.getRecipientName());
+                changed = true;
+            }
+            if (Objects.equals(order.getRecipientPhone(), previousPhone)
+                    && !Objects.equals(previousPhone, address.getRecipientPhone())) {
+                order.setRecipientPhone(address.getRecipientPhone());
+                changed = true;
+            }
+            if (changed) order.setLastModifyBy(actor);
+        }
     }
 
     public AddressResponse setDefault(String userId, String id) {
@@ -176,8 +202,15 @@ public class AccountService {
         return new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy dữ liệu.");
     }
 
+    /** Xóa: mọi đơn đang trỏ tới địa chỉ này (kể cả chưa giao) đều cần địa chỉ nhận, nên không xóa được. */
     private static ResponseStatusException inUse() {
         return new ResponseStatusException(HttpStatus.CONFLICT,
-                "Địa chỉ đã được dùng trong đơn hàng. Hãy thêm địa chỉ mới.");
+                "Địa chỉ đang được dùng trong đơn hàng nên không thể xóa. Bạn vẫn có thể sửa địa chỉ nếu đơn chưa giao cho đơn vị vận chuyển.");
+    }
+
+    /** Sửa: chỉ bị chặn khi có đơn đã tạo vận đơn hoặc đã giao. */
+    private static ResponseStatusException lockedByShipment() {
+        return new ResponseStatusException(HttpStatus.CONFLICT,
+                "Địa chỉ đang dùng cho đơn đã tạo vận đơn hoặc đã giao nên không thể sửa. Hãy thêm địa chỉ mới.");
     }
 }

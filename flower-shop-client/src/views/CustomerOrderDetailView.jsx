@@ -92,6 +92,10 @@ const paidAmount = order => (order.payments || [])
 /** Chưa giao cho GHN thì khách còn hủy được (backend kiểm tra lại). */
 const cancellableStatuses = ['PENDING', 'AWAITING_DEPOSIT', 'DEPOSIT_PAID', 'PROCESSING','AWAITING_QUOTE','QUOTED']
 
+// Địa chỉ nhận của đơn sửa được cho đến khi tạo vận đơn (chưa có Delivery, chưa đến DELIVERING); backend khóa sửa từ lúc đó.
+const addressEditable = order => cancellableStatuses.includes(order.status) && !order.delivery
+const addressLocked = order => !!order.delivery || ['DELIVERING', 'COMPLETED', 'REFUNDED'].includes(order.status)
+
 const trackingSteps = [
     'Cửa hàng đang chuẩn bị đơn hàng',
     'Cửa hàng đã giao hàng cho đơn vị vận chuyển',
@@ -278,6 +282,22 @@ export default function CustomerOrderDetailView() {
                         })}
                     </ol>
                 </section>
+
+                {order.deliveryAddress && <section className="mb-6 rounded-lg border border-gray-200 p-4 dark:border-white/10" aria-label="Địa chỉ nhận hàng">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                            <h2 className="font-semibold">Địa chỉ nhận hàng</h2>
+                            <p className="mt-1 text-sm"><strong>{order.recipientName}</strong>{order.recipientPhone && ` · ${order.recipientPhone}`}</p>
+                            <p className="text-sm text-gray-600 dark:text-gray-300">{order.deliveryAddress}</p>
+                        </div>
+                        {addressEditable(order) && (
+                            <Link to="/account" className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium dark:border-white/10">Sửa địa chỉ</Link>
+                        )}
+                    </div>
+                    {addressEditable(order)
+                        ? <p className="mt-2 text-xs text-gray-500">Bạn có thể sửa địa chỉ này trong hồ sơ cho đến khi cửa hàng giao đơn cho đơn vị vận chuyển (tạo mã vận đơn). Phí vận chuyển đã chốt khi đặt hàng không thay đổi.</p>
+                        : addressLocked(order) && <p className="mt-2 text-xs text-gray-500">Đơn đã tạo vận đơn hoặc đã giao nên không thể đổi địa chỉ nhận hàng.</p>}
+                </section>}
 
                 <div className="border rounded-lg overflow-hidden mb-4">
                     <table className="min-w-full">
