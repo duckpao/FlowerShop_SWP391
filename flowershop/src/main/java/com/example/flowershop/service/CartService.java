@@ -12,7 +12,6 @@ import com.example.flowershop.entity.enums.ProductStatus;
 import com.example.flowershop.entity.enums.ProductType;
 import com.example.flowershop.exception.ApiException;
 import com.example.flowershop.repository.CartItemRepository;
-import com.example.flowershop.repository.OrderDetailRepository;
 import com.example.flowershop.repository.ProductImageRepository;
 import com.example.flowershop.repository.ProductRepository;
 import com.example.flowershop.repository.UserRepository;
@@ -34,12 +33,11 @@ public class CartService {
     private final ProductRepository productRepository;
     private final ProductImageRepository productImageRepository;
     private final UserRepository userRepository;
-    private final OrderDetailRepository orderDetailRepository;
     @org.springframework.beans.factory.annotation.Autowired private ProductQuotaService quota;
 
-    /** Kho khách này có thể đặt: kho còn lại cộng phần chính họ đang giữ trong đơn PENDING chưa thanh toán. */
+    /** Kho khách này có thể đặt: kho còn lại (đơn PENDING cũ vẫn giữ hàng cho tới khi hết hạn 10 phút). */
     private int availableStock(String userId, Product product) {
-        return product.getStock() + orderDetailRepository.sumPendingQuantity(userId, product.getId());
+        return product.getStock();
     }
 
     /**
