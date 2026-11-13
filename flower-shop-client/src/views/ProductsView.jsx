@@ -347,10 +347,15 @@ export default function ProductsView({ shop, manage = false, canDelete = true })
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Loại</label>
-                    <select value={c.form.type} onChange={e => updateFormField('type', e.target.value)}
-                      className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900">
-                      {Object.entries(productTypeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                    </select>
+                    {c.editing && c.form.type === 'CUSTOM' ? (
+                      <input readOnly value={productTypeLabels.CUSTOM}
+                        className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm dark:border-gray-700 dark:bg-gray-900" />
+                    ) : (
+                      <select value={c.form.type} onChange={e => updateFormField('type', e.target.value)}
+                        className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900">
+                        <option value="READY_MADE">{productTypeLabels.READY_MADE}</option>
+                      </select>
+                    )}
                   </div>
                 </div>
               </div>

@@ -1,7 +1,10 @@
+import { useState } from 'react'
 import { Link } from 'react-router'
 import PageMeta from '../components/common/PageMeta'
 import PageBreadCrumb from '../components/common/PageBreadCrumb'
 import { useBlogsController } from '../controllers/useBlogsController'
+import BlogInteractions from '../components/blog/BlogInteractions'
+import { Modal } from '../components/ui/modal'
 
 const statusLabel = { DRAFT: 'Bản nháp', PUBLISHED: 'Đã đăng', HIDDEN: 'Đã ẩn' }
 
@@ -11,6 +14,7 @@ function RemoveButton({ onClick }) {
 
 export default function ManagerBlogsView({ shop }) {
   const c = useBlogsController(shop?.id)
+  const [commentPost, setCommentPost] = useState(null)
   const update = (key, value) => c.setForm(form => ({ ...form, [key]: value }))
   const imageCount = c.form.retainedImages.length + c.form.imageFiles.length
 
@@ -68,6 +72,7 @@ export default function ManagerBlogsView({ shop }) {
           <div className="flex items-start justify-between gap-2"><h2 className="font-semibold text-gray-900 dark:text-white">{post.title}</h2><span className="shrink-0 rounded-full bg-gray-100 px-2 py-1 text-xs dark:bg-gray-800">{statusLabel[post.status]}</span></div>
           <p className="line-clamp-3 whitespace-pre-line text-sm text-gray-500 dark:text-gray-400">{post.content}</p>
           <div className="flex flex-wrap gap-3 text-sm">
+            <button type="button" onClick={() => setCommentPost(post)} className="font-medium text-brand-500">Bình luận</button>
             <button type="button" disabled={c.busy} onClick={() => c.openEdit(post)} className="font-medium text-brand-500 disabled:opacity-50">Chỉnh sửa</button>
             {post.status === 'HIDDEN'
               ? <button type="button" disabled={c.busy} onClick={() => c.publish(post)} className="font-medium text-success-600 disabled:opacity-50">Công khai lại</button>
@@ -80,5 +85,11 @@ export default function ManagerBlogsView({ shop }) {
     {!c.busy && !c.data?.content?.length && <p className="rounded-xl border border-dashed border-gray-300 p-10 text-center text-gray-500">Chưa có bài viết nào.</p>}
     {c.busy && !c.data && <p role="status" className="text-gray-500">Đang tải bài viết…</p>}
     {(c.data?.totalPages || 0) > 1 && <div className="flex justify-center gap-3"><button disabled={c.page === 0} onClick={() => c.setPage(p => p - 1)} className="rounded border px-3 py-2 disabled:opacity-40">Trước</button><span className="py-2 text-sm">Trang {c.page + 1}/{c.data.totalPages}</span><button disabled={c.page + 1 >= c.data.totalPages} onClick={() => c.setPage(p => p + 1)} className="rounded border px-3 py-2 disabled:opacity-40">Sau</button></div>}
+    <Modal isOpen={Boolean(commentPost)} onClose={() => setCommentPost(null)} className="m-4 max-w-3xl">
+      {commentPost && <div className="max-h-[85vh] overflow-y-auto p-5 sm:p-8">
+        <h2 className="pr-12 text-lg font-semibold text-gray-900 dark:text-white">{commentPost.title}</h2>
+        <BlogInteractions key={`${shop.id}-${commentPost.id}`} blogId={commentPost.id} shopId={shop.id} />
+      </div>}
+    </Modal>
   </div>
 }

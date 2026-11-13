@@ -56,4 +56,22 @@ export const blogService = {
     `/api/customer/blogs/${encodeURIComponent(id)}/comments/${encodeURIComponent(commentId)}`,
     { method: 'DELETE' },
   ),
+  updateComment: (id, commentId, content) => authService.authenticatedRequest(
+    `/api/customer/blogs/${encodeURIComponent(id)}/comments/${encodeURIComponent(commentId)}`,
+    { method: 'PUT', body: { content } },
+  ),
+  managedComments: (shopId, id, page = 0) => authService.authenticatedRequest(
+    `${managedBase(shopId)}/${encodeURIComponent(id)}/comments?page=${page}`,
+  ),
+  managedEngagement: (shopId, id) => authService.authenticatedRequest(
+    `${managedBase(shopId)}/${encodeURIComponent(id)}/engagement`,
+  ),
+  replyComment: (shopId, id, commentId, content) => authService.authenticatedRequest(
+    `${managedBase(shopId)}/${encodeURIComponent(id)}/comments/${encodeURIComponent(commentId)}/replies`,
+    { method: 'POST', body: { content } },
+  ),
+  moderateComment: (shopId, id, commentId) => authService.authenticatedRequest(
+    `${managedBase(shopId)}/${encodeURIComponent(id)}/comments/${encodeURIComponent(commentId)}`,
+    { method: 'DELETE' },
+  ),
 }

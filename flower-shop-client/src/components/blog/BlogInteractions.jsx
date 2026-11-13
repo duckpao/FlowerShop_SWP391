@@ -1,14 +1,70 @@
-import { Bookmark, Heart, MessageCircle, Trash2 } from 'lucide-react'
+import { Bookmark, Heart, MessageCircle, Pencil, Reply, Trash2 } from 'lucide-react'
 import { Link } from 'react-router'
 import { useBlogInteractionsController } from '../../controllers/useBlogInteractionsController'
 
-export default function BlogInteractions({ blogId, auth }) {
+function CommentEditor({ c }) {
+  const replying = c.editor.mode === 'reply'
+  return <form onSubmit={c.submitEditor} className="mt-3 space-y-2">
+    <label htmlFor={`blog-editor-${c.editor.id}`} className="block text-sm font-medium text-gray-700 dark:text-gray-300">{replying ? 'Trả lời khách hàng' : 'Chỉnh sửa bình luận'}</label>
+    <textarea
+      id={`blog-editor-${c.editor.id}`}
+      autoFocus
+      required
+      maxLength={2000}
+      rows={3}
+      disabled={c.busy}
+      value={c.editor.draft}
+      onChange={event => c.setEditorDraft(event.target.value)}
+      className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+    />
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <span className="text-xs text-gray-400">{c.editor.draft.length}/2000</span>
+      <div className="flex gap-2">
+        <button type="button" disabled={c.busy} onClick={c.cancelEditor} className="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-600 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300">Hủy</button>
+        <button type="submit" disabled={c.busy || !c.editor.draft.trim()} className="rounded-lg bg-brand-500 px-3 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50">{replying ? 'Gửi phản hồi' : 'Lưu thay đổi'}</button>
+      </div>
+    </div>
+  </form>
+}
+
+function CommentCard({ comment, c, user }) {
+  const ownComment = c.isCustomer && user.id === comment.authorId
+  const isReply = Boolean(comment.parentCommentId)
+  const editing = c.editor?.id === comment.id
+  return <li className={`rounded-xl border border-gray-200 p-4 dark:border-gray-800 ${isReply ? 'bg-gray-50 dark:bg-gray-900/50' : ''}`}>
+    <div className="flex items-start gap-3">
+      {comment.authorAvatarUrl
+        ? <img src={comment.authorAvatarUrl} alt="" className="h-10 w-10 rounded-full object-cover" />
+        : <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-50 font-semibold text-brand-600 dark:bg-brand-500/10">{comment.authorName.charAt(0).toUpperCase()}</span>}
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <p className="font-medium text-gray-900 dark:text-white">{comment.authorName} {isReply && <span className="ml-1 rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-600 dark:bg-brand-500/10 dark:text-brand-400">Phản hồi từ shop</span>}</p>
+            <time dateTime={comment.createdDate} className="text-xs text-gray-400">{new Date(comment.createdDate).toLocaleString('vi-VN')}</time>
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {ownComment && <button type="button" disabled={c.busy} onClick={() => c.startEdit(comment)} className="inline-flex items-center gap-1 rounded-lg p-2 text-xs text-gray-500 hover:bg-brand-50 hover:text-brand-500 disabled:opacity-50" aria-label="Sửa bình luận"><Pencil size={16} /> Sửa</button>}
+            {c.isManager && !isReply && <button type="button" disabled={c.busy} onClick={() => c.startReply(comment)} className="inline-flex items-center gap-1 rounded-lg p-2 text-xs text-brand-500 hover:bg-brand-50 disabled:opacity-50"><Reply size={16} /> Trả lời</button>}
+            {(ownComment || c.isManager) && <button type="button" disabled={c.busy} onClick={() => c.deleteComment(comment.id)} className="inline-flex items-center gap-1 rounded-lg p-2 text-xs text-gray-500 hover:bg-error-50 hover:text-error-500 disabled:opacity-50" aria-label={isReply ? 'Xóa phản hồi' : 'Xóa bình luận'}><Trash2 size={16} /> Xóa</button>}
+          </div>
+        </div>
+        {!(editing && c.editor.mode === 'edit') && <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-gray-700 dark:text-gray-300">{comment.content}</p>}
+        {editing && <CommentEditor c={c} />}
+        {comment.replies?.length > 0 && <ul className="mt-4 space-y-3 border-l-2 border-brand-100 pl-3 dark:border-brand-500/20">
+          {comment.replies.map(reply => <CommentCard key={reply.id} comment={reply} c={c} user={user} />)}
+        </ul>}
+      </div>
+    </div>
+  </li>
+}
+
+export default function BlogInteractions({ blogId, auth, shopId }) {
   const user = auth?.user
-  const c = useBlogInteractionsController(blogId, user)
+  const c = useBlogInteractionsController(blogId, user, shopId)
   const loginUrl = `/login?next=${encodeURIComponent(`/floral-care/${blogId}`)}`
 
   return <section className="mt-10 border-t border-gray-200 pt-8 dark:border-gray-800" aria-labelledby="blog-interactions-heading">
-    <h2 id="blog-interactions-heading" className="text-xl font-bold text-gray-900 dark:text-white">Tương tác với bài viết</h2>
+    <h2 id="blog-interactions-heading" className="text-xl font-bold text-gray-900 dark:text-white">{c.isManager ? 'Quản lý bình luận' : 'Tương tác với bài viết'}</h2>
 
     <div className="mt-4 flex flex-wrap items-center gap-3">
       {c.isCustomer ? <>
@@ -36,7 +92,7 @@ export default function BlogInteractions({ blogId, auth }) {
         <span className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-600 dark:border-gray-700 dark:text-gray-300">
           <Heart size={18} /> {c.engagement.likeCount} lượt thích
         </span>
-        {!user && <Link to={loginUrl} className="text-sm font-medium text-brand-500 hover:underline">Đăng nhập để thích và lưu bài viết</Link>}
+        {!user && !c.isManager && <Link to={loginUrl} className="text-sm font-medium text-brand-500 hover:underline">Đăng nhập để thích và lưu bài viết</Link>}
       </>}
       <span className="inline-flex items-center gap-2 text-sm text-gray-500">
         <MessageCircle size={18} /> {c.engagement.commentCount} bình luận
@@ -54,6 +110,7 @@ export default function BlogInteractions({ blogId, auth }) {
           id="blog-comment"
           maxLength={2000}
           rows={3}
+          disabled={c.busy}
           value={c.commentDraft}
           onChange={event => c.setCommentDraft(event.target.value)}
           placeholder="Chia sẻ cảm nhận của bạn về bài viết..."
@@ -66,37 +123,20 @@ export default function BlogInteractions({ blogId, auth }) {
           </button>
         </div>
       </form>}
-      {!user && <p className="mt-4 text-sm text-gray-500"><Link to={loginUrl} className="font-medium text-brand-500 hover:underline">Đăng nhập</Link> để bình luận.</p>}
-      {user && !c.isCustomer && <p className="mt-4 text-sm text-gray-500">Chỉ tài khoản Khách hàng mới có thể thích, lưu và bình luận bài viết.</p>}
+      {!user && !c.isManager && <p className="mt-4 text-sm text-gray-500"><Link to={loginUrl} className="font-medium text-brand-500 hover:underline">Đăng nhập</Link> để bình luận.</p>}
+      {c.isManager && <p className="mt-4 text-sm text-gray-500">Trả lời khách hàng hoặc xóa bình luận không phù hợp. Xóa bình luận sẽ xóa cả các phản hồi bên dưới.</p>}
+      {user && !c.isCustomer && !c.isManager && <p className="mt-4 text-sm text-gray-500">Chỉ tài khoản Khách hàng mới có thể thích, lưu và bình luận bài viết.</p>}
 
       {c.loading && <p role="status" className="mt-6 text-sm text-gray-500">Đang tải bình luận…</p>}
-      {!c.loading && c.comments?.content.length === 0 && <p className="mt-6 rounded-xl bg-gray-50 p-5 text-center text-sm text-gray-500 dark:bg-gray-900">Chưa có bình luận nào. Hãy là người đầu tiên bình luận.</p>}
+      {!c.loading && c.comments?.content.length === 0 && <p className="mt-6 rounded-xl bg-gray-50 p-5 text-center text-sm text-gray-500 dark:bg-gray-900">{c.isManager ? 'Bài viết chưa có bình luận nào.' : 'Chưa có bình luận nào. Hãy là người đầu tiên bình luận.'}</p>}
       <ul className="mt-6 space-y-4">
-        {c.comments?.content.map(comment => <li key={comment.id} className="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
-          <div className="flex items-start gap-3">
-            {comment.authorAvatarUrl
-              ? <img src={comment.authorAvatarUrl} alt="" className="h-10 w-10 rounded-full object-cover" />
-              : <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-50 font-semibold text-brand-600 dark:bg-brand-500/10">{comment.authorName.charAt(0).toUpperCase()}</span>}
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <p className="font-medium text-gray-900 dark:text-white">{comment.authorName}</p>
-                  <time className="text-xs text-gray-400">{new Date(comment.createdDate).toLocaleString('vi-VN')}</time>
-                </div>
-                {c.isCustomer && user.id === comment.authorId && <button type="button" disabled={c.busy} onClick={() => c.deleteComment(comment.id)} className="rounded-lg p-2 text-gray-400 hover:bg-error-50 hover:text-error-500 disabled:opacity-50" aria-label="Xóa bình luận">
-                  <Trash2 size={17} />
-                </button>}
-              </div>
-              <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-gray-700 dark:text-gray-300">{comment.content}</p>
-            </div>
-          </div>
-        </li>)}
+        {c.comments?.content.map(comment => <CommentCard key={comment.id} comment={comment} c={c} user={user} />)}
       </ul>
 
       {c.comments && c.comments.totalPages > 1 && <div className="mt-5 flex items-center justify-between gap-3">
-        <button type="button" disabled={c.loading || c.page === 0} onClick={() => c.setPage(value => value - 1)} className="rounded-lg border border-gray-200 px-3 py-2 text-sm disabled:opacity-40 dark:border-gray-700">Trang trước</button>
+        <button type="button" disabled={c.busy || c.loading || c.page === 0} onClick={() => { c.cancelEditor(); c.setPage(value => value - 1) }} className="rounded-lg border border-gray-200 px-3 py-2 text-sm disabled:opacity-40 dark:border-gray-700">Trang trước</button>
         <span className="text-sm text-gray-500">Trang {c.page + 1}/{c.comments.totalPages}</span>
-        <button type="button" disabled={c.loading || c.page + 1 >= c.comments.totalPages} onClick={() => c.setPage(value => value + 1)} className="rounded-lg border border-gray-200 px-3 py-2 text-sm disabled:opacity-40 dark:border-gray-700">Trang sau</button>
+        <button type="button" disabled={c.busy || c.loading || c.page + 1 >= c.comments.totalPages} onClick={() => { c.cancelEditor(); c.setPage(value => value + 1) }} className="rounded-lg border border-gray-200 px-3 py-2 text-sm disabled:opacity-40 dark:border-gray-700">Trang sau</button>
       </div>}
     </div>
   </section>

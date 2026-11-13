@@ -1,16 +1,42 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useId, useMemo, useState } from 'react';
 import FeaturedProducts from '../components/products/FeaturedProducts'
 import { useSearchParams } from 'react-router';
 import { useCatalogController } from '../controllers/useCatalogController';
 import { useFavoriteToggle } from '../controllers/useFavoritesController';
-import { formatPrice, sortOptions, productTypeOptions } from '../models/productModel';
+import { CATALOG_PRICE_MAX, catalogPriceRanges, formatCatalogPriceInput, formatPrice, sortOptions, productTypeOptions } from '../models/productModel';
 import { CartIcon } from '../icons';
 import { useCartContext } from '../context/CartContext';
 import { toast } from 'react-hot-toast';
 
+function CatalogPriceInput({ name, label, value, error, onChange, placeholder }) {
+  const id = useId();
+  const [focused, setFocused] = useState(false);
+  return <div>
+    <label htmlFor={id} className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">{label}</label>
+    <input
+      id={id}
+      name={name}
+      type="text"
+      inputMode="numeric"
+      autoComplete="off"
+      spellCheck={false}
+      value={focused ? value : formatCatalogPriceInput(value)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      onChange={event => onChange(event.target.value)}
+      placeholder={placeholder}
+      aria-invalid={Boolean(error)}
+      aria-describedby={error ? `${id}-error` : undefined}
+      className={`w-full rounded-xl border bg-gray-50 px-4 py-2.5 text-sm text-gray-900 outline-none transition-all focus:bg-white focus:ring-2 dark:bg-gray-900 dark:text-white ${error ? 'border-error-500 focus:border-error-500 focus:ring-error-500/20 dark:border-error-500' : 'border-gray-300 focus:border-brand-500 focus:ring-brand-500/20 dark:border-white/10 dark:focus:border-brand-500'}`}
+    />
+    {error && <p id={`${id}-error`} role="alert" className="mt-1.5 text-xs text-error-500 dark:text-error-400">{error}</p>}
+  </div>;
+}
+
 export default function ProductCatalogView({ auth, shops, isEmbedded = false }) {
   const c = useCatalogController(shops);
   const [searchParams, setSearchParams] = useSearchParams();
+  const priceRangeGroup = useId();
 
   // On /products the category and sort live in the URL so menu links and the filter bar agree.
   const urlCategory = searchParams.get('categoryId') || '';
@@ -90,7 +116,7 @@ export default function ProductCatalogView({ auth, shops, isEmbedded = false }) 
 
       {/* Filter Bar */}
       <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-xs dark:border-white/10 dark:bg-gray-800 space-y-4">
-        <form onSubmit={c.search} className="space-y-4">
+        <form noValidate onSubmit={c.search} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
               <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
@@ -163,55 +189,64 @@ export default function ProductCatalogView({ auth, shops, isEmbedded = false }) 
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end pt-3 border-t border-gray-100 dark:border-white/5">
-            <div>
-              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                Giá từ (₫)
-              </label>
-              <input
-                type="number"
-                min="0"
-                step="1000"
-                placeholder="Ví dụ: 100000"
+          <fieldset className="border-t border-gray-100 pt-4 dark:border-white/5">
+            <legend className="pr-2 text-sm font-semibold text-gray-900 dark:text-white">Theo giá</legend>
+            <div className="grid grid-cols-1 gap-x-6 gap-y-1 sm:grid-cols-2 lg:grid-cols-3">
+              {[...catalogPriceRanges, { id: 'custom', label: 'Nhập khoảng giá khác' }].map(range => (
+                <label key={range.id} className={`flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2.5 text-sm transition-colors hover:bg-gray-50 dark:hover:bg-gray-900 ${c.priceRange === range.id ? 'font-medium text-brand-600 dark:text-brand-400' : 'text-gray-700 dark:text-gray-300'}`}>
+                  <input
+                    type="radio"
+                    name={priceRangeGroup}
+                    value={range.id}
+                    checked={c.priceRange === range.id}
+                    onChange={() => c.selectPriceRange(range.id)}
+                    className="h-4 w-4 shrink-0 cursor-pointer accent-brand-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+                  />
+                  {range.label}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+
+          {c.priceRange === 'custom' && <>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <CatalogPriceInput
+                name="minPrice"
+                label="Giá từ (₫)"
+                placeholder="Ví dụ: 100.000"
                 value={c.priceDraft.minPrice}
-                onChange={e => c.setPriceDraft(prev => ({ ...prev, minPrice: e.target.value }))}
-                className="w-full rounded-xl border border-gray-300 bg-gray-50 px-4 py-2.5 text-sm text-gray-900 outline-none transition-all focus:border-brand-500 focus:bg-white focus:ring-2 focus:ring-brand-500/20 dark:border-white/10 dark:bg-gray-900 dark:text-white dark:focus:border-brand-500"
+                error={c.priceErrors.minPrice}
+                onChange={value => c.updatePriceDraft('minPrice', value)}
               />
-            </div>
-
-            <div>
-              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                Đến giá (₫)
-              </label>
-              <input
-                type="number"
-                min="0"
-                step="1000"
-                placeholder="Ví dụ: 1000000"
+              <CatalogPriceInput
+                name="maxPrice"
+                label="Đến giá (₫)"
+                placeholder="Ví dụ: 1.000.000"
                 value={c.priceDraft.maxPrice}
-                onChange={e => c.setPriceDraft(prev => ({ ...prev, maxPrice: e.target.value }))}
-                className="w-full rounded-xl border border-gray-300 bg-gray-50 px-4 py-2.5 text-sm text-gray-900 outline-none transition-all focus:border-brand-500 focus:bg-white focus:ring-2 focus:ring-brand-500/20 dark:border-white/10 dark:bg-gray-900 dark:text-white dark:focus:border-brand-500"
+                error={c.priceErrors.maxPrice}
+                onChange={value => c.updatePriceDraft('maxPrice', value)}
               />
             </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400">Nhập số tiền nguyên theo đồng, từ 0 đến {formatCatalogPriceInput(CATALOG_PRICE_MAX)} ₫. Có thể để trống một hoặc cả hai ô.</p>
+          </>}
 
-            <div className="sm:col-span-2 flex gap-3">
-              <button
-                type="submit"
-                disabled={c.busy}
-                className="flex-1 rounded-xl bg-brand-500 py-2.5 px-6 font-semibold text-white shadow-xs transition-all hover:bg-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-50 cursor-pointer"
-              >
-                {c.busy ? 'Đang tìm...' : 'Tìm kiếm & Lọc'}
-              </button>
-              <button
-                type="button"
-                onClick={c.resetFilters}
-                disabled={c.busy}
-                className="rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 shadow-xs hover:bg-gray-50 dark:border-white/10 dark:bg-gray-800 dark:text-gray-300 transition-colors cursor-pointer"
-                title="Xóa bộ lọc"
-              >
-                Đặt lại
-              </button>
-            </div>
+          <div className="flex flex-wrap justify-end gap-3">
+            <button
+              type="submit"
+              disabled={c.busy}
+              className="flex-1 rounded-xl bg-brand-500 py-2.5 px-6 font-semibold text-white shadow-xs transition-all hover:bg-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-50 cursor-pointer sm:flex-none"
+            >
+              {c.busy ? 'Đang tìm...' : 'Tìm kiếm & Lọc'}
+            </button>
+            <button
+              type="button"
+              onClick={c.resetFilters}
+              disabled={c.busy}
+              className="rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 shadow-xs hover:bg-gray-50 dark:border-white/10 dark:bg-gray-800 dark:text-gray-300 transition-colors cursor-pointer"
+              title="Xóa bộ lọc"
+            >
+              Đặt lại
+            </button>
           </div>
         </form>
       </div>

@@ -90,4 +90,45 @@ public class BlogInteractionController {
             @AuthenticationPrincipal CurrentUser user) {
         service.deleteComment(blogId, commentId, user.id());
     }
+
+    @PutMapping("/api/customer/blogs/{blogId}/comments/{commentId}")
+    @PreAuthorize("hasRole('CUSTOMER')")
+    public BlogInteractionService.CommentResult updateComment(@PathVariable(name = "blogId") String blogId,
+            @PathVariable(name = "commentId") String commentId, @AuthenticationPrincipal CurrentUser user,
+            @Valid @RequestBody BlogInteractionService.CommentInput input) {
+        return service.updateComment(blogId, commentId, user.id(), input);
+    }
+
+    @GetMapping("/api/shop/mine/{shopId}/blogs/{blogId}/comments")
+    @PreAuthorize("hasAnyRole('SHOP', 'SHOP_STAFF')")
+    public BlogInteractionService.CommentResults managedComments(@PathVariable(name = "shopId") String shopId,
+            @PathVariable(name = "blogId") String blogId, @AuthenticationPrincipal CurrentUser user,
+            @RequestParam(name = "page", defaultValue = "0") int page) {
+        return service.managedComments(shopId, blogId, user.id(), page);
+    }
+
+    @GetMapping("/api/shop/mine/{shopId}/blogs/{blogId}/engagement")
+    @PreAuthorize("hasAnyRole('SHOP', 'SHOP_STAFF')")
+    public BlogInteractionService.EngagementResult managedEngagement(@PathVariable(name = "shopId") String shopId,
+            @PathVariable(name = "blogId") String blogId, @AuthenticationPrincipal CurrentUser user) {
+        return service.managedEngagement(shopId, blogId, user.id());
+    }
+
+    @PostMapping("/api/shop/mine/{shopId}/blogs/{blogId}/comments/{commentId}/replies")
+    @PreAuthorize("hasAnyRole('SHOP', 'SHOP_STAFF')")
+    @ResponseStatus(HttpStatus.CREATED)
+    public BlogInteractionService.CommentResult reply(@PathVariable(name = "shopId") String shopId,
+            @PathVariable(name = "blogId") String blogId, @PathVariable(name = "commentId") String commentId,
+            @AuthenticationPrincipal CurrentUser user, @Valid @RequestBody BlogInteractionService.CommentInput input) {
+        return service.reply(shopId, blogId, commentId, user.id(), input);
+    }
+
+    @DeleteMapping("/api/shop/mine/{shopId}/blogs/{blogId}/comments/{commentId}")
+    @PreAuthorize("hasAnyRole('SHOP', 'SHOP_STAFF')")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void moderateComment(@PathVariable(name = "shopId") String shopId,
+            @PathVariable(name = "blogId") String blogId, @PathVariable(name = "commentId") String commentId,
+            @AuthenticationPrincipal CurrentUser user) {
+        service.moderateComment(shopId, blogId, commentId, user.id());
+    }
 }
