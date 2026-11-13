@@ -1,0 +1,84 @@
+@startuml
+!pragma layout smetana
+title Personal Profile and Avatar - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<DTO>> #F3E9D2
+  BackgroundColor<<External>> #FFE0E0
+}
+hide empty members
+hide circle
+
+class View <<View>>
+class AccountController <<Controller>> {
+  profile(user): ProfileResponse
+  update(user, request): ProfileResponse
+  avatar(user, file): ProfileResponse
+  removeAvatar(user): ProfileResponse
+}
+class AccountService <<Service>> {
+  profile(userId): ProfileResponse
+  updateProfile(userId, request): ProfileResponse
+  uploadAvatar(userId, file): ProfileResponse
+  removeAvatar(userId): ProfileResponse
+  -syncShopLogo(user, url)
+  -lock(id): User
+}
+class CloudinaryService <<Service>> {
+  uploadAvatar(bytes): String
+  uploadDefaultAvatar(fullName): String
+  -upload(bytes, filename, contentType, folder): String
+}
+class ProfileResponse <<DTO>> {
+  fullName
+  phone
+  avatarUrl
+  +from(user): ProfileResponse
+}
+class UserRepository <<Repository>> {
+  findById(id) [inherited]
+  findByIdForUpdate(id): Optional<User>
+  existsByPhoneAndIdNot(phone, id): boolean
+}
+class ShopRepository <<Repository>> {
+  findByOwnerIdOrderByNameAsc(ownerId): List<Shop>
+}
+class User <<Entity>> {
+  fullName
+  phone
+  avatarUrl
+  role
+  status
+}
+class Shop <<Entity>> {
+  name
+  logoUrl
+  status
+}
+
+View --> AccountController : GET /api/account/profile
+View --> AccountController : PUT /api/account/profile
+View --> AccountController : POST /api/account/profile/avatar
+View --> AccountController : DELETE /api/account/profile/avatar
+AccountController --> AccountService
+AccountService --> UserRepository
+AccountService --> ShopRepository
+AccountService --> CloudinaryService : avatar bytes
+AccountService ..> ProfileResponse : builds
+ProfileResponse ..> User : from(user)
+Shop "*" --> "1" User : owner
+
+@enduml

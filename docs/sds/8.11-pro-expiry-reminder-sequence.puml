@@ -1,0 +1,96 @@
+@startuml
+title Pro Expiry Reminder - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor Scheduler as SCH
+participant ShopSubscriptionJob as J <<Service>> #DCECFF
+participant ShopPlanService as P <<Service>> #DCECFF
+participant SubscriptionReminderService as S <<Service>> #DCECFF
+participant ShopSubscriptionRepository as SSR <<Repository>> #FFF1C9
+participant SubscriptionReminderRepository as SRR <<Repository>> #FFF1C9
+participant ShopRepository as SR <<Repository>> #FFF1C9
+participant NotificationService as N <<Service>> #DCECFF
+participant HtmlMailSender as MAIL <<Service>> #DCECFF
+
+== Background job: every 60 s (fixedDelay) ==
+SCH -> J : background()
+J -> P : pendingInvoices()
+P --> J : PENDING invoices (max 25, not checked in last 2 min)
+loop each pending invoice
+  J -> P : reconcile(invoice)
+  note over P
+    Same flow as 8.6: status read first, SePay only if still PENDING.
+    Errors are logged per invoice and the loop continues.
+  end note
+end
+
+== Reminder scan: cron 09:00 and 19:00 (Asia/Ho_Chi_Minh), also run by background() ==
+SCH -> J : remind() at 09:00 / 19:00
+J -> S : dueSubscriptions()
+S -> SSR : dueIds(now)
+SSR --> S : subscription ids
+S --> J : ids
+loop each subscription id
+  J -> S : queue(id)
+  S -> SSR : findById(id)
+  SSR --> S : ShopSubscription
+  S -> SR : locked tx: findForUpdate(shopId), refresh subscription
+  alt not active, shop not ACTIVE, or not within last 3 calendar days
+    S --> J : no reminder
+  else eligible
+    S -> S : slot = 19 if hour >= 19, 9 if hour >= 9
+    S -> SRR : sentSlot(id, expectedEnd, today, slot)
+    SRR --> S : boolean
+    alt slot already queued
+      S --> J : no duplicate
+    else owner ACTIVE and slot free
+      S -> SRR : save(SubscriptionReminder PENDING, attempts 0)
+      S -> N : notifyUser(owner, "Gói Pro sắp hết hạn", message, /shop-admin/subscription)
+    end
+  end
+end
+
+J -> J : sendMail()
+J -> S : dueMail()
+S -> SRR : mailDue(now)
+SRR --> S : reminder ids
+S --> J : ids
+loop each due reminder
+  J -> S : deliver(id)
+  S -> SRR : lock(id)
+  SRR --> S : SubscriptionReminder (PENDING only)
+  S -> SR : findForUpdate(shopId), refresh subscription
+  alt expectedEnd changed, expired, shop or owner not ACTIVE
+    S -> S : mailStatus = CANCELLED
+  else valid reminder
+    alt nextAttemptAt is in the future
+      S --> J : wait for retry
+    else due now
+      S -> S : attempts + 1
+      S -> MAIL : send(owner.email, subject, html)
+      MAIL --> S : success boolean
+      alt sent
+        S -> S : mailStatus = SENT
+      else failed
+        S -> S : keep PENDING, nextAttemptAt = now + min(60, 5 * attempts) min
+      end
+    end
+  end
+end
+
+note over J
+  A reminder row is the in-app notification plus the pending mail.
+  No customer interaction triggers this job.
+end note
+
+@enduml

@@ -1,0 +1,126 @@
+@startuml
+!pragma layout smetana
+title Create GHN Waybill - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<DTO>> #F3F3F3
+  BackgroundColor<<External>> #FFE0E0
+}
+
+class View <<View>>
+class ManagerOrderController <<Controller>> {
+  @PreAuthorize hasAnyRole('SHOP','SHOP_STAFF')
+  ship(shopId, id, user): ShipResult
+}
+class ManagerOrderService <<Service>> {
+  ship(shopId, actor, orderId): ShipResult
+  -owned(shopId, actor): Shop
+  -blankToEmpty(value)
+}
+class ShipResult <<DTO>> {
+  trackingCode
+}
+class GhnService <<Service>> {
+  createOrder(toName, toPhone, to, fromName, fromPhone, from, codAmount, productName, quantity, price): CreateOrderResult
+  -send(request, path): JsonNode
+  -failureMessage(json, httpStatus, path): String
+}
+class "GhnService.Place" as Place <<DTO>> {
+  address
+  ward
+  district
+  province
+}
+class CreateOrderResult <<DTO>> {
+  orderCode
+  totalFee
+}
+class OrderRepository <<Repository>> {
+  findByIdAndShopIdForUpdate(id, shopId)
+}
+class AddressRepository <<Repository>> {
+  findByShopIdAndUserIsNullOrderByCreatedDateAscIdAsc(shopId): List<Address>
+}
+class OrderDetailRepository <<Repository>> {
+  findByOrderId(orderId): List<OrderDetail>
+}
+class PaymentRepository <<Repository>> {
+  findByOrderId(orderId): List<Payment>
+  save(payment)
+}
+class DeliveryRepository <<Repository>> {
+  findByOrderId(orderId): Optional<Delivery>
+  save(delivery)
+}
+class OrderStatusListener <<Service>> {
+  @PostUpdate publishIfChanged(order)
+}
+class OrderMailSender <<Service>> {
+  @Async onStatusChanged(event)
+}
+class Order <<Entity>> {
+  status
+  totalAmount
+  recipientName
+  recipientPhone
+}
+class Shop <<Entity>> {
+  name
+  owner: User
+}
+class Address <<Entity>> {
+  addressLine
+  ward
+  district
+  city
+  isDefault
+}
+class OrderDetail <<Entity>> {
+  quantity
+  price
+}
+class Payment <<Entity>> {
+  paymentType: FINAL
+  paymentMethod: COD
+  status: PENDING
+  amount
+}
+class Delivery <<Entity>> {
+  deliveryPartnerId: GHN
+  trackingCode
+  status: PENDING
+  ghnStatus: ready_to_pick
+}
+
+View --> ManagerOrderController : POST /api/shop/mine/{shopId}/orders/{id}/ship
+ManagerOrderController --> ManagerOrderService
+ManagerOrderController ..> ShipResult : returns
+ManagerOrderService --> OrderRepository
+ManagerOrderService --> AddressRepository
+ManagerOrderService --> OrderDetailRepository
+ManagerOrderService --> PaymentRepository
+ManagerOrderService --> DeliveryRepository
+ManagerOrderService --> GhnService : createOrder
+ManagerOrderService ..> ShipResult : builds
+GhnService ..> CreateOrderResult : returns
+GhnService *-- Place
+OrderStatusListener ..> OrderMailSender : OrderStatusChangedEvent
+Order "*" --> "1" Shop
+Order "*" --> "0..1" Address : deliveryAddress
+Delivery "0..1" --> "1" Order
+Payment "*" --> "1" Order
+
+@enduml

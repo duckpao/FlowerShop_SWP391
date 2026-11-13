@@ -1,0 +1,137 @@
+@startuml
+!pragma layout smetana
+title Order Queue and Cancel - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<DTO>> #F3F3F3
+  BackgroundColor<<External>> #FFE0E0
+}
+
+class View <<View>>
+class ManagerOrderController <<Controller>> {
+  @PreAuthorize hasAnyRole('SHOP','SHOP_STAFF')
+  list(shopId, user, page, status): Results
+  queue(shopId, user, page, status): Results
+  queueCount(shopId, user): QueueCount
+  confirm(shopId, id, user)
+  cancel(shopId, id, body, user)
+}
+class ManagerOrderService <<Service>> {
+  list(shopId, actor, page, status): Results
+  queue(shopId, actor, page, status): Results
+  queueCount(shopId, actor): QueueCount
+  confirm(shopId, actor, orderId)
+  cancel(shopId, actor, orderId, reason)
+  -owned(shopId, actor): Shop
+}
+class CouponService <<Service>> {
+  release(order)
+}
+class Results <<DTO>> {
+  content
+  page
+  totalPages
+  totalElements
+}
+class OrderSummary <<DTO>> {
+  id
+  customerName
+  customerPhone
+  totalAmount
+  status
+  createdDate
+  orderType
+}
+class QueueCount <<DTO>> {
+  pendingCount
+}
+class OrderRepository <<Repository>> {
+  findByShopIdAndStatusIn(shopId, statuses, pageable)
+  findByShopIdAndStatus(shopId, status, pageable)
+  findByShopId(shopId, pageable)
+  countByShopIdAndStatusIn(shopId, statuses)
+  findByIdAndShopIdForUpdate(id, shopId)
+}
+class ProductRepository <<Repository>> {
+  findByIdForUpdate(id)
+}
+class PaymentRepository <<Repository>> {
+  findByOrderId(orderId)
+  failPendingByOrderId(orderId, actor)
+}
+interface RefundRepository <<Repository>> {
+  save(refund)
+}
+class NotificationService <<Service>> {
+  notifyRefundRequested(refund)
+}
+class OrderStatusListener <<Service>> {
+  @PostUpdate publishIfChanged(order)
+}
+class OrderStatusChangedEvent <<Service>> {
+  orderId
+  from
+  to
+}
+class OrderMailSender <<Service>> {
+  @Async onStatusChanged(event)
+}
+class Order <<Entity>> {
+  status
+  cancelReason
+  totalAmount
+  orderType
+}
+class OrderDetail <<Entity>> {
+  quantity
+}
+class Product <<Entity>> {
+  stock
+  type
+}
+class Payment <<Entity>> {
+  status
+  amount
+}
+class Refund <<Entity>> {
+  amount
+  reason
+}
+
+View --> ManagerOrderController : GET /api/shop/mine/{shopId}/orders/queue
+View --> ManagerOrderController : GET /api/shop/mine/{shopId}/orders/queue/count
+View --> ManagerOrderController : GET /api/shop/mine/{shopId}/orders
+View --> ManagerOrderController : POST /api/shop/mine/{shopId}/orders/{id}/confirm
+View --> ManagerOrderController : POST /api/shop/mine/{shopId}/orders/{id}/cancel
+ManagerOrderController --> ManagerOrderService
+ManagerOrderService --> OrderRepository
+ManagerOrderService --> ProductRepository
+ManagerOrderService --> PaymentRepository
+ManagerOrderService --> RefundRepository
+ManagerOrderService --> CouponService
+ManagerOrderService --> NotificationService
+ManagerOrderService ..> Results : builds
+ManagerOrderService ..> QueueCount : builds
+Results *-- OrderSummary
+OrderStatusListener ..> OrderStatusChangedEvent : publishes
+OrderStatusChangedEvent ..> OrderMailSender : AFTER_COMMIT
+Order ..> OrderStatusListener : @EntityListeners
+OrderDetail "*" --> "1" Order
+OrderDetail "*" --> "0..1" Product
+Payment "*" --> "1" Order
+Refund "*" --> "1" Order
+
+@enduml

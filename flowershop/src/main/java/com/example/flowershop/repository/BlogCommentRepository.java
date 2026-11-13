@@ -14,6 +14,10 @@ import java.util.Optional;
 public interface BlogCommentRepository extends JpaRepository<BlogComment, String> {
     Page<BlogComment> findByBlogId(String blogId, Pageable pageable);
 
+    Page<BlogComment> findByBlogIdAndParentCommentIsNull(String blogId, Pageable pageable);
+
+    List<BlogComment> findByBlogIdAndParentCommentIdInOrderByCreatedDateAscIdAsc(String blogId, List<String> parentIds);
+
     long countByBlogId(String blogId);
 
     Optional<BlogComment> findByIdAndBlogId(String id, String blogId);

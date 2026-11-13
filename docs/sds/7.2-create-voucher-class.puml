@@ -1,0 +1,124 @@
+@startuml
+!pragma layout smetana
+title Create Voucher - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+  BackgroundColor<<DTO>> #ECECEC
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class CouponController <<Controller>> {
+  adminCreate(user, input): CouponView
+  shopCreate(user, shopId, input): CouponView
+}
+class CouponService <<Service>> {
+  save(actor, shopId, id, input): CouponView
+  -owned(shopId, actor): Shop
+  -view(c): CouponView
+}
+class "CouponService.Input" as CouponInput <<DTO>> {
+  code
+  target
+  discountType
+  discountValue
+  minOrderValue
+  maxDiscountValue
+  startDate
+  endDate
+  usageLimit
+  status
+  productId
+}
+class "CouponService.View" as CouponView <<DTO>> {
+  id
+  code
+  shopId
+  target
+  discountType
+  discountValue
+  minOrderValue
+  maxDiscountValue
+  startDate
+  endDate
+  usageLimit
+  usedCount
+  status
+  productId
+}
+class ShopRepository <<Repository>> {
+  findById(id): Optional<Shop>
+}
+class CouponRepository <<Repository>> {
+  findByCodeIgnoreCase(code): Optional<Coupon>
+  findLocked(id): Optional<Coupon>
+  saveAndFlush(coupon): Coupon
+}
+class ProductRepository <<Repository>> {
+  findById(id): Optional<Product>
+}
+class Shop <<Entity>> {
+  id
+  owner: User
+  status: ShopStatus
+}
+class Coupon <<Entity>> {
+  id
+  code
+  target: CouponTarget
+  discountType
+  discountValue
+  minOrderValue
+  maxDiscountValue
+  startDate
+  endDate
+  usageLimit
+  usedCount
+  status: CouponStatus
+  shop: Shop
+  product: Product
+  deleted
+}
+class Product <<Entity>> {
+  id
+  status: ProductStatus
+  shop: Shop
+}
+
+View --> CouponController : POST /api/admin/vouchers\nPOST /api/shop/mine/{shopId}/vouchers
+CouponController --> CouponService
+CouponService ..> CouponInput : validates
+CouponService ..> CouponView : returns
+CouponService --> ShopRepository
+CouponService --> CouponRepository
+CouponService --> ProductRepository
+ShopRepository ..> Shop
+CouponRepository ..> Coupon
+ProductRepository ..> Product
+Coupon "0..*" --> "0..1" Shop
+Coupon "0..*" --> "0..1" Product
+
+note bottom of CouponService
+  Order: owned shop check, then dates, percentage <= 100, 0 < maxDiscountValue <= 100000.
+  Shop scope: ACTIVE shop and ORDER target only (400). Code must be unique (400).
+  PRODUCT target: active product in an active shop (400).
+  productId with any other target: 400 "Chỉ mã sản phẩm mới có sản phẩm áp dụng.".
+end note
+
+@enduml

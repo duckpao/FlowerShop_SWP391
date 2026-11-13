@@ -1,0 +1,103 @@
+@startuml
+title Apply Voucher - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor Customer as U
+participant "View" as V <<View>> #EADCFF
+participant OrderController as C <<Controller>> #D8F3DC
+participant OrderService as S <<Service>> #DCECFF
+participant CouponService as CS <<Service>> #DCECFF
+participant CouponRepository as CR <<Repository>> #FFF1C9
+participant ProductRepository as PR <<Repository>> #FFF1C9
+participant GhnService as GHN <<Service>> #DCECFF
+participant OrderRepository as OR <<Repository>> #FFF1C9
+
+== A. Preview selection (no usage change) ==
+U -> V : select money or shipping voucher
+V -> C : POST /api/orders/{userId}/voucher-preview
+C -> S : previewVouchers(userId, request, merchandiseOnly)
+S -> S : cart items belong to user and shop; product and shop ACTIVE (else 400)
+S -> S : quota.requireAllowed(product) for each item
+opt merchandiseOnly = false
+  S -> GHN : quoteFee(shop, deliveryAddress)
+  GHN --> S : shipping fee
+end
+S -> CS : preview(ctx, orderCode, shippingCode)
+CS -> CR : available(shopId)
+CR --> CS : List<Coupon>
+CS -> CS : evaluate(ctx, codes, coupons), no usedCount change
+CS --> S : Preview
+S --> C : Preview
+C --> V : 200 totals
+V --> U : show discounted total
+
+== B. Confirm order (one order per shop, one transaction) ==
+U -> V : place order
+V -> C : POST /api/orders/{userId}/batch\n(shops[], deliveryAddressId, paymentMethod)
+note right of V
+  400 from the batch (price or voucher changed, or quota/stock error) is shown
+  as a message; the totals are reloaded before the customer can retry.
+end note
+C -> C : requireOwner(userId, currentUser)
+C -> S : makeOrders(userId, request)
+S -> S : sort shops by shopId, reject duplicate shopId (400)
+S -> S : checkoutGroup = UUID if more than one shop
+
+loop each shop part (shopId order)
+  S -> S : makeOrder(userId, single shop request)
+  S -> S : COD or ONLINE, recipient, delivery address with GHN code
+  S -> S : validate cart items belong to user and shop
+  S -> S : no older PENDING order is cancelled; stock is decremented, restored only by cancel
+  loop cart items sorted by productId
+    S -> PR : findByIdForUpdate(productId)
+    PR --> S : Product
+    S -> S : ACTIVE product and shop, quota.requireAllowed, stock >= quantity
+  end
+  S -> GHN : quoteFee(shop, deliveryAddress)
+  GHN --> S : shippingFee
+  S -> S : build Order (PENDING, subTotal, shippingFee)
+  S -> CS : apply(order, ctx, couponId, shippingCouponCode)
+  CS -> CS : codes into TreeSet (sorted, upper-case)
+  loop each code in sorted order
+    CS -> CR : findByCodeForUpdate(code)
+    CR --> CS : Coupon (locked)
+  end
+  CS -> CR : available(shopId)
+  CR --> CS : List<Coupon>
+  CS -> CS : evaluate(ctx, codes, coupons) (invalid code or bad combination: 400)
+  CS -> CS : usedCount + 1 for each locked coupon
+  CS -> CS : write coupon ids, codes, discount, totalAmount snapshot on Order
+  CS --> S : Preview (confirmed amounts)
+  alt expectedTotal != totalAmount
+    S --> C : 400 Giá hoặc ưu đãi đã thay đổi (whole batch rolls back)
+  else matches
+    S -> OR : save(order)
+    OR --> S : Order
+    S -> S : OrderDetail per item, stock decrement, cart items deleted
+  end
+  opt more than one shop
+    S -> OR : findById(orderId), set checkoutGroup, save
+  end
+end
+
+S -> S : publish OrderPlacedEvent (mail after commit)
+S --> C : List<OrderResponse>
+C --> V : 201 Created
+V --> U : continue to payment (COD or SePay)
+
+note over S
+  Any shop failure rolls back the whole batch.
+  Single-shop POST /api/orders/{userId} exists, but the checkout UI does not call it.
+end note
+
+@enduml

@@ -68,6 +68,11 @@ public class BlogService {
         return results(blogs.findByShopId(shopId, pageable(page)));
     }
 
+    Blog managedBlog(String shopId, String blogId, String actor, boolean write) {
+        owned(shopId, actor, write);
+        return blogs.findByIdAndShopId(blogId, shopId).orElseThrow(BlogService::missing);
+    }
+
     public Results listPublic(String shopId, String q, int page) {
         String term = q == null ? "" : q.strip();
         if (term.length() > 100) {

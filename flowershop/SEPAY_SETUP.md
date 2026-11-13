@@ -23,8 +23,9 @@ Không commit Secret Key. Khởi động lại backend sau khi cập nhật.
 ## URL quay về
 
 `app.frontend-base-url` mặc định là `http://localhost:5173` cho Vite.
-SePay quay về `/shop-admin/subscription` khi thanh toán Pro thành công, lỗi hoặc hủy.
+SePay quay về `/shop-admin/subscription` khi thanh toán Pro thành công, lỗi hoặc hủy, kèm `invoice_number` và `result`.
 Nếu dùng tên miền khác, đặt `FRONTEND_BASE_URL` là URL frontend mà trình duyệt truy cập.
+Thanh toán đơn hàng và đặt cọc dùng `sepay.success-url`, `sepay.error-url`, `sepay.cancel-url`; mặc định là `${app.frontend-base-url}/payment/success|error|cancel`, kèm `?invoice_number=...`. Backend còn có `GET /payment/{success|error|cancel}` chuyển tiếp về frontend (`PaymentReturnController`).
 Chỉ đặt cổng 8080 khi backend thực sự phục vụ cả bản build frontend.
 
 ## Chạy demo

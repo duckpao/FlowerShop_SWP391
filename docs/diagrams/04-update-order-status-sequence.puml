@@ -12,53 +12,68 @@ skinparam sequence {
   ParticipantBackgroundColor #FFFFFF
 }
 
-actor "Shop Manager" as M
-participant "Manager Order Page" as UI #EADCFF
-participant ManagerOrderController as C #D8F3DC
-participant ManagerOrderService as S #DCECFF
-participant OrderRepository as R #FFF1C9
-participant OrderStatusListener as L #DCECFF
-participant OrderMailSender as MAIL #DCECFF
+actor "Shop Manager / Staff" as M
+participant "View" as V <<View>> #EADCFF
+participant ManagerOrderController as C <<Controller>> #D8F3DC
+participant ManagerOrderService as S <<Service>> #DCECFF
+participant OrderRepository as R <<Repository>> #FFF1C9
+participant OrderStatusListener as L <<Service>> #DCECFF
+participant OrderMailSender as MAIL <<Service>> #DCECFF
 database MySQL
 
 == Confirm order ==
-M -> UI : click Confirm
-UI -> C : POST /api/shop/mine/{shopId}/orders/{id}/confirm
+M -> V : click Confirm
+note right of V : confirmation dialog "Xác nhận đơn hàng" before the request
+V -> C : POST /api/shop/mine/{shopId}/orders/{id}/confirm
 C -> S : confirm(shopId, actor, orderId)
 S -> S : owned(shopId, actor)
-S -> R : findByIdAndShopId(orderId, shopId)
+S -> R : findByIdAndShopIdForUpdate(orderId, shopId)
 R --> S : Order
-alt status is PENDING
+alt CUSTOM order still PENDING (customer has not paid)
+  S --> C : 409 Khách cần hoàn tất thanh toán trước khi chuẩn bị hoa.
+else status is not PENDING
+  S --> C : 400 Chỉ đơn hàng PENDING mới có thể xác nhận.
+else status is PENDING
   S -> S : order.status = PROCESSING
-  S -> MySQL : UPDATE Orders (transaction commit)
+  S -> MySQL : UPDATE Orders (commit)
   MySQL --> L : @PostUpdate
   L -> L : compare statusSnapshot with new status
-  L --> MAIL : OrderStatusChangedEvent(PENDING to PROCESSING)
+  L --> MAIL : OrderStatusChangedEvent(PENDING to PROCESSING), mail after commit
   S --> C : 200 OK
-else other status
-  S --> C : 400 only PENDING can be confirmed
 end
-C --> UI : result
-UI --> M : status PROCESSING
+C --> V : result
+V --> M : status PROCESSING
 
-== Change status manually ==
-M -> UI : choose target status
-UI -> C : POST /{id}/set-status { status }
+== Change status manually (no GHN call) ==
+M -> V : choose target status
+V -> C : POST /{id}/set-status { status }
 C -> S : changeStatus(shopId, actor, orderId, target)
-S -> R : findByIdAndShopId(orderId, shopId)
-alt target equals current, or moves back before shipping when a waybill exists
-  S --> C : 400 invalid transition
-else valid
-  S -> S : sync Delivery.ghnStatus and Delivery.status
-  opt target is COMPLETED
-    S -> S : mark payments SUCCESS
+S -> R : findByIdAndShopIdForUpdate(orderId, shopId)
+alt target invalid or equal to current status
+  S --> C : 400 Trạng thái không hợp lệ / Đơn đã ở trạng thái này
+else order CANCELLED or REFUNDED (closed)
+  S --> C : 409 Đơn đã đóng
+else target is AWAITING_QUOTE, QUOTED, AWAITING_DEPOSIT or DEPOSIT_PAID
+  S --> C : 409 cập nhật qua luồng thiết kế/thanh toán
+else target is CANCELLED
+  S -> S : cancel(..., "Shop chuyển trạng thái thủ công.")
+  S --> C : StatusResult(CANCELLED)
+else valid target
+  alt Delivery exists and target is before shipping
+    S --> C : 400 Đơn đã có vận đơn GHN nên không thể lùi về trước giai đoạn giao.
+  else
+    S -> MySQL : sync Delivery.ghnStatus/status (DELIVERING, COMPLETED, REFUNDED)
+    opt target is COMPLETED
+      S -> MySQL : all Payments of the order = SUCCESS
+    end
+    S -> S : order.status = target
+    S -> MySQL : UPDATE Orders, Deliveries, Payments
+    MySQL --> L : @PostUpdate
+    L --> MAIL : OrderStatusChangedEvent
+    S --> C : StatusResult(status, warning)
   end
-  S -> S : order.status = target
-  S -> MySQL : UPDATE Orders, Deliveries, Payments
-  MySQL --> L : @PostUpdate
-  L --> MAIL : OrderStatusChangedEvent
-  S --> C : StatusResult(status, warning)
 end
-C --> UI : JSON
+C --> V : JSON
+V --> M : status and warning
 
 @enduml

@@ -1,14 +1,32 @@
 # FlowerShop database
 
-ER diagram generated from [`database.sql`](../database.sql): 38 tables, 49 foreign-key relations.
+ER diagram for the MySQL schema. The diagram follows the JPA entities in
+[`flowershop/src/main/java/com/example/flowershop/entity`](../flowershop/src/main/java/com/example/flowershop/entity)
+(42 mapped tables, 62 relationship lines), checked against [`database.sql`](../database.sql) and the migrations in
+[`flowershop/sql`](../flowershop/sql) (read in numeric order, later migrations win).
 Source file: [database.mmd](database.mmd). Open this file in VS Code with a Mermaid
 preview extension, or paste `database.mmd` into https://mermaid.live.
 
 Notes:
 
 - Audit columns (`created_date`, `created_by`, `last_modify_date`, `last_modify_by`) exist on most tables and are omitted to keep the diagram readable.
-- `||--o{` means the foreign key is `NOT NULL` (exactly one parent). `|o--o{` means it is nullable (optional parent). `||--o|` means the foreign key is also unique (one-to-one).
-- Later migrations in `flowershop/sql/` may add columns that are not in `database.sql`.
+- Cardinality follows Mermaid syntax. On the parent side, `||` means the child FK is `NOT NULL`, and `|o` means it is nullable. On the child side, `o{` means zero or more rows, and `o|` means at most one row, so the FK is unique (one-to-one).
+- Enum columns list their values in the comment. The values come from `entity/enums` and from the status strings written by services.
+- Tables and columns that are not mapped by any entity are left out: `Blog_Images`, `Blogs.thumbnail_url`, and `Email_Verification_Tokens` (created only by migration `001`). `database.sql` still creates the first two, but no code reads or writes them.
+- The shop-level GHN fields are not in the `Shops` table. GHN codes are stored on `Addresses` (`ghn_district_id`, `ghn_ward_code`) and, for shop registration, on `Pending_Registrations` (`shop_ghn_*`).
+
+Known differences between the entities and the SQL scripts:
+
+| Item | Entity (used by the app) | SQL | Diagram shows |
+| --- | --- | --- | --- |
+| `Product_Reviews.order_id` | `NOT NULL`, required `@ManyToOne` (`ProductReview.java:32-33`) | Nullable since migration `016_product_catalog.sql` and `database.sql:494` | Required (parent side `\|\|`) |
+| `Product_Reviews` unique key | `(order_id, product_id)` (`ProductReview.java:11-12`) | `(user_id, product_id)` (`016_product_catalog.sql`, `database.sql:506`) | Comment on `Product_Reviews` |
+| `Auth_Sessions.refresh_hash` | `length = 64` (`AuthSession.java:10`), migration `004` also uses `VARCHAR(64)` | `VARCHAR(255)` in `database.sql:68` | `64` |
+| `Otp_Challenges.purpose` | `VARCHAR(20)` (`OtpChallenge.java:12`), migration `002` also uses `VARCHAR(20)` | `VARCHAR(30)` in `database.sql:81` | Enum `REGISTER, RESET_PASSWORD` |
+| `Users.phone` | Not declared unique in the entity (`User.java:37`) | `UNIQUE` in `database.sql:15` and migration `035` | Marked `UK` |
+| `Coupons.start_date` | `nullable = false` (`Coupon.java:60`) | Has a default but no `NOT NULL` | Shown without nullability |
+
+`Product_Reviews`: a review is tied to one order, so the same product can be reviewed again in a different order. The entity enforces this with `(order_id, product_id)`. The SQL unique key `(user_id, product_id)` in `database.sql` would block that second review, so the SQL script and the entity disagree. Keep this in mind before changing either one.
 
 ```mermaid
 erDiagram
@@ -19,7 +37,7 @@ erDiagram
         varchar password_hash
         varchar google_id UK
         varchar full_name
-        varchar phone
+        varchar phone UK
         enum role "ADMIN,SHOP,CUSTOMER,DELIVERY,SHOP_STAFF"
         boolean is_email_verified
         enum status "ACTIVE,INACTIVE,BANNED"
@@ -63,7 +81,7 @@ erDiagram
     Otp_Challenges {
         varchar id PK
         varchar user_id FK
-        varchar purpose
+        enum purpose "REGISTER,RESET_PASSWORD"
         varchar code_hash
         timestamp issued_at
         timestamp expires_at
@@ -104,7 +122,7 @@ erDiagram
         varchar city
         varchar district
         varchar ward
-        varchar status
+        enum status "PENDING,APPROVED,REJECTED"
         varchar review_note
         datetime submitted_at
         datetime reviewed_at
@@ -126,7 +144,7 @@ erDiagram
         varchar full_name
         varchar phone
         varchar introduction
-        varchar status
+        enum status "PENDING,APPROVED,REJECTED"
         datetime submitted_at
     }
 
@@ -139,7 +157,7 @@ erDiagram
         timestamp expires_at
         timestamp window_start
         int send_count
-        varchar status
+        enum status "PENDING,ACCEPTED,EXPIRED,CANCELLED"
     }
 
     Categories {
@@ -163,6 +181,7 @@ erDiagram
         enum product_type "READY_MADE,CUSTOM"
         enum status "ACTIVE,INACTIVE,OUT_OF_STOCK"
         boolean admin_hidden
+        boolean deleted
     }
 
     Product_Images {
@@ -185,6 +204,9 @@ erDiagram
     Coupons {
         varchar id PK
         varchar shop_id FK
+        enum target "ORDER,SHIPPING,PRODUCT"
+        varchar product_id FK
+        boolean deleted
         varchar code UK
         enum discount_type "PERCENTAGE,FIXED_AMOUNT"
         decimal discount_value
@@ -212,6 +234,11 @@ erDiagram
         varchar recipient_name
         varchar recipient_phone
         varchar coupon_id FK
+        varchar shipping_coupon_id FK
+        varchar coupon_code
+        varchar shipping_coupon_code
+        decimal shipping_discount_amount
+        boolean coupons_released
         enum order_type "STANDARD,CUSTOM"
         decimal sub_total
         decimal discount_amount
@@ -223,13 +250,15 @@ erDiagram
         text shop_note
         varchar checkout_group
         varchar custom_request_id
-        enum status "PENDING,AWAITING_DEPOSIT,DEPOSIT_PAID,PROCESSING,DELIVERING,COMPLETED,CANCELLED,REFUNDED"
+        datetime payment_started_at
+        enum status "PENDING,AWAITING_DEPOSIT,DEPOSIT_PAID,PROCESSING,DELIVERING,COMPLETED,CANCELLED,REFUNDED,AWAITING_QUOTE,QUOTED"
     }
 
     Order_Details {
         varchar id PK
         varchar order_id FK
         varchar product_id FK
+        varchar product_name
         json custom_materials
         decimal price
         int quantity
@@ -268,6 +297,14 @@ erDiagram
         boolean is_read
     }
 
+    Custom_Flower_Options {
+        varchar id PK
+        enum option_group "FLOWER,OCCASION,WRAPPING,ACCESSORY"
+        varchar label
+        boolean disabled
+        int sort_order
+    }
+
     Custom_Order_Requests {
         varchar id PK
         varchar customer_id FK
@@ -296,16 +333,19 @@ erDiagram
         varchar order_id FK
         decimal amount
         text reason
+        text description
+        text evidence_images
+        text shop_response
         varchar gateway_refund_id
         json gateway_response
-        enum status "REQUESTED,APPROVED,PROCESSED,REJECTED"
+        enum status "REQUESTED,APPROVED,PROCESSED,REJECTED,CANCELLED"
     }
 
     Product_Reviews {
         varchar id PK
         varchar product_id FK
         varchar user_id FK
-        varchar order_id FK
+        varchar order_id FK "NOT NULL in entity"
         int rating
         text comment
         json media
@@ -327,16 +367,8 @@ erDiagram
         varchar shop_id FK
         varchar title
         longtext content
-        varchar thumbnail_url
         json images
         enum status "DRAFT,PUBLISHED,HIDDEN"
-    }
-
-    Blog_Images {
-        varchar id PK
-        varchar blog_id FK
-        varchar image_url
-        int display_order
     }
 
     Blog_Interactions {
@@ -384,37 +416,80 @@ erDiagram
         varchar product_id
         varchar shop_id
         varchar user_id
-        varchar status
+        enum status "PENDING,SENT,FAILED,CANCELLED"
         int attempts
         datetime next_attempt_at
         datetime created_at
         datetime sent_at
     }
 
-    Notifications {
-        varchar id PK
-        varchar user_id FK
-        varchar title
-        text message
-        varchar link
-        boolean is_read
+    Shop_Plans {
+        varchar id PK "FREE,PRO1,PRO3,PRO6,PRO12"
+        varchar name
+        int duration_months
+        decimal price
+        int product_limit
+        int featured_limit
+        boolean enabled
     }
 
-    Shop_Product_Publications {
-        varchar product_id PK
-        datetime published_at
+    Shop_Subscriptions {
+        varchar id PK
+        varchar shop_id FK,UK
+        varchar plan_id FK
+        datetime started_at
+        datetime ends_at
     }
 
-    Shop_Product_Mails {
+    Shop_Plan_Payments {
         varchar id PK
-        varchar product_id
-        varchar shop_id
-        varchar user_id
-        varchar status
+        varchar shop_id FK
+        varchar plan_id FK
+        int duration_months
+        decimal amount
+        varchar invoice_number UK
+        enum status "PENDING,REVIEW,SUCCESS"
+        datetime created_at
+        datetime confirmed_at
+        datetime last_checked_at
+        varchar transaction_no
+    }
+
+    Shop_Product_Postings {
+        varchar id PK
+        varchar shop_id FK
+        datetime posted_at
+    }
+
+    Featured_Products {
+        varchar product_id PK,FK
+        varchar shop_id FK
+        datetime featured_at
+    }
+
+    Subscription_Reminders {
+        varchar id PK
+        varchar subscription_id FK
+        datetime expected_end
+        date reminder_date
+        int hour_slot
+        enum mail_status "PENDING,SENT,CANCELLED"
         int attempts
         datetime next_attempt_at
+    }
+
+    Shop_Pro_Activations {
+        varchar id PK
+        varchar shop_id FK
+        varchar plan_id FK
+        int duration_months
+        enum source "ADMIN_GRANT,ADMIN_CONFIRM"
+        varchar payment_id FK,UK
+        varchar actor_id FK
+        varchar note
+        datetime starts_at
+        datetime ends_at
         datetime created_at
-        datetime sent_at
     }
 
     Users ||--o| Shops : "owner_id"
@@ -433,12 +508,14 @@ erDiagram
     Products ||--o{ Product_Images : "product_id"
     Products ||--o{ Product_Videos : "product_id"
     Shops |o--o{ Coupons : "shop_id"
+    Products |o--o{ Coupons : "product_id"
     Users ||--o{ Cart_Items : "user_id"
     Products ||--o{ Cart_Items : "product_id"
     Users ||--o{ Orders : "customer_id"
     Shops ||--o{ Orders : "shop_id"
-    Addresses ||--o{ Orders : "delivery_address_id"
+    Addresses |o--o{ Orders : "delivery_address_id"
     Coupons |o--o{ Orders : "coupon_id"
+    Coupons |o--o{ Orders : "shipping_coupon_id"
     Orders ||--o{ Order_Details : "order_id"
     Products |o--o{ Order_Details : "product_id"
     Orders ||--o{ Deliveries : "order_id"
@@ -452,13 +529,12 @@ erDiagram
     Orders ||--o{ Refunds : "order_id"
     Products ||--o{ Product_Reviews : "product_id"
     Users ||--o{ Product_Reviews : "user_id"
-    Orders |o--o{ Product_Reviews : "order_id"
+    Orders ||--o{ Product_Reviews : "order_id"
     Users ||--o{ Favorite_Products : "user_id"
     Products ||--o{ Favorite_Products : "product_id"
     Users ||--o{ Favorite_Shops : "user_id"
     Shops ||--o{ Favorite_Shops : "shop_id"
     Shops ||--o{ Blogs : "shop_id"
-    Blogs ||--o{ Blog_Images : "blog_id"
     Users ||--o{ Blog_Interactions : "user_id"
     Blogs ||--o{ Blog_Interactions : "blog_id"
     Blogs ||--o{ Blog_Comments : "blog_id"
@@ -466,4 +542,16 @@ erDiagram
     Blog_Comments |o--o{ Blog_Comments : "parent_comment_id"
     Users ||--o{ Customer_Occasions : "customer_id"
     Users ||--o{ Notifications : "user_id"
+    Shops ||--o| Shop_Subscriptions : "shop_id"
+    Shop_Plans ||--o{ Shop_Subscriptions : "plan_id"
+    Shops ||--o{ Shop_Plan_Payments : "shop_id"
+    Shop_Plans ||--o{ Shop_Plan_Payments : "plan_id"
+    Shops ||--o{ Shop_Product_Postings : "shop_id"
+    Products ||--o| Featured_Products : "product_id"
+    Shops ||--o{ Featured_Products : "shop_id"
+    Shop_Subscriptions ||--o{ Subscription_Reminders : "subscription_id"
+    Shops ||--o{ Shop_Pro_Activations : "shop_id"
+    Shop_Plans ||--o{ Shop_Pro_Activations : "plan_id"
+    Shop_Plan_Payments |o--o| Shop_Pro_Activations : "payment_id"
+    Users |o--o{ Shop_Pro_Activations : "actor_id"
 ```

@@ -1,0 +1,105 @@
+@startuml
+title Create GHN Waybill - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor "Shop Manager / Shop Staff" as M
+participant "View" as V <<View>> #EADCFF
+participant ManagerOrderController as C <<Controller>> #D8F3DC
+participant ManagerOrderService as S <<Service>> #DCECFF
+participant OrderRepository as R <<Repository>> #FFF1C9
+participant AddressRepository as AR <<Repository>> #FFF1C9
+participant OrderDetailRepository as OD <<Repository>> #FFF1C9
+participant PaymentRepository as PR <<Repository>> #FFF1C9
+participant GhnService as G <<Service>> #DCECFF
+participant "GHN API" as GHN <<External>> #FFE0E0
+participant DeliveryRepository as DR <<Repository>> #FFF1C9
+participant OrderStatusListener as L <<Service>> #DCECFF
+participant OrderMailSender as MAIL <<Service>> #DCECFF
+database MySQL
+
+M -> V : click "Tạo vận đơn"
+note right of V : confirm dialog "Tạo vận đơn GHN" before sending
+V -> C : POST /api/shop/mine/{shopId}/orders/{id}/ship
+C -> S : ship(shopId, actorId, orderId)
+S -> S : owned(shopId, actorId)
+S -> R : findByIdAndShopIdForUpdate(orderId, shopId)
+R --> S : Order
+alt status not PROCESSING or DEPOSIT_PAID
+  S --> C : 400 Chỉ đơn hàng PROCESSING hoặc đã đặt cọc mới có thể gửi GHN.
+  C --> V : {message}
+  V --> M : error banner
+end
+S -> DR : findByOrderId(orderId)
+DR --> S : Optional<Delivery>
+alt delivery already exists
+  S --> C : 409 Đơn đã có vận đơn. Vui lòng kiểm tra trạng thái GHN.
+  C --> V : {message}
+  V --> M : error banner
+end
+S -> AR : findByShopIdAndUserIsNullOrderByCreatedDateAscIdAsc(shopId)
+AR --> S : shop addresses
+alt shop has no address
+  S --> C : 400 Shop chưa cấu hình địa chỉ.
+  C --> V : {message}
+end
+alt order has no delivery address
+  S --> C : 400 Đơn hàng chưa có địa chỉ nhận.
+  C --> V : {message}
+end
+S -> S : recipient name and phone (fallback to customer)
+alt recipient phone blank
+  S --> C : 400 Số điện thoại người nhận không được để trống.
+  C --> V : {message}
+end
+alt shop phone and owner phone both blank
+  S --> C : 400 Số điện thoại của cửa hàng (hoặc chủ shop) không được để trống.
+  C --> V : {message}
+end
+S -> OD : findByOrderId(orderId)
+OD --> S : first line (product name, quantity, price)
+S -> PR : findByOrderId(orderId)
+PR --> S : payments
+S -> S : codAmount = total - SUCCESS payments (min 0)
+opt codAmount > 0 and no COD payment exists
+  S -> PR : save(Payment FINAL, COD, PENDING, amount = codAmount)
+  PR -> MySQL : INSERT Payments
+end
+S -> G : createOrder(toName, toPhone, toPlace, fromName, fromPhone, fromPlace, codAmount, product, qty, price)
+G -> GHN : POST /shiip/public-api/v2/shipping-order/create\n(ward, district, province sent by name)
+alt HTTP not 200, body not JSON, or GHN code not 200
+  GHN --> G : error response
+  G --> S : 502 "Lỗi từ GHN: ..." | "GHN đang gặp sự cố (HTTP n)..."
+  S --> C : 502 (nothing saved)
+  C --> V : {message}
+  V --> M : error banner shows GHN message
+else connection failure or timeout
+  G --> S : 502 "Không thể kết nối tới GHN ..."
+  S --> C : 502
+  C --> V : {message}
+  V --> M : error banner
+else success
+  GHN --> G : order_code, total_fee
+  G --> S : CreateOrderResult(orderCode, totalFee)
+  S -> DR : save(Delivery trackingCode, GHN, PENDING, ghnStatus ready_to_pick)
+  DR -> MySQL : INSERT Deliveries
+  S -> S : order.status = DELIVERING
+  S -> MySQL : UPDATE Orders (commit)
+  MySQL --> L : @PostUpdate
+  L --> MAIL : OrderStatusChangedEvent(PROCESSING -> DELIVERING)
+  note over MAIL : @Async AFTER_COMMIT: mail "Đơn hàng đang được giao"\nwith "Mã vận đơn GHN"
+  S --> C : ShipResult(trackingCode)
+  C --> V : HTTP 200 { trackingCode }
+  V --> M : notice with tracking code, reload list
+end
+
+@enduml

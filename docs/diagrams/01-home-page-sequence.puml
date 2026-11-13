@@ -13,32 +13,33 @@ skinparam sequence {
 }
 
 actor User
-participant HomeView #EADCFF
-participant catalogService #EADCFF
-participant PublicCatalogController #D8F3DC
-participant CatalogService #DCECFF
-participant ProductRepository #FFF1C9
-participant PublicShopController #D8F3DC
-participant NotificationController #D8F3DC
-participant NotificationService #DCECFF
+participant "View" as V <<View>> #EADCFF
+participant PublicCatalogController as C <<Controller>> #D8F3DC
+participant CatalogService as S <<Service>> #DCECFF
+participant ProductRepository as R <<Repository>> #FFF1C9
+participant PublicShopController as SC <<Controller>> #D8F3DC
+participant ShopRepository as SR <<Repository>> #FFF1C9
+participant NotificationController as NC <<Controller>> #D8F3DC
+participant NotificationService as N <<Service>> #DCECFF
 database MySQL
 
-User -> HomeView : open "/" after login
-HomeView -> catalogService : browse(q, category, sort, page)
-catalogService -> PublicCatalogController : GET /api/public/products
-PublicCatalogController -> CatalogService : browse(q, categoryId, shopId, sort, page, size)
-CatalogService -> ProductRepository : find active products
-ProductRepository -> MySQL : SELECT Products
-MySQL --> ProductRepository : rows
-CatalogService --> PublicCatalogController : Results(ProductCard list)
-PublicCatalogController --> HomeView : JSON page of products
-HomeView -> PublicShopController : GET /api/public/shops?q=
-PublicShopController -> MySQL : search Shops by name
-PublicShopController --> HomeView : List<ShopCard>
-HomeView -> NotificationController : GET /api/account/notifications/unread-count
-NotificationController -> NotificationService : unreadCount(userId)
-NotificationService -> MySQL : count unread Notifications
-NotificationController --> HomeView : unread count
-HomeView --> User : hero, products and shops tabs, bell badge
+User -> V : open "/" (home is shown after login)
+V -> C : GET /api/public/products?q&categoryId&shopId&sort&page
+C -> S : browse(q, categoryId, shopId, type, minPrice, maxPrice, sort, page, size)
+S -> R : findAll(visible spec, page)
+R -> MySQL : SELECT Products (ACTIVE, visible)
+MySQL --> R : rows
+S --> C : Results(ProductCard list)
+C --> V : JSON page of products
+V -> SC : shops tab: GET /api/public/shops?q=
+SC -> SR : search by name
+SR -> MySQL : SELECT Shops
+SC --> V : List<ShopCard>
+User -> V : click header bell
+V -> NC : GET /api/account/notifications/unread-count
+NC -> N : unreadCount(userId)
+N -> MySQL : count unread Notifications
+NC --> V : { count }
+V --> User : hero, products and shops tabs, bell badge
 
 @enduml

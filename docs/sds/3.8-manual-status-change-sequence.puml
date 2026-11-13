@@ -1,0 +1,108 @@
+@startuml
+title Manual Status Change (DB only, no GHN call) - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor "Shop Manager" as M
+participant "View" as V <<View>> #EADCFF
+participant ManagerOrderController as C <<Controller>> #D8F3DC
+participant ManagerOrderService as S <<Service>> #DCECFF
+participant "OrderRepository\nDeliveryRepository" as R <<Repository>> #FFF1C9
+participant PaymentRepository as P <<Repository>> #FFF1C9
+participant CouponService as CP <<Service>> #DCECFF
+participant DeliverySync as DS <<Service>> #DCECFF
+participant OrderStatusListener as L <<Service>> #DCECFF
+database MySQL
+
+M -> V : choose target in "Chuyển trạng thái" (options from manualOrderStatuses)
+V -> M : confirm "Chỉ cập nhật trong database, không gọi GHN."
+alt shop dismisses the dialog
+  V --> M : nothing is sent
+else shop confirms
+  V -> C : POST /api/shop/mine/{shopId}/orders/{id}/set-status {status}
+  C -> S : changeStatus(shopId, actor, orderId, target)
+  S -> S : owned(shopId, actor)
+  S -> R : findByIdAndShopIdForUpdate(orderId, shopId)
+  alt order not found
+    S --> C : 404 Không tìm thấy đơn hàng.
+    C --> V : 404 {message}
+  else found
+    alt CUSTOM order in AWAITING_QUOTE, QUOTED, PENDING or AWAITING_DEPOSIT and target is not CANCELLED
+      S --> C : 409 quote, deposit and payment flow only
+      C --> V : 409 {message}
+    else
+      S -> S : parse target to OrderStatus
+      alt target not a valid status
+        S --> C : 400 Trạng thái không hợp lệ: <target>
+        C --> V : 400 {message}
+      else valid
+        alt order already in target status
+          S --> C : 400 Đơn đã ở trạng thái này.
+          C --> V : 400 {message}
+        else
+          alt current order is CANCELLED or REFUNDED
+            S --> C : 409 Đơn đã đóng, không thể mở lại bằng chuyển trạng thái thủ công.
+            C --> V : 409 {message}
+          else
+            alt target is AWAITING_QUOTE, QUOTED, AWAITING_DEPOSIT or DEPOSIT_PAID
+              S --> C : 409 Trạng thái báo giá và đặt cọc được cập nhật qua luồng thiết kế/thanh toán.
+              C --> V : 409 {message}
+            else target is CANCELLED
+              S -> S : cancel(shopId, actor, orderId, "Shop chuyển trạng thái thủ công.")
+              alt current status not in PENDING, AWAITING_DEPOSIT, DEPOSIT_PAID, PROCESSING, AWAITING_QUOTE, QUOTED
+                S --> C : 400 Chỉ có thể hủy đơn hàng trước khi bắt đầu giao.
+                C --> V : 400 {message}
+              else cancellable
+                S -> S : restock products (not CUSTOM), CANCELLED, cancelReason set
+                S -> CP : release(order)
+                S -> P : failPendingByOrderId(orderId, actor)
+                opt customer already paid
+                  S -> MySQL : INSERT Refund (amount = paid), notifications.notifyRefundRequested
+                end
+                S -> MySQL : UPDATE Orders, Products, Payments, Refunds
+                S --> C : StatusResult(CANCELLED, warning null)
+                C --> V : 200 JSON
+              end
+            else any other target
+              S -> R : deliveries.findByOrderId(orderId)
+              alt Delivery exists and target in PENDING, AWAITING_DEPOSIT, DEPOSIT_PAID, PROCESSING
+                S --> C : 400 Đơn đã có vận đơn GHN ... nên không thể lùi về trước giai đoạn giao.
+                C --> V : 400 {message}
+              else allowed
+                S -> S : warning if target DELIVERING and no Delivery row
+                opt Delivery exists: align Delivery with the new status
+                  alt target DELIVERING and ghnStatus null, delivered, returned or cancel
+                    S -> S : ghnStatus = ready_to_pick, status = PENDING
+                  else target COMPLETED
+                    S -> S : ghnStatus = delivered, status = DELIVERED
+                  else target REFUNDED
+                    S -> S : ghnStatus = returned, status = RETURNED
+                  end
+                end
+                opt target COMPLETED
+                  S -> P : every Payment of the order set to SUCCESS (not only COD)
+                end
+                S -> MySQL : UPDATE Orders, Deliveries, Payments
+                MySQL --> L : @PostUpdate on Order
+                S --> C : StatusResult(target, warning)
+                C --> V : 200 JSON
+                V --> M : notice "Đã chuyển đơn ... " plus warning text if any
+              end
+            end
+          end
+        end
+      end
+    end
+  end
+end
+
+@enduml

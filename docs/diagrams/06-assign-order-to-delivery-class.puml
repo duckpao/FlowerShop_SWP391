@@ -1,6 +1,6 @@
 @startuml
-!pragma layout smetana
 title Assign Order to Delivery - class diagram
+!pragma layout smetana
 skinparam shadowing false
 skinparam defaultFontName Arial
 skinparam wrapWidth 240
@@ -16,30 +16,39 @@ skinparam class {
   BackgroundColor<<Service>> #DCECFF
   BackgroundColor<<Repository>> #FFF1C9
   BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<DTO>> #FCE7F3
+  BackgroundColor<<Scheduler>> #FFE8CC
   BackgroundColor<<External>> #FFE0E0
 }
 hide empty members
 hide circle
 
+class View <<View>>
+
 class ManagerOrderController <<Controller>> {
   ship(shopId, id, user)
   refreshStatus(shopId, id, user)
+  pushGhnStatus(shopId, id, user, body)
 }
 class ManagerOrderService <<Service>> {
   ship(shopId, actor, orderId): ShipResult
   refreshStatus(shopId, actor, orderId): DeliveryInfo
+  pushGhnStatus(shopId, actor, orderId, targetStatus): DeliveryInfo
 }
-class GhnService <<External>> {
-  createOrder(toName, toPhone, toPlace, fromName, fromPhone, fromPlace, cod, product, qty, price): CreateOrderResult
+class GhnService <<Service>> {
+  createOrder(toName, toPhone, to: Place, fromName, fromPhone, from: Place, codAmount, productName, quantity, price): CreateOrderResult
   track(orderCode): Tracking
+  switchStatus(orderCode, action)
 }
 class DeliverySync <<Service>> {
   apply(order, delivery, tracking, actor)
+  complete(order, actor)
 }
-interface OrderRepository <<Repository>>
-interface DeliveryRepository <<Repository>>
-interface PaymentRepository <<Repository>>
-interface AddressRepository <<Repository>>
+class OrderRepository <<Repository>>
+class OrderDetailRepository <<Repository>>
+class DeliveryRepository <<Repository>>
+class PaymentRepository <<Repository>>
+class AddressRepository <<Repository>>
 class Order <<Entity>> {
   status
   totalAmount
@@ -53,6 +62,7 @@ class Delivery <<Entity>> {
   ghnStatus
 }
 class Payment <<Entity>> {
+  paymentType
   paymentMethod
   status
   amount
@@ -62,10 +72,8 @@ class Address <<Entity>> {
   ward
   district
   city
-  ghnDistrictId
-  ghnWardCode
 }
-enum DeliveryStatus {
+enum DeliveryStatus <<Entity>> {
   PENDING
   PICKED_UP
   ON_THE_WAY
@@ -75,14 +83,22 @@ enum DeliveryStatus {
   RETURNED
 }
 
+View ..> ManagerOrderController : POST /api/shop/mine/{shopId}/orders/{id}/ship
+View ..> ManagerOrderController : POST /api/shop/mine/{shopId}/orders/{id}/refresh-status
+View ..> ManagerOrderController : POST /api/shop/mine/{shopId}/orders/{id}/ghn-status
 ManagerOrderController --> ManagerOrderService
 ManagerOrderService --> GhnService
 ManagerOrderService --> DeliverySync
 ManagerOrderService --> OrderRepository
+ManagerOrderService --> OrderDetailRepository
 ManagerOrderService --> DeliveryRepository
 ManagerOrderService --> PaymentRepository
 ManagerOrderService --> AddressRepository
 DeliverySync --> PaymentRepository
+OrderRepository ..> Order
+DeliveryRepository ..> Delivery
+PaymentRepository ..> Payment
+AddressRepository ..> Address
 Delivery "0..1" --> "1" Order
 Payment "*" --> "1" Order
 Order "*" --> "0..1" Address : deliveryAddress

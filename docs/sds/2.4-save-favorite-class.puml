@@ -1,0 +1,80 @@
+@startuml
+!pragma layout smetana
+title Save Favorite Product - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<DTO>> #F3E9D2
+  BackgroundColor<<External>> #FFE0E0
+}
+hide empty members
+hide circle
+
+class View <<View>>
+class FavoriteController <<Controller>> {
+  add(user, productId)
+  remove(user, productId)
+}
+class FavoriteService <<Service>> {
+  add(userId, productId)
+  remove(userId, productId)
+}
+class ProductCardAssembler <<Service>> {
+  visible(product): boolean
+}
+interface FavoriteProductRepository <<Repository>> {
+  existsById(key)
+  saveAndFlush(favorite)
+  deleteById(key)
+}
+class ProductRepository <<Repository>> {
+  findById(id): Optional<Product>
+}
+class UserRepository <<Repository>> {
+  findById(id): Optional<User>
+}
+class FavoriteProduct <<Entity>> {
+  id: FavoriteProductId
+  createdBy
+}
+class FavoriteProductId <<Entity>> {
+  userId
+  productId
+}
+class Product <<Entity>> {
+  id
+  name
+  status
+  adminHidden
+  deleted
+}
+class User <<Entity>> {
+  id
+  role
+}
+
+View --> FavoriteController : PUT /api/customer/favorites/{productId}
+View --> FavoriteController : DELETE /api/customer/favorites/{productId}
+FavoriteController --> FavoriteService
+FavoriteService --> ProductRepository
+FavoriteService --> UserRepository
+FavoriteService --> FavoriteProductRepository
+FavoriteService ..> ProductCardAssembler : visible(product)
+FavoriteProductRepository ..> FavoriteProduct
+FavoriteProduct *-- FavoriteProductId
+FavoriteProduct "0..*" --> "1" Product
+FavoriteProduct "0..*" --> "1" User
+
+@enduml

@@ -18,7 +18,7 @@ Layout rules used in every diagram:
   diamond.
 - Loops use a labelled `repeat` decision inside a single lane.
 
-## 1. Standard Cart Checkout
+## 1.  
 
 Source flow: `POST /api/orders/{userId}/batch` in `OrderController` and
 `OrderService.makeOrders`.

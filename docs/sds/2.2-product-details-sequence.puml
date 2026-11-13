@@ -1,0 +1,83 @@
+@startuml
+title Product Details and Reviews - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor Visitor as U
+participant "View" as V <<View>> #EADCFF
+participant PublicCatalogController as C <<Controller>> #D8F3DC
+participant CatalogService as S <<Service>> #DCECFF
+participant ProductQuotaService as Q <<Service>> #DCECFF
+participant ProductReviewService as RS <<Service>> #DCECFF
+participant ProductRepository as R <<Repository>> #FFF1C9
+participant ProductImageRepository as IR <<Repository>> #FFF1C9
+participant ProductReviewRepository as RR <<Repository>> #FFF1C9
+database MySQL
+
+== Product details ==
+U -> V : select a product
+V -> C : GET /api/public/products/{id}
+C -> S : detail(productId)
+S -> R : findById(productId)
+R -> MySQL : select product
+MySQL --> R : product or no row
+R --> S : Optional<Product>
+S -> S : filter by visible (not deleted, ACTIVE, not adminHidden, shop ACTIVE)
+alt product missing or hidden
+  S --> C : 404 Không tìm thấy sản phẩm.
+  C --> V : 404 Not Found
+else product visible
+  S -> Q : allowed(product)
+  alt outside shop product limit
+    Q --> S : false
+    S --> C : 404 Không tìm thấy sản phẩm.
+    C --> V : 404 Not Found
+  else allowed
+    S -> IR : findByProductIdOrderByDisplayOrderAscIdAsc(productId)
+    IR --> S : List<ProductImage>
+    S -> S : put primary image first
+    S -> RR : summarize(List.of(productId))
+    RR --> S : average rating and review count
+    S --> C : ProductDetail
+    C --> V : 200 OK + ProductDetail
+  end
+end
+
+== Product reviews ==
+opt product details loaded
+  V -> C : GET /api/public/products/{id}/reviews?page
+  note right of C : Endpoint is permitAll; no login check
+  C -> RS : list(productId, page)
+  alt page < 0 or page > 100000
+    RS --> C : IllegalArgumentException
+    C --> V : 400 Trang không hợp lệ.
+  else valid page
+    RS -> R : findById(productId)
+    R --> RS : Optional<Product>
+    RS -> RS : visibleProduct check
+    alt product missing or hidden
+      RS --> C : 404 Không tìm thấy dữ liệu.
+      C --> V : 404 Not Found
+    else product visible
+      RS -> RR : findByProductId(productId, PageRequest(page, 10, createdDate desc))
+      RR -> MySQL : select reviews
+      MySQL --> RR : review rows
+      RR --> RS : Page<ProductReview>
+      RS -> RS : map to ReviewResult (display name only)
+      RS --> C : Results(content, page, totalElements, totalPages)
+      C --> V : 200 OK + Results
+    end
+  end
+end
+V --> U : show product, reviews or message
+
+@enduml

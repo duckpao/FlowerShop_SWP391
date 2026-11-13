@@ -1,7 +1,7 @@
 > Historical design-request API documentation. The active order workflow is documented in [CUSTOM_ORDER_WORKFLOW.md](CUSTOM_ORDER_WORKFLOW.md).
 >
-> The POST/PUT request endpoints and separate deposit-creation API described below are
-> retired and now return HTTP 410. New designs use `POST /api/customer/orders/custom`,
+> The POST/PUT request endpoints and the separate deposit-creation API described below are
+> still registered and do not return HTTP 410 (no 410 response exists in the backend). New designs use `POST /api/customer/orders/custom`,
 > shop quotes and customer acceptance in normal order management. Legacy GET endpoints
 > remain for history; responses include the linked `orderId` when present. Old chat
 > bookmarks open that order or display read-only history. Existing orders and payments
@@ -21,7 +21,7 @@
 
 1. Sign in as SHOP and open **Yêu cầu đặt hoa riêng** (`/shop-admin/custom-orders`).
 2. Select an owned shop, optionally filter by status, and read the customer's specifications.
-3. Respond with NEGOTIATING, ACCEPTED or REJECTED. A note is required; ACCEPTED also requires a total quote within the customer's budget.
+3. Respond with NEGOTIATING, ACCEPTED or REJECTED. A note is optional; ACCEPTED requires `quotedPrice` (at least 1) and `depositPercent` (10–100). No budget comparison is applied.
 4. ACCEPTED and REJECTED are final. Requests cannot be reset to REQUESTED. Updates use a database write lock to prevent conflicting final decisions.
 
 ## API and implementation
@@ -41,7 +41,6 @@ Create body:
 ```json
 {
   "shopId": "existing-shop-id",
-  "budget": 500000,
   "quantity": 2,
   "description": "Two pastel birthday bouquets with pink roses",
   "preferences": {
@@ -55,7 +54,7 @@ Create body:
 }
 ```
 
-Decision body: `{"status":"ACCEPTED","note":"We can make this design","quotedPrice":450000}`.
+Decision body: `{"status":"ACCEPTED","note":"We can make this design","quotedPrice":450000,"depositPercent":50}`. The create body has no `budget` field; the budget only drives the suggestions query.
 
 `CustomFlowerOrderController` → `CustomFlowerOrderService` → `CustomOrderRequestRepository`, `ShopRepository`, `UserRepository`, `ProductRepository`. Product suggestions use the existing `ProductCardAssembler`.
 

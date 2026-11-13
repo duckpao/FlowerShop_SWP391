@@ -1,6 +1,6 @@
 @startuml
-!pragma layout smetana
 title View Order Details - class diagram
+!pragma layout smetana
 skinparam shadowing false
 skinparam defaultFontName Arial
 skinparam wrapWidth 240
@@ -16,62 +16,87 @@ skinparam class {
   BackgroundColor<<Service>> #DCECFF
   BackgroundColor<<Repository>> #FFF1C9
   BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<DTO>> #FCE7F3
+  BackgroundColor<<Scheduler>> #FFE8CC
   BackgroundColor<<External>> #FFE0E0
 }
 hide empty members
 hide circle
+
+class View <<View>>
 
 class ManagerOrderController <<Controller>> {
   detail(shopId, id, user)
 }
 class ManagerOrderService <<Service>> {
   detail(shopId, actor, orderId): OrderDetailResponse
+  adminDetail(orderId): OrderDetailResponse
   -buildDetail(order)
   -owned(shopId, actor)
 }
-class OrderDetailResponse <<Service>> {
+class OrderDetailResponse <<DTO>> {
   id
   customerName
   customerPhone
   recipientName
-  toAddress
-  fromAddress
-  items
-  delivery
-  payment
+  recipientPhone
+  deliveryAddress
+  shopAddress
+  status
+  totalAmount
+  note
+  shopNote
+  cancelReason
 }
-class OrderItemResponse <<Service>> {
+class OrderItemResponse <<DTO>> {
   productId
   productName
   price
   quantity
 }
-class DeliveryInfo <<Service>> {
+class DeliveryInfo <<DTO>> {
   trackingCode
   deliveryPartnerId
   status
   ghnStatus
 }
-class PaymentInfo <<Service>> {
+class PaymentInfo <<DTO>> {
+  id
   method
   status
   amount
 }
-interface OrderRepository <<Repository>>
-interface OrderDetailRepository <<Repository>>
-interface DeliveryRepository <<Repository>>
-interface PaymentRepository <<Repository>>
-interface AddressRepository <<Repository>>
+class OrderRepository <<Repository>>
+class OrderDetailRepository <<Repository>> {
+  findByOrderId(orderId)
+}
+class DeliveryRepository <<Repository>> {
+  findByOrderId(orderId)
+}
+class PaymentRepository <<Repository>> {
+  findByOrderId(orderId)
+}
+class AddressRepository <<Repository>> {
+  findByShopIdAndUserIsNullOrderByCreatedDateAscIdAsc(shopId)
+}
 class Order <<Entity>>
 class OrderDetail <<Entity>> {
+  productName
   price
   quantity
 }
 class Delivery <<Entity>>
 class Payment <<Entity>>
-class Address <<Entity>>
+class Address <<Entity>> {
+  addressLine
+  ward
+  district
+  city
+  isDefault
+}
 class Product <<Entity>>
 
+View ..> ManagerOrderController : GET /api/shop/mine/{shopId}/orders/{id}
 ManagerOrderController --> ManagerOrderService
 ManagerOrderService --> OrderRepository
 ManagerOrderService --> OrderDetailRepository
@@ -82,10 +107,15 @@ ManagerOrderService ..> OrderDetailResponse : builds
 OrderDetailResponse *-- OrderItemResponse
 OrderDetailResponse *-- DeliveryInfo
 OrderDetailResponse *-- PaymentInfo
+OrderRepository ..> Order
+OrderDetailRepository ..> OrderDetail
+DeliveryRepository ..> Delivery
+PaymentRepository ..> Payment
 OrderDetail "*" --> "1" Order
 OrderDetail "*" --> "0..1" Product
 Delivery "0..1" --> "1" Order
 Payment "*" --> "1" Order
 Order "*" --> "0..1" Address : deliveryAddress
+AddressRepository ..> Address
 
 @enduml

@@ -1,0 +1,72 @@
+@startuml
+title Order Details (Shop Manager) - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor "Shop Manager / Shop Staff" as M
+participant "View" as V <<View>> #EADCFF
+participant ManagerOrderController as C <<Controller>> #D8F3DC
+participant ManagerOrderService as S <<Service>> #DCECFF
+participant ShopRepository as SR <<Repository>> #FFF1C9
+participant ShopStaffRepository as STF <<Repository>> #FFF1C9
+participant OrderRepository as R <<Repository>> #FFF1C9
+participant CustomOrderWorkflowService as CW <<Service>> #DCECFF
+participant OrderDetailRepository as OD <<Repository>> #FFF1C9
+participant DeliveryRepository as DR <<Repository>> #FFF1C9
+participant PaymentRepository as PR <<Repository>> #FFF1C9
+participant AddressRepository as AR <<Repository>> #FFF1C9
+database MySQL
+
+== Open order details ==
+M -> V : click order row
+V -> C : GET /api/shop/mine/{shopId}/orders/{id}
+note over C : @PreAuthorize hasAnyRole('SHOP','SHOP_STAFF')
+C -> S : detail(shopId, actorId, orderId)
+S -> S : owned(shopId, actorId)
+S -> SR : findById(shopId)
+SR -> MySQL : select Shop + owner
+MySQL --> SR : Shop
+SR --> S : Shop
+alt shop not found
+  S --> C : 404 Không tìm thấy shop.
+  C --> V : {message}
+else actor is not the owner
+  S -> STF : findByShopIdAndUserId(shopId, actorId)
+  STF --> S : ShopStaff (active?)
+  alt no active staff row
+    S --> C : 403 Bạn không có quyền với shop này.
+    C --> V : {message}
+  end
+end
+S -> R : findByIdAndShopId(orderId, shopId)
+R --> S : Order or empty
+alt order not found for this shop
+  S --> C : 404 Không tìm thấy đơn hàng.
+  C --> V : {message}
+else order found
+  S -> S : buildDetail(order)
+  S -> OD : findByOrderId(orderId)
+  OD --> S : List<OrderDetail>
+  S -> DR : findByOrderId(orderId)
+  DR --> S : Optional<Delivery>
+  S -> PR : findByOrderId(orderId)
+  PR --> S : List<Payment>
+  S -> AR : findByShopIdAndUserIsNullOrderByCreatedDateAscIdAsc(shopId)
+  AR --> S : shop addresses (default first)
+  S -> CW : design(order)
+  CW --> S : Design (budget, description, preferences)
+  S --> C : OrderDetailResponse
+  C --> V : HTTP 200 JSON
+  V --> M : show order details
+end
+
+@enduml

@@ -1,0 +1,82 @@
+@startuml
+!pragma layout smetana
+title FlowerShop - Package diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 200
+skinparam ArrowColor #444444
+skinparam ArrowFontSize 11
+skinparam nodesep 40
+skinparam ranksep 55
+skinparam package {
+  BorderColor #555555
+}
+
+package "flower-shop-client (React / Vite)" #F4F8FF {
+  package "AppRouter + layout" as FE_ROUTER #EADCFF
+  package "views + pages + components" as FE_VIEWS #EADCFF
+  package "controllers + hooks + context" as FE_CTRL #EADCFF
+  package "services + api" as FE_SVC #EADCFF
+  package "models" as FE_MODEL #EADCFF
+}
+
+package "flowershop (Spring Boot)" #F7FFF7 {
+  package "config" as BE_CONFIG #FFF1C9
+  package "security" as BE_SEC #FFF1C9
+  package "controller" as BE_CTRL #D8F3DC
+  package "chat" as BE_CHAT #D8F3DC
+  package "dto.*" as BE_DTO #DCECFF
+  package "service" as BE_SVC #DCECFF
+  package "event" as BE_EVENT #FFE8CC
+  package "scheduler" as BE_JOB #FFE8CC
+  package "repository" as BE_REPO #FFF1C9
+  package "entity + entity.enums" as BE_ENTITY #E0F3E7
+  package "exception" as BE_EXC #FFE0E0
+  package "util" as BE_UTIL #EEEEEE
+}
+
+database "MySQL 8\nflower_shop_db" as DB #E0F3E7
+cloud "GHN / SePay / Cloudinary / SMTP / Google" as EXT #FFE0E0
+
+FE_ROUTER ..> FE_VIEWS : renders
+FE_ROUTER ..> FE_CTRL : auth / cart state
+FE_VIEWS ..> FE_CTRL : calls hooks
+FE_VIEWS ..> FE_MODEL : labels, formatting
+FE_CTRL ..> FE_SVC : invokes
+FE_CTRL ..> FE_MODEL
+FE_SVC ..> FE_MODEL : access token
+FE_SVC ..> BE_CTRL : HTTP JSON /api/**
+FE_SVC ..> BE_CHAT : STOMP /ws
+
+BE_CONFIG ..> BE_SEC : filter chain
+BE_CONFIG ..> BE_CHAT : WebSocket config
+BE_SEC ..> BE_SVC : token validation
+BE_SEC ..> BE_REPO : user lookup
+BE_CTRL ..> BE_DTO : request / response
+BE_CTRL ..> BE_SVC : business operations
+BE_CTRL ..> BE_EXC : API errors
+BE_CHAT ..> BE_SVC
+BE_CHAT ..> BE_REPO
+BE_CHAT ..> BE_ENTITY
+BE_SVC ..> BE_DTO
+BE_SVC ..> BE_REPO : persistence
+BE_SVC ..> BE_ENTITY : domain objects
+BE_SVC ..> BE_EVENT : publish events
+BE_SVC ..> BE_UTIL : IDs / signatures
+BE_SVC ..> BE_EXC
+BE_EVENT ..> BE_ENTITY : OrderStatusListener
+BE_JOB ..> BE_SVC : timed jobs
+BE_JOB ..> BE_REPO : due orders, coupons, carts
+BE_REPO ..> BE_ENTITY : JPA mappings
+BE_REPO ..> DB : JPA / JDBC
+BE_SVC ..> EXT : GHN, SePay, Cloudinary, mail
+
+note bottom of BE_EVENT
+  Listeners of OrderPlacedEvent, OrderStatusChangedEvent and AuthMailEvent
+  (the listener classes OrderMailSender and VerificationMailSender live in service).
+end note
+note bottom of BE_JOB
+  PaymentTimeoutScheduler, MaintenanceJob, OccasionReminderJob,
+  ShopProductMailJob, ShopSubscriptionJob.
+end note
+@enduml

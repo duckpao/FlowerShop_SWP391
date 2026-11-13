@@ -47,6 +47,8 @@ Gói Pro cấu hình: database đang có dữ liệu chạy thêm `033_configura
 
 Dùng `database.sql` đã gộp: gồm schema master, danh mục đặt riêng, voucher, dữ liệu mẫu, trạng thái báo giá và thời điểm bắt đầu thanh toán. Không cần chạy lại chuỗi ALTER lịch sử sau khi import file này. Chỉ dùng `022_custom_order_workflow.sql` nếu chủ động muốn chuyển các yêu cầu cũ chưa chuyển; không cần cho yêu cầu mới tạo trực tiếp ở Orders.
 
+Lưu ý: `database.sql` chưa khớp hoàn toàn với migration và entity ở ba điểm. `Auth_Sessions.refresh_hash` là `VARCHAR(255)` trong `database.sql`, trong khi migration `004` và entity dùng `VARCHAR(64)`. `Otp_Challenges.purpose` là `VARCHAR(30)` trong `database.sql`, trong khi migration `002` và entity dùng `VARCHAR(20)`. `database.sql` còn tạo bảng `Blog_Images` mà không có entity nào dùng, và không có bảng `Email_Verification_Tokens` từ migration `001`. Chi tiết và ảnh hưởng xem tại `docs/DATABASE.md`.
+
 ## Nhóm số trùng cũ
 
 Các cặp 016 (giao hàng/catalog), 017 (font/danh mục hoa), 018 (nhóm danh mục/loại sản phẩm), 019 (địa chỉ/khôi phục catalog), 020 (địa chỉ cá nhân/theo dõi shop), 021 (avatar/shop mẫu), 026 (chat/blog) là các thay đổi khác nhau. Không chạy lại hàng loạt trên database đã triển khai. Dùng schema thực tế và tên đầy đủ để chọn; `027_sync_schema.sql` là bước đối chiếu bổ sung cho các phần mới từ master.

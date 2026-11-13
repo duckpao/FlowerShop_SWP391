@@ -1,0 +1,129 @@
+@startuml
+title Accept Shop Quote (custom order, FULL or DEPOSIT) - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor Customer as U
+participant "View" as V <<View>> #EADCFF
+participant CustomOrderWorkflowController as C <<Controller>> #D8F3DC
+participant CustomOrderWorkflowService as S <<Service>> #DCECFF
+participant CustomOrderPricing as P <<Service>> #DCECFF
+participant CouponService as CS <<Service>> #DCECFF
+participant OrderRepository as OR <<Repository>> #FFF1C9
+participant PaymentRepository as PR <<Repository>> #FFF1C9
+
+== A. Precondition: shop quoted the design ==
+note over S
+  Order is QUOTED (subTotal, shippingFee, totalAmount set by quote()).
+  Deposit percent comes from the design preferences saved with the request.
+end note
+
+== B. Voucher preview (no usage change) ==
+U -> V : choose order / shipping voucher
+V -> C : POST /api/customer/orders/{id}/voucher-preview\n{couponCode, shippingCouponCode}
+C -> S : previewVouchers(user.id, id, body)
+S -> OR : findByIdAndCustomerId(id, actor)
+alt order missing or not owned by customer
+  S --> C : 404 Không tìm thấy đơn hàng thuộc quyền truy cập của bạn.
+  C --> V : {message}
+else found
+  alt status is not QUOTED
+    S --> C : 409 Đơn chưa được báo giá hoặc đã được xử lý.
+    C --> V : {message}
+  else status is QUOTED
+    S -> CS : preview(Context(shop, subTotal, shippingFee, {}), orderCode, shippingCode)
+    CS --> S : Preview (no usedCount change)
+    S -> P : deposit(subTotal, discount, total, depositPercent)
+    P --> S : depositAmount (percent null: 50% of total)
+    S --> C : CustomPaymentPreview\n(vouchers, discount, total, depositAmount, remainingAmount, depositPercent)
+    C --> V : 200 CustomPaymentPreview
+    V --> U : CustomPaymentSummary (deposit or full amount)
+  end
+end
+
+== C. Accept quote (one transaction) ==
+U -> V : choose FULL or DEPOSIT, then proceed
+V -> C : POST /api/customer/orders/{id}/accept-quote\n{paymentMethod: ONLINE, expectedTotal, couponCode,\nshippingCouponCode, paymentType, expectedDeposit (DEPOSIT only)}
+C -> C : @Valid: paymentMethod and expectedTotal required, amounts >= 1
+alt validation fails
+  C --> V : 400 validation error
+else valid
+  C -> S : accept(actor, id, body)
+  S -> OR : findByIdForUpdate(id)
+  alt order missing or not owned by customer
+    S --> C : 404 Không tìm thấy đơn hàng thuộc quyền truy cập của bạn.
+  else owned
+    alt status is not QUOTED
+      S --> C : 409 Đơn chưa được báo giá hoặc đã được xử lý.
+    else QUOTED
+      S -> S : paymentType = input.paymentType, null means FULL
+      alt paymentType is neither FULL nor DEPOSIT
+        S --> C : 409 Chọn thanh toán cọc hoặc toàn bộ.
+      else FULL or DEPOSIT
+        alt DEPOSIT and paymentMethod is COD
+          S --> C : 409 Tiền cọc cần thanh toán trực tuyến; phần còn lại có thể trả khi nhận hoa.
+        else allowed
+          S -> CS : apply(order, Context(shop, subTotal, shippingFee, {}), couponCode, shippingCouponCode)
+          CS --> S : vouchers locked, usedCount + 1, order snapshot written
+          alt expectedTotal is null or differs from order.totalAmount
+            S --> C : 409 Báo giá đã thay đổi. Vui lòng tải lại đơn hàng và kiểm tra trước khi đồng ý.
+          else total matches
+            alt order has no delivery address
+              S --> C : 409 Vui lòng bổ sung địa chỉ nhận hàng.
+            else address set
+              S -> S : paymentStartedAt = now, lastModifyBy = actor
+              alt paymentType is DEPOSIT
+                S -> P : deposit(subTotal, discount, total, depositPercent)
+                P --> S : depositAmount (whole VND, min 1, max total)
+                S -> S : order.depositAmount = depositAmount
+                alt expectedDeposit set and differs from depositAmount
+                  S --> C : 409 Mức cọc đã thay đổi. Vui lòng kiểm tra lại báo giá.
+                else matches
+                  S -> S : status = AWAITING_DEPOSIT
+                end
+              else paymentType is FULL
+                alt paymentMethod is COD
+                  S -> S : status = PROCESSING
+                  S -> PR : save(Payment FULL, COD, PENDING, amount = total)
+                else paymentMethod is ONLINE
+                  S -> S : status = PENDING (no Payment row yet)
+                end
+              end
+              S --> C : 200 Receipt(orderId, status)
+              C --> V : 200 Receipt
+            end
+          end
+        end
+      end
+    end
+  end
+end
+
+== D. Open SePay checkout (see 10.3) ==
+note over V
+  View calls startSePayCheckout(order.id, accepted type)
+  (paymentService in the frontend), which opens the SePay checkout.
+end note
+note over V
+  FULL + ONLINE: PENDING, 10 minutes from paymentStartedAt.
+  DEPOSIT: AWAITING_DEPOSIT, 24 hours from paymentStartedAt.
+  COD FULL: PROCESSING, nothing to pay online.
+end note
+
+note over S
+  Every 409/404 thrown after apply() rolls back the whole transaction,
+  including the voucher usedCount increment.
+  The View always sends paymentMethod ONLINE, so the COD branch
+  is reachable only through the API.
+end note
+
+@enduml
