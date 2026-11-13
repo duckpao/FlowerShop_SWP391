@@ -1,0 +1,129 @@
+@startuml
+!pragma layout smetana
+title Order Details (Shop Manager) - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<DTO>> #F3F3F3
+  BackgroundColor<<External>> #FFE0E0
+}
+
+class View <<View>>
+class ManagerOrderController <<Controller>> {
+  @PreAuthorize hasAnyRole('SHOP','SHOP_STAFF')
+  detail(shopId, id, user)
+  ship(shopId, id, user)
+}
+class ManagerOrderService <<Service>> {
+  detail(shopId, actor, orderId): OrderDetailResponse
+  -owned(shopId, actor): Shop
+  -buildDetail(order): OrderDetailResponse
+  -staff: ShopStaffRepository
+}
+class CustomOrderWorkflowService <<Service>> {
+  design(order): Design
+}
+class OrderDetailResponse <<DTO>> {
+  id
+  customerName
+  recipientName
+  deliveryAddress
+  shopAddress
+  status
+  items
+  delivery
+  payment
+  customDesign
+}
+class OrderItemResponse <<DTO>> {
+  productId
+  productName
+  price
+  quantity
+}
+class DeliveryInfo <<DTO>> {
+  trackingCode
+  deliveryPartnerId
+  status
+  ghnStatus
+}
+class PaymentInfo <<DTO>> {
+  method
+  status
+  amount
+}
+class Design <<DTO>> {
+  budget
+  description
+  legacy
+}
+class OrderRepository <<Repository>> {
+  findByIdAndShopId(id, shopId): Optional<Order>
+}
+class OrderDetailRepository <<Repository>> {
+  findByOrderId(orderId): List<OrderDetail>
+}
+class DeliveryRepository <<Repository>> {
+  findByOrderId(orderId): Optional<Delivery>
+}
+class PaymentRepository <<Repository>> {
+  findByOrderId(orderId): List<Payment>
+}
+class AddressRepository <<Repository>> {
+  findByShopIdAndUserIsNullOrderByCreatedDateAscIdAsc(shopId): List<Address>
+}
+class ShopRepository <<Repository>> {
+  findById(id): Optional<Shop>
+}
+interface ShopStaffRepository <<Repository>> {
+  findByShopIdAndUserId(shopId, userId): Optional<ShopStaff>
+}
+class Order <<Entity>>
+class OrderDetail <<Entity>> {
+  price
+  quantity
+}
+class Delivery <<Entity>>
+class Payment <<Entity>>
+class Address <<Entity>>
+class Shop <<Entity>>
+class ShopStaff <<Entity>> {
+  active
+}
+
+View --> ManagerOrderController : GET /api/shop/mine/{shopId}/orders/{id}
+ManagerOrderController --> ManagerOrderService
+ManagerOrderService --> ShopRepository
+ManagerOrderService --> ShopStaffRepository
+ManagerOrderService --> OrderRepository
+ManagerOrderService --> OrderDetailRepository
+ManagerOrderService --> DeliveryRepository
+ManagerOrderService --> PaymentRepository
+ManagerOrderService --> AddressRepository
+ManagerOrderService --> CustomOrderWorkflowService
+ManagerOrderService ..> OrderDetailResponse : builds
+CustomOrderWorkflowService ..> Design : builds
+OrderDetailResponse *-- OrderItemResponse
+OrderDetailResponse *-- DeliveryInfo
+OrderDetailResponse *-- PaymentInfo
+OrderDetailResponse *-- Design
+ShopStaffRepository ..> ShopStaff
+OrderDetail "*" --> "1" Order
+Delivery "0..1" --> "1" Order
+Payment "*" --> "1" Order
+Order "*" --> "0..1" Address : deliveryAddress
+Shop "1" --> "*" ShopStaff
+
+@enduml

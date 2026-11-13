@@ -1,0 +1,147 @@
+@startuml
+!pragma layout smetana
+title Apply Voucher - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+  BackgroundColor<<DTO>> #ECECEC
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class OrderController <<Controller>> {
+  makeOrders(userId, request, currentUser): 201 List<OrderResponse>
+  vouchers(userId, request, currentUser): Preview
+  makeOrder(userId, request, currentUser): OrderResponse
+}
+class OrderService <<Service>> {
+  makeOrders(userId, request): List<OrderResponse>
+  makeOrder(userId, request): OrderResponse
+  previewVouchers(userId, request, merchandiseOnly): Preview
+  -quoteFee(shop, address): BigDecimal
+}
+class CouponService <<Service>> {
+  preview(ctx, orderCode, shippingCode): Preview
+  apply(order, ctx, orderCode, shippingCode): Preview
+  -evaluate(ctx, orderCode, shippingCode, all): Preview
+  -reason(c, ctx): String
+  -saving(c, ctx): BigDecimal
+}
+class "CouponService.Context" as Context <<DTO>> {
+  shopId
+  subTotal
+  shippingFee
+  productTotals
+}
+class "CouponService.Preview" as Preview <<DTO>> {
+  orderVouchers
+  shippingVouchers
+  recommendedOrderCode
+  recommendedShippingCode
+  bestSaving
+  discountAmount
+  shippingDiscountAmount
+  totalAmount
+}
+class MakeOrdersRequest <<DTO>> {
+  deliveryAddressId
+  paymentMethod
+  recipientName
+  phone
+  shops: ShopOrder[]
+}
+class "MakeOrdersRequest.ShopOrder" as ShopOrder <<DTO>> {
+  shopId
+  cartItemIds
+  couponId
+  shippingCouponCode
+  expectedTotal
+}
+class OrderRepository <<Repository>> {
+  save(order): Order
+  findById(id): Optional<Order>
+}
+class CouponRepository <<Repository>> {
+  available(shopId): List<Coupon>
+  findByCodeForUpdate(code): Optional<Coupon>
+  findLocked(id): Optional<Coupon>
+}
+class ProductRepository <<Repository>> {
+  findByIdForUpdate(id): Optional<Product>
+}
+class GhnService <<Service>> {
+  quoteFee(shop, address): BigDecimal
+}
+class Order <<Entity>> {
+  id
+  checkoutGroup
+  couponId
+  couponCode
+  shippingCouponId
+  shippingCouponCode
+  discountAmount
+  shippingDiscountAmount
+  totalAmount
+  couponsReleased
+  status
+}
+class Coupon <<Entity>> {
+  id
+  code
+  target
+  discountType
+  discountValue
+  maxDiscountValue
+  usageLimit
+  usedCount
+  shop
+  product
+}
+
+View --> OrderController : POST /api/orders/{userId}/voucher-preview\nPOST /api/orders/{userId}/batch
+OrderController --> OrderService
+OrderController ..> Preview : vouchers returns
+OrderService ..> MakeOrdersRequest : reads
+MakeOrdersRequest *-- ShopOrder
+OrderService --> CouponService : preview / apply
+OrderService --> OrderRepository
+OrderService --> CouponRepository
+OrderService --> ProductRepository
+OrderService --> GhnService
+CouponService ..> Context : builds from order
+CouponService ..> Preview : returns
+CouponService --> CouponRepository
+CouponService ..> Order : writes snapshot
+CouponRepository ..> Coupon
+OrderRepository ..> Order
+Order "0..1" --> "0..1" Coupon : couponId (snapshot)
+
+note bottom of CouponService
+  preview() is read-only: no usedCount change.
+  apply() runs inside OrderService's write transaction:
+  codes locked in sorted order (TreeSet), revalidated, usedCount + 1,
+  Order snapshot filled. Max 1 ORDER/PRODUCT + 1 SHIPPING voucher.
+end note
+
+note bottom of OrderService
+  makeOrders() sorts shops by shopId, rejects duplicate shopId (400),
+  calls makeOrder() once per shop, all in one transaction.
+  Groups >1 shop with one checkoutGroup id.
+end note
+
+@enduml

@@ -1,6 +1,6 @@
 @startuml
-!pragma layout smetana
 title Order Queue - class diagram
+!pragma layout smetana
 skinparam shadowing false
 skinparam defaultFontName Arial
 skinparam wrapWidth 240
@@ -16,25 +16,33 @@ skinparam class {
   BackgroundColor<<Service>> #DCECFF
   BackgroundColor<<Repository>> #FFF1C9
   BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<DTO>> #FCE7F3
+  BackgroundColor<<Scheduler>> #FFE8CC
   BackgroundColor<<External>> #FFE0E0
 }
 hide empty members
 hide circle
 
+class View <<View>>
+
 class ManagerOrderController <<Controller>> {
   queueCount(shopId, user)
   list(shopId, user, page, status)
+  queue(shopId, user, page, status)
 }
 class ManagerOrderService <<Service>> {
   queueCount(shopId, actor): QueueCount
   list(shopId, actor, page, status): Results
+  queue(shopId, actor, page, status): Results
+  -owned(shopId, actor)
 }
-class QueueCount <<Service>> {
+class QueueCount <<DTO>> {
   pendingCount
 }
-interface OrderRepository <<Repository>> {
+class OrderRepository <<Repository>> {
   countByShopIdAndStatusIn(shopId, statuses)
   findByShopIdAndStatus(shopId, status, pageable)
+  findByShopIdAndStatusIn(shopId, statuses, pageable)
 }
 class Order <<Entity>> {
   id
@@ -42,11 +50,18 @@ class Order <<Entity>> {
   status
   createdDate
 }
-enum OrderStatus {
+enum OrderStatus <<Entity>> {
   PENDING
   AWAITING_DEPOSIT
+  AWAITING_QUOTE
+  DEPOSIT_PAID
+  PROCESSING
+  QUOTED
 }
 
+View ..> ManagerOrderController : GET /api/shop/mine/{shopId}/orders/queue/count
+View ..> ManagerOrderController : GET /api/shop/mine/{shopId}/orders?page&status
+View ..> ManagerOrderController : GET /api/shop/mine/{shopId}/orders/queue
 ManagerOrderController --> ManagerOrderService
 ManagerOrderService --> OrderRepository
 ManagerOrderService ..> QueueCount : returns

@@ -1,0 +1,72 @@
+@startuml
+!pragma layout smetana
+title Display Categories - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<DTO>> #F3E9D2
+  BackgroundColor<<External>> #FFE0E0
+}
+hide empty members
+hide circle
+
+class View <<View>>
+class PublicCatalogController <<Controller>> {
+  categories()
+}
+class CatalogService <<Service>> {
+  categories(): List<CategoryCard>
+}
+class ProductQuotaService <<Service>> {
+  allowedSpecification(): Specification<Product>
+}
+class CategoryCard <<DTO>> {
+  id
+  name
+  description
+  group
+  productCount
+}
+class CategoryRepository <<Repository>> {
+  findByStatusOrderByNameAsc(status)
+}
+class ProductRepository <<Repository>> {
+  findAll(spec, pageable): List<Product>
+}
+class Category <<Entity>> {
+  id
+  name
+  description
+  groupName
+  status
+}
+class Product <<Entity>> {
+  id
+  status
+  adminHidden
+  deleted
+}
+
+View --> PublicCatalogController : GET /api/public/categories
+PublicCatalogController --> CatalogService
+CatalogService --> ProductRepository : visible products, unpaged
+CatalogService --> ProductQuotaService
+CatalogService --> CategoryRepository
+CatalogService ..> CategoryCard : builds
+CategoryRepository ..> Category
+ProductRepository ..> Product
+Product "0..*" --> "1" Category
+
+@enduml

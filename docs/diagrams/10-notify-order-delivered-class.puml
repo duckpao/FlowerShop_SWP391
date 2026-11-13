@@ -1,6 +1,6 @@
 @startuml
-!pragma layout smetana
 title Notify Order Delivered via Email - class diagram
+!pragma layout smetana
 skinparam shadowing false
 skinparam defaultFontName Arial
 skinparam wrapWidth 240
@@ -16,24 +16,39 @@ skinparam class {
   BackgroundColor<<Service>> #DCECFF
   BackgroundColor<<Repository>> #FFF1C9
   BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<DTO>> #FCE7F3
+  BackgroundColor<<Scheduler>> #FFE8CC
   BackgroundColor<<External>> #FFE0E0
 }
 hide empty members
 hide circle
 
+class View <<View>>
+
+class ManagerOrderController <<Controller>> {
+  refreshStatus(shopId, id, user)
+  setStatus(shopId, id, user, body)
+}
+class CustomerOrderController <<Controller>> {
+  refreshTracking(user, id)
+}
 class ManagerOrderService <<Service>> {
   refreshStatus(shopId, actor, orderId)
   changeStatus(shopId, actor, orderId, target)
 }
+class CustomerOrderService <<Service>> {
+  refreshTracking(customerId, orderId)
+}
 class DeliverySync <<Service>> {
   apply(order, delivery, tracking, actor)
+  complete(order, actor)
 }
-class GhnService <<External>> {
+class GhnService <<Service>> {
   track(orderCode): Tracking
 }
 class OrderStatusListener <<Service>> {
-  remember(order)
-  publishIfChanged(order)
+  remember(order) @PostLoad
+  publishIfChanged(order) @PostUpdate
 }
 class OrderStatusChangedEvent <<Service>> {
   orderId
@@ -41,17 +56,18 @@ class OrderStatusChangedEvent <<Service>> {
   to
 }
 class OrderMailSender <<Service>> {
-  onStatusChanged(event) @Async
+  onStatusChanged(event) @Async AFTER_COMMIT
   -buildStatusMail(event)
   -placesSection(order)
   -reviewSection(order)
 }
 class HtmlMailSender <<Service>> {
   send(to, subject, html): boolean
-  layout(heading, body, label, url)
+  url(path)
+  layout(heading, bodyHtml, buttonLabel, buttonUrl)
 }
-interface OrderRepository <<Repository>>
-interface DeliveryRepository <<Repository>>
+class OrderRepository <<Repository>>
+class DeliveryRepository <<Repository>>
 interface ProductReviewRepository <<Repository>>
 class Order <<Entity>> {
   status
@@ -68,9 +84,16 @@ class User <<Entity>> {
 }
 class "SMTP server" as SMTP <<External>>
 
+View ..> ManagerOrderController : POST /api/shop/mine/{shopId}/orders/{id}/refresh-status
+View ..> ManagerOrderController : POST /api/shop/mine/{shopId}/orders/{id}/set-status
+View ..> CustomerOrderController : POST /api/customer/orders/{id}/refresh-tracking
+ManagerOrderController --> ManagerOrderService
+CustomerOrderController --> CustomerOrderService
 ManagerOrderService --> GhnService
 ManagerOrderService --> DeliverySync
-DeliverySync --> Order : status COMPLETED
+CustomerOrderService --> GhnService
+CustomerOrderService --> DeliverySync
+DeliverySync --> Order : status COMPLETED, COD payments SUCCESS
 Order ..> OrderStatusListener : @EntityListeners
 OrderStatusListener ..> OrderStatusChangedEvent : publishes
 OrderMailSender ..> OrderStatusChangedEvent : listens AFTER_COMMIT

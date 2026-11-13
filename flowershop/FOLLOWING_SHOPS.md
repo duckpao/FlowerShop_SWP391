@@ -16,8 +16,8 @@
 1. Apply `sql/020_shop_follow_notifications.sql` to the existing database. `ddl-auto=none` does not create these tables automatically. Do not re-run the full database reset scripts.
 2. Optionally apply `sql/021_demo_follow_shops.sql`. This inserts three sample shops and their owners without changing existing accounts. Sample owners have no password and use reserved test addresses; use an existing real shop owner to test publishing, or set demo credentials through your local admin tooling.
 3. Restart the backend. Configure `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, and `MAIL_FROM` using the existing SMTP setup.
-4. Set `FRONTEND_BASE_URL` to the URL customers can open (default `http://localhost:5173`). For a deployed app, localhost links must be replaced with the public URL.
-5. The worker is enabled by default. Set `SHOP_FOLLOW_MAIL_ENABLED=false` to disable actual delivery for local experiments; publication and pending records are still saved. Set `SHOP_FOLLOW_MAIL_INTERVAL_MS` to adjust the default 30-second poll interval.
+4. Set `FRONTEND_BASE_URL` to the URL customers can open (property `app.frontend-base-url`, default `http://localhost:5173`). For a deployed app, localhost links must be replaced with the public URL.
+5. The worker is enabled by default. Set `app.shop-follow-mail.enabled=false` to disable actual delivery for local experiments; publication and pending records are still saved. Set `app.shop-follow-mail.interval-ms` to adjust the default 30-second poll interval.
 
 ## Manual checks
 

@@ -1,0 +1,112 @@
+@startuml
+!pragma layout smetana
+title Pro Expiry Reminder - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+}
+hide empty members
+hide circle
+
+class ShopSubscriptionJob <<Service>> {
+  remind()
+  background()
+  -sendMail()
+}
+class ShopPlanService <<Service>> {
+  pendingInvoices(): List<String>
+  reconcile(invoice): void
+}
+class SubscriptionReminderService <<Service>> {
+  dueSubscriptions(): List<String>
+  queue(id): void
+  dueMail(): List<String>
+  deliver(id): void
+  -message(s): String
+}
+class NotificationService <<Service>> {
+  notifyUser(user, title, message, link): void
+}
+class HtmlMailSender <<Service>> {
+  send(to, subject, html): boolean
+  url(path): String
+  {static} layout(title, body, action, url): String
+}
+class ShopPlanClock <<Service>> {
+  now(): LocalDateTime
+}
+class SePayGatewayService <<Service>> {
+  capturedSubscriptionInvoice(invoice): Optional<CapturedInvoice>
+}
+class ShopSubscriptionRepository <<Repository>> {
+  dueIds(now): List<String>
+  forShop(shopId): Optional<ShopSubscription>
+}
+class SubscriptionReminderRepository <<Repository>> {
+  sentSlot(id, end, day, slot): boolean
+  save(reminder): SubscriptionReminder
+  lock(id): Optional<SubscriptionReminder>
+  mailDue(now): List<String>
+}
+class ShopRepository <<Repository>> {
+  findForUpdate(id): Optional<Shop>
+}
+class ShopPlanPaymentRepository <<Repository>> {
+  pendingInvoices(now): List<String>
+}
+class ShopSubscription <<Entity>> {
+  id
+  endsAt
+  shop: Shop
+  plan: ShopPlan
+}
+class SubscriptionReminder <<Entity>> {
+  id
+  expectedEnd
+  reminderDate
+  hourSlot
+  mailStatus
+  attempts
+  nextAttemptAt
+  subscription: ShopSubscription
+}
+
+ShopSubscriptionJob --> SubscriptionReminderService : remind (queue, dueMail, deliver)
+ShopSubscriptionJob --> ShopPlanService : background (pendingInvoices, reconcile)
+ShopPlanService --> SePayGatewayService
+ShopPlanService --> ShopPlanPaymentRepository
+SubscriptionReminderService --> ShopSubscriptionRepository
+SubscriptionReminderService --> SubscriptionReminderRepository
+SubscriptionReminderService --> ShopRepository
+SubscriptionReminderService --> NotificationService
+SubscriptionReminderService --> HtmlMailSender
+SubscriptionReminderService --> ShopPlanClock
+ShopSubscriptionRepository ..> ShopSubscription
+SubscriptionReminderRepository ..> SubscriptionReminder
+SubscriptionReminder "0..*" --> "1" ShopSubscription
+
+note bottom of ShopSubscriptionJob
+  remind(): @Scheduled cron "0 0 9,19 * * *", zone Asia/Ho_Chi_Minh.
+  background(): @Scheduled fixedDelay 60000 ms (initial delay 60000 ms).
+  Reconciles pending SePay invoices first, then calls remind().
+end note
+
+note bottom of SubscriptionReminder
+  Unique slot: (subscription, expectedEnd, reminderDate, hourSlot), checked by sentSlot().
+  Failed send: nextAttemptAt = now + min(60, 5 * attempts) minutes.
+end note
+
+@enduml

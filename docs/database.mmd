@@ -50,7 +50,7 @@ erDiagram
     Otp_Challenges {
         varchar id PK
         varchar user_id FK
-        varchar purpose
+        enum purpose "REGISTER,RESET_PASSWORD"
         varchar code_hash
         timestamp issued_at
         timestamp expires_at
@@ -91,7 +91,7 @@ erDiagram
         varchar city
         varchar district
         varchar ward
-        varchar status
+        enum status "PENDING,APPROVED,REJECTED"
         varchar review_note
         datetime submitted_at
         datetime reviewed_at
@@ -113,7 +113,7 @@ erDiagram
         varchar full_name
         varchar phone
         varchar introduction
-        varchar status
+        enum status "PENDING,APPROVED,REJECTED"
         datetime submitted_at
     }
 
@@ -126,7 +126,7 @@ erDiagram
         timestamp expires_at
         timestamp window_start
         int send_count
-        varchar status
+        enum status "PENDING,ACCEPTED,EXPIRED,CANCELLED"
     }
 
     Categories {
@@ -173,7 +173,7 @@ erDiagram
     Coupons {
         varchar id PK
         varchar shop_id FK
-        varchar target
+        enum target "ORDER,SHIPPING,PRODUCT"
         varchar product_id FK
         boolean deleted
         varchar code UK
@@ -268,7 +268,7 @@ erDiagram
 
     Custom_Flower_Options {
         varchar id PK
-        varchar option_group
+        enum option_group "FLOWER,OCCASION,WRAPPING,ACCESSORY"
         varchar label
         boolean disabled
         int sort_order
@@ -314,7 +314,7 @@ erDiagram
         varchar id PK
         varchar product_id FK
         varchar user_id FK
-        varchar order_id FK
+        varchar order_id FK "NOT NULL in entity"
         int rating
         text comment
         json media
@@ -336,16 +336,8 @@ erDiagram
         varchar shop_id FK
         varchar title
         longtext content
-        varchar thumbnail_url
         json images
         enum status "DRAFT,PUBLISHED,HIDDEN"
-    }
-
-    Blog_Images {
-        varchar id PK
-        varchar blog_id FK
-        varchar image_url
-        int display_order
     }
 
     Blog_Interactions {
@@ -393,7 +385,7 @@ erDiagram
         varchar product_id
         varchar shop_id
         varchar user_id
-        varchar status
+        enum status "PENDING,SENT,FAILED,CANCELLED"
         int attempts
         datetime next_attempt_at
         datetime created_at
@@ -401,7 +393,7 @@ erDiagram
     }
 
     Shop_Plans {
-        varchar id PK
+        varchar id PK "FREE,PRO1,PRO3,PRO6,PRO12"
         varchar name
         int duration_months
         decimal price
@@ -425,7 +417,7 @@ erDiagram
         int duration_months
         decimal amount
         varchar invoice_number UK
-        varchar status
+        enum status "PENDING,REVIEW,SUCCESS"
         datetime created_at
         datetime confirmed_at
         datetime last_checked_at
@@ -450,7 +442,7 @@ erDiagram
         datetime expected_end
         date reminder_date
         int hour_slot
-        varchar mail_status
+        enum mail_status "PENDING,SENT,CANCELLED"
         int attempts
         datetime next_attempt_at
     }
@@ -460,7 +452,7 @@ erDiagram
         varchar shop_id FK
         varchar plan_id FK
         int duration_months
-        varchar source
+        enum source "ADMIN_GRANT,ADMIN_CONFIRM"
         varchar payment_id FK,UK
         varchar actor_id FK
         varchar note
@@ -506,13 +498,12 @@ erDiagram
     Orders ||--o{ Refunds : "order_id"
     Products ||--o{ Product_Reviews : "product_id"
     Users ||--o{ Product_Reviews : "user_id"
-    Orders |o--o{ Product_Reviews : "order_id"
+    Orders ||--o{ Product_Reviews : "order_id"
     Users ||--o{ Favorite_Products : "user_id"
     Products ||--o{ Favorite_Products : "product_id"
     Users ||--o{ Favorite_Shops : "user_id"
     Shops ||--o{ Favorite_Shops : "shop_id"
     Shops ||--o{ Blogs : "shop_id"
-    Blogs ||--o{ Blog_Images : "blog_id"
     Users ||--o{ Blog_Interactions : "user_id"
     Blogs ||--o{ Blog_Interactions : "blog_id"
     Blogs ||--o{ Blog_Comments : "blog_id"

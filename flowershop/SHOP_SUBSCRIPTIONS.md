@@ -4,23 +4,23 @@
 
 Shop mở **Gói đăng ký Pro** tại `/shop-admin/subscription` để mua, gia hạn và chọn sản phẩm nổi bật.
 
-| Gói | Giá VND | Lượt tạo sản phẩm | Sản phẩm nổi bật đồng thời |
+| Gói | Giá VND | Giới hạn sản phẩm (tổng hiện có) | Sản phẩm nổi bật đồng thời |
 | --- | ---: | --- | ---: |
-| Free | 0 | 5/tháng dương lịch | 0 |
-| Pro 1 tháng | 59.000 | Không giới hạn | 10 |
-| Pro 3 tháng | 149.000 | Không giới hạn | 10 |
-| Pro 6 tháng | 298.000 | Không giới hạn | 10 |
-| Pro 1 năm | 596.000 | Không giới hạn | 10 |
+| Free | 0 | 5 | 0 |
+| Pro 1 tháng | 59.000 | 15 | 3 |
+| Pro 3 tháng | 149.000 | 25 | 5 |
+| Pro 6 tháng | 298.000 | 40 | 8 |
+| Pro 1 năm | 596.000 | Không giới hạn | 15 |
 
 Giá 6/12 tháng áp dụng cùng mức giảm của gói 3 tháng: `1 - 149000/(59000*3)` (~15,82%).
 Giá và thời hạn được lưu trong `Shop_Plans`; giao dịch chụp lại số tiền và số tháng tại lúc mua.
 
 ## Quyền lợi và hạn mức
 
-- Mọi shop chưa có Pro còn hạn mặc định dùng Free. Tạo sản phẩm mới tiêu thụ lượt, kể cả sản phẩm chưa bật bán; sửa sản phẩm không tiêu thụ lượt.
-- `Shop_Product_Postings` giữ lịch sử lượt tạo; xóa/ẩn sản phẩm không hoàn lại lượt. Hạn mức tính theo tháng dương lịch, múi giờ Việt Nam, kể cả sản phẩm tạo khi đang dùng Pro trong tháng đó.
+- Shop chưa có Pro còn hạn dùng gói Free (5 sản phẩm hiện có). Giới hạn tính theo tổng sản phẩm chưa xóa, không theo tháng; xem CONFIGURABLE_PRO_PLANS.md.
+- `Shop_Product_Postings` chỉ giữ lịch sử; không còn quyết định quota (quota dựa trên `Products.deleted`).
 - Khóa dòng shop trước khi kiểm tra/lưu lượt để các request đồng thời không vượt hạn mức.
-- Pro được chọn tối đa 10 sản phẩm đang bán, còn hàng, danh mục hoạt động và không bị admin ẩn. Mục nổi bật trên danh sách hoa lấy từ `/api/public/featured-products`.
+- Số sản phẩm nổi bật tối đa theo `featured_limit` của gói (Free 0; Pro 1/3/6/12 tháng: 3/5/8/15) cho sản phẩm đang bán, còn hàng, danh mục hoạt động và không bị admin ẩn. Mục nổi bật trên danh sách hoa lấy từ `/api/public/featured-products`.
 - Hết hạn: trở về Free và tự ngừng xuất hiện nổi bật ngay theo truy vấn; giữ nguyên sản phẩm và đơn hàng. Mua lại sau khi hết hạn cần chọn lại sản phẩm nổi bật.
 
 ## Thanh toán và gia hạn

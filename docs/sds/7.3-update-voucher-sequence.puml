@@ -1,0 +1,80 @@
+@startuml
+title Update Voucher - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor "Admin / Shop" as U
+participant "View" as V <<View>> #EADCFF
+participant CouponController as C <<Controller>> #D8F3DC
+participant CouponService as S <<Service>> #DCECFF
+participant ShopRepository as SR <<Repository>> #FFF1C9
+participant CouponRepository as CR <<Repository>> #FFF1C9
+participant ProductRepository as PR <<Repository>> #FFF1C9
+
+== Edit voucher ==
+U -> V : edit voucher and submit
+note right of V
+  Any 4xx from the API is shown as an error message in the form.
+end note
+V -> C : PUT /api/admin/vouchers/{id}\nor PUT /api/shop/mine/{shopId}/vouchers/{id} (Input)
+C -> C : @Valid CouponService.Input
+C -> S : save(actor, shopId, id, input)
+opt shopId != null
+  S -> SR : findById(shopId)
+  SR --> S : Shop
+  S -> S : owned(shopId, actor)
+  alt not ACTIVE, or target is not ORDER
+    S --> C : 400 Shop chỉ được tạo mã giảm tiền đơn hàng
+  end
+end
+S -> S : endDate after startDate, percentage <= 100, 0 < maxDiscountValue <= 100000
+S -> CR : findByCodeIgnoreCase(normalized code)
+CR --> S : Optional<Coupon>
+alt another voucher already has this code
+  S --> C : 400 Mã giảm giá đã tồn tại.
+else code free or same voucher
+  S -> S : managed(actor, shopId, id)
+  S -> CR : findLocked(id)
+  CR --> S : Optional<Coupon>
+  alt missing, deleted, or outside shop scope
+    S --> C : 404 Không tìm thấy mã giảm giá thuộc quyền quản lý.
+  else found
+    alt input.usageLimit < coupon.usedCount
+      S --> C : 400 Số lượt tối đa không được nhỏ hơn số lượt đã dùng.
+    else limit valid
+      alt target == PRODUCT
+        S -> PR : findById(productId)
+        PR --> S : Optional<Product>
+        alt product missing, not ACTIVE, or shop not ACTIVE
+          S --> C : 400 Chọn sản phẩm đang bán cho voucher sản phẩm.
+        else product valid
+          S -> S : bind product
+        end
+      else productId present for non-PRODUCT target
+        S --> C : 400 Chỉ mã sản phẩm mới có sản phẩm áp dụng.
+      end
+      S -> S : update fields, lastModifyBy = actor (usedCount kept)
+      S -> CR : saveAndFlush(coupon)
+      CR --> S : Coupon
+      S --> C : CouponService.View
+      C --> V : 200 OK
+      V --> U : show updated voucher
+    end
+  end
+end
+
+note over S
+  Update transaction. The check order is fixed:
+  duplicate code, managed lookup, usageLimit >= usedCount, then PRODUCT/productId rule.
+end note
+
+@enduml

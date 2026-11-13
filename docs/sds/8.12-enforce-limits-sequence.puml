@@ -1,0 +1,65 @@
+@startuml
+title Enforce Subscription Limits - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor Customer as U
+participant "View" as V <<View>> #EADCFF
+participant OrderController as C <<Controller>> #D8F3DC
+participant OrderService as S <<Service>> #DCECFF
+participant ProductQuotaService as Q <<Service>> #DCECFF
+participant ShopPlanClock as CK <<Service>> #DCECFF
+participant ProductRepository as PR <<Repository>> #FFF1C9
+
+== Checkout / order guard ==
+U -> V : place order
+V -> C : POST /api/orders/{userId}/batch
+C -> S : makeOrders(userId, request)
+S -> S : makeOrder(shop part) for each shop
+loop each cart product (sorted by productId)
+  S -> Q : requireAllowed(product)
+  Q -> Q : allowed(product) = allowedIds([product]) contains product
+  Q -> CK : now()
+  CK --> Q : now
+  Q -> Q : allowedSpecification(now): undeleted AND rank <= effective limit
+  Q -> PR : findAll(allowedSpec AND id in ids, unpaged)
+  PR --> Q : eligible ids
+  alt product NOT in eligible ids
+    Q --> S : 400 badRequest "Sản phẩm đang bị khóa do vượt giới hạn gói"
+    S --> C : 400 order rejected
+    C --> V : 400 error
+    V --> U : show "Sản phẩm đang bị khóa do vượt giới hạn gói"
+  else product allowed
+    Q --> S : ok
+    S -> S : continue normal order processing
+  end
+end
+
+note over S
+  Same guard runs in OrderService.previewVouchers (voucher preview), CartService,
+  CustomerOrderService (3 call sites) and ShopPlanService.feature. It is a live check.
+end note
+
+ref over S, Q
+  Creation guard (not requireAllowed): ManagerProductService.create calls
+  ShopPlanService.assertCanCreate(shop) at 2 sites (create path, under the shop write lock).
+  It reads the current subscription (forShop) and counts undeleted products (countForShop).
+  If the count >= limit it throws 409 CONFLICT, otherwise it saves.
+end ref
+
+note over Q
+  Effective limit: active Pro plan productLimit (null = unlimited),
+  otherwise 5 for Free. Excess products are blocked, not deleted.
+  Rank = createdDate, then id. CatalogService reuses allowedSpecification() and allowed().
+end note
+
+@enduml

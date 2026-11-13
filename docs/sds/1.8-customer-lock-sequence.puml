@@ -1,0 +1,62 @@
+@startuml
+title Lock or Unlock Customer Account - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor Admin
+participant "View" as V <<View>> #EADCFF
+participant AdminCustomerController as C <<Controller>> #D8F3DC
+participant AdminCustomerService as S <<Service>> #DCECFF
+participant UserRepository as UR <<Repository>> #FFF1C9
+participant AuthSessionRepository as SESS <<Repository>> #FFF1C9
+database Database
+
+== Choose action ==
+Admin -> V : click Lock or Unlock on a customer row
+note right of V
+  Confirm dialog before sending.
+  Lock: danger tone, message says sessions will be revoked.
+  Unlock: primary tone.
+end note
+alt admin cancels
+  V --> Admin : nothing sent
+else admin confirms
+  V -> C : PUT /api/admin/customers/{id}/blocked  body { blocked }
+  note over C : class-level @PreAuthorize hasRole('ADMIN')
+  C -> S : setBlocked(id, blocked, adminId)
+  S -> UR : findByIdForUpdate(id)
+  alt user not found, or role is not CUSTOMER
+    S --> C : 404 NOT_FOUND "Không tìm thấy khách hàng."
+    C --> V : 404
+    V --> Admin : error message
+  else customer found
+    alt unlock request (blocked = false) and status is INACTIVE
+      S --> C : 409 CONFLICT "Tài khoản đang ngừng hoạt động; thao tác này chỉ mở khóa tài khoản bị khóa."
+      C --> V : 409
+      V --> Admin : error message, nothing changes
+    else allowed
+      S -> S : status = BANNED (blocked) or ACTIVE (unlocked), lastModifyBy = adminId
+      opt blocked = true
+        S -> SESS : revokeAll(userId)
+        SESS -> Database : UPDATE AuthSessions set revoked
+      end
+      S -> UR : flush on commit
+      UR -> Database : UPDATE Users
+      S --> C : CustomerResponse
+      C --> V : 200 CustomerResponse
+      V --> Admin : notice "Đã khóa tài khoản và thu hồi phiên." or "Đã mở khóa. Khách hàng cần đăng nhập lại."
+      note right of V : setRevision, list and selected detail reload
+    end
+  end
+end
+
+@enduml

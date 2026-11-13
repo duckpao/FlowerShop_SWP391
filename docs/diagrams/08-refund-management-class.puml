@@ -1,6 +1,6 @@
 @startuml
+title Refund Management - class diagram
 !pragma layout smetana
-title Refund management for shop - class diagram
 skinparam shadowing false
 skinparam defaultFontName Arial
 skinparam wrapWidth 240
@@ -16,32 +16,49 @@ skinparam class {
   BackgroundColor<<Service>> #DCECFF
   BackgroundColor<<Repository>> #FFF1C9
   BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<DTO>> #FCE7F3
+  BackgroundColor<<Scheduler>> #FFE8CC
   BackgroundColor<<External>> #FFE0E0
 }
 hide empty members
 hide circle
 
+class View <<View>>
+
 class StaffRefundController <<Controller>> {
   list(shopId, user)
-  updateStatus(shopId, id, user, body)
+  updateStatus(shopId, id, user, body: StatusRequest)
 }
 class StaffRefundService <<Service>> {
   -NEXT: Map<RefundStatus, Set<RefundStatus>>
   list(shopId, actor): List<RefundResponse>
-  updateStatus(shopId, actor, refundId, status): RefundResponse
+  updateStatus(shopId, actor, refundId, status, note): RefundResponse
+  -apply(refund, actor, status, note)
+}
+class CustomerOrderController <<Controller>> {
+  requestRefund(user, id, input)
+  cancelRefund(user, id, refundId)
+}
+class CustomerRefundService <<Service>> {
+  request(customerId, orderId, input): RefundResult
+  cancel(customerId, orderId, refundId): RefundResult
+}
+class ManagerOrderController <<Controller>> {
+  cancel(shopId, id, user, body)
 }
 class ShopOperationGuard <<Service>> {
   requireAccess(shopId, actorId)
+}
+class ManagerOrderService <<Service>> {
+  cancel(shopId, actor, orderId, reason)
 }
 class NotificationService <<Service>> {
   notifyRefundRequested(refund)
   notifyRefundResolved(refund)
 }
-class ManagerOrderService <<Service>> {
-  cancel(shopId, actor, orderId, reason)
-}
 interface RefundRepository <<Repository>> {
   findByOrderShopIdOrderByCreatedDateDesc(shopId)
+  findById(id)
 }
 interface ShopStaffRepository <<Repository>>
 interface NotificationRepository <<Repository>>
@@ -49,6 +66,7 @@ class Refund <<Entity>> {
   id
   amount
   reason
+  shopResponse
   gatewayRefundId
   status
 }
@@ -60,18 +78,28 @@ class Shop <<Entity>>
 class ShopStaff <<Entity>> {
   active
 }
-enum RefundStatus {
+enum RefundStatus <<Entity>> {
   REQUESTED
   APPROVED
   PROCESSED
   REJECTED
+  CANCELLED
 }
 
+View ..> StaffRefundController : GET /api/staff/shops/{shopId}/refunds
+View ..> StaffRefundController : POST /api/staff/shops/{shopId}/refunds/{id}/status
+View ..> CustomerOrderController : POST /api/customer/orders/{id}/refunds
+View ..> CustomerOrderController : POST /api/customer/orders/{id}/refunds/{refundId}/cancel
+View ..> ManagerOrderController : POST /api/shop/mine/{shopId}/orders/{id}/cancel
 StaffRefundController --> StaffRefundService
 StaffRefundService --> ShopOperationGuard
 StaffRefundService --> RefundRepository
 StaffRefundService --> NotificationService
+CustomerOrderController --> CustomerRefundService
+CustomerRefundService --> RefundRepository
+CustomerRefundService --> NotificationService
 ShopOperationGuard --> ShopStaffRepository
+ManagerOrderController --> ManagerOrderService
 ManagerOrderService --> RefundRepository : creates REQUESTED refund
 ManagerOrderService --> NotificationService
 NotificationService --> NotificationRepository

@@ -1,0 +1,82 @@
+@startuml
+title Renew Pro - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor Shop as U
+participant "View" as V <<View>> #EADCFF
+participant ShopPlanController as C <<Controller>> #D8F3DC
+participant ShopPlanService as S <<Service>> #DCECFF
+participant SePayGatewayService as GW <<Service>> #DCECFF
+participant "SePay Gateway" as SEPAY <<External>> #FFE0E0
+participant ShopPlanPaymentRepository as PR <<Repository>> #FFF1C9
+participant ShopRepository as SR <<Repository>> #FFF1C9
+participant ShopSubscriptionRepository as SSR <<Repository>> #FFF1C9
+
+== A. Choose renewal plan (same checkout as 8.6) ==
+U -> V : choose renewal plan
+V -> C : POST /api/shop/mine/{shopId}/subscription/checkout {planId}
+C -> S : checkout(shopId, actor, planId)
+S -> SR : findForUpdate(shopId)
+S -> S : owned, ACTIVE shop and owner, plan enabled
+S -> GW : subscriptionCheckout(invoice, price, ownerId, returnUrl)
+GW --> S : signed fields
+S -> PR : save(PENDING payment, amount and months snapshot)
+S --> C : Checkout
+C --> V : HTTP 200 checkout
+V -> SEPAY : POST signed checkout form (auto-submit)
+SEPAY --> V : redirect with invoice_number
+
+== B. Confirm renewal (poll or background job) ==
+V -> C : GET /api/shop/mine/{shopId}/subscription/payments/{invoice}
+C -> S : payment(shopId, actor, invoice)
+S -> S : short tx: owned, requirePayment(shopId, invoice)
+S -> S : reconcile(invoice), read status first (no outer transaction)
+S -> PR : short tx: invoice(invoice)
+PR --> S : current status
+alt already SUCCESS (or REVIEW): not PENDING
+  S --> C : existing PaymentStatus, no SePay call, no extension
+else PENDING
+  S -> GW : capturedSubscriptionInvoice(invoice)
+  GW -> SEPAY : GET /v1/order/detail/{invoice}
+  SEPAY --> GW : CAPTURED result
+  GW --> S : Optional<CapturedInvoice>
+  S -> SR : locked tx: findForUpdate(shopId)
+  S -> PR : refresh payment, recheck PENDING
+  alt not captured
+    S -> S : keep PENDING
+  else invoice or amount mismatch
+    S -> S : status = REVIEW, notify shop
+  else captured VND, matching invoice and amount
+    S -> SSR : forShop(shopId)
+    SSR --> S : current ShopSubscription
+    alt endsAt is after now (still active)
+      S -> S : start = previous endsAt, keep startedAt
+    else expired or missing
+      S -> S : start = now, startedAt = now, clear featured selections
+    end
+    S -> S : plan = chosen plan, endsAt = start + snapshotted months
+    S -> SSR : save(subscription)
+    S -> S : ShopProActivation audit, notify owner
+    S -> S : payment status = SUCCESS, confirmedAt, transactionNo
+  end
+  S --> C : PaymentStatus
+end
+C --> V : HTTP 200
+V --> U : display new expiry and limits
+
+note over S
+  The activation transaction holds the shop lock, so a double poll
+  cannot extend the subscription twice. Remaining valid time is preserved.
+end note
+
+@enduml

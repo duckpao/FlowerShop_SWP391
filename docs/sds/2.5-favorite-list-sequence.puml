@@ -1,0 +1,48 @@
+@startuml
+title Favorite Product List - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor Customer as U
+participant "View" as V <<View>> #EADCFF
+participant FavoriteController as C <<Controller>> #D8F3DC
+participant FavoriteService as S <<Service>> #DCECFF
+participant ProductCardAssembler as A <<Service>> #DCECFF
+participant FavoriteProductRepository as FR <<Repository>> #FFF1C9
+database MySQL
+
+== View saved products ==
+U -> V : open favorites
+V -> C : GET /api/customer/favorites?page
+note right of C : @PreAuthorize hasRole('CUSTOMER')
+C -> S : mine(userId, page)
+S -> S : validate page (0 to 100000)
+alt invalid page
+  S --> C : IllegalArgumentException
+  C --> V : 400 Trang không hợp lệ.
+else valid page
+  S -> FR : findOwned(userId, PageRequest(page, 12, createdDate desc))
+  FR -> MySQL : select favorites with products
+  MySQL --> FR : rows and total
+  FR --> S : Page<FavoriteProduct>
+  S -> A : cards(products)
+  A --> S : List<ProductCard>
+  note over S, A
+    Hidden, deleted or inactive products stay in the list.
+    Their card has available = false (FavoriteService lines 70-71).
+  end note
+  S --> C : Results(content, page, 12, totalElements, totalPages)
+  C --> V : 200 OK + Results
+  V --> U : show favorites, unavailable items marked
+end
+
+@enduml

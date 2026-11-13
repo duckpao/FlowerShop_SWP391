@@ -1,0 +1,89 @@
+@startuml
+title Sync GHN Status (Shop) - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor "Shop Manager" as M
+participant "View" as V <<View>> #EADCFF
+participant ManagerOrderController as C <<Controller>> #D8F3DC
+participant ManagerOrderService as S <<Service>> #DCECFF
+participant "OrderRepository\nDeliveryRepository" as R <<Repository>> #FFF1C9
+participant GhnService as G <<Service>> #DCECFF
+participant "GHN API\n(dev-online-gateway.ghn.vn)" as GHN <<External>> #FFE0E0
+participant DeliverySync as DS <<Service>> #DCECFF
+participant OrderStatusListener as L <<Service>> #DCECFF
+participant OrderMailSender as MAIL <<Service>> #DCECFF
+database MySQL
+
+== Trigger ==
+M -> V : click "Đồng bộ từ GHN" or "Kiểm tra GHN" (queue row)
+V -> C : POST /api/shop/mine/{shopId}/orders/{id}/refresh-status
+C -> S : refreshStatus(shopId, actor, orderId)
+S -> S : owned(shopId, actor)
+S -> R : findByIdAndShopId(orderId, shopId)
+alt order not found for this shop
+  S --> C : 404 Không tìm thấy đơn hàng.
+  C --> V : 404 {message}
+else order found
+  S -> R : deliveries.findByOrderId(orderId)
+  alt no Delivery row
+    S --> C : 404 Đơn hàng chưa có vận đơn GHN.
+    C --> V : 404 {message}
+  else Delivery exists
+    == Read GHN ==
+    S -> G : track(delivery.trackingCode)
+    G -> GHN : GET /shiip/public-api/v2/shipping-order/detail?order_code=\n(headers Token, ShopId)
+    alt HTTP 200 and body code 200
+      GHN --> G : data.status (e.g. delivering, delivered)
+      G -> G : toDeliveryStatus(status) using STATUS_MAP
+      G --> S : Tracking(ghnStatus, DeliveryStatus)
+
+      == Apply to our records ==
+      S -> DS : apply(order, delivery, tracking, actor)
+      DS -> DS : delivery.status and delivery.ghnStatus set (always)
+      opt order.status is DELIVERING
+        alt ghnStatus = delivered
+          DS -> DS : complete(order): COMPLETED, COD payments SUCCESS
+        else ghnStatus = returned
+          DS -> DS : order.status = REFUNDED
+        else ghnStatus = cancel
+          DS -> DS : vouchers.release(order), order.status = CANCELLED, cancelReason set
+        else any other status
+          DS -> DS : no change to Order
+        end
+      end
+      S --> C : DeliveryInfo(trackingCode, partner, status, ghnStatus)
+      C --> V : 200 JSON
+      V --> M : notice "Trạng thái GHN hiện tại: ..." and list reload
+    else GHN HTTP not 200, non-JSON body, or code not 200
+      G --> S : 502 "Lỗi từ GHN: <message>" or "GHN đang gặp sự cố (HTTP n)..."
+      S --> C : 502 (no DB write, transaction rolled back)
+      C --> V : 502 {message}
+      V --> M : red alert with the GHN message (setError)
+    else connection failure or timeout
+      G --> S : 502 "Không thể kết nối tới GHN ..."
+      S --> C : 502 (no DB write)
+      C --> V : 502 {message}
+      V --> M : red alert with the GHN message
+    end
+  end
+end
+
+== Side effects after commit ==
+S -> MySQL : UPDATE Deliveries (+ Orders if changed)
+MySQL --> L : @PostUpdate on Order
+L -> L : compare statusSnapshot with new status
+opt status changed
+  L --> MAIL : OrderStatusChangedEvent (sent AFTER_COMMIT)
+end
+
+@enduml

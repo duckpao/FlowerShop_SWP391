@@ -1,0 +1,133 @@
+@startuml
+title Order Queue and Cancel (Shop Manager) - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor "Shop Manager / Shop Staff" as M
+participant "View" as V <<View>> #EADCFF
+participant ManagerOrderController as C <<Controller>> #D8F3DC
+participant ManagerOrderService as S <<Service>> #DCECFF
+participant OrderRepository as R <<Repository>> #FFF1C9
+participant ProductRepository as P <<Repository>> #FFF1C9
+participant CouponService as CP <<Service>> #DCECFF
+participant PaymentRepository as PM <<Repository>> #FFF1C9
+participant RefundRepository as RF <<Repository>> #FFF1C9
+participant NotificationService as N <<Service>> #DCECFF
+participant OrderStatusListener as L <<Service>> #DCECFF
+participant OrderMailSender as MAIL <<Service>> #DCECFF
+database MySQL
+
+== Load queue ==
+M -> V : open order queue
+V -> C : GET /api/shop/mine/{shopId}/orders/queue?page&status
+C -> S : queue(shopId, actorId, page, status)
+S -> S : owned(shopId, actorId)
+alt status filter given
+  alt status not in queue set
+    S --> C : 400 Trạng thái không thuộc danh sách chờ xử lý.
+  else status in queue set
+    S -> R : findByShopIdAndStatus(shopId, status, page 20)
+  end
+else no filter
+  S -> R : findByShopIdAndStatusIn(shopId, PENDING, AWAITING_DEPOSIT, DEPOSIT_PAID, PROCESSING, AWAITING_QUOTE, QUOTED)
+end
+R --> S : Page<Order>
+S --> C : Results(content, page, totalPages, totalElements)
+C --> V : HTTP 200
+V --> M : queue table
+
+M -> V : badge refresh
+V -> C : GET /api/shop/mine/{shopId}/orders/queue/count
+C -> S : queueCount(shopId, actorId)
+S -> R : countByShopIdAndStatusIn(shopId, PENDING, AWAITING_DEPOSIT, AWAITING_QUOTE)
+R --> S : long
+S --> C : QueueCount(pendingCount)
+C --> V : HTTP 200 { pendingCount }
+
+== Full order list ==
+M -> V : choose status filter or next page
+V -> C : GET /api/shop/mine/{shopId}/orders?page&status
+C -> S : list(shopId, actorId, page, status)
+S -> S : owned(shopId, actorId)
+S -> R : findByShopIdAndStatus or findByShopId (page 20, createdDate desc)
+R --> S : Page<Order>
+S --> C : Results
+C --> V : HTTP 200
+
+== Confirm order ==
+opt order is PENDING
+  M -> V : click Confirm, then accept dialog
+  V -> C : POST /api/shop/mine/{shopId}/orders/{id}/confirm
+  C -> S : confirm(shopId, actorId, orderId)
+  S -> S : owned(shopId, actorId)
+  S -> R : findByIdAndShopIdForUpdate(orderId, shopId)
+  R --> S : Order
+  alt CUSTOM order still PENDING
+    S --> C : 409 Khách cần hoàn tất thanh toán trước khi chuẩn bị hoa.
+    C --> V : {message}
+  else status is not PENDING
+    S --> C : 400 Chỉ đơn hàng PENDING mới có thể xác nhận.
+    C --> V : {message}
+  else status is PENDING
+    S -> S : order.status = PROCESSING, lastModifyBy = actor
+    S -> MySQL : UPDATE Orders (commit)
+    MySQL --> L : @PostUpdate
+    L --> MAIL : OrderStatusChangedEvent(PENDING -> PROCESSING)
+    note over MAIL : @Async, @TransactionalEventListener AFTER_COMMIT\nmail sent on a separate thread
+    S --> C : 200
+    C --> V : 200
+    V --> M : reload queue
+  end
+end
+
+== Cancel order ==
+opt order can still be cancelled
+  M -> V : enter reason, confirm
+  V -> C : POST /api/shop/mine/{shopId}/orders/{id}/cancel { reason }
+  C -> S : cancel(shopId, actorId, orderId, reason)
+  S -> S : owned(shopId, actorId)
+  alt reason blank
+    S --> C : 400 Vui lòng nhập lý do hủy đơn.
+    C --> V : {message}
+  else reason given
+    S -> R : findByIdAndShopIdForUpdate(orderId, shopId)
+    R --> S : Order
+    alt status not in PENDING, AWAITING_DEPOSIT, DEPOSIT_PAID, PROCESSING, AWAITING_QUOTE, QUOTED
+      S --> C : 400 Chỉ có thể hủy đơn hàng trước khi bắt đầu giao.
+      C --> V : {message}
+    else cancellable
+      S -> S : status = CANCELLED, cancelReason = reason
+      loop each order line with a product (sorted by product id)
+        S -> P : findByIdForUpdate(productId)
+        P --> S : Product
+        opt product type is not CUSTOM
+          S -> S : stock += quantity
+        end
+      end
+      S -> CP : release(order)
+      S -> PM : failPendingByOrderId(orderId, actor)
+      S -> S : paidAmount(orderId) from SUCCESS payments
+      opt paid amount > 0
+        S -> RF : save(Refund(amount = paid, reason "Shop hủy đơn: ...")
+        S -> N : notifyRefundRequested(refund)
+      end
+      S -> MySQL : UPDATE Orders, Products, Payments, Refunds (commit)
+      MySQL --> L : @PostUpdate
+      L --> MAIL : OrderStatusChangedEvent(old -> CANCELLED)
+      S --> C : 200
+      C --> V : 200
+      V --> M : reload queue
+    end
+  end
+end
+
+@enduml

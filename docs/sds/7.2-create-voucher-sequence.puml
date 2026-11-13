@@ -1,0 +1,80 @@
+@startuml
+title Create Voucher - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor "Admin / Shop" as U
+participant "View" as V <<View>> #EADCFF
+participant CouponController as C <<Controller>> #D8F3DC
+participant CouponService as S <<Service>> #DCECFF
+participant ShopRepository as SR <<Repository>> #FFF1C9
+participant CouponRepository as CR <<Repository>> #FFF1C9
+participant ProductRepository as PR <<Repository>> #FFF1C9
+
+== Submit new voucher ==
+U -> V : submit voucher form
+note right of V
+  Any 4xx from the API is shown as an error message in the form.
+end note
+V -> C : POST /api/admin/vouchers (Input)\nor POST /api/shop/mine/{shopId}/vouchers
+C -> C : @Valid CouponService.Input (11 fields)
+alt bean validation fails
+  C --> V : 400 validation error
+  V --> U : show field errors
+else valid
+  C -> S : save(actor, shopId, null, input)
+  opt shopId != null
+    S -> SR : findById(shopId)
+    SR --> S : Shop
+    S -> S : owned(shopId, actor)
+    alt missing or not owned
+      S --> C : 404
+    else shop not ACTIVE, or target is not ORDER
+      S --> C : 400 Shop chỉ được tạo mã giảm tiền đơn hàng
+    end
+  end
+  S -> S : endDate after startDate
+  S -> S : PERCENTAGE value <= 100
+  S -> S : 0 < maxDiscountValue <= 100000
+  S -> CR : findByCodeIgnoreCase(normalized code)
+  CR --> S : Optional<Coupon>
+  alt another voucher has this code
+    S --> C : 400 Mã giảm giá đã tồn tại.
+  else code is free
+    S -> S : new Coupon (UUID, createdBy)
+    alt target == PRODUCT
+      S -> PR : findById(productId)
+      PR --> S : Optional<Product>
+      alt product missing, not ACTIVE, or shop not ACTIVE
+        S --> C : 400 Chọn sản phẩm đang bán cho voucher sản phẩm.
+      else product valid
+        S -> S : bind product
+      end
+    else productId present for non-PRODUCT target
+      S --> C : 400 Chỉ mã sản phẩm mới có sản phẩm áp dụng.
+    end
+    S -> S : set fields, lastModifyBy = actor
+    S -> CR : saveAndFlush(coupon)
+    CR --> S : Coupon
+    S -> S : view(coupon)
+    S --> C : CouponService.View
+    C --> V : 201 Created
+    V --> U : show created voucher
+  end
+end
+
+note over S
+  Persistence happens inside the CouponService transaction.
+  Admin scope = shopId null; shop scope = owned shopId.
+end note
+
+@enduml

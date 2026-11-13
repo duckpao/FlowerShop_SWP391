@@ -16,13 +16,15 @@ skinparam class {
   BackgroundColor<<Service>> #DCECFF
   BackgroundColor<<Repository>> #FFF1C9
   BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<DTO>> #FCE7F3
+  BackgroundColor<<Scheduler>> #FFE8CC
   BackgroundColor<<External>> #FFE0E0
 }
 hide empty members
 hide circle
 
-class OccasionReminderJob <<Service>> {
-  @Scheduled every 15 minutes
+class OccasionReminderJob <<Scheduler>> {
+  @Scheduled fixedDelay 15 min, initialDelay 1 min
   run()
 }
 class OccasionReminderService <<Service>> {
@@ -33,9 +35,11 @@ class OccasionReminderService <<Service>> {
 class OccasionSchedule <<Service>> {
   {static} isDue(occasion, now)
   {static} nextOccurrence(occasion, today)
+  {static} remindAt(occasion, occurrence)
 }
 class HtmlMailSender <<Service>> {
   send(to, subject, html): boolean
+  url(path)
 }
 class NotificationService <<Service>> {
   notifyUser(user, title, message, link)
@@ -63,7 +67,7 @@ class Notification <<Entity>> {
   title
   message
   link
-  isRead
+  read
 }
 class "SMTP server" as SMTP <<External>>
 

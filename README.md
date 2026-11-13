@@ -21,9 +21,7 @@ Dự án được chia thành hai phần độc lập:
 Danh sách sản phẩm toàn sàn, chi tiết kèm đánh giá, quản lý ảnh của Manager, sản phẩm yêu thích
 và quản lý danh mục của Admin. Cần chạy migration `flowershop/sql/016_product_catalog.sql` trước khi dùng.
 
-* [PRODUCT_CATALOG_GUIDE.md](PRODUCT_CATALOG_GUIDE.md) — cách dùng và các bước test thủ công.
-* [PRODUCT_CATALOG_IMPLEMENTATION.md](PRODUCT_CATALOG_IMPLEMENTATION.md) — danh sách file, nghiệp vụ
-  chi tiết, phân quyền và các quyết định thiết kế.
+* Các file PRODUCT_CATALOG_GUIDE.md và PRODUCT_CATALOG_IMPLEMENTATION.md được nhắc trước đây hiện không có trong repo.
 
 ## Database cho các chức năng trên nhánh Quangdv
 
@@ -105,7 +103,7 @@ Frontend được xây dựng bằng **ReactJS (JSX)** và sử dụng **Vite** 
 
 ### 1. Di chuyển vào thư mục Frontend
 
-Frontend hiện được đóng gói và phục vụ bởi Spring Boot tại cổng 8080. Nếu backend đã chạy thì chỉ cần mở http://localhost:8080, không chạy thêm server frontend. Gradle tự chạy `npm ci` và build React khi cần.
+Frontend hiện được đóng gói và phục vụ bởi Spring Boot tại cổng 8080. Nếu backend đã chạy thì chỉ cần mở http://localhost:8080, không chạy thêm server frontend. Gradle tự chạy `npm install` và `npm run build` (task `buildFrontend`) trước khi đóng gói `processResources`.
 
 Cách khởi động thay thế từ thư mục frontend (chỉ dùng khi backend chưa chạy):
 
@@ -130,7 +128,7 @@ npm run dev
 Sau khi khởi động thành công, mở trình duyệt và truy cập:
 
 ```text
-http://localhost:8080
+http://localhost:5173 (Vite; /api được proxy sang 8080)
 ```
 
 ---
@@ -286,7 +284,7 @@ npm run dev
 Frontend:
 
 ```text
-http://localhost:8080
+http://localhost:5173 (Vite dev server, cổng mặc định)
 ```
 
 ---

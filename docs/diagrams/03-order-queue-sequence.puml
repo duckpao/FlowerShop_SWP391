@@ -12,32 +12,43 @@ skinparam sequence {
   ParticipantBackgroundColor #FFFFFF
 }
 
-actor "Shop Manager" as M
-participant "Manager Dashboard" as UI #EADCFF
-participant ManagerOrderController as C #D8F3DC
-participant ManagerOrderService as S #DCECFF
-participant OrderRepository as R #FFF1C9
+actor "Shop Manager / Staff" as M
+participant "View" as V <<View>> #EADCFF
+participant ManagerOrderController as C <<Controller>> #D8F3DC
+participant ManagerOrderService as S <<Service>> #DCECFF
+participant OrderRepository as R <<Repository>> #FFF1C9
 database MySQL
 
-M -> UI : open shop dashboard
-UI -> C : GET /api/shop/mine/{shopId}/orders/queue/count
+M -> V : open shop dashboard
+V -> C : GET /api/shop/mine/{shopId}/orders/queue/count
 C -> S : queueCount(shopId, actor)
 S -> S : owned(shopId, actor)
-S -> R : countByShopIdAndStatusIn(shopId, [PENDING, AWAITING_DEPOSIT])
+S -> R : countByShopIdAndStatusIn(shopId, [PENDING, AWAITING_DEPOSIT, AWAITING_QUOTE])
 R -> MySQL : SELECT COUNT(*) FROM Orders
 MySQL --> R : n
 S --> C : QueueCount(n)
-C --> UI : { pendingCount: n }
-UI --> M : badge with waiting orders
+C --> V : { pendingCount: n }
+V --> M : badge with waiting orders
 
-M -> UI : open queue list
-UI -> C : GET /orders?status=PENDING&page=0
+M -> V : open queue list, choose status (optional)
+V -> C : GET /api/shop/mine/{shopId}/orders?page=0&status=PENDING
 C -> S : list(shopId, actor, 0, "PENDING")
-S -> R : findByShopIdAndStatus(shopId, PENDING, pageable)
-R -> MySQL : SELECT Orders newest first
-MySQL --> R : page
-S --> C : Results
-C --> UI : JSON
-UI --> M : queue of orders waiting for confirmation
+S -> S : owned(shopId, actor)
+alt status is not a valid OrderStatus
+  S --> C : 400 Trạng thái không hợp lệ
+else valid
+  S -> R : findByShopIdAndStatus(shopId, PENDING, pageable)
+  R -> MySQL : SELECT Orders newest first (20 per page)
+  MySQL --> R : page
+  S --> C : Results
+end
+C --> V : JSON
+V --> M : queue of orders waiting for confirmation
+
+note over C, S
+GET /orders/queue (ManagerOrderService.queue) is the variant that
+returns the working statuses PENDING, AWAITING_DEPOSIT, DEPOSIT_PAID,
+PROCESSING, AWAITING_QUOTE, QUOTED when no status is given.
+end note
 
 @enduml

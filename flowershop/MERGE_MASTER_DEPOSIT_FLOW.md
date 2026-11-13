@@ -8,8 +8,10 @@
 4. Preview và tạo đơn dùng cùng giá báo, phí GHN và quy tắc voucher. Server kiểm tra lại tổng tiền khi tạo.
 5. Tạo `Orders` CUSTOM/AWAITING_DEPOSIT và `Order_Details`, liên kết `custom_request_id`.
 6. Thanh toán DEPOSIT qua SePay; chỉ giao dịch đã xác minh mới chuyển DEPOSIT_PAID.
-   Đơn thường và đơn cọc chưa thanh toán hết hạn sau 1 phút; job quét mỗi 5 giây và đối soát SePay trước khi hủy. Đơn COD và đơn đã thanh toán không bị hủy theo thời hạn này.
+   Đơn thường (PENDING) chưa thanh toán hết hạn sau 10 phút; đơn đặt cọc (AWAITING_DEPOSIT) hết hạn sau 24 giờ; job quét mỗi 5 giây và đối soát SePay trước khi hủy. Đơn COD và đơn đã thanh toán không bị hủy theo thời hạn này.
 7. Đơn xuất hiện trong quản lý đơn hàng để shop chuẩn bị và gửi GHN. COD còn lại bằng tổng sau ưu đãi trừ tiền đã thanh toán.
+
+Luồng báo giá mới (`/api/customer/orders/custom`, xem CUSTOM_ORDER_WORKFLOW.md) là đường riêng: khách đồng ý báo giá với `paymentType: DEPOSIT` và `ONLINE` để vào AWAITING_DEPOSIT; khi không có tỷ lệ cọc thì mức cọc là 50% tổng tiền.
 
 Request được khóa khi tạo đơn để tránh tạo nhiều đơn đang hoạt động từ cùng một yêu cầu.
 Nếu đã tạo đơn, trang yêu cầu dẫn tới đơn đó để tiếp tục thanh toán.
