@@ -1,6 +1,6 @@
 @startuml
-!pragma layout smetana
 title Order Management - class diagram
+!pragma layout smetana
 skinparam shadowing false
 skinparam defaultFontName Arial
 skinparam wrapWidth 240
@@ -16,10 +16,14 @@ skinparam class {
   BackgroundColor<<Service>> #DCECFF
   BackgroundColor<<Repository>> #FFF1C9
   BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<DTO>> #FCE7F3
+  BackgroundColor<<Scheduler>> #FFE8CC
   BackgroundColor<<External>> #FFE0E0
 }
 hide empty members
 hide circle
+
+class View <<View>>
 
 class ManagerOrderController <<Controller>> {
   list(shopId, user, page, status)
@@ -29,22 +33,30 @@ class ManagerOrderController <<Controller>> {
 }
 class ManagerOrderService <<Service>> {
   list(shopId, actor, page, status): Results
-  detail(shopId, actor, orderId)
+  detail(shopId, actor, orderId): OrderDetailResponse
   cancel(shopId, actor, orderId, reason)
   updateGhn(shopId, actor, orderId, body)
   -owned(shopId, actor): Shop
 }
-class GhnService <<External>> {
-  updateOrder(orderCode, fields)
+class GhnService <<Service>> {
+  updateOrder(orderCode, updateFields)
+  switchStatus(orderCode, action)
 }
 class OrderService <<Service>> {
   makeOrders(userId, request)
 }
-interface OrderRepository <<Repository>> {
+class OrderRepository <<Repository>> {
   findByShopId(shopId, pageable)
   findByShopIdAndStatus(shopId, status, pageable)
+  findByIdAndShopId(id, shopId)
+  findByIdAndShopIdForUpdate(id, shopId)
 }
-interface DeliveryRepository <<Repository>>
+class DeliveryRepository <<Repository>> {
+  findByOrderId(orderId)
+}
+class PaymentRepository <<Repository>> {
+  failPendingByOrderId(orderId, actor)
+}
 interface RefundRepository <<Repository>>
 class Order <<Entity>> {
   id
@@ -67,7 +79,7 @@ class User <<Entity>> {
   fullName
   phone
 }
-enum OrderStatus {
+enum OrderStatus <<Entity>> {
   PENDING
   AWAITING_DEPOSIT
   DEPOSIT_PAID
@@ -76,14 +88,21 @@ enum OrderStatus {
   COMPLETED
   CANCELLED
   REFUNDED
+  AWAITING_QUOTE
+  QUOTED
 }
 
+View ..> ManagerOrderController : GET /api/shop/mine/{shopId}/orders
+View ..> ManagerOrderController : GET /api/shop/mine/{shopId}/orders/{id}
+View ..> ManagerOrderController : POST /api/shop/mine/{shopId}/orders/{id}/cancel
+View ..> ManagerOrderController : POST /api/shop/mine/{shopId}/orders/{id}/update-ghn
 ManagerOrderController --> ManagerOrderService
 ManagerOrderService --> OrderRepository
 ManagerOrderService --> DeliveryRepository
+ManagerOrderService --> PaymentRepository
 ManagerOrderService --> RefundRepository
 ManagerOrderService --> GhnService
-OrderService ..> OrderRepository : creates new orders
+OrderService ..> OrderRepository : creates new orders (customer checkout)
 OrderRepository ..> Order
 DeliveryRepository ..> Delivery
 RefundRepository ..> Refund

@@ -1,0 +1,90 @@
+@startuml
+!pragma layout smetana
+title Display Product List - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<DTO>> #F3E9D2
+  BackgroundColor<<External>> #FFE0E0
+}
+hide empty members
+hide circle
+
+class View <<View>>
+class PublicCatalogController <<Controller>> {
+  browse(q, categoryId, shopId, type, minPrice, maxPrice, sort, page, size)
+}
+class CatalogService <<Service>> {
+  browse(q, categoryId, shopId, type, minPrice, maxPrice, sort, page, size): Results
+}
+class ProductQuotaService <<Service>> {
+  allowedSpecification(): Specification<Product>
+}
+class ProductCardAssembler <<Service>> {
+  cards(products): List<ProductCard>
+  primaryImages(productIds)
+  ratings(productIds)
+}
+class ProductCard <<DTO>> {
+  id
+  name
+  type
+  price
+  stock
+}
+class ProductRepository <<Repository>> {
+  findAll(spec, pageable): Page<Product>
+  findById(id): Optional<Product>
+}
+class ProductImageRepository <<Repository>> {
+  findByProductIdInOrderByDisplayOrderAscIdAsc(productIds)
+}
+interface ProductReviewRepository <<Repository>> {
+  summarize(ids)
+}
+class Product <<Entity>> {
+  id
+  name
+  price
+  stock
+  type
+  status
+  adminHidden
+  deleted
+}
+class Category <<Entity>> {
+  id
+  name
+}
+class Shop <<Entity>> {
+  id
+  name
+  status
+}
+
+View --> PublicCatalogController : GET /api/public/products
+PublicCatalogController --> CatalogService
+CatalogService --> ProductQuotaService
+CatalogService --> ProductRepository
+CatalogService --> ProductCardAssembler
+ProductCardAssembler ..> ProductCard : builds
+ProductCardAssembler --> ProductImageRepository
+ProductCardAssembler --> ProductReviewRepository
+ProductRepository ..> Product
+ProductImageRepository ..> Product
+Product "0..*" --> "1" Category : category
+Product "0..*" --> "1" Shop : shop
+
+@enduml

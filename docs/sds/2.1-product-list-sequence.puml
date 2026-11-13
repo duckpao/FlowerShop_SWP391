@@ -1,0 +1,62 @@
+@startuml
+title Display Product List - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor Visitor as U
+participant "View" as V <<View>> #EADCFF
+participant PublicCatalogController as C <<Controller>> #D8F3DC
+participant CatalogService as S <<Service>> #DCECFF
+participant ProductQuotaService as Q <<Service>> #DCECFF
+participant ProductRepository as R <<Repository>> #FFF1C9
+participant ProductCardAssembler as A <<Service>> #DCECFF
+participant ProductImageRepository as IR <<Repository>> #FFF1C9
+participant ProductReviewRepository as RR <<Repository>> #FFF1C9
+database MySQL
+
+== Browse products ==
+U -> V : open list or change filters
+V -> C : GET /api/public/products?q&categoryId&shopId&type&minPrice&maxPrice&sort&page&size
+C -> S : browse(q, categoryId, shopId, type, minPrice, maxPrice, sort, page, size)
+S -> S : validate page, size, price range, search length, sort
+alt invalid input
+  S --> C : IllegalArgumentException
+  C --> V : 400 Bad Request
+else valid input
+  S -> S : build spec (ACTIVE, not adminHidden, shop ACTIVE, filters)
+  S -> Q : allowedSpecification()
+  Q --> S : quota spec (not deleted, within shop product limit)
+  S -> R : findAll(spec.and(quota.allowedSpecification()), pageable)
+  R -> MySQL : select products with count
+  MySQL --> R : rows and total
+  R --> S : Page<Product>
+  alt no matching products
+    S --> C : Results with empty content
+    C --> V : 200 OK, empty content
+  else products found
+    S -> A : cards(products)
+    A -> IR : findByProductIdInOrderByDisplayOrderAscIdAsc(productIds)
+    IR -> MySQL : select images
+    MySQL --> IR : image rows
+    IR --> A : List<ProductImage>
+    A -> RR : summarize(productIds)
+    RR -> MySQL : average rating and review count
+    MySQL --> RR : totals
+    RR --> A : rating rows
+    A --> S : List<ProductCard>
+    S --> C : Results(content, page, size, totalElements, totalPages)
+    C --> V : 200 OK + Results
+  end
+end
+V --> U : show products or empty message
+
+@enduml

@@ -1,0 +1,214 @@
+@startuml
+title Custom Deposit Order (from accepted request) - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor Customer as U
+actor Shop as M
+participant "View" as V <<View>> #EADCFF
+participant OrderController as C <<Controller>> #D8F3DC
+participant CustomFlowerOrderController as FC <<Controller>> #D8F3DC
+participant ManagerOrderController as MC <<Controller>> #D8F3DC
+participant OrderService as S <<Service>> #DCECFF
+participant CustomOrderPricing as P <<Service>> #DCECFF
+participant CouponService as CS <<Service>> #DCECFF
+participant GhnService as GHN <<Service>> #DCECFF
+participant CustomOrderRequestRepository as CR <<Repository>> #FFF1C9
+participant OrderRepository as OR <<Repository>> #FFF1C9
+participant PaymentRepository as PR <<Repository>> #FFF1C9
+participant SePayGatewayService as GW <<Service>> #DCECFF
+participant ManagerOrderService as MS <<Service>> #DCECFF
+participant PaymentTimeoutScheduler as SCH <<Service>> #DCECFF
+
+== A. Precondition: shop accepts and prices the design ==
+M -> V : set request ACCEPTED with quotedPrice and depositPercent
+V -> FC : PUT /api/shop/mine/{shopId}/custom-orders/{id}\n{status: ACCEPTED, quotedPrice, depositPercent 10..100}
+FC -> CR : save request, desiredComponents = {quotedPrice, depositPercent}
+alt ACCEPTED without quotedPrice or depositPercent
+  FC --> V : rejected (service check, request unchanged)
+  V --> M : rejected message
+end
+FC --> V : 200 request ACCEPTED
+V --> M : request shown as ACCEPTED
+
+== B. Voucher preview for the deposit ==
+U -> V : open accepted request, choose address and vouchers
+V -> C : POST /api/orders/{userId}/custom/{requestId}/voucher-preview\n{deliveryAddressId, couponCode, shippingCouponCode}
+C -> C : requireOwner(userId, currentUser)
+C -> S : previewCustomVouchers(userId, requestId, request)
+S -> CR : find(requestId)
+alt request missing or not owned
+  S --> C : 404 Không tìm thấy yêu cầu hoa tùy chỉnh.
+else owned
+  alt status is not ACCEPTED
+    S --> C : 400 Shop chưa chấp nhận yêu cầu này.
+  else ACCEPTED
+    alt shop not ACTIVE
+      S --> C : 400 Cửa hàng hiện không hoạt động.
+    else shop ACTIVE
+      alt request already has a non-cancelled order
+        S --> C : 400 Yêu cầu này đã có đơn đặt cọc. Hãy xem đơn hàng để tiếp tục thanh toán.
+      else no order yet
+        S -> S : customPrice(desiredComponents): quotedPrice > 0, depositPercent 10..100 (else 400)
+        S -> S : resolveDestination(userId, addressId) (saved address with GHN codes, else 400)
+        S -> GHN : quoteFee(shop, destination)
+        GHN --> S : shippingFee
+        S -> CS : preview(Context(shop, quotedPrice, fee, {}), couponCode, shippingCouponCode)
+        CS --> S : Preview
+        S -> P : deposit(subTotal, discount, total, depositPercent)
+        S --> C : CustomPaymentPreview (depositAmount, remainingAmount, depositPercent)
+        C --> V : 200
+      end
+    end
+  end
+end
+
+== C. Create the deposit order ==
+U -> V : confirm and deposit
+V -> C : POST /api/orders/{userId}/custom/{requestId}\n{deliveryAddressId, recipientName, phone, couponCode,\nshippingCouponCode, expectedTotal, expectedDeposit}
+C -> C : requireOwner(userId, currentUser)
+C -> S : makeCustomOrder(userId, requestId, request)
+S -> CR : find(requestId) with PESSIMISTIC_WRITE
+alt request missing or not owned
+  S --> C : 404 Không tìm thấy yêu cầu hoa tùy chỉnh.
+else owned
+  alt status is not ACCEPTED
+    S --> C : 400 Shop chưa chấp nhận yêu cầu này.
+  else ACCEPTED
+    alt a non-cancelled order already exists for this request
+      S --> C : 400 Yêu cầu này đã có đơn đặt cọc.
+    else none
+      alt shop not ACTIVE
+        S --> C : 400 Cửa hàng hiện không hoạt động.
+      else ACTIVE
+        S -> S : customPrice(), resolveDestination(), quoteFee()
+        S -> OR : save Order(CUSTOM, customRequestId, subTotal = quote,\nshippingFee, totalAmount, depositAmount = 0, status AWAITING_DEPOSIT)
+        S -> CS : apply(order, Context(shop, quote, fee, {}), couponCode, shippingCouponCode)
+        CS --> S : order voucher and shipping voucher snapshot, usedCount + 1
+        alt expectedTotal is set and differs from order.totalAmount
+          S --> C : 400 Giá hoặc voucher đã thay đổi. Vui lòng kiểm tra lại trước khi đặt cọc.
+        else total matches
+          S -> P : deposit(quote, discountAmount, totalAmount, depositPercent)
+          P --> S : depositAmount
+          S -> S : order.depositAmount = depositAmount
+          alt expectedDeposit is set and differs from depositAmount
+            S --> C : 400 Mức cọc đã thay đổi. Vui lòng tải lại báo giá trước khi thanh toán.
+          else matches
+            S -> S : OrderDetail(price = quote, quantity 1, customMaterials = desiredComponents)
+            S -> S : flush, publish OrderPlacedEvent (mail after commit)
+            S --> C : 201 OrderResponse(status AWAITING_DEPOSIT, depositAmount)
+            C --> V : 201
+          end
+        end
+      end
+    end
+  end
+end
+note over S
+  Steps after the order save run in one transaction:
+  a 400 rolls back the order, the voucher usage and the detail.
+end note
+
+== D. Pay the deposit online ==
+V -> C : POST /api/payments/sepay/create\n{orderId, paymentType: DEPOSIT}
+C -> GW : createPayment(request, userId)
+GW -> OR : findByIdForUpdate(orderId)
+alt not owner
+  GW --> C : 403 Bạn không có quyền thanh toán cho đơn hàng này.
+else owner
+  alt status COMPLETED or CANCELLED
+    GW --> C : 400 Đơn hàng này đã hoàn thành / đã bị hủy
+  else open
+    alt AWAITING_DEPOSIT older than 24 hours from paymentWindowStart
+      GW --> C : 400 Đơn hàng đã hết hạn đặt cọc (quá 24 giờ).
+    else within 24 hours
+      alt order has a COD payment
+        GW --> C : 400 Đơn COD không thể thanh toán trực tuyến.
+      else ONLINE allowed
+        GW -> PR : mark older PENDING ONLINE DEPOSIT payments FAILED
+        GW -> GW : payable = requiredDeposit(order) (depositAmount)
+        GW -> PR : save(Payment DEPOSIT, ONLINE, PENDING, invoice INV-...-DEPOSIT-xxxx)
+        GW --> C : 200 CreatePaymentResponse(checkoutUrl, fields signed HMAC, amount)
+        C --> V : 200
+        note right of V : POST signed form to SePay (see 10.3)
+      end
+    end
+  end
+end
+
+== E. Deposit confirmed (reconcile, see 10.3) ==
+GW -> GW : reconcileWithSePayGateway(invoice)\nGET /v1/order/detail/{invoice} returns CAPTURED with matching amount
+alt Payment amount differs from paid amount
+  GW -> PR : Payment FAILED (AMOUNT_MISMATCH), order unchanged
+else match
+  alt order is AWAITING_DEPOSIT
+    GW -> OR : status = DEPOSIT_PAID, Payment DEPOSIT = SUCCESS
+    GW --> U : notifyPaymentSuccess(order, DEPOSIT)
+  else order cancelled or not awaiting deposit
+    GW -> OR : create Refund REQUESTED, notify shop staff (no order change)
+  end
+end
+
+== F. Pay the remainder ==
+alt remainder paid online
+  V -> C : POST /api/payments/sepay/create {orderId, paymentType: FINAL}
+  C -> GW : createPayment
+  alt status is not DEPOSIT_PAID
+    GW --> C : 400 Đơn hàng chưa thanh toán tiền cọc.
+  else DEPOSIT_PAID
+    GW -> GW : payable = total - SUCCESS payments
+    GW -> PR : save(Payment FINAL, ONLINE, PENDING)
+    GW --> C : 200 CreatePaymentResponse
+    note over GW
+      Confirmed FINAL: status DEPOSIT_PAID -> PROCESSING
+      (order.depositAmount is not changed).
+    end note
+  end
+else pay the remainder on delivery
+  M -> V : click ship (shop page)
+  V -> MC : POST /api/shop/mine/{shopId}/orders/{id}/ship
+  MC -> MS : ship(shopId, actor, orderId)
+  alt status is neither PROCESSING nor DEPOSIT_PAID
+    MS --> MC : 400 Chỉ đơn hàng PROCESSING hoặc đã đặt cọc mới có thể gửi GHN.
+  else DEPOSIT_PAID allowed
+    MS -> GHN : createOrder (GHN waybill)
+    MS -> PR : save(Payment FINAL, COD, PENDING, amount = total - paid)
+    MS -> OR : status = DELIVERING
+  end
+end
+
+== G. Deposit not paid within 24 hours ==
+loop every 5 seconds (fixedDelay)
+  SCH -> OR : AWAITING_DEPOSIT with paymentWindowStart before now - 24 hours
+  SCH -> GW : expireUnpaidOrder(orderId)
+  alt COD payment exists or order no longer expired
+    GW --> SCH : return, nothing changed
+  else expired and not paid
+    GW -> GW : POST /v1/order/cancel for each open invoice (SePay closed)
+    GW -> GW : reconcile each invoice again, paid means keep the order
+    GW -> S : cancelExpiredOrder(orderId, deposit expired reason)
+    S -> OR : CANCELLED, restore stock, fail PENDING payments
+  end
+end
+
+note over S
+  Customer cancel (POST /api/orders/{userId}/{orderId}/cancel) also
+  allows AWAITING_DEPOSIT and DEPOSIT_PAID, but only changes the database
+  and does not call SePay cancel. See 10.3.
+
+  Deadline inconsistency (code as is): expiry checks in SePayGatewayService.isExpired
+  and PaymentTimeoutScheduler use paymentWindowStart (paymentStartedAt, else createdDate).
+  OrderService.cancelExpiredOrder uses createdDate + 24 hours for AWAITING_DEPOSIT.
+  No false cancel was found because paymentStartedAt is never earlier than createdDate.
+end note
+
+@enduml

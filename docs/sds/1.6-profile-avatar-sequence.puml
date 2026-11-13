@@ -1,0 +1,87 @@
+@startuml
+title Upload and Remove Avatar - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor User
+participant "View" as V <<View>> #EADCFF
+participant AccountController as C <<Controller>> #D8F3DC
+participant AccountService as S <<Service>> #DCECFF
+participant CloudinaryService as CLD <<Service>> #DCECFF
+participant UserRepository as UR <<Repository>> #FFF1C9
+participant ShopRepository as SR <<Repository>> #FFF1C9
+database Database
+
+== Upload avatar ==
+User -> V : choose image file
+note right of V : client check: JPG or PNG, 1 byte to 5 MB
+V --> User : preview shown
+User -> V : click "Tải ảnh lên"
+V -> C : POST /api/account/profile/avatar (multipart/form-data, X-CSRF-TOKEN, FormData field "file")
+C -> S : uploadAvatar(userId, file)
+S -> UR : findByIdForUpdate(userId)
+alt file empty, over 5 MB, or content type not JPEG or PNG
+  S --> C : 400 "Ảnh đại diện phải có dung lượng từ 1 byte đến 5 MB." or "Chỉ hỗ trợ ảnh JPG hoặc PNG."
+  C --> V : 400
+else file passes the first checks
+  S -> S : ImageIO reader: no reader found, or format not JPEG or PNG gives 400
+  alt width or height is 0, or above 4096 pixels
+    S --> C : 400 "Kích thước ảnh tối đa 4096 × 4096 pixel."
+    C --> V : 400
+  else size allowed
+    S -> S : read image and re-encode to PNG bytes
+    S -> CLD : uploadAvatar(pngBytes), calls upload("avatar.png", "image/png", folder flowershop/avatars)
+    alt Cloudinary rejects or returns no URL
+      CLD --> S : 502 BAD_GATEWAY
+      S --> C : 502
+      C --> V : 502
+    else upload succeeds
+      CLD --> S : hosted image URL
+      S -> S : user.avatarUrl = URL, lastModifyBy = userId
+      opt user role is SHOP
+        S -> SR : findByOwnerIdOrderByNameAsc(userId)
+        S -> S : each shop.logoUrl = same URL (avatar and logo stay in sync)
+      end
+      S -> UR : flush on commit
+      S --> C : ProfileResponse
+      C --> V : 200 ProfileResponse
+      note right of V : dispatch "flowershop-profile-updated" event, which refreshes the header avatar
+      V --> User : notice "Đã cập nhật ảnh đại diện."
+    end
+  end
+end
+note over S
+  Unreadable or non-image input returns 400
+  "Tệp tải lên không phải ảnh hợp lệ" or "Không thể đọc ảnh".
+end note
+
+== Remove avatar ==
+User -> V : click "Xóa ảnh"
+note right of V : window.confirm("Xóa ảnh đại diện hiện tại?")
+alt user cancels
+  V --> User : nothing changes
+else user confirms
+  V -> C : DELETE /api/account/profile/avatar (X-CSRF-TOKEN)
+  C -> S : removeAvatar(userId)
+  S -> UR : findByIdForUpdate(userId)
+  S -> S : user.avatarUrl = null
+  opt user role is SHOP
+    S -> SR : findByOwnerIdOrderByNameAsc(userId)
+    S -> S : each shop.logoUrl = empty string
+  end
+  S -> UR : flush on commit
+  S --> C : ProfileResponse
+  C --> V : 200 ProfileResponse
+  V --> User : initial letter shown, notice "Đã xóa ảnh đại diện."
+end
+
+@enduml

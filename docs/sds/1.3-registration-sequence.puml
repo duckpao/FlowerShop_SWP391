@@ -1,0 +1,130 @@
+@startuml
+title Register and Verify Email - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor "Customer or Shop Manager" as M
+participant "View" as V <<View>> #EADCFF
+participant AuthController as C <<Controller>> #D8F3DC
+participant AuthService as S <<Service>> #DCECFF
+participant CaptchaService as CAP <<Service>> #DCECFF
+participant CloudinaryService as CLD <<Service>> #DCECFF
+participant UserRepository as UR <<Repository>> #FFF1C9
+participant PendingRegistrationRepository as PR <<Repository>> #FFF1C9
+participant ShopRepository as SR <<Repository>> #FFF1C9
+participant AddressRepository as AR <<Repository>> #FFF1C9
+participant "ApplicationEventPublisher" as EVT <<Service>> #DCECFF
+participant VerificationMailSender as MAIL <<Service>> #DCECFF
+database Database
+
+== Request registration OTP ==
+M -> V : enter details (customer, or shop manager with shop info)
+note right of V : CSRF token from GET /api/auth/csrf
+V -> C : POST /api/auth/register  or  POST /api/auth/register-shop
+alt register-shop without description or address
+  C --> V : 400 IllegalArgumentException
+else
+  C -> S : registerCustomer(request) / registerShop(request)
+  S -> S : password must be at most 72 UTF-8 bytes (400 otherwise)
+  S -> UR : existsByEmail(normalized email)
+  alt email already registered
+    S --> C : 409 CONFLICT "Email Ä‘Ã£ Ä‘Æ°á»£c Ä‘Äƒng kÃ½."
+    C --> V : 409
+    V --> M : error message
+  else email is free
+    S -> PR : findLocked(email)
+    S -> S : canIssue(): 60 s since last code, fewer than 3 codes in 15 min, fewer than 5 failed attempts
+    alt throttled
+      S --> C : 429 TOO_MANY_REQUESTS
+      C --> V : 429
+    else allowed
+      S -> S : store full name, shop fields and BCrypt password hash on the pending row
+      S -> S : issue(): new 6-digit OTP, BCrypt hash, expires in 300 s, sendCount + 1
+      S -> PR : saveAndFlush(pending registration)
+      S -> EVT : publish AuthMailEvent(REGISTER_OTP, code)
+      EVT -> MAIL : BEFORE_COMMIT sendOtp(event)
+      MAIL --> M : OTP email (SMTP failure gives 503 and the transaction rolls back)
+      S --> C : return
+      C --> V : 202 Accepted "YÃªu cáº§u Ä‘Ã£ Ä‘Æ°á»£c tiáº¿p nháº­n"
+      V --> M : show OTP step
+    end
+  end
+end
+
+== Resend OTP ==
+M -> V : click resend
+V -> C : POST /api/auth/resend-verification
+C -> S : resend(email, captchaId, captchaAnswer)
+S -> UR : existsByEmail(normalized email)
+alt account exists or no pending registration
+  S --> C : return with no mail sent
+else pending registration found
+  S -> PR : findLocked(email)
+  opt failedAttempts >= 5
+    S -> CAP : verify(email, "register", captchaId, captchaAnswer)
+    CAP --> S : CaptchaRequiredException if missing or wrong (429, captchaRequired)
+    S -> S : reset failedAttempts, sendCount and window
+  end
+  S -> S : issue(): new OTP replaces the old hash
+  S -> PR : saveAndFlush(pending registration)
+  S -> EVT : publish AuthMailEvent(REGISTER_OTP, code)
+  EVT -> MAIL : BEFORE_COMMIT sendOtp(event)
+  MAIL --> M : new OTP email
+end
+C --> V : 202 Accepted (same message for every case)
+
+== Verify OTP ==
+M -> V : enter OTP (and CAPTCHA if required)
+V -> C : POST /api/auth/verify-email
+C -> S : verify(email, otp, captchaId, captchaAnswer)
+S -> PR : findLocked(email)
+alt no pending registration
+  S --> C : 400 InvalidOtpException
+else pending registration found
+  opt failedAttempts >= 5
+    S -> CAP : verify(email, "register", captchaId, captchaAnswer)
+    CAP --> S : CaptchaRequiredException (429) if wrong
+  end
+  alt email already registered, or code expired
+    S --> C : 400 InvalidOtpException
+  else code does not match
+    S -> S : failedAttempts = min(5, failedAttempts + 1)
+    alt failedAttempts reached 5
+      S --> C : 429 CaptchaRequiredException (captchaRequired = true)
+    else
+      S --> C : 400 InvalidOtpException
+    end
+  else code matches
+    S -> CLD : uploadDefaultAvatar(fullName)
+    CLD --> S : avatar URL
+    S -> UR : saveAndFlush(User: ACTIVE, email verified, role CUSTOMER or SHOP)
+    opt registration is for a shop
+      S -> SR : saveAndFlush(Shop: PENDING, owner = new user)
+      opt shop address was submitted
+        S -> AR : save(Address: default, type OFFICE, shop owned)
+      end
+    end
+    S -> PR : delete(pending registration)
+    S -> EVT : publish AuthMailEvent(WELCOME)
+    EVT -> MAIL : AFTER_COMMIT send(event)
+    MAIL --> M : welcome email
+    S --> C : return
+    C --> V : 200 "XÃ¡c thá»±c email vÃ  Ä‘Äƒng kÃ½ thÃ nh cÃ´ng."
+    V --> M : account created, go to sign in
+  end
+end
+note over S
+  verify() uses noRollbackFor InvalidOtpException,
+  so failedAttempts and captcha counters are still saved on a wrong code.
+end note
+
+@enduml

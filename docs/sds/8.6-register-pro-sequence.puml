@@ -1,0 +1,83 @@
+@startuml
+title Register Pro - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor Shop as U
+participant "View" as V <<View>> #EADCFF
+participant ShopPlanController as C <<Controller>> #D8F3DC
+participant ShopPlanService as S <<Service>> #DCECFF
+participant SePayGatewayService as GW <<Service>> #DCECFF
+participant "SePay Gateway" as SEPAY <<External>> #FFE0E0
+participant ShopPlanPaymentRepository as PR <<Repository>> #FFF1C9
+participant ShopRepository as SR <<Repository>> #FFF1C9
+participant ShopSubscriptionRepository as SSR <<Repository>> #FFF1C9
+
+== A. Checkout (creates PENDING invoice) ==
+U -> V : choose Pro plan
+V -> C : POST /api/shop/mine/{shopId}/subscription/checkout {planId}
+C -> S : checkout(shopId, actor, planId)
+S -> SR : findForUpdate(shopId) (shop lock)
+S -> S : owned, ACTIVE shop and owner, plan enabled, price > 0
+S -> S : invoice = "SUB-" + UUID
+S -> GW : subscriptionCheckout(invoice, price, ownerId, returnUrl)
+GW --> S : signed checkout fields
+S -> PR : save(ShopPlanPayment PENDING, amount and months snapshot)
+S --> C : Checkout(invoice, amount, checkoutUrl, fields)
+C --> V : HTTP 200 Checkout
+V -> SEPAY : POST signed checkout form (auto-submit)
+SEPAY --> V : redirect to /shop-admin/subscription?invoice_number=...
+note over V
+  The redirect alone does not activate Pro.
+end note
+
+== B. Confirm (poll or background job) ==
+V -> C : GET /api/shop/mine/{shopId}/subscription/payments/{invoice}
+C -> S : payment(shopId, actor, invoice)
+S -> S : short tx: owned(shopId, actor), requirePayment(shopId, invoice)
+S -> S : reconcile(invoice) (NOT_SUPPORTED: no outer transaction)
+S -> PR : short tx: invoice(invoice)
+PR --> S : payment status
+alt status is not PENDING (already SUCCESS or REVIEW)
+  S -> S : return without any SePay call
+else status PENDING
+  S -> GW : capturedSubscriptionInvoice(invoice)
+  GW -> SEPAY : GET /v1/order/detail/{invoice}
+  SEPAY --> GW : order detail
+  GW --> S : Optional<CapturedInvoice> (empty unless CAPTURED, VND, same invoice)
+  S -> SR : locked tx: findForUpdate(shopId)
+  S -> PR : refresh(payment), recheck PENDING
+  S -> S : lastCheckedAt = now
+  alt not captured (empty)
+    S -> S : keep PENDING
+  else invoice or amount mismatch
+    S -> S : status = REVIEW, notify shop owner
+  else captured, matching invoice and amount
+    S -> SSR : forShop(shopId)
+    SSR --> S : ShopSubscription (may be null)
+    S -> S : activate(): extend from endsAt if still active, else start now
+    S -> SSR : save(subscription)
+    S -> S : ShopProActivation audit, notify owner
+    S -> S : status = SUCCESS, confirmedAt, transactionNo
+  end
+end
+S -> PR : short tx: read status
+PR --> S : PaymentStatus
+S --> C : PaymentStatus
+C --> V : HTTP 200 status
+V --> U : show PENDING (waiting), SUCCESS (Pro active) or REVIEW
+
+note over S
+  Background ShopSubscriptionJob.background() runs the same reconcile(invoice) for pending invoices.
+end note
+
+@enduml

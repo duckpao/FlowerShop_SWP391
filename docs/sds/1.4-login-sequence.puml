@@ -1,0 +1,103 @@
+@startuml
+title Login and Session Refresh - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor User
+participant "View" as V <<View>> #EADCFF
+participant SessionController as SC <<Controller>> #D8F3DC
+participant LoginRateLimiter as RL <<Service>> #DCECFF
+participant TokenAuthService as TAS <<Service>> #DCECFF
+participant CaptchaService as CAP <<Service>> #DCECFF
+participant UserRepository as UR <<Repository>> #FFF1C9
+participant AuthSessionRepository as SESS <<Repository>> #FFF1C9
+participant JwtService as JWT <<Service>> #DCECFF
+database Database
+
+== Login ==
+User -> V : enter email and password (CAPTCHA if required)
+V -> SC : POST /api/auth/login (X-CSRF-TOKEN header)
+SC -> RL : check(remoteAddr)
+alt more than 20 requests in one minute from this IP
+  RL --> SC : 429 "Vui lòng chờ một phút trước khi đăng nhập lại."
+  SC --> V : 429
+  V --> User : wait message
+else within limit
+  SC -> TAS : login(LoginRequest)
+  TAS -> CAP : required(email)
+  opt 5 or more failed logins in the last 15 min
+    TAS -> CAP : verify(email, "login", captchaId, captchaAnswer)
+    CAP --> TAS : CaptchaRequiredException (429, captchaRequired = true) if missing or wrong
+  end
+  TAS -> UR : findUserIdByEmail(normalized email)
+  TAS -> UR : findByIdForUpdate(userId)
+  alt no user, or user has no password hash
+    TAS -> CAP : failed(email)
+    TAS --> SC : 401 BadCredentialsException
+  else user found
+    TAS -> TAS : password is at most 72 bytes and BCrypt matches
+    alt wrong password, or user not eligible (status not ACTIVE, not verified, role DELIVERY)
+      TAS -> CAP : failed(email): count + 1, window 15 min
+      alt count reaches 5
+        CAP --> TAS : CaptchaRequiredException (429, captchaRequired = true)
+        TAS --> SC : 429 captcha required
+      else
+        TAS --> SC : 401 BadCredentialsException
+      end
+      SC --> V : 401 "Thông tin đăng nhập hoặc phiên không hợp lệ."
+      V --> User : show error
+      note right of V : CAPTCHA is reloaded after 5 failures
+    else credentials valid
+      TAS -> CAP : clear(email)
+      TAS -> SESS : new AuthSession(id, userId, expires in 7 days)
+      TAS -> JWT : issue refresh token (type refresh, sid, expiry 7 days)
+      TAS -> SESS : saveAndFlush(session with SHA-256 hash of refresh token)
+      TAS -> JWT : issue access token (type access, sid, expiry 600 s)
+      TAS --> SC : Tokens(accessToken, 600, CurrentUser, refreshToken)
+      SC -> SC : Set-Cookie refresh_token (HttpOnly, SameSite Lax, path /api/auth, 7 days)
+      SC --> V : 200 LoginResponse(accessToken, "Bearer", 600, user)
+      V --> User : store access token, navigate by role
+    end
+  end
+end
+
+== Refresh session on page load ==
+User -> V : page load, or a request returns 401
+note right of V : restore session on page load, or refresh after a 401; calls are serialized by Web Locks
+V -> SC : POST /api/auth/refresh (cookie refresh_token)
+alt cookie missing or blank
+  SC --> V : 204 No Content, cookie cleared
+else cookie present
+  SC -> TAS : refresh(rawToken)
+  TAS -> JWT : decode(rawToken, "refresh")
+  TAS -> UR : findByIdForUpdate(sub)
+  TAS -> SESS : findLocked(sid)
+  alt invalid JWT, unknown session, revoked, expired, or user not eligible
+    TAS --> SC : invalid session (BadCredentials or JwtException)
+    SC --> V : 204 No Content, cookie cleared
+  else session valid
+    alt hash of token does not match the stored hash (replay of rotated token)
+      TAS -> SESS : revoked = true (revokes the whole session)
+      TAS --> SC : invalid session
+      SC --> V : 204 No Content, cookie cleared
+    else hash matches
+      TAS -> JWT : issue new refresh token and new access token
+      TAS -> SESS : saveAndFlush(new refresh hash)
+      TAS --> SC : Tokens
+      SC -> SC : Set-Cookie refresh_token (rotated)
+      SC --> V : 200 LoginResponse
+      V --> User : session restored
+    end
+  end
+end
+
+@enduml

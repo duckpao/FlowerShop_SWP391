@@ -1,0 +1,119 @@
+@startuml
+!pragma layout smetana
+title Product Management - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<DTO>> #F3E9D2
+  BackgroundColor<<External>> #FFE0E0
+}
+hide empty members
+hide circle
+
+class View <<View>>
+class ManagerProductController <<Controller>> {
+  create(shopId, user, product, images, videos)
+  update(shopId, id, user, product, images, videos)
+  hide(shopId, id, user)
+  remove(shopId, id, user)
+  unhide(shopId, id, user)
+}
+class AdminCatalogController <<Controller>> {
+  products(q, shopId, status, page)
+  hide(id, admin, body)
+}
+class ManagerProductService <<Service>> {
+  save(shopId, id, actor, input, images, videos): Result
+  hide(shopId, id, actor)
+  remove(shopId, id, actor)
+  unhide(shopId, id, actor)
+  -owned(shopId, actor, write): Shop
+}
+class AdminCatalogService <<Service>> {
+  products(q, shopId, status, page)
+  setHidden(productId, hidden, actor): ProductCard
+}
+class ProductQuotaService <<Service>> {
+  requireAllowed(product)
+}
+class ShopPlanService <<Service>> {
+  assertCanCreate(shop)
+}
+class ProductRepository <<Repository>> {
+  findByIdAndShopId(id, shopId): Optional<Product>
+  findById(id): Optional<Product>
+  saveAndFlush(product)
+}
+class ProductImageRepository <<Repository>> {
+  findByProductIdOrderByDisplayOrderAscIdAsc(productId)
+  deleteByProductId(productId)
+}
+class CategoryRepository <<Repository>> {
+  findById(id): Optional<Category>
+}
+class ShopRepository <<Repository>> {
+  findForUpdate(id): Optional<Shop>
+}
+class Product <<Entity>> {
+  id
+  name
+  price
+  stock
+  type
+  status
+  adminHidden
+  deleted
+  lastModifyBy
+}
+class ProductImage <<Entity>> {
+  id
+  imageUrl
+  isPrimary
+  displayOrder
+}
+class Category <<Entity>> {
+  id
+  status
+}
+class Shop <<Entity>> {
+  id
+  status
+}
+
+View --> ManagerProductController : POST /api/shop/mine/{shopId}/products
+View --> ManagerProductController : PUT /api/shop/mine/{shopId}/products/{id}
+View --> ManagerProductController : DELETE /api/shop/mine/{shopId}/products/{id}
+View --> ManagerProductController : DELETE /api/shop/mine/{shopId}/products/{id}/remove
+View --> ManagerProductController : PUT /api/shop/mine/{shopId}/products/{id}/unhide
+View --> AdminCatalogController : GET /api/admin/products
+View --> AdminCatalogController : PUT /api/admin/products/{id}/hidden
+ManagerProductController --> ManagerProductService
+AdminCatalogController --> AdminCatalogService
+ManagerProductService --> ProductQuotaService
+ManagerProductService --> ShopPlanService
+ManagerProductService --> ProductRepository
+ManagerProductService --> ProductImageRepository
+ManagerProductService --> CategoryRepository
+ManagerProductService --> ShopRepository
+AdminCatalogService --> ProductRepository
+ProductRepository ..> Product
+ProductImageRepository ..> ProductImage
+CategoryRepository ..> Category
+ShopRepository ..> Shop
+ProductImage "0..*" --> "1" Product
+Product "0..*" --> "1" Category : category
+Product "0..*" --> "1" Shop : shop
+
+@enduml

@@ -1,5 +1,5 @@
 @startuml
-title Refund management for shop - sequence diagram
+title Refund Management - sequence diagram
 autonumber
 skinparam shadowing false
 skinparam defaultFontName Arial
@@ -15,48 +15,63 @@ skinparam sequence {
 actor "Shop Manager" as M
 actor "Shop Staff" as ST
 actor Customer
-participant "Refund Page" as UI #EADCFF
-participant ManagerOrderService as MOS #DCECFF
-participant StaffRefundController as C #D8F3DC
-participant StaffRefundService as S #DCECFF
-participant ShopOperationGuard as G #DCECFF
-participant RefundRepository as R #FFF1C9
-participant NotificationService as N #DCECFF
+participant "View" as V <<View>> #EADCFF
+participant ManagerOrderController as MOC <<Controller>> #D8F3DC
+participant ManagerOrderService as MOS <<Service>> #DCECFF
+participant CustomerOrderController as CO <<Controller>> #D8F3DC
+participant CustomerRefundService as CRS <<Service>> #DCECFF
+participant StaffRefundController as C <<Controller>> #D8F3DC
+participant StaffRefundService as S <<Service>> #DCECFF
+participant ShopOperationGuard as G <<Service>> #DCECFF
+participant RefundRepository as R <<Repository>> #FFF1C9
+participant NotificationService as N <<Service>> #DCECFF
 database MySQL
 
 == Refund request is created when the shop cancels a paid order ==
-M -> MOS : cancel(shopId, actor, orderId, reason)
+M -> V : cancel order, enter reason
+V -> MOC : POST /api/shop/mine/{shopId}/orders/{id}/cancel { reason }
+MOC -> MOS : cancel(shopId, actor, orderId, reason)
 MOS -> MySQL : UPDATE Order status CANCELLED
 opt customer already paid
   MOS -> R : save Refund(amount = paid, status REQUESTED)
   MOS -> N : notifyRefundRequested(refund)
-  N -> MySQL : INSERT Notifications for shop staff
+  N -> MySQL : INSERT Notifications for shop owner and active staff
 end
+MOC --> V : 200 OK
+
+== Customer can also request a refund ==
+Customer -> V : request refund
+note right of Customer : allowed only when the order is COMPLETED, CANCELLED or REFUNDED
+V -> CO : POST /api/customer/orders/{id}/refunds
+CO -> CRS : request(customerId, orderId, input)
+CRS -> MySQL : INSERT Refund(REQUESTED), notifyRefundRequested
+CO --> V : RefundResult
+V --> Customer : refund request sent
 
 == Staff reviews the refund list ==
-ST -> UI : open refunds of the assigned shop
-UI -> C : GET /api/staff/shops/{shopId}/refunds
+ST -> V : open refunds of the assigned shop
+V -> C : GET /api/staff/shops/{shopId}/refunds
 C -> S : list(shopId, actor)
 S -> G : requireAccess(shopId, actor)
-G --> S : Shop (staff is active in the shop)
+G --> S : Shop (user active, email verified, active staff)
 S -> R : findByOrderShopIdOrderByCreatedDateDesc(shopId)
 R -> MySQL : SELECT Refunds JOIN Orders
 S --> C : List<RefundResponse>
-C --> UI : JSON
-UI --> ST : refund table
+C --> V : JSON
+V --> ST : refund table
 
 == Staff updates the refund status ==
-ST -> UI : choose APPROVED, PROCESSED or REJECTED
-UI -> C : POST /{id}/status { status }
-C -> S : updateStatus(shopId, actor, refundId, status)
+ST -> V : choose APPROVED, PROCESSED or REJECTED, optional note
+V -> C : POST /{id}/status { status, note }
+C -> S : updateStatus(shopId, actor, refundId, status, note)
 S -> G : requireAccess(shopId, actor)
 S -> R : findById(refundId), must belong to shop
-alt not found
-  S --> C : 404
+alt not found in this shop
+  S --> C : 404 Không tìm thấy yêu cầu hoàn tiền.
 else transition not allowed by NEXT map
-  S --> C : 400 cannot move from X to Y
-else allowed
-  S -> S : refund.status = next
+  S --> C : 400 Không thể chuyển yêu cầu hoàn tiền từ X sang Y.
+else allowed (REQUESTED to APPROVED/REJECTED, APPROVED to PROCESSED/REJECTED)
+  S -> S : refund.status = next, shopResponse = note (max 1000 chars)
   S -> MySQL : UPDATE Refunds
   opt next is PROCESSED or REJECTED
     S -> N : notifyRefundResolved(refund)
@@ -65,6 +80,7 @@ else allowed
   end
   S --> C : RefundResponse
 end
-C --> UI : JSON
+C --> V : JSON
+V --> ST : result
 
 @enduml

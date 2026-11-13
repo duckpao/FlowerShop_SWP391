@@ -1,0 +1,149 @@
+@startuml
+title Manage Customer Address - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor User
+participant "View" as V <<View>> #EADCFF
+participant PublicGhnController as GC <<Controller>> #D8F3DC
+participant AccountController as AC <<Controller>> #D8F3DC
+participant GhnService as GS <<Service>> #DCECFF
+participant AccountService as AS <<Service>> #DCECFF
+participant "GHN master-data API" as GHN <<External>> #FFE0E0
+participant UserRepository as UR <<Repository>> #FFF1C9
+participant AddressRepository as AR <<Repository>> #FFF1C9
+participant OrderRepository as OR <<Repository>> #FFF1C9
+database Database
+
+== Choose province, district, ward (public, no login) ==
+User -> V : open "add address" or "edit address"
+note right of V : address form renders a 3-level picker
+V -> GC : GET /api/public/ghn/provinces
+GC -> GS : provinces()
+GS -> GHN : GET master-data/province
+alt GHN unavailable
+  GHN --> GS : error
+  GS --> GC : 502 with reason
+  GC --> V : 502
+  V --> User : "GHN đang gặp sự cố..."
+else GHN responds
+  GHN --> GS : provinces
+  GS --> GC : List<Option>
+  GC --> V : provinces
+  V --> User : options shown
+end
+User -> V : select province
+V -> GC : GET /api/public/ghn/provinces/{id}/districts
+GC -> GS : districts(id)
+GS -> GHN : GET master-data/district?province_id=
+GHN --> GS : districts
+GS --> GC : List<Option>
+GC --> V : districts
+User -> V : select district
+V -> GC : GET /api/public/ghn/districts/{id}/wards
+GC -> GS : wards(id)
+GS -> GHN : GET master-data/ward?district_id=
+GHN --> GS : wards (ward code is a string)
+GS --> GC : List<Option>
+GC --> V : wards
+User -> V : select ward
+note right of V : onChange sets city, district, ghnDistrictId, ward, ghnWardCode
+
+== Save address (create or update) ==
+User -> V : enter recipient, phone, address line, type
+note right of V : client check: GHN district and ward codes required
+User -> V : submit
+alt new address
+  V -> AC : POST /api/account/addresses (X-CSRF-TOKEN)
+else edit existing address
+  V -> AC : PUT /api/account/addresses/{id}
+end
+AC -> AS : save(userId, id, request)
+AS -> UR : findByIdForUpdate(userId), serializes address changes for this owner
+AS -> AR : findByUserIdAndShopIsNullOrderByCreatedDateAscIdAsc(userId)
+alt create and the user already has 10 addresses
+  AS --> AC : 400 "Chỉ được lưu tối đa 10 địa chỉ."
+  AC --> V : 400
+else edit and the id is not owned by the user
+  AS --> AC : 404 "Không tìm thấy dữ liệu."
+  AC --> V : 404
+else edit and the address is used by an order
+  AS -> OR : existsByDeliveryAddressId(id)
+  OR --> AS : true
+  AS --> AC : 409 CONFLICT "Địa chỉ đã được dùng trong đơn hàng. Hãy thêm địa chỉ mới."
+  AC --> V : 409
+else valid
+  AS -> AS : copy fields, pickup and return flags (only one each per owner)
+  AS -> AS : default rule: first address, or none is default, or the one set as default becomes default
+  AS -> AR : save(address)
+  AR -> Database : INSERT or UPDATE Addresses
+  AS --> AC : AddressResponse
+  AC --> V : 201 Created (create) or 200 OK (update)
+  V -> AC : GET /api/account/addresses
+  AC -> AS : list(userId)
+  AS --> AC : List<AddressResponse>
+  AC --> V : List<AddressResponse>
+  V --> User : list reloaded, notice "Đã lưu địa chỉ."
+end
+
+== Set default ==
+User -> V : click make default on an address
+V -> AC : PUT /api/account/addresses/{id}/default (X-CSRF-TOKEN)
+AC -> AS : setDefault(userId, id)
+AS -> UR : findByIdForUpdate(userId)
+alt id not owned by the user
+  AS --> AC : 404
+  AC --> V : 404
+else owned
+  AS -> AS : only the selected address keeps isDefault = true
+  AS --> AC : AddressResponse
+  AC --> V : 200 OK
+  V --> User : reload list, notice "Đã đổi địa chỉ mặc định."
+end
+
+== Delete address ==
+User -> V : click remove on an address
+note right of V : confirm dialog "Xóa địa chỉ ..."
+alt user cancels
+  V --> User : nothing changes
+else user confirms
+  V -> AC : DELETE /api/account/addresses/{id} (X-CSRF-TOKEN)
+  AC -> AS : delete(userId, id)
+  AS -> UR : findByIdForUpdate(userId)
+  AS -> AR : list owned addresses
+  alt id not owned by the user
+    AS --> AC : 404
+    AC --> V : 404
+  else owned
+    AS -> OR : existsByDeliveryAddressId(id)
+    alt address is referenced by an order
+      OR --> AS : true
+      AS --> AC : 409 CONFLICT "Địa chỉ đã được dùng trong đơn hàng. Hãy thêm địa chỉ mới."
+      AC --> V : 409
+      V --> User : error message shown
+    else not referenced
+      AS -> AR : delete(address)
+      AR -> Database : DELETE Addresses
+      opt deleted address was the default
+        AS -> AR : first remaining address becomes default
+      end
+      AC --> V : 204 No Content
+      V -> AC : GET /api/account/addresses
+      AC -> AS : list(userId)
+      AS --> AC : List<AddressResponse>
+      AC --> V : List<AddressResponse>
+      V --> User : list reloaded, notice "Đã xóa địa chỉ."
+    end
+  end
+end
+
+@enduml

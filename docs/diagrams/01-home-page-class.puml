@@ -16,29 +16,24 @@ skinparam class {
   BackgroundColor<<Service>> #DCECFF
   BackgroundColor<<Repository>> #FFF1C9
   BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<DTO>> #FCE7F3
+  BackgroundColor<<Scheduler>> #FFE8CC
   BackgroundColor<<External>> #FFE0E0
 }
 hide empty members
 hide circle
 
-class HomeView <<View>> {
-  browseTab
-  selectBrowseTab(tab)
-}
-class useShopSearchController <<View>> {
-  shops
-  search(query)
-}
-class catalogService <<View>> {
-  browse(params)
-}
+class View <<View>>
+
 class PublicCatalogController <<Controller>> {
-  browse(q, categoryId, shopId, sort, page, size)
+  browse(q, categoryId, shopId, type, minPrice, maxPrice, sort, page, size)
   detail(id)
+  categories()
 }
 class CatalogService <<Service>> {
-  browse(q, categoryId, shopId, sort, page, size)
-  detail(id)
+  browse(q, categoryId, shopId, type, minPrice, maxPrice, sort, page, size): Results
+  detail(productId): ProductDetail
+  categories(): List<CategoryCard>
 }
 class ProductCardAssembler <<Service>>
 class PublicShopController <<Controller>> {
@@ -48,19 +43,20 @@ class PublicShopController <<Controller>> {
 class NotificationController <<Controller>> {
   mine(user)
   unreadCount(user)
+  markAllAsRead(user)
 }
 class NotificationService <<Service>> {
   mine(userId)
   unreadCount(userId)
+  markAllAsRead(userId)
 }
-interface ProductRepository <<Repository>>
-interface ShopRepository <<Repository>>
+class ProductRepository <<Repository>>
+class ShopRepository <<Repository>>
 interface NotificationRepository <<Repository>>
 class Product <<Entity>> {
   id
   name
   price
-  stock
   status
 }
 class Shop <<Entity>> {
@@ -73,14 +69,15 @@ class Notification <<Entity>> {
   id
   title
   message
-  isRead
+  link
+  read
 }
 
-HomeView --> useShopSearchController
-HomeView --> catalogService
-catalogService ..> PublicCatalogController : GET /api/public/products
-useShopSearchController ..> PublicShopController : GET /api/public/shops
-HomeView ..> NotificationController : GET /api/account/notifications
+View ..> PublicCatalogController : GET /api/public/products
+View ..> PublicShopController : GET /api/public/shops
+View ..> PublicShopController : GET /api/public/shops?q=
+View ..> NotificationController : GET /api/account/notifications
+View ..> NotificationController : GET /api/account/notifications/unread-count
 PublicCatalogController --> CatalogService
 CatalogService --> ProductCardAssembler
 CatalogService --> ProductRepository

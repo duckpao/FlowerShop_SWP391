@@ -1,0 +1,134 @@
+@startuml
+title Shop/Admin Product Management - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor "Shop Owner / Staff" as M
+actor Admin as A
+participant "View" as V <<View>> #EADCFF
+participant ManagerProductController as C <<Controller>> #D8F3DC
+participant AdminCatalogController as AC <<Controller>> #D8F3DC
+participant ManagerProductService as S <<Service>> #DCECFF
+participant AdminCatalogService as AS <<Service>> #DCECFF
+participant ProductQuotaService as Q <<Service>> #DCECFF
+participant ProductRepository as R <<Repository>> #FFF1C9
+database MySQL
+
+== Create or update product ==
+M -> V : save product form with images and videos
+V -> C : POST /api/shop/mine/{shopId}/products or PUT /{id}
+C -> S : save(shopId, id or null, actor, input, images, videos)
+S -> S : owned(shopId, actor, write) - owner or active staff, shop ACTIVE
+alt create
+  S -> S : shopPlans.assertCanCreate(shop)
+end
+alt more than 10 images or 5 videos, or invalid file type or size
+  S --> C : 400 IllegalArgumentException
+  C --> V : 400 Bad Request
+else files valid
+  S -> S : upload images and videos to cloud storage
+  S -> R : findByIdAndShopId(id, shopId)
+  alt product not in this shop
+    R --> S : empty
+    S --> C : 404 Không tìm thấy shop hoặc sản phẩm.
+    C --> V : 404 Not Found
+  else product found or create
+    opt status ACTIVE on update
+      S -> Q : requireAllowed(product)
+      alt over shop product limit
+        Q --> S : 400 product locked by plan
+        S --> C : 400
+        C --> V : 400 Bad Request
+      end
+    end
+    S -> S : set primary image, validate category ACTIVE
+    S -> R : saveAndFlush(product)
+    R -> MySQL : insert or update product
+    MySQL --> R : saved row
+    R --> S : Product
+    S --> C : Result
+    C --> V : 201 Created (create) or 200 OK (update)
+  end
+end
+
+== Hide product (shop) ==
+M -> V : click Hide
+V -> C : DELETE /api/shop/mine/{shopId}/products/{id}
+C -> S : hide(shopId, id, actor)
+S -> S : owned(shopId, actor, write)
+S -> R : findByIdAndShopId(id, shopId)
+alt product not found
+  S --> C : 404
+  C --> V : 404 Not Found
+else found
+  S -> S : status = INACTIVE, lastModifyBy = actor
+  S -> MySQL : update product (transaction commit)
+  S --> C : void
+  C --> V : 204 No Content
+end
+
+== Remove product (owner only, soft delete) ==
+M -> V : click Remove
+V -> C : DELETE /api/shop/mine/{shopId}/products/{id}/remove
+C -> S : remove(shopId, id, actor)
+S -> S : owned(shopId, actor, write)
+alt actor is staff, not owner
+  S --> C : 403 Chỉ chủ shop được xóa sản phẩm.
+  C --> V : 403 Forbidden
+else actor is owner
+  S -> R : findByIdAndShopId(id, shopId)
+  R --> S : Product
+  S -> S : deleted = true, status = INACTIVE
+  S -> MySQL : delete FeaturedProduct row, update product
+  S --> C : void
+  C --> V : 204 No Content
+end
+
+== Unhide product (shop) ==
+M -> V : click Unhide
+V -> C : PUT /api/shop/mine/{shopId}/products/{id}/unhide
+C -> S : unhide(shopId, id, actor)
+S -> S : owned(shopId, actor, write)
+S -> R : findByIdAndShopId(id, shopId)
+S -> Q : requireAllowed(product)
+alt over shop product limit
+  S --> C : 400 product locked by plan
+  C --> V : 400 Bad Request
+else allowed
+  S -> S : status = ACTIVE, notify published
+  S -> MySQL : update product
+  S --> C : void
+  C --> V : 204 No Content
+end
+
+== Admin hides or unhides product ==
+A -> V : toggle admin hidden
+V -> AC : PUT /api/admin/products/{id}/hidden { hidden }
+AC -> AS : setHidden(productId, hidden, admin.id)
+AS -> R : findById(productId)
+R -> MySQL : select product
+MySQL --> R : product or no row
+R --> AS : Optional<Product>
+alt product not found
+  AS --> AC : 404 Không tìm thấy dữ liệu.
+  AC --> V : 404 Not Found
+else found
+  AS -> AS : adminHidden = hidden, lastModifyBy = admin
+  AS -> R : saveAndFlush(product)
+  R -> MySQL : update product
+  AS --> AC : ProductCard
+  AC --> V : 200 OK + ProductCard
+end
+V --> M : show result
+V --> A : show result
+
+@enduml

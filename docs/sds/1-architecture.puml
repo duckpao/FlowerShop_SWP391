@@ -1,0 +1,53 @@
+@startuml
+!pragma layout smetana
+title FlowerShop - System Architecture
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 200
+skinparam ArrowColor #444444
+skinparam ArrowFontSize 12
+skinparam RectangleBorderColor #555555
+skinparam RectangleFontSize 14
+skinparam nodesep 50
+skinparam ranksep 60
+
+actor "Users\nCustomer, Shop Manager,\nShop Staff, Admin" as USER
+
+rectangle "React SPA\nflower-shop-client\nviews, controllers, services" as CLIENT #EADCFF
+
+rectangle "Spring Boot - flowershop" as BACKEND #F4F8FF {
+  rectangle "security\nJWT filter, CSRF, rate limit" as SEC #FFF1C9
+  rectangle "controller + chat\nREST /api and STOMP /ws" as CTRL #D8F3DC
+  rectangle "service\nbusiness logic" as SVC #D8F3DC
+  rectangle "integration\nGHN, SePay, Cloudinary, Mail" as INTEG #FFE8CC
+  rectangle "event + scheduler\nafter-commit events, timed jobs" as JOBS #FFE8CC
+  rectangle "repository + entity\nSpring Data JPA" as REPO #E0F3E7
+}
+
+database "MySQL 8\nflower_shop_db" as DB #E0F3E7
+
+rectangle "GHN" as GHN #FFE0E0
+rectangle "SePay" as SEPAY #FFE0E0
+rectangle "Cloudinary" as CLOUD #FFE0E0
+rectangle "SMTP" as SMTP #FFE0E0
+rectangle "Google Identity" as GOOG #FFE0E0
+
+USER --> CLIENT
+CLIENT --> SEC : HTTPS JSON, STOMP
+SEC --> CTRL : authenticated request
+CTRL --> SVC
+SVC --> REPO
+REPO --> DB : JDBC
+SVC --> INTEG
+SVC --> JOBS : publish events
+JOBS --> SVC : timed jobs
+JOBS --> INTEG : send mail
+
+INTEG --> GHN
+INTEG --> SEPAY
+INTEG --> CLOUD
+INTEG --> SMTP
+INTEG --> GOOG
+CLIENT --> SEPAY : signed checkout form
+
+@enduml

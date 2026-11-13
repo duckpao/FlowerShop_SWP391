@@ -1,5 +1,5 @@
 @startuml
-title Notify User Confirmation via Email - sequence diagram
+title Notify User Confirmation - sequence diagram
 autonumber
 skinparam shadowing false
 skinparam defaultFontName Arial
@@ -14,19 +14,26 @@ skinparam sequence {
 
 actor Customer
 actor "Shop Manager" as M
-participant OrderService as OS #DCECFF
-participant ManagerOrderService as MOS #DCECFF
-participant OrderStatusListener as L #DCECFF
-participant OrderMailSender as MAIL #DCECFF
-participant HtmlMailSender as H #DCECFF
-participant "SMTP server" as SMTP #FFE0E0
+participant "View" as V <<View>> #EADCFF
+participant OrderController as OC <<Controller>> #D8F3DC
+participant ManagerOrderController as MOC <<Controller>> #D8F3DC
+participant OrderService as OS <<Service>> #DCECFF
+participant ManagerOrderService as MOS <<Service>> #DCECFF
+participant OrderStatusListener as L <<Service>> #DCECFF
+participant OrderMailSender as MAIL <<Service>> #DCECFF
+participant HtmlMailSender as H <<Service>> #DCECFF
+participant "SMTP server" as SMTP <<External>> #FFE0E0
 database MySQL
 
 == Order receipt after checkout ==
-Customer -> OS : place order (checkout)
+Customer -> V : place order (checkout)
+V -> OC : POST /api/orders/{userId}/batch
+OC -> OS : makeOrders(userId, request)
 OS -> MySQL : INSERT Orders, Order_Details
 OS --> MAIL : publish OrderPlacedEvent(orderIds)
 note right of MAIL : after the transaction commits, run asynchronously
+OC --> V : 201 Created, one order per shop
+V --> Customer : order created, cart items removed
 MAIL -> MySQL : read orders, details, payments (read-only transaction)
 alt customer email missing or not verified
   MAIL -> MAIL : skip, no mail
@@ -38,13 +45,28 @@ else can mail
 end
 
 == Confirmation after the shop confirms ==
-M -> MOS : confirm(shopId, actor, orderId)
+M -> V : click Confirm
+note right of V : confirmation dialog before the request
+V -> MOC : POST /api/shop/mine/{shopId}/orders/{id}/confirm
+MOC -> MOS : confirm(shopId, actor, orderId)
 MOS -> MySQL : UPDATE Orders status PENDING to PROCESSING
 MySQL --> L : @PostUpdate
-L --> MAIL : OrderStatusChangedEvent(PENDING to PROCESSING)
+L --> MAIL : OrderStatusChangedEvent(PENDING to PROCESSING), after commit
 MAIL -> MAIL : buildStatusMail: "Đơn hàng đã được xác nhận"
-MAIL -> H : send(email, subject, html)
-H -> SMTP : send message
-SMTP --> Customer : confirmation email with order link
+alt customer email missing or not verified
+  MAIL -> MAIL : skip, no mail
+else can mail
+  MAIL -> H : send(email, subject, html with "Xem đơn hàng" link)
+  H -> SMTP : send message
+  SMTP --> Customer : confirmation email
+end
+MOC --> V : 200 OK
+V --> M : status PROCESSING
+
+note over MAIL
+Status mails are sent only for PROCESSING, DEPOSIT_PAID, DELIVERING,
+COMPLETED, CANCELLED and REFUNDED. Other changes are ignored.
+A failed send is logged ("Order email skipped") and not retried.
+end note
 
 @enduml

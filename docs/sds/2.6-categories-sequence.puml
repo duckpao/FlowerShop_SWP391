@@ -1,0 +1,50 @@
+@startuml
+title Display Categories - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor Visitor as U
+participant "View" as V <<View>> #EADCFF
+participant PublicCatalogController as C <<Controller>> #D8F3DC
+participant CatalogService as S <<Service>> #DCECFF
+participant ProductQuotaService as Q <<Service>> #DCECFF
+participant CategoryRepository as CR <<Repository>> #FFF1C9
+participant ProductRepository as R <<Repository>> #FFF1C9
+participant GlobalExceptionHandler as G <<Controller>> #D8F3DC
+database MySQL
+
+== Load categories ==
+U -> V : open catalog
+V -> C : GET /api/public/categories
+C -> S : categories()
+S -> R : findAll(visible.and(quota.allowedSpecification()), unpaged)
+R -> MySQL : select visible products
+MySQL --> R : product rows
+R --> S : List<Product>
+S -> S : count products per category in Java (map categoryId -> count)
+S -> CR : findByStatusOrderByNameAsc(ACTIVE)
+CR -> MySQL : select active categories
+MySQL --> CR : category rows
+CR --> S : List<Category>
+S -> S : build CategoryCard(id, name, description, group, productCount)
+alt unexpected error in service or repository
+  S --> G : exception (no try/catch in service)
+  G --> C : mapped error response
+  C --> V : error status
+  note right of V : empty catch, categories stays []
+else success
+  S --> C : List<CategoryCard>
+  C --> V : 200 OK + list
+end
+V --> U : show category menu (empty when load failed)
+
+@enduml

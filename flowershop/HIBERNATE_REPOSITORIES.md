@@ -9,7 +9,7 @@ Every domain query is implemented explicitly using Hibernate HQL or Criteria que
 `OrderRepository`, `OrderDetailRepository`, `CustomOrderRequestRepository`,
 `PaymentRepository`, `DeliveryRepository`, `AddressRepository`, `ShopRepository`,
 `UserRepository`, `ProductRepository`, `CategoryRepository`,
-`ProductImageRepository` and `ProductVideoRepository`.
+`ProductImageRepository` and `ProductVideoRepository`, plus `CouponRepository`, `CustomFlowerOptionRepository`, `FeaturedProductRepository`, `ShopPlanRepository`, `ShopPlanPaymentRepository`, `ShopProActivationRepository`, `ShopProductPostingRepository`, `ShopSubscriptionRepository` and `SubscriptionReminderRepository`.
 
 Other features such as authentication sessions and shop-follow notifications retain
 their existing Spring Data repositories. They share the same persistence unit and

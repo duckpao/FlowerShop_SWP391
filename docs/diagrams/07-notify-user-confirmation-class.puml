@@ -1,6 +1,6 @@
 @startuml
+title Notify User Confirmation - class diagram
 !pragma layout smetana
-title Notify User Confirmation via Email - class diagram
 skinparam shadowing false
 skinparam defaultFontName Arial
 skinparam wrapWidth 240
@@ -16,22 +16,33 @@ skinparam class {
   BackgroundColor<<Service>> #DCECFF
   BackgroundColor<<Repository>> #FFF1C9
   BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<DTO>> #FCE7F3
+  BackgroundColor<<Scheduler>> #FFE8CC
   BackgroundColor<<External>> #FFE0E0
 }
 hide empty members
 hide circle
 
-class OrderService <<Service>> {
+class View <<View>>
+
+class OrderController <<Controller>> {
   makeOrders(userId, request)
 }
-class OrderPlacedEvent <<Service>> {
-  orderIds
+class ManagerOrderController <<Controller>> {
+  confirm(shopId, id, user)
+}
+class OrderService <<Service>> {
+  makeOrders(userId, request)
 }
 class ManagerOrderService <<Service>> {
   confirm(shopId, actor, orderId)
 }
+class OrderPlacedEvent <<Service>> {
+  orderIds
+}
 class OrderStatusListener <<Service>> {
-  publishIfChanged(order)
+  remember(order) @PostLoad
+  publishIfChanged(order) @PostUpdate
 }
 class OrderStatusChangedEvent <<Service>> {
   orderId
@@ -39,8 +50,8 @@ class OrderStatusChangedEvent <<Service>> {
   to
 }
 class OrderMailSender <<Service>> {
-  onPlaced(event) @Async
-  onStatusChanged(event) @Async
+  onPlaced(event) @Async AFTER_COMMIT
+  onStatusChanged(event) @Async AFTER_COMMIT
   -buildReceipt(orderIds)
   -buildStatusMail(event)
   -canMail(customer)
@@ -48,11 +59,11 @@ class OrderMailSender <<Service>> {
 class HtmlMailSender <<Service>> {
   send(to, subject, html): boolean
   url(path)
-  layout(heading, body, label, url)
+  layout(heading, bodyHtml, buttonLabel, buttonUrl)
 }
-interface OrderRepository <<Repository>>
-interface OrderDetailRepository <<Repository>>
-interface PaymentRepository <<Repository>>
+class OrderRepository <<Repository>>
+class OrderDetailRepository <<Repository>>
+class PaymentRepository <<Repository>>
 class Order <<Entity>> {
   id
   status
@@ -65,8 +76,12 @@ class User <<Entity>> {
 }
 class "SMTP server" as SMTP <<External>>
 
+View ..> OrderController : POST /api/orders/{userId}/batch
+View ..> ManagerOrderController : POST /api/shop/mine/{shopId}/orders/{id}/confirm
+OrderController --> OrderService
+ManagerOrderController --> ManagerOrderService
 OrderService ..> OrderPlacedEvent : publishes
-ManagerOrderService --> Order : status PROCESSING
+ManagerOrderService --> Order : status PENDING to PROCESSING
 Order ..> OrderStatusListener : @EntityListeners
 OrderStatusListener ..> OrderStatusChangedEvent : publishes
 OrderMailSender ..> OrderPlacedEvent : listens AFTER_COMMIT

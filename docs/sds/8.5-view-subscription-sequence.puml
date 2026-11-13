@@ -1,0 +1,60 @@
+@startuml
+title View Shop Subscription - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor Shop as U
+participant "View" as V <<View>> #EADCFF
+participant ShopPlanController as C <<Controller>> #D8F3DC
+participant ShopPlanService as S <<Service>> #DCECFF
+participant ShopRepository as SR <<Repository>> #FFF1C9
+participant ShopSubscriptionRepository as SSR <<Repository>> #FFF1C9
+participant ProductRepository as PR <<Repository>> #FFF1C9
+participant FeaturedProductRepository as FR <<Repository>> #FFF1C9
+
+== Open subscription page ==
+U -> V : open subscription page
+V -> C : GET /api/shop/mine/{shopId}/subscription
+C -> S : status(shopId, actor)
+S -> SR : findById(shopId)
+SR --> S : Shop
+S -> S : owned(shopId, actor, lock = false)
+alt shop missing or owner mismatch
+  S --> C : 404
+else shop or owner not ACTIVE
+  S --> C : 409 Cửa hàng phải đang hoạt động.
+else valid
+  S -> S : statusForShop(shopId)
+  S -> SSR : forShop(shopId)
+  SSR --> S : Optional<ShopSubscription>
+  S -> S : pro = endsAt is after clock.now()
+  S -> PR : countForShop(shopId)
+  PR --> S : productCount
+  alt pro
+    S -> FR : forShop(shopId)
+    FR --> S : List<FeaturedProduct>
+    S -> S : productLimit = plan.productLimit (null = unlimited)\nfeaturedLimit = plan.featuredLimit\nfeaturedProductIds = all selected ids
+  else not pro (Free)
+    S -> S : productLimit = 5, featuredLimit = 0, featuredProductIds = []
+  end
+  S --> C : Status(pro, expiresAt, productCount, productLimit, featuredLimit, featuredProductIds, planName)
+end
+C --> V : HTTP 200 Status
+V --> U : display plan, expiry, counts and limits
+
+note over S
+  status() is read-only and keeps an expired row and existing products.
+  It returns every selected featured id, NOT cut to featuredLimit.
+  The public featured() list is the only place where the limit cuts the ids (per shop, in order of featuredAt).
+end note
+
+@enduml

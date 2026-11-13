@@ -127,9 +127,9 @@ Thông báo đơn đã giao. Lớp chính: `DeliverySync`, `OrderStatusListener`
 
 ## Ghi chú khớp với code
 
-- **Order Management, thêm mới:** shop không tạo đơn. Đơn mới đến từ checkout của customer (`OrderService.makeOrders`) rồi hiện trong danh sách của shop. Phần "chỉnh sửa" được vẽ là hủy đơn và cập nhật vận đơn GHN (`updateGhn`).
-- **Order Queue:** hàng đợi gồm đơn `PENDING` và `AWAITING_DEPOSIT` (`queueCount`), danh sách lọc theo `PENDING`.
-- **Refund:** yêu cầu hoàn tiền được tạo khi shop hủy đơn đã thanh toán. Việc cập nhật trạng thái do role `SHOP_STAFF` làm qua `StaffRefundController`, theo luồng REQUESTED → APPROVED → PROCESSED, hoặc REJECTED.
+- **Order Management, thêm mới:** shop không tạo đơn. Đơn mới đến từ checkout của customer (`OrderService.makeOrders`) rồi hiện trong danh sách của shop. Phần "chỉnh sửa" được vẽ là hủy đơn (`cancel`, bắt buộc có lý do) và cập nhật vận đơn GHN (`updateGhn`).
+- **Order Queue:** hàng đợi đếm đơn `PENDING`, `AWAITING_DEPOSIT`, `AWAITING_QUOTE` (`queueCount`); danh sách `queue` mặc định gồm thêm `DEPOSIT_PAID`, `PROCESSING`, `QUOTED`, và màn hình có thể lọc theo từng trạng thái.
+- **Refund:** yêu cầu hoàn tiền được tạo khi shop hủy đơn đã thanh toán. Việc cập nhật trạng thái do role `SHOP_STAFF` làm qua `StaffRefundController`, theo luồng REQUESTED → APPROVED → PROCESSED, hoặc REJECTED. Khách cũng có thể tự gửi yêu cầu hoàn tiền (`CustomerRefundService`) và hủy yêu cầu đó (trạng thái CANCELLED).
 - **Mail đơn hàng:** mọi mail đổi trạng thái đi qua `OrderStatusListener` (JPA `@PostUpdate`) và `OrderMailSender` chạy `@Async` sau khi commit. Vì vậy xác nhận đơn và đơn đã giao dùng chung một cơ chế.
-- **Nhắc dịp đặc biệt:** `OccasionReminderJob` chạy mỗi 15 phút, lần đầu sau 1 phút. Mail lỗi thì không đánh dấu đã nhắc để lần quét sau thử lại.
+- **Nhắc dịp đặc biệt:** `OccasionReminderJob` chạy với `fixedDelay` 15 phút, lần đầu sau 1 phút. Mail lỗi thì không đánh dấu đã nhắc để lần quét sau thử lại.
 - **Home Page:** các endpoint được gọi từ `HomeView` và controller của nó. Thông báo chuông dùng `/api/account/notifications`.

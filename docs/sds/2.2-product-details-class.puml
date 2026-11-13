@@ -1,0 +1,97 @@
+@startuml
+!pragma layout smetana
+title Product Details and Reviews - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<DTO>> #F3E9D2
+  BackgroundColor<<External>> #FFE0E0
+}
+hide empty members
+hide circle
+
+class View <<View>>
+class PublicCatalogController <<Controller>> {
+  detail(id)
+  reviews(id, page)
+}
+class CatalogService <<Service>> {
+  detail(productId): ProductDetail
+}
+class ProductQuotaService <<Service>> {
+  allowed(product): boolean
+}
+class ProductReviewService <<Service>> {
+  list(productId, page): Results
+  -visibleProduct(productId)
+}
+class ProductCardAssembler <<Service>> {
+  visible(product): boolean
+  ratings(productIds)
+}
+class ProductRepository <<Repository>> {
+  findById(id): Optional<Product>
+}
+class ProductImageRepository <<Repository>> {
+  findByProductIdOrderByDisplayOrderAscIdAsc(productId)
+}
+interface ProductReviewRepository <<Repository>> {
+  findByProductId(productId, pageable)
+  summarize(ids)
+}
+class Product <<Entity>> {
+  id
+  name
+  description
+  price
+  stock
+  deleted
+  adminHidden
+}
+class ProductImage <<Entity>> {
+  id
+  imageUrl
+  isPrimary
+  displayOrder
+}
+class ProductReview <<Entity>> {
+  id
+  rating
+  comment
+  shopReply
+}
+class User <<Entity>> {
+  id
+  fullName
+}
+
+View --> PublicCatalogController : GET /api/public/products/{id}
+View --> PublicCatalogController : GET /api/public/products/{id}/reviews
+PublicCatalogController --> CatalogService
+PublicCatalogController --> ProductReviewService
+CatalogService --> ProductQuotaService
+CatalogService --> ProductRepository
+CatalogService --> ProductImageRepository
+CatalogService --> ProductCardAssembler
+ProductReviewService --> ProductRepository
+ProductReviewService --> ProductReviewRepository
+ProductRepository ..> Product
+ProductImageRepository ..> ProductImage
+ProductReviewRepository ..> ProductReview
+ProductImage "0..*" --> "1" Product
+ProductReview "0..*" --> "1" Product
+ProductReview "0..*" --> "1" User : user
+
+@enduml

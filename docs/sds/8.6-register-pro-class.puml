@@ -1,0 +1,141 @@
+@startuml
+!pragma layout smetana
+title Register Pro - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+  BackgroundColor<<DTO>> #ECECEC
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class ShopPlanController <<Controller>> {
+  checkout(shopId, u, input): Checkout
+  payment(shopId, invoice, u): PaymentStatus
+}
+class ShopPlanService <<Service>> {
+  checkout(shopId, actor, planId): Checkout
+  payment(shopId, actor, invoice): PaymentStatus
+  reconcile(invoice): void
+  -activate(shop, plan, months, source, actor, note, paymentId, requestId)
+  -owned(shopId, actor, lock): Shop
+}
+class "ShopPlanService.Checkout" as Checkout <<DTO>> {
+  invoiceNumber
+  amount
+  checkoutUrl
+  fields
+}
+class "ShopPlanService.PaymentStatus" as PaymentStatus <<DTO>> {
+  invoiceNumber
+  status
+  amount
+  confirmedAt
+}
+class SePayGatewayService <<Service>> {
+  subscriptionCheckout(invoice, amount, ownerId, returnUrl): SubscriptionCheckout
+  capturedSubscriptionInvoice(invoice): Optional<CapturedInvoice>
+}
+class "SePayGatewayService.CapturedInvoice" as CapturedInvoice <<DTO>> {
+  invoiceNumber
+  amount
+  transactionNo
+}
+class ShopRepository <<Repository>> {
+  findById(id): Optional<Shop>
+  findForUpdate(id): Optional<Shop>
+}
+class ShopPlanPaymentRepository <<Repository>> {
+  save(payment): ShopPlanPayment
+  invoice(invoice): Optional<ShopPlanPayment>
+  refresh(payment): void
+  pendingInvoices(now): List<String>
+}
+class ShopSubscriptionRepository <<Repository>> {
+  forShop(shopId): Optional<ShopSubscription>
+  save(subscription): ShopSubscription
+}
+class ShopProActivationRepository <<Repository>> {
+  save(activation): ShopProActivation
+}
+class NotificationService <<Service>> {
+  notifyUser(user, title, message, link): void
+}
+class ShopPlanClock <<Service>> {
+  now(): LocalDateTime
+}
+class ShopPlanPayment <<Entity>> {
+  id
+  invoiceNumber
+  amount
+  durationMonths
+  status: String
+  createdAt
+  lastCheckedAt
+  confirmedAt
+  transactionNo
+  shop: Shop
+  plan: ShopPlan
+}
+class ShopSubscription <<Entity>> {
+  id
+  shop: Shop
+  plan: ShopPlan
+  startedAt
+  endsAt
+}
+class ShopProActivation <<Entity>> {
+  id
+  source
+  paymentId
+  actorId
+  startsAt
+  endsAt
+  shop: Shop
+  plan: ShopPlan
+}
+
+View --> ShopPlanController : POST /api/shop/mine/{shopId}/subscription/checkout\nGET /api/shop/mine/{shopId}/subscription/payments/{invoice}
+ShopPlanController --> ShopPlanService
+ShopPlanService ..> Checkout : returns
+ShopPlanService ..> PaymentStatus : returns
+ShopPlanService --> SePayGatewayService
+SePayGatewayService ..> CapturedInvoice
+ShopPlanService --> ShopRepository
+ShopPlanService --> ShopPlanPaymentRepository
+ShopPlanService --> ShopSubscriptionRepository
+ShopPlanService --> ShopProActivationRepository
+ShopPlanService --> NotificationService
+ShopPlanService --> ShopPlanClock
+ShopPlanPaymentRepository ..> ShopPlanPayment
+ShopSubscriptionRepository ..> ShopSubscription
+ShopProActivationRepository ..> ShopProActivation
+
+note bottom of ShopPlanService
+  checkout(): @Transactional, locks shop, creates SUB- invoice, signs SePay form,
+  saves PENDING payment with amount/months snapshot. Redirect alone never activates Pro.
+  reconcile() is NOT_SUPPORTED: status is read first (returns if not PENDING),
+  then SePay is called, then a short locked transaction re-checks and activates.
+end note
+
+note bottom of SePayGatewayService
+  Server-to-server GET /v1/order/detail/{invoice}. Accepts only CAPTURED, VND,
+  matching invoice number. Anything else: Optional.empty().
+end note
+
+@enduml
