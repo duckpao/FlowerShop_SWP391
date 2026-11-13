@@ -272,12 +272,6 @@ single.setShippingCouponCode(part.getShippingCouponCode()); single.setExpectedTo
 
             selectedCartItems.add(cartItem);
         }
-        // Đặt lại món đang nằm trong đơn PENDING cũ của chính khách: hủy đơn cũ (trả kho) thay vì tạo đơn trùng trừ kho lần nữa.
-        // Món đang được đặt lại không khôi phục (giỏ hiện tại mới là thứ khách muốn đặt); các món khác của đơn cũ trả về giỏ.
-        List<String> reorderedProductIds = selectedCartItems.stream().map(item -> item.getProduct().getId()).toList();
-        for (String pendingId : orderDetailRepository.findPendingOrderIds(userId, reorderedProductIds)) {
-            cancelPending(pendingId, "Khách đặt lại đơn mới cho cùng sản phẩm", userId, reorderedProductIds);
-        }
         selectedCartItems.sort(Comparator.comparing(item -> item.getProduct().getId()));
         for (CartItem cartItem : selectedCartItems) {
             Product product = productRepository.findByIdForUpdate(cartItem.getProduct().getId())

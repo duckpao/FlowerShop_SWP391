@@ -14,19 +14,22 @@ const statusColors = { REQUESTED: 'warning', APPROVED: 'info', PROCESSED: 'succe
  * Trang chủ shop và Staff: đơn đã hủy cần hoàn tiền. Người xử lý gọi khách theo SĐT rồi đánh dấu tiến độ:
  * Chờ liên hệ -> Đã liên hệ -> Đã hoàn tiền (hoặc Từ chối).
  */
-export default function StaffRefundsView({ role = 'SHOP_STAFF' }) {
+export default function StaffRefundsView({ role }) {
     const [shop, setShop] = useState(null)
     const [refunds, setRefunds] = useState(null)
     const [busy, setBusy] = useState(false)
     const [error, setError] = useState('')
     const [notes, setNotes] = useState({})
 
-    // Shop của chủ shop hoặc shop staff đang làm: lấy shop đầu tiên
+    // Shop của chủ shop hoặc shop staff đang làm: lấy shop đầu tiên.
+    // Chờ có role (user tải sau lần render đầu) để không gọi nhầm API của staff khi là chủ shop.
     useEffect(() => {
+        if (!role) return
+        setError('')
         managerShopService.list(role)
             .then(shops => shops.length ? setShop(shops[0]) : setError('Bạn chưa thuộc cửa hàng nào.'))
             .catch(e => setError(e.message))
-    }, [])
+    }, [role])
 
     const load = async () => {
         setBusy(true); setError('')
