@@ -117,8 +117,11 @@ class CouponTests {
         var input=depositInput();input.setCouponCode(low.getCode());input.setShippingCouponCode(ship.getCode());
         var preview=cartOrders.previewCustomVouchers(customer.getId(),design.getId(),input);
         assertThat(preview.totalAmount()).isEqualByComparingTo("480000");
+        assertThat(preview.depositAmount()).isEqualByComparingTo("144000");
+        assertThat(preview.remainingAmount()).isEqualByComparingTo("336000");
         assertThat(preview.orderVouchers()).filteredOn(v->v.code().equals(high.getCode())).allSatisfy(v->assertThat(v.eligible()).isFalse());
         input.setExpectedTotal(preview.totalAmount());
+        input.setExpectedDeposit(preview.depositAmount());
         var created=cartOrders.makeCustomOrder(customer.getId(),design.getId(),input);
         var saved=orders.findById(created.getId()).orElseThrow();
         assertThat(saved.getStatus()).isEqualTo(OrderStatus.AWAITING_DEPOSIT);
@@ -129,6 +132,17 @@ class CouponTests {
         assertThat(coupons.findById(low.getId()).orElseThrow().getUsedCount()).isEqualTo(1);
         assertThat(coupons.findById(ship.getId()).orElseThrow().getUsedCount()).isEqualTo(1);
         assertThat(payments.findByOrderId(saved.getId())).isEmpty();
+        var gateway=PaymentBusinessTests.newGateway(orders,payments,refunds,cartOrders);
+        org.springframework.test.util.ReflectionTestUtils.setField(gateway,"merchantId","merchant-test");
+        org.springframework.test.util.ReflectionTestUtils.setField(gateway,"secretKey","secret-test");
+        var paymentInput=com.example.flowershop.dto.payment.CreatePaymentRequest.builder()
+                .orderId(saved.getId()).paymentType(PaymentType.DEPOSIT).build();
+        var first=gateway.createPayment(paymentInput,customer.getId());
+        var retry=gateway.createPayment(paymentInput,customer.getId());
+        assertThat(first.getAmount()).isEqualByComparingTo(preview.depositAmount());
+        assertThat(retry.getFields().get("order_amount")).isEqualTo("144000");
+        assertThat(first.getInvoiceNumber()).isNotEqualTo(retry.getInvoiceNumber());
+        assertThat(coupons.findById(low.getId()).orElseThrow().getUsedCount()).isEqualTo(1);
         cartOrders.cancelByCustomer(customer.getId(),saved.getId(),"Changed design");
         assertThat(coupons.findById(low.getId()).orElseThrow().getUsedCount()).isZero();
         assertThat(coupons.findById(ship.getId()).orElseThrow().getUsedCount()).isZero();
@@ -253,6 +267,30 @@ class CouponTests {
         workflow.accept(customer.getId(),receipt.orderId(),new CustomOrderWorkflowService.Accept(PaymentMethod.COD,preview.totalAmount(),"LOW","SHIP"));
         assertThat(customerOrders.detail(customer.getId(),receipt.orderId()).totalAmount()).isEqualByComparingTo("380000");
         assertThat(low.getUsedCount()).isEqualTo(1);
+    }
+    @Test void quotedCustomWithVouchersCanPayDepositInsteadOfBeingForcedToFullOrCod() {
+        CustomFlowerCatalogFixture.seed(options);
+        coupon("DEPOSITLOW",CouponTarget.ORDER,"10","20000");
+        coupon("DEPOSITSHIP",CouponTarget.SHIPPING,"100","30000");
+        var design=new CustomFlowerOrderService.RequestInput(shop.getId(),1,"",
+                new CustomFlowerOrderService.Preferences(null,null,null,null,null,null));
+        var receipt=workflow.create(customer.getId(),new CustomOrderWorkflowService.CreateInput(destination.getId(),design));
+        workflow.quote(shop.getId(),owner.getId(),receipt.orderId(),new CustomOrderWorkflowService.Quote(money("400000"),"Quote"));
+        var preview=workflow.previewVouchers(customer.getId(),receipt.orderId(),new CustomOrderWorkflowService.VoucherInput("DEPOSITLOW","DEPOSITSHIP"));
+        assertThat(preview.totalAmount()).isEqualByComparingTo("380000");
+        assertThat(preview.depositAmount()).isEqualByComparingTo("190000");
+        var result=workflow.accept(customer.getId(),receipt.orderId(),new CustomOrderWorkflowService.Accept(
+                PaymentMethod.ONLINE,preview.totalAmount(),"DEPOSITLOW","DEPOSITSHIP",PaymentType.DEPOSIT,preview.depositAmount()));
+        assertThat(result.status()).isEqualTo("AWAITING_DEPOSIT");
+        var order=orders.findById(receipt.orderId()).orElseThrow();
+        assertThat(order.getPaymentStartedAt()).isNotNull();
+        var gateway=PaymentBusinessTests.newGateway(orders,payments,refunds,cartOrders);
+        org.springframework.test.util.ReflectionTestUtils.setField(gateway,"merchantId","merchant-test");
+        org.springframework.test.util.ReflectionTestUtils.setField(gateway,"secretKey","secret-test");
+        var payment=gateway.createPayment(com.example.flowershop.dto.payment.CreatePaymentRequest.builder()
+                .orderId(order.getId()).paymentType(PaymentType.DEPOSIT).build(),customer.getId());
+        assertThat(payment.getAmount()).isEqualByComparingTo("190000");
+        assertThat(payment.getFields().get("order_amount")).isEqualTo("190000");
     }
     @Test void multiShopCheckoutKeepsEachShopsVoucherAndDiscountedTotal() {
         var first=coupon("FIRST",CouponTarget.ORDER,"5","20000"); first.setShop(shop); coupons.saveAndFlush(first);

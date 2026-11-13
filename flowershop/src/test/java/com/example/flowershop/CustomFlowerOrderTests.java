@@ -176,6 +176,17 @@ class CustomFlowerOrderTests {
         assertThatThrownBy(()->service.suggestions(new BigDecimal("1.001"),1,null,"",0)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(()->service.suggestions(new BigDecimal("300000"),101,null,"",0)).isInstanceOf(IllegalArgumentException.class);
     }
+    @Test void shopCanChangeStatusWithNullEmptyOrWhitespaceFeedback(){
+        var r=service.create(customer.getId(),input(null));
+        assertThat(service.decide(shop.getId(),owner.getId(),r.id(),new Decision(CustomOrderStatus.NEGOTIATING,null,null,null)).status())
+                .isEqualTo(CustomOrderStatus.NEGOTIATING);
+        var accepted=service.decide(shop.getId(),owner.getId(),r.id(),new Decision(CustomOrderStatus.ACCEPTED,"",new BigDecimal("260000"),30));
+        assertThat(accepted.status()).isEqualTo(CustomOrderStatus.ACCEPTED);
+        assertThat(accepted.design().quotedPrice()).isEqualByComparingTo("260000");
+        var other=service.create(customer.getId(),input(null));
+        assertThat(service.decide(shop.getId(),owner.getId(),other.id(),new Decision(CustomOrderStatus.REJECTED,"   ",null,null)).status())
+                .isEqualTo(CustomOrderStatus.REJECTED);
+    }
     @Test void lifecycleAllowsNegotiationThenAcceptance(){
         var r=service.create(customer.getId(),input(null));
         service.decide(shop.getId(),owner.getId(),r.id(),new Decision(CustomOrderStatus.NEGOTIATING,"Can make pink roses",new BigDecimal("250000"),null));

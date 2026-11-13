@@ -149,9 +149,9 @@ single.setShippingCouponCode(part.getShippingCouponCode()); single.setExpectedTo
             throw ApiException.badRequest("Giá hoặc voucher đã thay đổi. Vui lòng kiểm tra lại trước khi đặt cọc.");
         // New quotes: deposit is a percentage of flower price AFTER the order voucher.
         // Legacy quotes without a percentage keep the existing 50% of net total fallback.
-        BigDecimal netFlowers=quotedPrice.subtract(order.getDiscountAmount()==null?BigDecimal.ZERO:order.getDiscountAmount());
-        order.setDepositAmount(depositPercent==null?BigDecimal.ZERO:netFlowers.multiply(BigDecimal.valueOf(depositPercent))
-                .divide(BigDecimal.valueOf(100),0,RoundingMode.HALF_UP));
+        order.setDepositAmount(CustomOrderPricing.deposit(quotedPrice,order.getDiscountAmount(),order.getTotalAmount(),depositPercent));
+        if(request.getExpectedDeposit()!=null && request.getExpectedDeposit().compareTo(order.getDepositAmount())!=0)
+            throw ApiException.badRequest("Mức cọc đã thay đổi. Vui lòng tải lại báo giá trước khi thanh toán.");
         // Hoa làm theo yêu cầu không có sản phẩm trong kho: một dòng giá = báo giá, kèm thiết kế khách đã gửi.
         OrderDetail detail = orderDetailRepository.save(OrderDetail.builder()
                 .id(UUID.randomUUID().toString())
@@ -176,6 +176,7 @@ single.setShippingCouponCode(part.getShippingCouponCode()); single.setExpectedTo
                 .shippingCouponCode(order.getShippingCouponCode())
                 .shippingFee(shippingFee)
                 .totalAmount(order.getTotalAmount())
+                .depositAmount(order.getDepositAmount())
                 .deliveryAddressId(deliveryAddress.getId())
                 .recipientName(order.getRecipientName())
                 .recipientPhone(order.getRecipientPhone())
@@ -201,7 +202,7 @@ single.setShippingCouponCode(part.getShippingCouponCode()); single.setExpectedTo
     }
 
     @Transactional(readOnly=true)
-    public CouponService.Preview previewCustomVouchers(String userId,String requestId,com.example.flowershop.dto.order.MakeCustomOrderRequest request) {
+    public com.example.flowershop.dto.order.CustomPaymentPreview previewCustomVouchers(String userId,String requestId,com.example.flowershop.dto.order.MakeCustomOrderRequest request) {
         var custom=entityManager.find(CustomOrderRequest.class,requestId);
         if(custom==null || !custom.getCustomer().getId().equals(userId)) throw ApiException.notFound("Không tìm thấy yêu cầu hoa tùy chỉnh.");
         if(custom.getStatus()!=com.example.flowershop.entity.enums.CustomOrderStatus.ACCEPTED)
@@ -211,8 +212,9 @@ single.setShippingCouponCode(part.getShippingCouponCode()); single.setExpectedTo
             throw ApiException.badRequest("Yêu cầu này đã có đơn đặt cọc. Hãy xem đơn hàng để tiếp tục thanh toán.");
         var price=customPrice(custom);
         var fee=quoteFee(custom.getShop(),resolveDestination(userId,request.getDeliveryAddressId()));
-        return vouchers.preview(new CouponService.Context(custom.getShop().getId(),price.amount(),fee,java.util.Map.of()),
+        var preview=vouchers.preview(new CouponService.Context(custom.getShop().getId(),price.amount(),fee,java.util.Map.of()),
                 request.getCouponCode(),request.getShippingCouponCode());
+        return com.example.flowershop.dto.order.CustomPaymentPreview.from(preview,price.amount(),fee,price.depositPercent());
     }
 
     /**
@@ -269,12 +271,6 @@ single.setShippingCouponCode(part.getShippingCouponCode()); single.setExpectedTo
             }
 
             selectedCartItems.add(cartItem);
-        }
-        // Đặt lại món đang nằm trong đơn PENDING cũ của chính khách: hủy đơn cũ (trả kho) thay vì tạo đơn trùng trừ kho lần nữa.
-        // Món đang được đặt lại không khôi phục (giỏ hiện tại mới là thứ khách muốn đặt); các món khác của đơn cũ trả về giỏ.
-        List<String> reorderedProductIds = selectedCartItems.stream().map(item -> item.getProduct().getId()).toList();
-        for (String pendingId : orderDetailRepository.findPendingOrderIds(userId, reorderedProductIds)) {
-            cancelPending(pendingId, "Khách đặt lại đơn mới cho cùng sản phẩm", userId, reorderedProductIds);
         }
         selectedCartItems.sort(Comparator.comparing(item -> item.getProduct().getId()));
         for (CartItem cartItem : selectedCartItems) {

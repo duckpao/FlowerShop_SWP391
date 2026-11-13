@@ -78,8 +78,9 @@ class CustomDepositOrderTests {
         assertThat(order.getTotalAmount()).isEqualByComparingTo("830000");
         assertThat(order.getRecipientName()).isEqualTo("Lan");
         assertThat(response.getTotalAmount()).isEqualByComparingTo("830000");
-        // Báo giá cũ không có depositPercent: để 0, SePay tự lấy 50% tổng như trước
-        assertThat(order.getDepositAmount()).isEqualByComparingTo("0");
+        // Store the same whole-VND amount returned by preview and charged by SePay.
+        assertThat(order.getDepositAmount()).isEqualByComparingTo("415000");
+        assertThat(response.getDepositAmount()).isEqualByComparingTo("415000");
     }
 
     @Test

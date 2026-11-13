@@ -35,10 +35,6 @@ public class OrderDetailRepository extends HibernateRepository<OrderDetail> {
         return counts;
     }
 
-public int sumPendingQuantity(String userId, String productId) { return session().createSelectionQuery("SELECT COALESCE(SUM(d.quantity), 0) FROM OrderDetail d WHERE d.order.customer.id = :userId AND d.order.status = com.example.flowershop.entity.enums.OrderStatus.PENDING AND d.product.id = :productId",Long.class).setParameter("userId",userId).setParameter("productId",productId).getSingleResult().intValue(); }
-
-public List<String> findPendingOrderIds(String userId, Collection<String> productIds) { return session().createSelectionQuery("SELECT DISTINCT d.order.id FROM OrderDetail d WHERE d.order.customer.id = :userId AND d.order.status = com.example.flowershop.entity.enums.OrderStatus.PENDING AND d.product.id IN :productIds",String.class).setParameter("userId",userId).setParameterList("productIds",productIds).getResultList(); }
-
 public List<Object[]> productPerformanceForReport(String shopId, LocalDateTime start, LocalDateTime end) { return session().createSelectionQuery("SELECT d.product.id, d.product.name, SUM(CASE WHEN d.order.status = com.example.flowershop.entity.enums.OrderStatus.COMPLETED THEN d.quantity ELSE 0 END), SUM(CASE WHEN d.order.status = com.example.flowershop.entity.enums.OrderStatus.REFUNDED THEN d.quantity ELSE 0 END), COUNT(DISTINCT CASE WHEN d.order.status = com.example.flowershop.entity.enums.OrderStatus.COMPLETED THEN d.order.id ELSE NULL END), COUNT(DISTINCT CASE WHEN d.order.status = com.example.flowershop.entity.enums.OrderStatus.REFUNDED THEN d.order.id ELSE NULL END) FROM OrderDetail d WHERE d.order.shop.id = :shopId AND d.product IS NOT NULL AND d.order.createdDate >= :start AND d.order.createdDate < :end AND d.order.status IN (com.example.flowershop.entity.enums.OrderStatus.COMPLETED, com.example.flowershop.entity.enums.OrderStatus.REFUNDED) GROUP BY d.product.id, d.product.name ORDER BY d.product.name",Object[].class).setParameter("shopId",shopId).setParameter("start",start).setParameter("end",end).getResultList(); }
 
 }

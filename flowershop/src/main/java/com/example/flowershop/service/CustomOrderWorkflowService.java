@@ -21,7 +21,11 @@ public class CustomOrderWorkflowService {
     public record Quote(@NotNull @DecimalMin("1") @Digits(integer=10, fraction=2) BigDecimal amount,
                         @Size(max=2000) String note) {}
     public record Accept(@NotNull PaymentMethod paymentMethod, @NotNull @DecimalMin("1") BigDecimal expectedTotal,
-                         @Size(max=50) String couponCode, @Size(max=50) String shippingCouponCode) {
+                         @Size(max=50) String couponCode, @Size(max=50) String shippingCouponCode,
+                         PaymentType paymentType, @DecimalMin("1") BigDecimal expectedDeposit) {
+        public Accept(PaymentMethod paymentMethod,BigDecimal expectedTotal,String couponCode,String shippingCouponCode) {
+            this(paymentMethod,expectedTotal,couponCode,shippingCouponCode,null,null);
+        }
         public Accept(PaymentMethod paymentMethod,BigDecimal expectedTotal) { this(paymentMethod,expectedTotal,null,null); }
     }
     public record VoucherInput(@Size(max=50) String couponCode,@Size(max=50) String shippingCouponCode) {}
@@ -135,13 +139,22 @@ public class CustomOrderWorkflowService {
         var order=locked(id); requireCustom(order);
         if (!order.getCustomer().getId().equals(actor)) throw missing();
         if (order.getStatus()!=OrderStatus.QUOTED) throw invalid("Đơn chưa được báo giá hoặc đã được xử lý.");
+        PaymentType type=input.paymentType()==null?PaymentType.FULL:input.paymentType();
+        if(type!=PaymentType.FULL && type!=PaymentType.DEPOSIT) throw invalid("Chọn thanh toán cọc hoặc toàn bộ.");
+        if(type==PaymentType.DEPOSIT && input.paymentMethod()!=PaymentMethod.ONLINE)
+            throw invalid("Tiền cọc cần thanh toán trực tuyến; phần còn lại có thể trả khi nhận hoa.");
         vouchers.apply(order,context(order),input.couponCode(),input.shippingCouponCode());
         if (input.expectedTotal()==null || order.getTotalAmount().compareTo(input.expectedTotal())!=0)
             throw invalid("Báo giá đã thay đổi. Vui lòng tải lại đơn hàng và kiểm tra trước khi đồng ý.");
         if (order.getDeliveryAddress()==null) throw invalid("Vui lòng bổ sung địa chỉ nhận hàng.");
         if (input.paymentMethod()!=PaymentMethod.COD && input.paymentMethod()!=PaymentMethod.ONLINE) throw invalid("Chọn COD hoặc thanh toán trực tuyến.");
         order.setPaymentStartedAt(LocalDateTime.now()); order.setLastModifyBy(actor);
-        order.setStatus(input.paymentMethod()==PaymentMethod.COD ? OrderStatus.PROCESSING : OrderStatus.PENDING);
+        if(type==PaymentType.DEPOSIT) {
+            order.setDepositAmount(CustomOrderPricing.deposit(order.getSubTotal(),order.getDiscountAmount(),order.getTotalAmount(),depositPercent(order)));
+            if(input.expectedDeposit()!=null && input.expectedDeposit().compareTo(order.getDepositAmount())!=0)
+                throw invalid("Mức cọc đã thay đổi. Vui lòng kiểm tra lại báo giá.");
+            order.setStatus(OrderStatus.AWAITING_DEPOSIT);
+        } else order.setStatus(input.paymentMethod()==PaymentMethod.COD ? OrderStatus.PROCESSING : OrderStatus.PENDING);
         if (input.paymentMethod()==PaymentMethod.COD) {
             payments.save(Payment.builder().id(UUID.randomUUID().toString()).order(order).paymentType(PaymentType.FULL)
                     .paymentMethod(PaymentMethod.COD).amount(order.getTotalAmount()).status(PaymentStatus.PENDING).createdBy(actor).build());
@@ -169,10 +182,16 @@ public class CustomOrderWorkflowService {
         return address!=null && address.getGhnDistrictId()!=null && address.getGhnDistrictId()>0
                 && address.getGhnWardCode()!=null && !address.getGhnWardCode().isBlank();
     }
-    public CouponService.Preview previewVouchers(String actor,String id,VoucherInput input) {
+    private Integer depositPercent(Order order) {
+        var value=design(order);
+        return value==null||value.preferences()==null?null:value.preferences().depositPercent();
+    }
+    public com.example.flowershop.dto.order.CustomPaymentPreview previewVouchers(String actor,String id,VoucherInput input) {
         var order=orders.findByIdAndCustomerId(id,actor).orElseThrow(CustomOrderWorkflowService::missing);
         requireCustom(order);
         if(order.getStatus()!=OrderStatus.QUOTED) throw invalid("Đơn chưa được báo giá hoặc đã được xử lý.");
-        return vouchers.preview(context(order),input.couponCode(),input.shippingCouponCode());
+        return com.example.flowershop.dto.order.CustomPaymentPreview.from(
+                vouchers.preview(context(order),input.couponCode(),input.shippingCouponCode()),
+                order.getSubTotal(),order.getShippingFee(),depositPercent(order));
     }
 }

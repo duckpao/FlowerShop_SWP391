@@ -25,4 +25,6 @@ public class MakeCustomOrderRequest {
 
     @jakarta.validation.constraints.DecimalMin("1")
     private java.math.BigDecimal expectedTotal;
+    @jakarta.validation.constraints.DecimalMin("1")
+    private java.math.BigDecimal expectedDeposit;
 }
