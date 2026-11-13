@@ -133,7 +133,6 @@ public class CustomFlowerOrderService {
         var request=requests.findLocked(id).filter(r->r.getShop().getId().equals(shopId)).orElseThrow(CustomFlowerOrderService::missing);
         if(request.getStatus()==CustomOrderStatus.ACCEPTED||request.getStatus()==CustomOrderStatus.REJECTED)throw conflict("Yêu cầu đã kết thúc, không thể đổi trạng thái.");
         if(input.status()==CustomOrderStatus.REQUESTED)throw new IllegalArgumentException("Shop không thể chuyển về trạng thái mới gửi.");
-        if(input.note()==null||input.note().isBlank())throw new IllegalArgumentException("Vui lòng nhập nội dung phản hồi cho khách.");
         if(input.status()==CustomOrderStatus.ACCEPTED&&input.quotedPrice()==null)throw new IllegalArgumentException("Cần báo giá tổng khi chấp nhận.");
         if(input.status()==CustomOrderStatus.ACCEPTED&&input.depositPercent()==null)throw new IllegalArgumentException("Cần báo mức cọc (10-100%) khi chấp nhận.");
         if(input.quotedPrice()!=null)validateMoney(input.quotedPrice(),1);

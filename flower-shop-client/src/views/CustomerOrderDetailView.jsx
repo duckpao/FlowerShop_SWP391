@@ -1,4 +1,5 @@
 import CustomerQuoteActions from '../components/customFlowers/CustomerQuoteActions'
+import CustomOrderPayment from '../components/customFlowers/CustomOrderPayment'
 import CustomerCustomAddress from '../components/customFlowers/CustomerCustomAddress'
 import { OrderDesignPanel } from '../components/customFlowers/OrderDesignPanel'
 import OrderDiscountSummary from '../components/checkout/OrderDiscountSummary'
@@ -237,7 +238,7 @@ export default function CustomerOrderDetailView() {
         <div className="max-w-3xl mx-auto space-y-6">
             <Link to="/orders" className="inline-flex text-sm font-medium text-brand-600 hover:underline dark:text-brand-400">&larr; Lịch sử đơn hàng</Link>
             <ComponentCard title={`Đơn hàng từ ${order.shopName}`}>
-<OrderDesignPanel order={order} /><CustomerCustomAddress order={order} onChanged={async () => setOrder(await customerOrderService.detail(id))} /><CustomerQuoteActions order={order} user={user} onChanged={async () => setOrder(await customerOrderService.detail(id))} /><OrderDiscountSummary order={order} />
+<OrderDesignPanel order={order} /><CustomerCustomAddress order={order} onChanged={async () => setOrder(await customerOrderService.detail(id))} /><CustomerQuoteActions key={order.id} order={order} user={user} onChanged={async () => setOrder(await customerOrderService.detail(id))} />{order.orderType === 'CUSTOM' && ['AWAITING_DEPOSIT', 'DEPOSIT_PAID'].includes(order.status) && <CustomOrderPayment key={order.id} orderId={order.id} />}<OrderDiscountSummary order={order} />
                 <div className="flex justify-between items-center mb-4">
                     <Badge color={statusColors[order.status]||'primary'}>{statusLabels[order.status]||order.status}</Badge>
                     <span className="text-sm text-gray-500">{new Date(order.createdDate).toLocaleString('vi-VN')}</span>

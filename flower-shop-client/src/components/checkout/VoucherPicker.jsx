@@ -3,7 +3,7 @@ import { voucherService } from '../../services/voucherService'
 import { formatPrice } from '../../models/productModel'
 
 /** The server determines eligibility, combination restrictions and payable total. */
-export default function VoucherPicker({ context, value, onChange, onPreview, disabled = false }) {
+export default function VoucherPicker({ context, value, onChange, onPreview, disabled = false, showSummary = true }) {
   const namespace = useId()
   const [data, setData] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -40,10 +40,10 @@ export default function VoucherPicker({ context, value, onChange, onPreview, dis
   </fieldset>
   return <section className="space-y-4 rounded-xl border border-gray-200 p-4 dark:border-gray-700" aria-label="Chọn voucher">
     <h3 className="font-semibold">Ưu đãi cho đơn hàng</h3>
-    {/* <p className="text-xs text-gray-500">Tối đa 1 mã tiền hàng + 1 mã phí ship. Khi dùng mã ship, chỉ dùng được mã tiền hàng có số tiền giảm thực tế thấp nhất trong các mã đủ điều kiện.</p> */}
+    <p className="text-xs leading-relaxed text-gray-500">Dùng tối đa 1 mã tiền hàng và 1 mã phí ship. Khi có mã ship, chỉ kết hợp được mã tiền hàng có mức giảm thực tế thấp nhất đủ điều kiện.</p>
     {!context && <p className="text-sm text-gray-500">Chọn sản phẩm và địa chỉ nhận hàng để xem ưu đãi.</p>}
     {busy && <p role="status" className="text-sm">Đang kiểm tra voucher…</p>}
-    {error && <div role="alert" className="space-y-2 text-sm text-error-500"><p>{error}</p><button type="button" onClick={() => setRetry(v => v + 1)}>Thử lại</button> · <button type="button" onClick={() => onChange({ couponCode: '', shippingCouponCode: '' })}>Bỏ mã đã chọn</button></div>}
+    {error && <div role="alert" className="space-y-2 text-sm text-error-500"><p>{error}</p><button type="button" disabled={disabled || busy} onClick={() => setRetry(v => v + 1)}>Thử lại</button> · <button type="button" disabled={disabled || busy} onClick={() => onChange({ couponCode: '', shippingCouponCode: '' })}>Bỏ mã đã chọn</button></div>}
     {data && <>
       {data.bestSaving > 0 && <div className="rounded-lg bg-brand-50 p-3 text-sm dark:bg-brand-500/10"><p>Gợi ý tiết kiệm nhất: <strong>{[data.recommendedOrderCode, data.recommendedShippingCode].filter(Boolean).join(' + ')}</strong> — giảm {formatPrice(data.bestSaving)}</p>
         <button type="button" disabled={disabled || busy} className="mt-2 font-semibold text-brand-600" onClick={() => onChange({ couponCode: data.recommendedOrderCode || '', shippingCouponCode: data.recommendedShippingCode || '' })}>Dùng ưu đãi tốt nhất</button></div>}
@@ -51,11 +51,11 @@ export default function VoucherPicker({ context, value, onChange, onPreview, dis
         ? <p role="status" className="text-sm text-gray-500">Bạn có thể chọn mã giảm tiền hàng trước. Cần địa chỉ hợp lệ và phí giao hàng để chọn mã phí ship và thanh toán. Tổng bên dưới chưa gồm phí giao hàng.</p>
         : renderChoices(data.shippingVouchers, 'shippingCouponCode', 'Giảm phí giao hàng')}
       {renderChoices(data.orderVouchers, 'couponCode', 'Giảm tiền hàng / sản phẩm')}
-      <div className="space-y-1 border-t border-gray-200 pt-3 text-sm dark:border-gray-700" aria-live="polite">
+      {showSummary && <div className="space-y-1 border-t border-gray-200 pt-3 text-sm dark:border-gray-700" aria-live="polite">
         <p className="flex justify-between"><span>Giảm tiền hàng</span><strong>−{formatPrice(data.discountAmount)}</strong></p>
         <p className="flex justify-between"><span>Giảm phí ship</span><strong>−{formatPrice(data.shippingDiscountAmount)}</strong></p>
         <p className="flex justify-between"><span>Thanh toán sau ưu đãi</span><strong className="text-brand-600">{formatPrice(data.totalAmount)}</strong></p>
-      </div>
+      </div>}
     </>}
   </section>
 }

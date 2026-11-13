@@ -21,6 +21,7 @@ public class OrderResponse {
     private String shippingCouponCode;
     private BigDecimal shippingFee;
     private BigDecimal totalAmount;
+    private BigDecimal depositAmount;
     private String deliveryAddressId;
     private String recipientName;
     private String recipientPhone;

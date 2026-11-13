@@ -245,6 +245,11 @@ class PaymentBusinessTests {
 
         assertThat(result.getAmount()).isEqualByComparingTo("100000");
     }
+    @Test void depositCheckoutRemainsAllowedAfterAcceptingQuoteStartsPaymentWindow() {
+        var order=customOrder(OrderStatus.AWAITING_DEPOSIT,"380000","190000",LocalDateTime.now().minusDays(2));
+        order.setPaymentStartedAt(LocalDateTime.now());
+        assertThat(pay(gatewayWithCheckoutConfig(),order,PaymentType.DEPOSIT).getAmount()).isEqualByComparingTo("190000");
+    }
 
     @Test
     void depositOnStandardOrderIsRejected() {

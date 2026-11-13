@@ -53,7 +53,7 @@ public class OrderController {
     }
 
     @PostMapping("/{userId}/custom/{requestId}/voucher-preview")
-    public com.example.flowershop.service.CouponService.Preview customVouchers(
+    public com.example.flowershop.dto.order.CustomPaymentPreview customVouchers(
             @PathVariable("userId") String userId, @PathVariable("requestId") String requestId,
             @Valid @RequestBody MakeCustomOrderRequest request,
             @AuthenticationPrincipal CurrentUser currentUser) {

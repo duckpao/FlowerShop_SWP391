@@ -76,13 +76,13 @@ public class SePayGatewayService {
     @Value("${sepay.api-base-url:https://pgapi-sandbox.sepay.vn}")
     private String apiBaseUrl;
 
-    @Value("${sepay.success-url:http://localhost:8080/payment/success}")
+    @Value("${sepay.success-url:${app.frontend-base-url:http://localhost:5173}/payment/success}")
     private String successUrl;
 
-    @Value("${sepay.error-url:http://localhost:8080/payment/error}")
+    @Value("${sepay.error-url:${app.frontend-base-url:http://localhost:5173}/payment/error}")
     private String errorUrl;
 
-    @Value("${sepay.cancel-url:http://localhost:8080/payment/cancel}")
+    @Value("${sepay.cancel-url:${app.frontend-base-url:http://localhost:5173}/payment/cancel}")
     private String cancelUrl;
 
     /** Properties/environment variables may contain spaces accidentally pasted with credentials. */
@@ -106,7 +106,7 @@ public class SePayGatewayService {
         if (order.getCreatedDate() == null) return false;
         java.time.LocalDateTime now = java.time.LocalDateTime.now();
         if (order.getStatus() == OrderStatus.AWAITING_DEPOSIT) {
-            return !order.getCreatedDate().plusMinutes(DEPOSIT_DEADLINE_MINUTES).isAfter(now);
+            return !order.getPaymentWindowStart().plusMinutes(DEPOSIT_DEADLINE_MINUTES).isAfter(now);
         }
         return order.getStatus() == OrderStatus.PENDING && !order.getPaymentWindowStart().plusMinutes(PAYMENT_WINDOW_MINUTES).isAfter(now);
     }
@@ -120,7 +120,7 @@ public class SePayGatewayService {
     static BigDecimal requiredDeposit(Order order) {
         return order.getDepositAmount() != null && order.getDepositAmount().compareTo(BigDecimal.ZERO) > 0
                 ? order.getDepositAmount()
-                : order.getTotalAmount().multiply(new BigDecimal("0.5"));
+                : CustomOrderPricing.deposit(order.getSubTotal(),order.getDiscountAmount(),order.getTotalAmount(),null);
     }
 
     /** Điền các field tiến độ thanh toán (cọc/còn lại/bước tiếp theo) vào response trạng thái. */
@@ -197,7 +197,9 @@ public class SePayGatewayService {
 
         // PHASE 2 & 3: Xác định PaymentType (FULL, DEPOSIT, FINAL)
         PaymentType paymentType = request.getPaymentType() != null ? request.getPaymentType() : PaymentType.FULL;
-        if(order.getOrderType()==OrderType.CUSTOM && order.getPaymentStartedAt()!=null && paymentType!=PaymentType.FULL) throw ApiException.badRequest("Đơn thiết kế đã chốt báo giá chỉ thanh toán toàn bộ.");
+        if(order.getOrderType()==OrderType.CUSTOM && order.getStatus()==OrderStatus.PENDING
+                && order.getPaymentStartedAt()!=null && paymentType!=PaymentType.FULL)
+            throw ApiException.badRequest("Đơn thiết kế đã chọn thanh toán toàn bộ.");
         if (order.getOrderType() == OrderType.STANDARD
                 && paymentType != PaymentType.FULL) {
             throw ApiException.badRequest("Đơn hàng thường chỉ hỗ trợ thanh toán toàn bộ.");
