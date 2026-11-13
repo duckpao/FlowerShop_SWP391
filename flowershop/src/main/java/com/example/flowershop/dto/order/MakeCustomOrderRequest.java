@@ -8,6 +8,9 @@ import lombok.Data;
 @Data
 public class MakeCustomOrderRequest {
 
+    /** DEPOSIT followed by COD, or FULL online. Null keeps the existing deposit default. */
+    private com.example.flowershop.entity.enums.PaymentType paymentType;
+
     @NotBlank(message = "deliveryAddressId không được để trống")
     private String deliveryAddressId;
 

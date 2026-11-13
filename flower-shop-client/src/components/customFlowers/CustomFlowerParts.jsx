@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { customFlowerService } from '../../services/customFlowerService'
 import { formatPrice } from '../../models/productModel'
 
-export const customStatus = { REQUESTED: 'Chờ shop tiếp nhận', NEGOTIATING: 'Đang trao đổi', ACCEPTED: 'Shop đã chấp nhận', REJECTED: 'Shop từ chối' }
+export const customStatus = { REQUESTED: 'Chờ shop tiếp nhận', NEGOTIATING: 'Đang trao đổi', ACCEPTED: 'Shop đã chấp nhận', REJECTED: 'Đã hủy (shop từ chối)' }
 export const customButton = 'custom-flower-button'
 
 export function ReferenceSuggestions({ quantity, shopId, onChoose, selectedId = '' }) {
@@ -40,11 +40,11 @@ export function ReferenceSuggestions({ quantity, shopId, onChoose, selectedId = 
 }
 
 export function CustomRequestCard({ request, children }) {
-  const d = request.design || {}
+  const d = request.status === 'REJECTED' ? { ...request.design, quotedPrice: null, depositPercent: null } : request.design || {}
   return <article className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-white/3">
     <div className="mb-3 flex flex-wrap items-start justify-between gap-2"><div><h3 className="text-lg font-semibold">{request.shopName}</h3><p className="text-sm text-gray-500">{request.customerName} · {new Date(request.createdAt).toLocaleString('vi-VN')}</p></div><span className="rounded-full bg-brand-50 px-3 py-1 text-sm text-brand-700 dark:bg-brand-500/10 dark:text-brand-300">{customStatus[request.status] || request.status}</span></div>
     <p className="mb-3 whitespace-pre-wrap">{request.description}</p>
-    <dl className="grid gap-2 text-sm sm:grid-cols-2"><div><dt className="text-gray-500">Giá thiết kế</dt><dd className="font-semibold">{d.quotedPrice != null ? formatPrice(d.quotedPrice) : 'Chờ shop báo giá'}</dd></div><div><dt className="text-gray-500">Số mẫu/bó</dt><dd>{d.quantity || 1}</dd></div>
+    <dl className="grid gap-2 text-sm sm:grid-cols-2">{request.status !== 'REJECTED' && <div><dt className="text-gray-500">Giá thiết kế</dt><dd className="font-semibold">{d.quotedPrice != null ? formatPrice(d.quotedPrice) : 'Chờ shop báo giá'}</dd></div>}<div><dt className="text-gray-500">Số mẫu/bó</dt><dd>{d.quantity || 1}</dd></div>
       {[["Loại hoa", d.flowers], ["Màu sắc", d.colors], ["Dịp tặng", d.occasion], ["Giấy gói / phụ kiện", d.wrapping], ["Ngày mong muốn", d.deliveryDate], ["Mẫu tham khảo", d.referenceProductName]].filter(([, value]) => value).map(([label, value]) => <div key={label}><dt className="text-gray-500">{label}</dt><dd>{value}</dd></div>)}
     </dl>
     {(d.shopNote || d.quotedPrice != null) && <div className="mt-4 border-t border-gray-200 pt-4 dark:border-gray-700"><p className="font-semibold">Phản hồi của shop</p>{d.shopNote && <p className="whitespace-pre-wrap">{d.shopNote}</p>}{d.quotedPrice != null && <p className="mt-2 font-semibold">Báo giá tổng: {formatPrice(d.quotedPrice)}</p>}{d.quotedPrice != null && d.depositPercent != null && <p className="mt-1">Cọc {d.depositPercent}%: {formatPrice(Math.round(d.quotedPrice * d.depositPercent / 100))}</p>}</div>}

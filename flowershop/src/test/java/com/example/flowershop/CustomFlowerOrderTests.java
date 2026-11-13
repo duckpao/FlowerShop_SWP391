@@ -187,6 +187,18 @@ class CustomFlowerOrderTests {
         assertThat(service.decide(shop.getId(),owner.getId(),other.id(),new Decision(CustomOrderStatus.REJECTED,"   ",null,null)).status())
                 .isEqualTo(CustomOrderStatus.REJECTED);
     }
+    @Test void rejectingRequestClearsEarlierQuoteAndClosesWithoutDepositOrder(){
+        var r=service.create(customer.getId(),input(null));
+        service.decide(shop.getId(),owner.getId(),r.id(),new Decision(CustomOrderStatus.NEGOTIATING,"",new BigDecimal("350000"),30));
+        var rejected=service.decide(shop.getId(),owner.getId(),r.id(),new Decision(CustomOrderStatus.REJECTED,"",new BigDecimal("500000"),50));
+        assertThat(rejected.status()).isEqualTo(CustomOrderStatus.REJECTED);
+        assertThat(rejected.design().quotedPrice()).isNull();
+        assertThat(rejected.design().depositPercent()).isNull();
+        assertThat(rejected.orderId()).isNull();
+        assertThat(service.detail(customer.getId(),r.id()).design().quotedPrice()).isNull();
+        assertThatThrownBy(()->service.decide(shop.getId(),owner.getId(),r.id(),new Decision(CustomOrderStatus.ACCEPTED,"",new BigDecimal("500000"),50)))
+                .isInstanceOf(ResponseStatusException.class);
+    }
     @Test void lifecycleAllowsNegotiationThenAcceptance(){
         var r=service.create(customer.getId(),input(null));
         service.decide(shop.getId(),owner.getId(),r.id(),new Decision(CustomOrderStatus.NEGOTIATING,"Can make pink roses",new BigDecimal("250000"),null));

@@ -105,6 +105,9 @@ single.setShippingCouponCode(part.getShippingCouponCode()); single.setExpectedTo
      */
     @Transactional
     public OrderResponse makeCustomOrder(String userId, String requestId, com.example.flowershop.dto.order.MakeCustomOrderRequest request) {
+        PaymentType paymentType=request.getPaymentType()==null?PaymentType.DEPOSIT:request.getPaymentType();
+        if(paymentType!=PaymentType.DEPOSIT && paymentType!=PaymentType.FULL)
+            throw ApiException.badRequest("Chọn đặt cọc và trả COD, hoặc thanh toán toàn bộ qua SePay.");
         CustomOrderRequest custom = entityManager.find(CustomOrderRequest.class, requestId,
                 jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
         if (custom == null || !custom.getCustomer().getId().equals(userId))
@@ -138,7 +141,8 @@ single.setShippingCouponCode(part.getShippingCouponCode()); single.setExpectedTo
                 .totalAmount(totalAmount)
                 .depositAmount(BigDecimal.ZERO)
                 .customerNote(custom.getDescription())
-                .status(OrderStatus.AWAITING_DEPOSIT)
+                .status(paymentType==PaymentType.FULL?OrderStatus.PENDING:OrderStatus.AWAITING_DEPOSIT)
+                .paymentStartedAt(paymentType==PaymentType.FULL?java.time.LocalDateTime.now():null)
                 .createdBy(userId)
                 .lastModifyBy(userId)
                 .build());
@@ -150,7 +154,7 @@ single.setShippingCouponCode(part.getShippingCouponCode()); single.setExpectedTo
         // New quotes: deposit is a percentage of flower price AFTER the order voucher.
         // Legacy quotes without a percentage keep the existing 50% of net total fallback.
         order.setDepositAmount(CustomOrderPricing.deposit(quotedPrice,order.getDiscountAmount(),order.getTotalAmount(),depositPercent));
-        if(request.getExpectedDeposit()!=null && request.getExpectedDeposit().compareTo(order.getDepositAmount())!=0)
+        if(paymentType==PaymentType.DEPOSIT && request.getExpectedDeposit()!=null && request.getExpectedDeposit().compareTo(order.getDepositAmount())!=0)
             throw ApiException.badRequest("Mức cọc đã thay đổi. Vui lòng tải lại báo giá trước khi thanh toán.");
         // Hoa làm theo yêu cầu không có sản phẩm trong kho: một dòng giá = báo giá, kèm thiết kế khách đã gửi.
         OrderDetail detail = orderDetailRepository.save(OrderDetail.builder()
@@ -484,7 +488,7 @@ single.setShippingCouponCode(part.getShippingCouponCode()); single.setExpectedTo
         var current=orderRepository.findById(orderId).orElse(null);
         if(current!=null && current.getPaymentWindowStart()!=null) {
             var deadline=current.getStatus()==OrderStatus.AWAITING_DEPOSIT
-                    ? current.getCreatedDate().plusMinutes(SePayGatewayService.DEPOSIT_DEADLINE_MINUTES)
+                    ? current.getPaymentWindowStart().plusMinutes(SePayGatewayService.DEPOSIT_DEADLINE_MINUTES)
                     : current.getPaymentWindowStart().plusMinutes(SePayGatewayService.PAYMENT_WINDOW_MINUTES);
             if(deadline.isAfter(LocalDateTime.now())) return;
         }

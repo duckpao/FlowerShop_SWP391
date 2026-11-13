@@ -2,8 +2,11 @@ import { useEffect, useRef, useState } from 'react'
 import { shopPlanService as api } from '../../services/shopPlanService'
 import { useConfirm } from '../ui/confirm/ConfirmProvider'
 import { formatPrice } from '../../models/productModel'
+import { BadgeCheck, RefreshCw, ShieldCheck } from 'lucide-react'
 
 const date = value => value ? new Date(value).toLocaleString('vi-VN') : '—'
+const actionClass = 'inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border px-4 py-2 text-sm font-semibold shadow-sm transition focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-40'
+const primaryAction = `${actionClass} border-brand-600 bg-brand-600 text-white hover:bg-brand-700 focus-visible:outline-brand-500`
 const sources = { ADMIN_GRANT: 'Admin cấp trực tiếp', ADMIN_CONFIRM: 'Admin xác nhận giao dịch', SEPAY: 'SePay xác nhận' }
 export default function AdminShopSubscriptionPanel({ shop }) {
   const { confirm } = useConfirm()
@@ -63,7 +66,7 @@ export default function AdminShopSubscriptionPanel({ shop }) {
     } catch (e) { setError(e.message) } finally { setBusy(false) }
   }
   return <section className="mb-6 space-y-4 rounded-xl border border-brand-200 p-4 dark:border-gray-700">
-    <div className="flex items-center justify-between gap-3"><h4 className="font-semibold">Gói Pro của cửa hàng</h4><button type="button" onClick={reload} disabled={busy} className="text-sm text-brand-600">Tải lại</button></div>
+    <div className="flex flex-wrap items-center justify-between gap-3"><h4 className="font-semibold">Gói Pro của cửa hàng</h4><button type="button" onClick={reload} disabled={busy} className={`${actionClass} border-gray-300 bg-white text-gray-700 hover:bg-gray-50 focus-visible:outline-gray-400 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700`}><RefreshCw size={16} aria-hidden="true" className={busy ? 'animate-spin' : ''} />Tải lại</button></div>
     {error && <p role="alert" className="text-sm text-error-600">{error}</p>}
     {notice && <p role="status" className="text-sm text-success-600">{notice}</p>}
     {data && <p className="text-sm">Gói hiện tại: <strong>{data.subscription.pro ? 'Pro' : 'Free'}</strong>{data.subscription.expiresAt && ` · Hạn Pro: ${date(data.subscription.expiresAt)}`}</p>}
@@ -75,14 +78,14 @@ export default function AdminShopSubscriptionPanel({ shop }) {
     {!!data?.payments.length && <div className="space-y-3"><h5 className="text-sm font-semibold">Giao dịch cần xác nhận</h5>{data.payments.map(payment => <div key={payment.invoiceNumber} className="rounded-lg border border-gray-200 p-3 dark:border-gray-700">
       <p className="break-all text-sm font-medium">{payment.invoiceNumber}</p><p className="mt-1 text-sm">{payment.planName} · {formatPrice(payment.amount)} · {payment.status === 'REVIEW' ? 'Cần kiểm tra' : 'Chờ xác nhận'}</p>
       <label className="mt-2 block text-sm">Ghi chú xác nhận<input maxLength={1000} value={paymentNotes[payment.invoiceNumber] || ''} disabled={busy || !allowed} onChange={e => setPaymentNotes(v => ({ ...v, [payment.invoiceNumber]: e.target.value }))} className="mt-1 w-full rounded-lg border p-2 dark:bg-gray-900" /></label>
-      <button type="button" disabled={busy || !allowed || !(paymentNotes[payment.invoiceNumber] || '').trim()} onClick={() => confirmPayment(payment)} className="mt-2 rounded-lg bg-brand-600 px-3 py-2 text-sm text-white disabled:opacity-50">Xác nhận & kích hoạt</button>
+      <button type="button" disabled={busy || !allowed || !(paymentNotes[payment.invoiceNumber] || '').trim()} onClick={() => confirmPayment(payment)} className={`mt-3 ${primaryAction}`}><BadgeCheck size={17} aria-hidden="true" />Xác nhận & kích hoạt</button>
     </div>)}</div>}
     <form onSubmit={grant} className="space-y-3 border-t border-gray-200 pt-4 dark:border-gray-700">
       <h5 className="text-sm font-semibold">Cấp Pro trực tiếp</h5>
       <p className="text-xs text-gray-500">Giao dịch đang chờ được xác nhận ở phần trên. Phần này dùng để cấp thêm thời gian Pro, không ghi nhận một khoản thanh toán.</p>
       <label className="block text-sm">Gói Pro<select required disabled={busy || !allowed} value={planId} onChange={e => setPlanId(e.target.value)} className="mt-1 w-full rounded-lg border p-2 dark:bg-gray-900"><option value="">Chọn gói</option>{plans.map(plan => <option key={plan.id} value={plan.id}>{plan.name} · {plan.durationMonths} tháng</option>)}</select></label>
       <label className="block text-sm">Lý do / ghi chú<textarea required maxLength={1000} disabled={busy || !allowed} value={note} onChange={e => setNote(e.target.value)} className="mt-1 w-full rounded-lg border p-2 dark:bg-gray-900" /></label>
-      <button disabled={busy || !allowed || !planId || !note.trim()} className="rounded-lg bg-brand-600 px-3 py-2 text-sm text-white disabled:opacity-50">{busy ? 'Đang xử lý…' : 'Xác nhận cấp Pro'}</button>
+      <button type="submit" disabled={busy || !allowed || !planId || !note.trim()} className={primaryAction}><ShieldCheck size={17} aria-hidden="true" />{busy ? 'Đang xử lý…' : 'Xác nhận cấp Pro'}</button>
     </form>
     {!!data?.history.length && <div className="space-y-2 border-t border-gray-200 pt-3 dark:border-gray-700"><h5 className="text-sm font-semibold">Lịch sử kích hoạt</h5>{data.history.map(item => <article key={item.id} className="rounded-lg bg-gray-50 p-3 text-xs dark:bg-gray-900"><p className="font-semibold">{sources[item.source] || item.source} · {item.durationMonths} tháng</p><p>{item.actorName || 'Admin'} · {date(item.createdAt)}</p><p>Thời gian cộng: {date(item.startsAt)} → {date(item.endsAt)}</p><p className="mt-1 whitespace-pre-wrap">{item.note}</p></article>)}</div>}
   </section>

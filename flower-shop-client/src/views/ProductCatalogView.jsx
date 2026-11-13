@@ -8,32 +8,7 @@ import { CartIcon } from '../icons';
 import { useCartContext } from '../context/CartContext';
 import { toast } from 'react-hot-toast';
 
-function CatalogPriceInput({ name, label, value, error, onChange, placeholder }) {
-  const id = useId();
-  const [focused, setFocused] = useState(false);
-  return <div>
-    <label htmlFor={id} className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">{label}</label>
-    <input
-      id={id}
-      name={name}
-      type="text"
-      inputMode="numeric"
-      autoComplete="off"
-      spellCheck={false}
-      value={focused ? value : formatCatalogPriceInput(value)}
-      onFocus={() => setFocused(true)}
-      onBlur={() => setFocused(false)}
-      onChange={event => onChange(event.target.value)}
-      placeholder={placeholder}
-      aria-invalid={Boolean(error)}
-      aria-describedby={error ? `${id}-error` : undefined}
-      className={`w-full rounded-xl border bg-gray-50 px-4 py-2.5 text-sm text-gray-900 outline-none transition-all focus:bg-white focus:ring-2 dark:bg-gray-900 dark:text-white ${error ? 'border-error-500 focus:border-error-500 focus:ring-error-500/20 dark:border-error-500' : 'border-gray-300 focus:border-brand-500 focus:ring-brand-500/20 dark:border-white/10 dark:focus:border-brand-500'}`}
-    />
-    {error && <p id={`${id}-error`} role="alert" className="mt-1.5 text-xs text-error-500 dark:text-error-400">{error}</p>}
-  </div>;
-}
-
-export default function ProductCatalogView({ auth, shops, isEmbedded = false }) {
+export default function ProductCatalogView({ auth, shops, isEmbedded = false, showFeatured = true }) {
   const c = useCatalogController(shops);
   const [searchParams, setSearchParams] = useSearchParams();
   const priceRangeGroup = useId();
@@ -82,7 +57,7 @@ export default function ProductCatalogView({ auth, shops, isEmbedded = false }) 
 
   return (
     <section id="products" className={isEmbedded ? 'space-y-6' : 'mx-auto w-full max-w-7xl py-8 space-y-8 px-4 sm:px-6'}>
-      {!isEmbedded && <FeaturedProducts />}
+      {!isEmbedded && showFeatured && <FeaturedProducts />}
       {/* Section Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>

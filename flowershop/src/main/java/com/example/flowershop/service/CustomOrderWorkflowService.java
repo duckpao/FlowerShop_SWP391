@@ -139,7 +139,7 @@ public class CustomOrderWorkflowService {
         var order=locked(id); requireCustom(order);
         if (!order.getCustomer().getId().equals(actor)) throw missing();
         if (order.getStatus()!=OrderStatus.QUOTED) throw invalid("Đơn chưa được báo giá hoặc đã được xử lý.");
-        PaymentType type=input.paymentType()==null?PaymentType.FULL:input.paymentType();
+        PaymentType type=input.paymentType()==null?(input.paymentMethod()==PaymentMethod.ONLINE?PaymentType.DEPOSIT:PaymentType.FULL):input.paymentType();
         if(type!=PaymentType.FULL && type!=PaymentType.DEPOSIT) throw invalid("Chọn thanh toán cọc hoặc toàn bộ.");
         if(type==PaymentType.DEPOSIT && input.paymentMethod()!=PaymentMethod.ONLINE)
             throw invalid("Tiền cọc cần thanh toán trực tuyến; phần còn lại có thể trả khi nhận hoa.");

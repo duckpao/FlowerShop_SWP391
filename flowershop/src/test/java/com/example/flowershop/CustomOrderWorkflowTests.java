@@ -210,13 +210,22 @@ class CustomOrderWorkflowTests {
         workflow.accept(customer.getId(), id, new CustomOrderWorkflowService.Accept(PaymentMethod.ONLINE, new BigDecimal("380000")));
         assertThat(paymentService.checkPaymentStatus(id, customer.getId()).getTotalAmount()).isEqualByComparingTo("380000");
         orderService.cancelExpiredOrder(id, "Expired");
-        assertThat(orders.findById(id).orElseThrow().getStatus()).isEqualTo(OrderStatus.PENDING);
+        assertThat(orders.findById(id).orElseThrow().getStatus()).isEqualTo(OrderStatus.AWAITING_DEPOSIT);
         assertThatThrownBy(() -> manager.confirm(shop.getId(), owner.getId(), id)).isInstanceOf(ResponseStatusException.class);
         assertThatThrownBy(() -> manager.ship(shop.getId(), owner.getId(), id)).isInstanceOf(ResponseStatusException.class);
-        orders.findById(id).orElseThrow().setPaymentStartedAt(LocalDateTime.now().minusMinutes(11));
+        orders.findById(id).orElseThrow().setPaymentStartedAt(LocalDateTime.now().minusHours(25));
         orderService.cancelExpiredOrder(id, "Expired");
         assertThat(orders.findById(id).orElseThrow().getStatus()).isEqualTo(OrderStatus.CANCELLED);
         assertThat(reference.getStock()).isEqualTo(10);
+    }
+
+    @Test void customerCanExplicitlyChooseFullOnlineAtQuoteAcceptance() {
+        var id=create().orderId(); quote(id);
+        var result=workflow.accept(customer.getId(),id,new CustomOrderWorkflowService.Accept(
+                PaymentMethod.ONLINE,new BigDecimal("380000"),null,null,PaymentType.FULL,null));
+        assertThat(result.status()).isEqualTo("PENDING");
+        assertThat(paymentService.checkPaymentStatus(id,customer.getId()).getNextPaymentType()).isEqualTo("FULL");
+        assertThat(payments.findByOrderId(id)).isEmpty();
     }
     @Test void duplicateAcceptanceAndQuoteChangesAfterAcceptanceAreRejected() {
         var id=create().orderId(); quote(id);

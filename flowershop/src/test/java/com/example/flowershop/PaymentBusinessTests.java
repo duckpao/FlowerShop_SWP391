@@ -258,6 +258,27 @@ class PaymentBusinessTests {
     }
 
     @Test
+    void customFullAndFinalOnlinePaymentsAreRejectedEvenAfterDeposit() {
+        for (PaymentType type : List.of(PaymentType.FULL, PaymentType.FINAL)) {
+            assertThatThrownBy(() -> pay(gatewayWithCheckoutConfig(),
+                    customOrder(OrderStatus.DEPOSIT_PAID,"400000","200000",LocalDateTime.now()),type))
+                    .isInstanceOf(ApiException.class).hasMessageContaining("COD");
+        }
+    }
+
+    @Test void customFullCheckoutChargesTotalAndCannotSwitchToDeposit() {
+        var order=customOrder(OrderStatus.PENDING,"400000","100000",LocalDateTime.now());
+        order.setPaymentStartedAt(LocalDateTime.now());
+        assertThat(pay(gatewayWithCheckoutConfig(),order,PaymentType.FULL).getAmount()).isEqualByComparingTo("400000");
+        assertThatThrownBy(()->pay(gatewayWithCheckoutConfig(),order,PaymentType.DEPOSIT)).isInstanceOf(ApiException.class);
+        assertThatThrownBy(()->pay(gatewayWithCheckoutConfig(),customOrder(OrderStatus.AWAITING_DEPOSIT,"400000","100000",LocalDateTime.now()),PaymentType.FULL))
+                .isInstanceOf(ApiException.class);
+        var service=new PaymentService(orders,payments,mock(SePayGatewayService.class));
+        when(orders.findById(order.getId())).thenReturn(Optional.of(order));
+        assertThat(service.checkPaymentStatus(order.getId(),"customer-1").getNextPaymentType()).isEqualTo("FULL");
+    }
+
+    @Test
     void finalBeforeDepositIsRejected() {
         assertThatThrownBy(() -> pay(gatewayWithCheckoutConfig(),
                 customOrder(OrderStatus.AWAITING_DEPOSIT, "400000", "0", LocalDateTime.now()), PaymentType.FINAL))
@@ -410,8 +431,36 @@ class PaymentBusinessTests {
 
         var second = service.checkPaymentStatus("order-2", "customer-1");
 
-        assertThat(second.getNextPaymentType()).isEqualTo("FINAL");
+        assertThat(second.getNextPaymentType()).isNull();
         assertThat(second.getTotalPaid()).isEqualByComparingTo("200000");
         assertThat(second.getRemainingAmount()).isEqualByComparingTo("200000");
+    }
+
+    @Test
+    void shippingCustomShowsRemainingCodAndFullyPaidDepositNeedsNoFinalPayment() {
+        Order order = customOrder(OrderStatus.DELIVERING, "400000", "200000", LocalDateTime.now());
+        Payment deposit = Payment.builder().order(order).paymentMethod(PaymentMethod.ONLINE)
+                .paymentType(PaymentType.DEPOSIT).status(PaymentStatus.SUCCESS).amount(new BigDecimal("200000")).build();
+        Payment cod = Payment.builder().order(order).paymentMethod(PaymentMethod.COD)
+                .paymentType(PaymentType.FINAL).status(PaymentStatus.PENDING).amount(new BigDecimal("200000")).build();
+        var service = new PaymentService(orders, payments, mock(SePayGatewayService.class));
+        when(orders.findById(order.getId())).thenReturn(Optional.of(order));
+        when(payments.findByOrderId(order.getId())).thenReturn(List.of(deposit, cod));
+        var status = service.checkPaymentStatus(order.getId(), "customer-1");
+        assertThat(status.getTotalPaid()).isEqualByComparingTo("200000");
+        assertThat(status.getRemainingAmount()).isEqualByComparingTo("200000");
+        assertThat(status.getCodAmount()).isEqualByComparingTo("200000");
+        assertThat(status.getNextPaymentType()).isNull();
+
+        cod.setStatus(PaymentStatus.SUCCESS);
+        order.setStatus(OrderStatus.COMPLETED);
+        status = service.checkPaymentStatus(order.getId(), "customer-1");
+        assertThat(status.getRemainingAmount()).isEqualByComparingTo("0");
+        assertThat(status.getCodAmount()).isEqualByComparingTo("0");
+
+        order.setStatus(OrderStatus.DEPOSIT_PAID);
+        deposit.setAmount(new BigDecimal("400000"));
+        when(payments.findByOrderId(order.getId())).thenReturn(List.of(deposit));
+        assertThat(service.checkPaymentStatus(order.getId(), "customer-1").getNextPaymentType()).isNull();
     }
 }

@@ -1,5 +1,44 @@
 @import './catalog.css';
 
+.custom-flower-page label.custom-payment-choice { flex-direction: row; align-items: flex-start; }
+
+.custom-flower-page button.custom-reload-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: end;
+  gap: .5rem;
+  height: 2.75rem;
+  min-height: 2.75rem;
+  width: auto;
+  padding: .65rem 1rem;
+  border-radius: .65rem;
+  font-size: .875rem;
+  font-weight: 600;
+  white-space: nowrap;
+  border: 1px solid var(--color-brand-600, #e11d48);
+  background: var(--color-brand-600, #e11d48);
+  color: #fff;
+  box-shadow: 0 2px 5px rgb(190 18 60 / 16%);
+  transition: background .15s, border-color .15s, box-shadow .15s;
+}
+
+.custom-flower-page button.custom-reload-button:hover:not(:disabled) {
+  background: var(--color-brand-700, #be123c);
+  border-color: var(--color-brand-700, #be123c);
+  color: #fff;
+  box-shadow: 0 3px 8px rgb(190 18 60 / 22%);
+}
+.custom-flower-page button.custom-reload-button:focus-visible {
+  outline: 3px solid var(--color-brand-300, #fda4af);
+  outline-offset: 3px;
+}
+.custom-flower-page button.custom-reload-button:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
 /* Keep CTA links and buttons readable above the shared catalog styles. */
 .catalog-page a.custom-flower-button,
 .catalog-page button.custom-flower-button,

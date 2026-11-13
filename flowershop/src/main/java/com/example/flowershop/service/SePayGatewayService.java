@@ -131,18 +131,22 @@ public class SePayGatewayService {
                 .map(Payment::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal total = order.getTotalAmount();
+        BigDecimal remaining = total != null ? total.subtract(totalPaid).max(BigDecimal.ZERO) : null;
+        BigDecimal cod = orderPayments.stream()
+                .filter(p -> p.getPaymentMethod() == PaymentMethod.COD && p.getStatus() == PaymentStatus.PENDING)
+                .map(Payment::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
         String next = null;
         if (order.getStatus() == OrderStatus.AWAITING_DEPOSIT
-                || (order.getOrderType() == OrderType.CUSTOM && order.getPaymentStartedAt()==null && order.getStatus() == OrderStatus.PENDING)) {
-            next = "DEPOSIT";
-        } else if (order.getStatus() == OrderStatus.DEPOSIT_PAID) {
-            next = "FINAL";
+                || (order.getOrderType() == OrderType.CUSTOM && order.getStatus() == OrderStatus.PENDING)) {
+            next = order.getStatus()==OrderStatus.PENDING && order.getPaymentStartedAt()!=null ? "FULL" : "DEPOSIT";
         }
+        if (remaining == null || remaining.signum() <= 0 || cod.signum() > 0) next = null;
         status.orderType(order.getOrderType() != null ? order.getOrderType().name() : null)
                 .totalAmount(total)
                 .depositAmount(total != null ? requiredDeposit(order) : null)
                 .totalPaid(totalPaid)
-                .remainingAmount(total != null ? total.subtract(totalPaid).max(BigDecimal.ZERO) : null)
+                .remainingAmount(remaining)
+                .codAmount(cod)
                 .nextPaymentType(next);
     }
 
@@ -197,9 +201,12 @@ public class SePayGatewayService {
 
         // PHASE 2 & 3: Xác định PaymentType (FULL, DEPOSIT, FINAL)
         PaymentType paymentType = request.getPaymentType() != null ? request.getPaymentType() : PaymentType.FULL;
-        if(order.getOrderType()==OrderType.CUSTOM && order.getStatus()==OrderStatus.PENDING
-                && order.getPaymentStartedAt()!=null && paymentType!=PaymentType.FULL)
-            throw ApiException.badRequest("Đơn thiết kế đã chọn thanh toán toàn bộ.");
+        if(order.getOrderType()==OrderType.CUSTOM) {
+            PaymentType expected=order.getStatus()==OrderStatus.AWAITING_DEPOSIT?PaymentType.DEPOSIT
+                    :order.getStatus()==OrderStatus.PENDING?(order.getPaymentStartedAt()!=null?PaymentType.FULL:PaymentType.DEPOSIT):null;
+            if(paymentType!=expected)
+                throw ApiException.badRequest("Thanh toán không đúng lựa chọn đã chốt. Đơn đặt cọc trả phần còn lại bằng COD; chỉ đơn chọn trả toàn bộ mới thanh toán FULL qua SePay.");
+        }
         if (order.getOrderType() == OrderType.STANDARD
                 && paymentType != PaymentType.FULL) {
             throw ApiException.badRequest("Đơn hàng thường chỉ hỗ trợ thanh toán toàn bộ.");

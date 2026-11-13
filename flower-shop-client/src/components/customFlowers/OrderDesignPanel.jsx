@@ -32,8 +32,7 @@ export function ShopCustomOrderActions({ order, shopId, onChanged }) {
     setBusy(true); setError('')
     try {
       if (reject) {
-        if (!note.trim()) throw new Error('Vui lòng nhập lý do từ chối trong phần phản hồi.')
-        await managerOrderService.cancel(shopId, order.id, note.trim())
+        await managerOrderService.cancel(shopId, order.id, note.trim() || 'Shop từ chối yêu cầu thiết kế.')
       } else await managerOrderService.quote(shopId, order.id, { amount: Number(amount), note })
       await onChanged()
     } catch (e) { setError(e.message) } finally { setBusy(false) }
