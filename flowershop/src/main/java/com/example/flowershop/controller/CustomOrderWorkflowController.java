@@ -15,7 +15,7 @@ public class CustomOrderWorkflowController {
 
     @PostMapping("/api/customer/orders/{id}/voucher-preview")
     @PreAuthorize("hasRole('CUSTOMER')")
-    public com.example.flowershop.service.CouponService.Preview vouchers(@PathVariable("id") String id,
+    public com.example.flowershop.dto.order.CustomPaymentPreview vouchers(@PathVariable("id") String id,
             @AuthenticationPrincipal CurrentUser user,@Valid @RequestBody CustomOrderWorkflowService.VoucherInput body) {
         return workflow.previewVouchers(user.id(),id,body);
     }
