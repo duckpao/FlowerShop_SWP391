@@ -141,7 +141,7 @@ export default function AdminCustomersView() {
 
       {/* Detail Modal Overlay */}
       {c.selected && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-99999 flex items-center justify-center bg-gray-900/50 p-4 backdrop-blur-sm">
           <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-800">
             <h3 className="mb-4 text-lg font-semibold text-gray-900 dark:text-white">Chi tiết khách hàng</h3>
             <div className="space-y-3 mb-6">

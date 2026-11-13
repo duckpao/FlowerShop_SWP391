@@ -16,6 +16,7 @@ import {
   UserCircleIcon,
 } from "../icons";
 import { cn } from "../utils";
+import { homePathFor } from "../utils/homePath";
 import { useChatUnread } from "../controllers/useChatUnread";
 
 type NavItem = {
@@ -341,7 +342,7 @@ const AppSidebar: React.FC = () => {
           !isExpanded && !isHovered ? "xl:justify-center" : "justify-start",
         )}
       >
-        <Link to="/" className="flex items-center gap-2">
+        <Link to={homePathFor(user?.role)} className="flex items-center gap-2">
           <span className="text-2xl">✿</span>
           {(isExpanded || isHovered || isMobileOpen) && (
             <span className="text-xl font-bold text-brand-500 truncate">

@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { useManagerShopController } from "../controllers/useManagerShopController";
 import { shopStatusLabels } from "../models/shopModel";
-import StaffApplicationsView from "./StaffApplicationsView";
 import ShopInvitationsView from "./ShopInvitationsView";
 import ProductsView from "./ProductsView";
 import OrderQueueView from "./OrderQueueView";
@@ -20,7 +19,7 @@ import GhnAddressPicker from "../components/GhnAddressPicker";
  * 1. Thông tin hồ sơ shop (Tên, mô tả, logo).
  * 2. Cấu hình địa chỉ kho lấy hàng chuẩn 3 cấp theo API Giao Hàng Nhanh (GHN).
  * 3. Quản lý danh sách nhân viên của cửa hàng.
- * 4. Tích hợp các module con: Duyệt đơn ứng tuyển (StaffApplicationsView), Quản lý sản phẩm (ProductsView).
+ * 4. Tích hợp các module con: Mời nhân viên (ShopInvitationsView), Quản lý sản phẩm (ProductsView).
  * 
  * @param {string} role - Quyền người dùng ('SHOP' hoặc 'SHOP_STAFF')
  * @param {string} section - Mục đang hiển thị ('all', 'shop', 'staff', 'products', 'orders')
@@ -212,7 +211,6 @@ export default function ManagerShopsView({ role, section = "all" }) {
           {role === "SHOP" && ["all", "staff"].includes(section) && (
             <div className="space-y-6">
               <ShopInvitationsView key={`invitations-${c.selected.id}`} shop={c.selected} />
-              <StaffApplicationsView key={c.selected.id} shop={c.selected} />
               
               <ComponentCard title="Nhân viên cửa hàng">
                 <p className="mb-4 text-gray-500 dark:text-gray-400">

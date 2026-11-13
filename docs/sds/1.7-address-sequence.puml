@@ -76,16 +76,20 @@ alt create and the user already has 10 addresses
 else edit and the id is not owned by the user
   AS --> AC : 404 "Không tìm thấy dữ liệu."
   AC --> V : 404
-else edit and the address is used by an order
-  AS -> OR : existsByDeliveryAddressId(id)
+else edit and an order using the address already has a waybill or is DELIVERING / COMPLETED / REFUNDED
+  AS -> OR : existsShippedByDeliveryAddressId(id)
   OR --> AS : true
-  AS --> AC : 409 CONFLICT "Địa chỉ đã được dùng trong đơn hàng. Hãy thêm địa chỉ mới."
+  AS --> AC : 409 CONFLICT "Địa chỉ đang dùng cho đơn đã tạo vận đơn hoặc đã giao nên không thể sửa. Hãy thêm địa chỉ mới."
   AC --> V : 409
 else valid
   AS -> AS : copy fields, pickup and return flags (only one each per owner)
   AS -> AS : default rule: first address, or none is default, or the one set as default becomes default
   AS -> AR : save(address)
   AR -> Database : INSERT or UPDATE Addresses
+  opt edit: orders without a waybill keep pointing to this address, so they now receive the new address
+    AS -> OR : findNotShippedByDeliveryAddressId(id)
+    AS -> AS : order recipient name / phone that still equal the old address values follow the new ones
+  end
   AS --> AC : AddressResponse
   AC --> V : 201 Created (create) or 200 OK (update)
   V -> AC : GET /api/account/addresses
@@ -127,7 +131,7 @@ else user confirms
     AS -> OR : existsByDeliveryAddressId(id)
     alt address is referenced by an order
       OR --> AS : true
-      AS --> AC : 409 CONFLICT "Địa chỉ đã được dùng trong đơn hàng. Hãy thêm địa chỉ mới."
+      AS --> AC : 409 CONFLICT "Địa chỉ đang được dùng trong đơn hàng nên không thể xóa. ..."
       AC --> V : 409
       V --> User : error message shown
     else not referenced

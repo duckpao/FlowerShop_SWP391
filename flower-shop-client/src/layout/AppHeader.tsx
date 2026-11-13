@@ -5,6 +5,7 @@ import NotificationDropdown from "@/components/header/NotificationDropdown";
 import UserDropdown from "@/components/header/UserDropdown";
 import { useSidebar } from "@/context/SidebarContext";
 import { cn } from "@/utils";
+import { homePathFor } from "@/utils/homePath";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useLocation } from "react-router";
@@ -60,7 +61,7 @@ const AppHeader: React.FC = () => {
       <div className="flex grow flex-col items-center justify-between xl:flex-row xl:px-6">
         <div className="flex w-full items-center justify-between gap-2 border-b border-gray-200 px-3 py-3 sm:gap-4 xl:justify-normal xl:border-b-0 xl:px-0 xl:py-4 dark:border-gray-800">
           {!isBackOffice && (
-            <Link to="/" className="flex shrink-0 items-center gap-2 rounded-lg">
+            <Link to={homePathFor(user?.role)} className="flex shrink-0 items-center gap-2 rounded-lg">
               <span className="text-2xl" aria-hidden="true">✿</span>
               <span className="text-xl font-bold text-brand-500">FlowerShop</span>
             </Link>

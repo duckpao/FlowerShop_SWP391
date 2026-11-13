@@ -55,6 +55,27 @@ public class OrderRepository extends HibernateRepository<Order> {
         return countWhere("e.deliveryAddress.id = :addressId", Map.of("addressId", addressId)) > 0;
     }
 
+    /** Trạng thái đơn đã giao cho đơn vị vận chuyển hoặc đã kết thúc giao hàng. */
+    private static final List<OrderStatus> SHIPPED_STATUSES =
+            List.of(OrderStatus.DELIVERING, OrderStatus.COMPLETED, OrderStatus.REFUNDED);
+
+    /**
+     * Có đơn dùng địa chỉ này đã tạo vận đơn (có Delivery) hoặc đã đến DELIVERING trở đi không.
+     * Các đơn đó phải giữ nguyên địa chỉ nhận, nên địa chỉ không còn sửa được.
+     */
+    public boolean existsShippedByDeliveryAddressId(String addressId) {
+        return countWhere("e.deliveryAddress.id = :addressId and (e.status in :shipped"
+                + " or exists (select 1 from Delivery d where d.order = e))",
+                Map.of("addressId", addressId, "shipped", SHIPPED_STATUSES)) > 0;
+    }
+
+    /** Các đơn dùng địa chỉ này mà chưa tạo vận đơn: địa chỉ đổi thì các đơn này nhận hoa theo địa chỉ mới. */
+    public List<Order> findNotShippedByDeliveryAddressId(String addressId) {
+        return list("e.deliveryAddress.id = :addressId and e.status not in :shipped"
+                + " and not exists (select 1 from Delivery d where d.order = e)",
+                Map.of("addressId", addressId, "shipped", SHIPPED_STATUSES));
+    }
+
     public Page<Order> findByShopIdAndStatusIn(String shopId, Collection<OrderStatus> statuses, Pageable pageable) {
         return page("e.shop.id = :shopId and e.status in :statuses", Map.of("shopId", shopId, "statuses", statuses), pageable);
     }

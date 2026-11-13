@@ -148,7 +148,7 @@ export default function AdminShopsView() {
 
       {/* Detail Modal Overlay */}
       {c.selected && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-99999 flex items-center justify-center bg-gray-900/50 p-4 backdrop-blur-sm">
           <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-800">
             <h3 className="mb-4 text-xl font-semibold text-gray-900 dark:text-white">{c.selected.name}</h3>
             
