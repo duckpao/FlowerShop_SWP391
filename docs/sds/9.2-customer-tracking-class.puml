@@ -1,0 +1,162 @@
+@startuml
+!pragma layout smetana
+title 9.2 Customer Order Tracking - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+  BackgroundColor<<DTO>> #ECECEC
+  BackgroundColor<<Scheduler>> #FFE8CC
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class CustomerOrderController <<Controller>> {
+  detail(user, id): OrderDetailResponse
+  shippingFee(user, id): ShippingFeeResponse
+  refreshTracking(user, id): DeliveryInfo
+}
+class CustomerOrderService <<Service>> {
+  detail(customerId, orderId): OrderDetailResponse
+  calculateShippingFeeForOrder(customerId, orderId): BigDecimal
+  refreshTracking(customerId, orderId): DeliveryInfo
+  -quote(shop, destination): BigDecimal
+  -pickupAddress(shop): Address
+}
+class GhnService <<Service>> {
+  +DEFAULT_WEIGHT_GRAM = 2000
+  track(orderCode): Tracking
+  calculateFee(fromDistrictId, fromWardCode, toDistrictId, toWardCode, weightGram): BigDecimal
+  -get(path): JsonNode
+  +{static} toDeliveryStatus(ghnStatus): DeliveryStatus
+}
+class "GHN API\n(app.ghn.api-url)" as GHN <<External>>
+class DeliverySync <<Service>> {
+  apply(order, delivery, tracking, actor)
+  complete(order, actor)
+}
+class CouponService <<Service>> {
+  release(order)
+}
+class OrderRepository <<Repository>> {
+  findById(id): Optional<Order>
+}
+class DeliveryRepository <<Repository>> {
+  findByOrderId(orderId): Optional<Delivery>
+}
+class AddressRepository <<Repository>> {
+  findByShopIdAndUserIsNullOrderByCreatedDateAscIdAsc(shopId): List<Address>
+}
+class PaymentRepository <<Repository>> {
+  findByOrderId(orderId): List<Payment>
+}
+class "CustomerOrderService.DeliveryInfo" as DeliveryInfo <<DTO>> {
+  trackingCode
+  deliveryPartnerId
+  status: DeliveryStatus
+  ghnStatus
+}
+class "CustomerOrderService.ShippingFeeResponse" as ShippingFeeResponse <<DTO>> {
+  shippingFee
+}
+class "CustomerOrderService.OrderDetailResponse" as OrderDetailResponse <<DTO>> {
+  status, shippingFee, totalAmount
+  delivery: DeliveryInfo
+  payments, refunds
+  deliveryAddress
+}
+class "GhnService.Tracking" as Tracking <<DTO>> {
+  ghnStatus
+  status: DeliveryStatus
+}
+class Order <<Entity>> {
+  id
+  status: OrderStatus
+  shippingFee
+  totalAmount
+  deliveryAddress
+}
+class Delivery <<Entity>> {
+  trackingCode
+  deliveryPartnerId
+  status: DeliveryStatus
+  ghnStatus
+}
+class Shop <<Entity>> {
+  id
+  name
+}
+class Address <<Entity>> {
+  ghnDistrictId
+  ghnWardCode
+  isDefault
+}
+
+View --> CustomerOrderController : GET /api/customer/orders/{id}\nPOST /api/customer/orders/{id}/refresh-tracking\nGET /api/customer/orders/{id}/shipping-fee
+CustomerOrderController --> CustomerOrderService
+CustomerOrderController ..> OrderDetailResponse : returns
+CustomerOrderController ..> ShippingFeeResponse : returns
+CustomerOrderController ..> DeliveryInfo : returns
+CustomerOrderService --> OrderRepository
+CustomerOrderService --> DeliveryRepository
+CustomerOrderService --> AddressRepository : pickup address of the shop
+CustomerOrderService --> PaymentRepository
+CustomerOrderService --> GhnService
+CustomerOrderService --> DeliverySync : apply(order, delivery, tracking, customerId)
+GhnService ..> GHN : GET shipping-order/detail\nPOST shipping-order/fee
+DeliverySync --> CouponService : release(order) on GHN cancel
+DeliverySync --> PaymentRepository : COD payments SUCCESS on complete
+DeliverySync ..> Delivery : sets status, ghnStatus
+GhnService ..> Tracking : returns
+OrderRepository ..> Order
+DeliveryRepository ..> Delivery
+AddressRepository ..> Address
+Order "*" --> "1" Shop
+Order "*" --> "0..1" Address : deliveryAddress
+Delivery "0..1" --> "1" Order
+
+note bottom of CustomerOrderService
+  refreshTracking(): order not DELIVERING, COMPLETED or REFUNDED: 409 "Đơn hàng chưa được bàn giao cho đơn vị vận chuyển."
+  No Delivery row: 404 "Đơn hàng chưa có vận đơn." Otherwise GhnService.track() and DeliverySync.apply().
+  detail() and shipping fee: order not found or not owned: 404 "Không tìm thấy dữ liệu."
+end note
+
+note bottom of CustomerOrderService
+  calculateShippingFeeForOrder(): destination without ghnDistrictId or ghnWardCode: 400
+  "Địa chỉ nhận hàng chưa có thông tin GHN hợp lệ." quote(): the shop has no pickup address with GHN codes:
+  400 "Cửa hàng chưa có địa chỉ lấy hàng theo danh mục GHN." Fee weight is always 2000 g.
+end note
+
+note bottom of GhnService
+  Any GHN answer other than HTTP 200 with code 200 (or a non-JSON page) becomes
+  ResponseStatusException 502 with the GHN message (or the HTTP status when the body is not JSON).
+  GHN status strings map to DeliveryStatus through toDeliveryStatus().
+end note
+
+note bottom of DeliverySync
+  Annotated as @Component (not @Service); drawn as Service.
+  Always stores delivery.status and ghnStatus. Changes the Order only while it is DELIVERING:
+  delivered -> complete() (COMPLETED, COD payments SUCCESS); returned -> REFUNDED;
+  cancel -> CANCELLED with coupon release and cancelReason "Vận đơn bị hủy trên GHN.".
+  The cancel branch does not give back product stock and does not fail PENDING payments (see 5.3, 9.3).
+end note
+
+note bottom of Delivery
+  DeliveryStatus values: PENDING, PICKED_UP, ON_THE_WAY, DELIVERED, FAILED, RETURNING, RETURNED
+end note
+
+@enduml

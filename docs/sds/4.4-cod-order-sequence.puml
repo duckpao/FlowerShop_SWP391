@@ -1,0 +1,79 @@
+@startuml
+title 4.4 COD Order and Confirmation Page - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor Customer as U
+actor "Shop Manager" as M
+participant "View" as V <<View>> #EADCFF
+participant OrderController as C <<Controller>> #D8F3DC
+participant OrderService as S <<Service>> #DCECFF
+participant PaymentRepository as PR <<Repository>> #FFF1C9
+participant NotificationService as N <<Service>> #DCECFF
+participant OrderMailSender as MAIL <<Service>> #DCECFF
+participant CustomerOrderController as COC <<Controller>> #D8F3DC
+participant CustomerOrderService as COS <<Service>> #DCECFF
+participant OrderRepository as OR <<Repository>> #FFF1C9
+participant OrderDetailRepository as DR <<Repository>> #FFF1C9
+participant ProductImageRepository as IR <<Repository>> #FFF1C9
+participant PaymentTimeoutScheduler as T <<Scheduler>> #FFE8CC
+participant SePayGatewayService as SP <<Service>> #DCECFF
+
+== A. Place a COD order ==
+U -> V : choose "Cash on delivery", click "Confirm COD order"
+V -> C : POST /api/orders/{userId}/batch\n(paymentMethod = COD, shops[] ...)
+C -> S : makeOrders(userId, request)
+note right of S
+  Order, details, stock, vouchers and cart cleanup follow 4.3.
+  Below is only what is specific to COD, done for each shop's order.
+end note
+S -> S : Order saved as PENDING (shipping fee included in totalAmount)
+S -> PR : save(Payment: FULL, COD, amount = totalAmount,\ninvoiceNumber "COD-" + 8 chars of the order id, PENDING)
+S -> N : notifyOrderPlaced(order)
+N -> N : bell notification to the customer "Đặt hàng thành công"
+N -> N : bell notification to the shop owner "Có đơn hàng mới"
+S -> S : publish OrderPlacedEvent(orderIds)
+S --> C : List<OrderResponse>
+C --> V : 201 Created
+S --> MAIL : OrderPlacedEvent, after the transaction commits
+MAIL -> MAIL : one receipt mail for the whole checkout, skipped without a verified email (13.3)
+
+== B. Confirmation page ==
+V -> V : reload the cart (ordered items are gone), badge updated
+V -> V : go to /payment/cod-success?order=<id>&order=<id>
+V -> COC : GET /api/customer/orders/by-ids?ids=<id>,<id>
+COC -> COS : byIds(customerId, ids)
+loop each distinct id (at most 20)
+  COS -> OR : findById(id)
+  OR --> COS : Order (kept only when it belongs to this customer)
+  COS -> DR : findByOrderId(id)
+  DR --> COS : details
+  COS -> IR : findByProductIdInOrderByDisplayOrderAscIdAsc(productIds)
+  IR --> COS : images
+end
+COS --> COC : List<OrderSummary>
+COC --> V : 200 OK
+V --> U : "Order created" (one line per order with a link to /orders/{id}),\ntotal of all orders when there are several, buttons to the order list
+
+== C. After the order ==
+note over T, SP
+  PaymentTimeoutScheduler also scans PENDING orders; expireUnpaidOrder() returns at once
+  when the order has a COD payment, so a COD order is never cancelled for non-payment.
+end note
+M -> V : open the order queue, confirm the order (3.2)
+note right of M
+  The shop confirms, creates the GHN waybill (3.3) and the customer follows the order (9.2).
+  The customer can still cancel while the order has not been handed to GHN (9.3).
+end note
+U -> V : open the order list, status PENDING until the shop confirms
+
+@enduml

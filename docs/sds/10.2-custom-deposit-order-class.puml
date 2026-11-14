@@ -1,0 +1,225 @@
+@startuml
+!pragma layout smetana
+title 10.2 Custom Deposit Order - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+  BackgroundColor<<DTO>> #ECECEC
+  BackgroundColor<<Scheduler>> #FFE8CC
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class CustomFlowerOrderController <<Controller>> {
+  decide(shopId, id, currentUser, body: Decision): CustomRequestResult
+}
+class CustomFlowerOrderService <<Service>> {
+  decide(shopId, actor, id, input: Decision): CustomRequestResult
+  -ownedShop(id, actor): Shop
+}
+class OrderController <<Controller>> {
+  makeCustomOrder(userId, requestId, currentUser, body: MakeCustomOrderRequest): OrderResponse
+  customVouchers(userId, requestId, currentUser, body: MakeCustomOrderRequest): CustomPaymentPreview
+  -requireOwner(userId, currentUser)
+}
+class OrderService <<Service>> {
+  makeCustomOrder(userId, requestId, request): OrderResponse
+  previewCustomVouchers(userId, requestId, request): CustomPaymentPreview
+  -customPrice(custom): CustomPrice
+  -resolveDestination(userId, addressId): Address
+  -quoteFee(shop, destination): BigDecimal
+}
+class CustomOrderRequestRepository <<Repository>> {
+  findLocked(id): Optional<CustomOrderRequest>
+}
+class ShopRepository <<Repository>> {
+  findById(id): Optional<Shop>
+}
+class OrderRepository <<Repository>> {
+  findLinkedCustomOrder(referenceId, customerId, shopId): Optional<Order>
+  existsByCustomRequestIdAndStatusNot(customRequestId, status): boolean
+}
+class OrderDetailRepository <<Repository>> {
+  save(detail): OrderDetail
+}
+class AddressRepository <<Repository>> {
+  findById(id): Optional<Address>
+  findByShopIdAndUserIsNullOrderByCreatedDateAscIdAsc(shopId): List<Address>
+}
+class CouponService <<Service>> {
+  preview(context, orderCode, shippingCode): Preview
+  apply(order, context, orderCode, shippingCode): Preview
+}
+class GhnService <<Service>> {
+  calculateFee(fromDistrictId, fromWardCode, toDistrictId, toWardCode, weightGram): BigDecimal
+}
+class "GHN API" as GHN <<External>>
+class OrderMailSender <<Service>> {
+  onPlaced(event: OrderPlacedEvent)
+}
+class CustomOrderRequest <<Entity>> {
+  id
+  description
+  desiredComponents: JSON
+  status: CustomOrderStatus
+  createdBy
+  createdDate
+}
+class Order <<Entity>> {
+  id
+  orderType: CUSTOM
+  customRequestId
+  status
+  subTotal
+  shippingFee
+  discountAmount
+  totalAmount
+  depositAmount
+  customerNote
+  recipientName
+  recipientPhone
+}
+class OrderDetail <<Entity>> {
+  customMaterials
+  price
+  quantity
+}
+class Address <<Entity>> {
+  ghnDistrictId
+  ghnWardCode
+  isDefault
+}
+class Shop <<Entity>> {
+  id
+  name
+  status
+}
+class "CustomFlowerOrderService.Decision" as Decision <<DTO>> {
+  status
+  note
+  quotedPrice
+  depositPercent: 10..100
+}
+class "CustomFlowerOrderService.Result" as CustomRequestResult <<DTO>> {
+  id
+  status
+  design
+  orderId
+}
+class MakeCustomOrderRequest <<DTO>> {
+  deliveryAddressId
+  recipientName
+  phone
+  couponCode
+  shippingCouponCode
+  expectedTotal
+  expectedDeposit
+}
+class OrderResponse <<DTO>> {
+  id
+  status
+  orderType
+  subTotal
+  totalAmount
+  depositAmount
+  items
+}
+class CustomPaymentPreview <<DTO>> {
+  depositAmount
+  remainingAmount
+  depositPercent
+  totalAmount
+}
+
+View --> CustomFlowerOrderController : PUT /api/shop/mine/{shopId}/custom-orders/{id}\n{status ACCEPTED, quotedPrice, depositPercent}
+View --> OrderController : POST /api/orders/{userId}/custom/{requestId}/voucher-preview\nPOST /api/orders/{userId}/custom/{requestId}
+CustomFlowerOrderController --> CustomFlowerOrderService
+CustomFlowerOrderController ..> Decision : reads
+CustomFlowerOrderController ..> CustomRequestResult : returns
+CustomFlowerOrderService --> CustomOrderRequestRepository
+CustomFlowerOrderService --> ShopRepository : ownedShop
+CustomFlowerOrderService --> OrderRepository : findLinkedCustomOrder (orderId in result)
+CustomFlowerOrderService ..> CustomRequestResult : builds
+OrderController --> OrderService
+OrderController ..> MakeCustomOrderRequest : reads
+OrderController ..> OrderResponse : returns
+OrderController ..> CustomPaymentPreview : returns
+OrderService ..> CustomOrderRequest : entityManager.find(..., PESSIMISTIC_WRITE)
+OrderService --> OrderRepository : existsByCustomRequestIdAndStatusNot, save
+OrderService --> OrderDetailRepository : save
+OrderService --> AddressRepository : findById, shop pickup address
+OrderService --> CouponService : apply / preview
+OrderService --> GhnService : quoteFee
+OrderService ..> OrderMailSender : OrderPlacedEvent (after commit, async)
+GhnService --> GHN : fee request
+CustomOrderRequestRepository ..> CustomOrderRequest
+ShopRepository ..> Shop
+OrderRepository ..> Order
+OrderDetailRepository ..> OrderDetail
+AddressRepository ..> Address
+Order ..> CustomOrderRequest : customRequestId (plain id)
+OrderDetail "*" --> "1" Order : order
+CustomOrderRequest "*" --> "1" Shop : shop
+Order "*" --> "1" Address : deliveryAddress
+
+note bottom of CustomFlowerOrderService
+  decide() (shop side, owner only; shop and owner must be ACTIVE, 403):
+  ACCEPTED or REJECTED already set: 409, final.
+  REQUESTED: 400. ACCEPTED needs quotedPrice and depositPercent (400).
+  Stores quotedPrice, depositPercent, shopNote inside desiredComponents JSON.
+  No notification is sent to the customer.
+end note
+
+note bottom of OrderService
+  makeCustomOrder() (customer, one transaction):
+  request locked with PESSIMISTIC_WRITE, owner = customer (404)
+  status must be ACCEPTED (400), no non-cancelled order yet (400)
+  customPrice(): quotedPrice > 0, depositPercent 10..100 or null (400)
+  delivery address must be saved with GHN codes (400); fee from shop pickup address
+  Order AWAITING_DEPOSIT, subTotal = quotedPrice, depositAmount = 0 at first,
+  vouchers applied, expectedTotal and expectedDeposit compared (400).
+  OrderDetail price = quotedPrice, customMaterials = whole request JSON.
+  OrderPlacedEvent published; receipt mail is sent after commit.
+end note
+
+note bottom of OrderDetail
+  Only one line: "Hoa đặt theo yêu cầu", quantity 1.
+  customMaterials copies CustomOrderRequest.desiredComponents.
+end note
+
+note bottom of Order
+  Vouchers: only ORDER and SHIPPING vouchers apply, the reference product is not bought.
+  depositAmount = CustomOrderPricing.deposit(subTotal, discount, total, depositPercent).
+  CustomOrderPricing is a static utility (not a Spring bean), kept out of the diagram:
+  percent set: percent x (subTotal - discount); percent null: 50% of total.
+  Whole VND, minimum 1, maximum total.
+end note
+
+note bottom of CustomOrderRequest
+  Status values: REQUESTED, NEGOTIATING, ACCEPTED, REJECTED.
+  Only ACCEPTED can start a deposit order.
+  Code issue: decide() rewrites the whole JSON. A status change without
+  quotedPrice/depositPercent (e.g. NEGOTIATING) stores null for both.
+end note
+
+note bottom of View
+  Customer picks the accepted request, address and vouchers, then pays the deposit.
+  Online payment is shown in 10.3 and 5.1. Payment rows are not created here.
+end note
+
+@enduml

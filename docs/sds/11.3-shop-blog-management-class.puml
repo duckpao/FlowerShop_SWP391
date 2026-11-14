@@ -1,0 +1,145 @@
+@startuml
+!pragma layout smetana
+title 11.3 Shop Manages Blog Posts - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+  BackgroundColor<<DTO>> #ECECEC
+  BackgroundColor<<Scheduler>> #FFE8CC
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class ManagerBlogController <<Controller>> {
+  list(shopId, currentUser, page): BlogResults
+  create(shopId, currentUser, blog, images): 201 BlogResult
+  update(shopId, id, currentUser, blog, images): BlogResult
+  publish(shopId, id, currentUser): 204
+  hide(shopId, id, currentUser): 204
+}
+class BlogService <<Service>> {
+  listManaged(shopId, actor, page): BlogResults
+  save(shopId, id, actor, input, images): BlogResult
+  publish(shopId, id, actor)
+  hide(shopId, id, actor)
+  -owned(shopId, actor, write): Shop
+  -validateImageFile(file)
+  -readImages(json): List<String>
+  -writeImages(images): String
+}
+class CloudinaryService <<Service>> {
+  uploadBlogImage(bytes, filename, contentType): String
+  -upload(bytes, filename, contentType, folder, errors): String
+}
+interface BlogRepository <<Repository>> {
+  findByShopId(shopId, pageable): Page<Blog>
+  findByIdAndShopId(id, shopId): Optional<Blog>
+}
+class ShopRepository <<Repository>> {
+  findById(id): Optional<Shop>
+}
+interface ShopStaffRepository <<Repository>> {
+  findByShopIdAndUserId(shopId, userId): Optional<ShopStaff>
+}
+class BlogInput <<DTO>> {
+  title (not blank, max 255)
+  content (not blank, max 50000)
+  status: DRAFT or PUBLISHED
+  retainedImages (max 10)
+}
+class BlogResult <<DTO>> {
+  id
+  shop: ShopSummary
+  title
+  content
+  images
+  status
+  createdDate
+  lastModifyDate
+}
+class BlogResults <<DTO>> {
+  content
+  page
+  totalPages
+  totalElements
+}
+class Blog <<Entity>> {
+  id
+  title
+  content
+  images (JSON array of URLs)
+  status: BlogStatus
+  createdBy
+  lastModifyBy
+}
+class Shop <<Entity>> {
+  id
+  name
+  status
+}
+class ShopStaff <<Entity>> {
+  isActive
+}
+class User <<Entity>> {
+  id
+  role
+  status
+}
+class CloudinaryApi <<External>> {
+  POST https://api.cloudinary.com/v1_1/{cloud}/image/upload\nfolder: flowershop/blogs
+}
+
+View --> ManagerBlogController : GET /api/shop/mine/{shopId}/blogs?page\nPOST /api/shop/mine/{shopId}/blogs (multipart)\nPUT /api/shop/mine/{shopId}/blogs/{id} (multipart)\nPUT /api/shop/mine/{shopId}/blogs/{id}/publish\nDELETE /api/shop/mine/{shopId}/blogs/{id} (hides the post)
+ManagerBlogController --> BlogService
+ManagerBlogController ..> BlogInput : reads part "blog"
+ManagerBlogController ..> BlogResult : returns
+BlogService ..> BlogResults : returns
+BlogService --> BlogRepository
+BlogService --> ShopRepository
+BlogService --> ShopStaffRepository
+BlogService --> CloudinaryService
+CloudinaryService --> CloudinaryApi : upload image
+BlogRepository ..> Blog
+ShopRepository ..> Shop
+ShopStaffRepository ..> ShopStaff
+Blog "*" --> "1" Shop
+ShopStaff "*" --> "1" Shop
+ShopStaff "*" --> "1" User : user
+Shop "*" --> "1" User : owner
+
+note bottom of BlogService
+  Read: owner or ACTIVE staff of the shop (else 404 "Không tìm thấy bài viết.").
+  Write (create, update, publish, hide): shop must be ACTIVE, owner role SHOP and owner ACTIVE
+  (else 403 "Shop phải được duyệt và đang hoạt động để đăng bài.").
+  status HIDDEN in save is refused (400): use the hide action.
+  Images: at most 10 per post (kept + new), each at most 5 MB, JPEG, PNG or WebP only.
+  Update: kept images must already belong to the post (else 400).
+end note
+
+note bottom of BlogService
+  "Delete" is a soft hide: status becomes HIDDEN, the row and the Cloudinary images stay.
+  CloudinaryService has no delete call, so an image removed from a post stays on Cloudinary.
+  ShopStaffRepository is injected by field (@Autowired), not by the constructor.
+end note
+
+note bottom of View
+  Staff (SHOP_STAFF) can list, write, publish and hide if the shop is ACTIVE.
+  Public visibility: status PUBLISHED and shop ACTIVE (see 11.2).
+end note
+
+@enduml

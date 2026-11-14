@@ -1,5 +1,5 @@
 @startuml
-title Display Categories - sequence diagram
+title 2.6 Display Categories - sequence diagram
 autonumber
 skinparam shadowing false
 skinparam defaultFontName Arial

@@ -1,0 +1,110 @@
+@startuml
+title 8.10 Featured Products - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor Shop as U
+actor Admin as A
+participant "View" as V <<View>> #EADCFF
+participant ShopPlanController as C <<Controller>> #D8F3DC
+participant AdminShopPlanController as AC <<Controller>> #D8F3DC
+participant ShopPlanService as S <<Service>> #DCECFF
+participant UserRepository as UR <<Repository>> #FFF1C9
+participant ShopRepository as SR <<Repository>> #FFF1C9
+participant ProductRepository as PR <<Repository>> #FFF1C9
+participant ShopSubscriptionRepository as SSR <<Repository>> #FFF1C9
+participant FeaturedProductRepository as FR <<Repository>> #FFF1C9
+participant ProductQuotaService as Q <<Service>> #DCECFF
+participant ShopPlanClock as CK <<Service>> #DCECFF
+
+== A. Shop picks or unpicks a featured product ==
+U -> V : tick "Chọn nổi bật" (or "Bỏ nổi bật") on a product of the list
+V -> V : button disabled while busy, or when not Pro, product not ACTIVE / hidden / stock 0, or count >= featuredLimit
+V -> C : PUT /api/shop/mine/{shopId}/subscription/featured/{productId}\n(featured true | false)
+C -> S : feature(shopId, userId, productId, featured)
+S -> SR : findForUpdate(shopId) (shop lock)
+alt not owner, or shop not ACTIVE
+  S --> C : 404 or 409 "Cửa hàng phải đang hoạt động."
+else owner ACTIVE
+  S -> PR : findByIdAndShopId(productId, shopId)
+  alt product not found in this shop
+    PR --> S : empty
+    S --> C : 404 "Không tìm thấy gói, cửa hàng hoặc giao dịch thuộc quyền truy cập."
+  else found
+    S -> FR : findById(productId)
+    FR --> S : existing featured row or null
+    alt featured = false (unpick)
+      S -> FR : delete(row) if present
+      S --> C : 200 OK (allowed even for a locked or hidden product)
+    else featured = true (pick)
+      S -> SSR : forShop(shopId)
+      S -> CK : now()
+      alt no subscription, or endsAt not after now
+        S --> C : 409 "Chỉ gói Pro còn hạn được đưa sản phẩm lên nổi bật."
+      else Pro active
+        S -> Q : requireAllowed(product)
+        Q -> PR : findAll(allowedSpec AND id = product) (quota rule, see 8.12)
+        alt product locked by the plan product limit
+          Q --> S : 400 "Sản phẩm đang bị khóa do vượt giới hạn gói của shop..."
+          S --> C : 400
+        else allowed
+          S -> S : visible, stock >= 1, category ACTIVE
+          alt not sellable
+            S --> C : 409 "Chỉ sản phẩm đang bán, còn hàng và không bị ẩn mới được chọn nổi bật."
+          else sellable
+            alt already featured
+              S --> C : 200 OK (no change)
+            else new pick
+              S -> FR : countForShop(shopId) vs plan.featuredLimit
+              alt count >= featuredLimit
+                S --> C : 409 "Gói hiện tại chỉ cho phép N sản phẩm nổi bật."
+              else room left
+                S -> FR : save(FeaturedProduct id = productId, featuredAt = now)
+                S --> C : 200 OK
+              end
+            end
+          end
+        end
+      end
+    end
+  end
+end
+C --> V : 200 OK (empty body)
+V -> V : reload subscription status and product list
+V --> U : "Sản phẩm nổi bật · x/y" counter updated
+
+== B. Admin picks featured products for a shop ==
+A -> V : open the shop in the admin panel, tick a product
+V -> AC : GET /api/admin/shops/{shopId}/subscription/products
+AC -> S : adminProducts(shopId, adminId)
+S -> UR : findByIdAndRoleAndStatus(adminId, ADMIN, ACTIVE)
+S -> PR : findByShopId(shopId, unpaged) (not deleted)
+loop each product
+  S -> Q : allowed(product)
+end
+S --> AC : List<ManagedProduct> (featured, eligible)
+AC --> V : 200 OK
+V -> AC : PUT /api/admin/shops/{shopId}/subscription/featured/{productId}\n(featured)
+AC -> S : adminFeature(shopId, adminId, productId, featured)
+S -> UR : findByIdAndRoleAndStatus(adminId, ADMIN, ACTIVE)
+S -> SR : findForUpdate(shopId), owner must be SHOP and ACTIVE (409 otherwise)
+S -> S : same rules as section A (Pro active, quota, sellable, featuredLimit)
+S --> AC : 200 OK
+AC --> V : 200 OK
+V --> A : checkbox state refreshed, counter x/y
+
+note over S
+  Public list GET /api/public/featured-products (no action here) keeps only
+  the first featuredLimit ids per shop (by featuredAt) and filters locked products.
+end note
+
+@enduml

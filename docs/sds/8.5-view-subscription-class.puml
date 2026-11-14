@@ -1,0 +1,114 @@
+@startuml
+!pragma layout smetana
+title 8.5 View Shop Subscription - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+  BackgroundColor<<DTO>> #ECECEC
+  BackgroundColor<<Scheduler>> #FFE8CC
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class ShopPlanController <<Controller>> {
+  status(shopId, u): Status
+}
+class ShopPlanService <<Service>> {
+  status(shopId, actor): Status
+  -owned(shopId, actor, lock): Shop
+  -statusForShop(shopId): Status
+  -active(subscription): boolean
+  -used(shopId): long
+}
+class ShopRepository <<Repository>> {
+  findById(id): Optional<Shop>
+}
+class ShopSubscriptionRepository <<Repository>> {
+  forShop(shopId): Optional<ShopSubscription>
+}
+class ProductRepository <<Repository>> {
+  countForShop(shopId): long
+}
+class FeaturedProductRepository <<Repository>> {
+  forShop(shopId): List<FeaturedProduct>
+}
+class ShopPlanClock <<Service>> {
+  now(): LocalDateTime
+}
+class "ShopPlanService.Status" as Status <<DTO>> {
+  pro
+  expiresAt
+  productCount
+  productLimit (null = unlimited)
+  featuredLimit
+  featuredProductIds
+  planName
+}
+class Shop <<Entity>> {
+  id
+  status
+  owner: User
+}
+class ShopSubscription <<Entity>> {
+  id
+  startedAt
+  endsAt
+  plan: ShopPlan
+}
+class ShopPlan <<Entity>> {
+  id
+  name
+  productLimit
+  featuredLimit
+}
+class FeaturedProduct <<Entity>> {
+  id (= productId)
+  featuredAt
+}
+class Product <<Entity>> {
+  id
+  deleted
+}
+
+View --> ShopPlanController : GET /api/shop/mine/{shopId}/subscription
+ShopPlanController --> ShopPlanService
+ShopPlanService --> ShopRepository
+ShopPlanService --> ShopSubscriptionRepository
+ShopPlanService --> ProductRepository
+ShopPlanService --> FeaturedProductRepository
+ShopPlanService --> ShopPlanClock
+ShopPlanService ..> Status : returns
+ShopRepository ..> Shop
+ShopSubscriptionRepository ..> ShopSubscription
+ShopSubscription "*" --> "1" Shop
+ShopSubscription "*" --> "1" ShopPlan
+ProductRepository ..> Product
+FeaturedProductRepository ..> FeaturedProduct
+
+note bottom of ShopPlanService
+  status(): read-only. owned(shopId, actor, lock=false): 404 if the shop is missing
+  or not owned by the caller, 409 if the shop or its owner is not ACTIVE.
+  pro = endsAt is after clock.now(). Free: productLimit 5, featuredLimit 0, no featured ids.
+  Pro: plan limits, and every selected featured id (not cut to featuredLimit).
+end note
+
+note bottom of ShopSubscription
+  An expired row is kept. Only endsAt decides whether the shop is Pro.
+end note
+
+@enduml

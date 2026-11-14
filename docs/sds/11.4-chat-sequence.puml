@@ -1,0 +1,269 @@
+@startuml
+title 11.4 Chat between Customer and Shop - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor Customer as U
+actor "Shop owner or staff" as O
+participant "View" as V <<View>> #EADCFF
+participant CustomerChatController as CC <<Controller>> #D8F3DC
+participant ManagerChatController as MC <<Controller>> #D8F3DC
+participant ChatService as CS <<Service>> #DCECFF
+participant WebSocketConfig as WS <<Service>> #DCECFF
+participant TokenAuthService as TA <<Service>> #DCECFF
+participant ChatBroadcaster as CB <<Service>> #DCECFF
+participant ApplicationEventPublisher as EV <<Service>> #DCECFF
+participant SimpMessagingTemplate as STOMP <<Service>> #DCECFF
+participant NotificationService as NS <<Service>> #DCECFF
+participant CloudinaryService as CL <<Service>> #DCECFF
+participant "Cloudinary API" as CDN <<External>> #FFE0E0
+participant ShopRepository as SR <<Repository>> #FFF1C9
+participant UserRepository as UR <<Repository>> #FFF1C9
+participant ChatSessionRepository as SSR <<Repository>> #FFF1C9
+participant ChatMessageRepository as MR <<Repository>> #FFF1C9
+participant ProductRepository as PR <<Repository>> #FFF1C9
+participant OrderRepository as OR <<Repository>> #FFF1C9
+
+== A. Customer opens a chat with a shop ==
+U -> V : "Chat with shop" on the shop page
+V -> CC : POST /api/customer/chat/sessions\n(shopId)
+CC -> CS : openForCustomer(customerId, shopId)
+CS -> SR : findById(shopId)
+alt shop not found
+  CS --> CC : 404 "Không tìm thấy cửa hàng."
+  CC --> V : 404
+else shop found
+  alt shop not ACTIVE
+    CS --> CC : 400 "Cửa hàng hiện không hoạt động."
+    CC --> V : 400
+  else ACTIVE
+    CS -> UR : findById(customerId)
+    alt customer missing
+      CS --> CC : 404 "Không tìm thấy tài khoản."
+      CC --> V : 404
+    else found
+      CS -> SSR : findByCustomerIdAndShopId(customerId, shopId)
+      alt no session yet
+        CS -> SSR : saveAndFlush(ChatSession)
+      end
+      CS --> CC : SessionDto
+      CC --> V : 200 OK
+      V --> U : conversation opened
+    end
+  end
+end
+
+== B. Shop opens a chat from an order or a custom request ==
+O -> V : "Chat with customer" on an order or custom request
+V -> MC : POST /api/shop/mine/{shopId}/chat/sessions\n(orderId) or (customOrderId)
+MC -> CS : openForShopByOrder(shopId, userId, orderId) or openForShop(shopId, userId, customOrderId)
+CS -> SR : findById(shopId) (404 "Không tìm thấy cửa hàng.")
+alt caller is neither the owner nor an ACTIVE staff
+  CS --> MC : 403 "Không có quyền truy cập cửa hàng này."
+  MC --> V : 403
+else allowed
+  alt orderId given
+    CS -> OR : findById(orderId) filtered by shop
+    alt not found or another shop
+      CS --> MC : 404 "Không tìm thấy đơn hàng."
+      MC --> V : 404
+    else found
+      CS -> SSR : findOrCreate(order.customer, shop)
+      CS --> MC : SessionDto
+      MC --> V : 200 OK
+    end
+  else customOrderId given
+    CS -> OR : findById(customOrderId)
+    alt it is an order but not a CUSTOM order of this shop
+      CS --> MC : 404 "Không tìm thấy đơn hoa riêng của cửa hàng."
+      MC --> V : 404
+    else custom order of this shop, or no order
+      alt no order with that id
+        CS -> CS : look up CustomOrderRequest of this shop (404 "Không tìm thấy yêu cầu custom.")
+      end
+      CS -> SSR : findOrCreate(customer, shop)
+      CS --> MC : SessionDto
+      MC --> V : 200 OK
+    end
+  else neither id
+    CS --> MC : 400 "Thiếu yêu cầu custom hoặc đơn hàng."
+    MC --> V : 400
+  end
+end
+
+== C. Load the conversation list and history ==
+U -> V : open chat page
+V -> CC : GET /api/customer/chat/sessions
+CC -> CS : customerSessions(customerId)
+CS -> SSR : forCustomer(customerId)
+SSR --> CS : sessions, newest message first
+CS --> CC : List<SessionDto> (unread for the customer side)
+CC --> V : 200 OK
+V -> CC : GET /api/customer/chat/sessions/{id}/messages?before&size
+CC -> CS : history(sessionId, userId, before, size)
+CS -> SSR : findById(sessionId)
+alt session not found
+  CS --> CC : 404 "Không tìm thấy cuộc trò chuyện."
+  CC --> V : 404
+else found
+  CS -> CS : sideOf(session, userId) (customer, owner or active staff; else 403 "Không có quyền truy cập cuộc trò chuyện này.")
+  CS -> MR : latest(sessionId) or olderThan(sessionId, before), size 1..50 (default 30)
+  MR --> CS : messages, newest first
+  CS --> CC : List<MessageDto> in oldest-first order
+  CC --> V : 200 OK
+end
+note over V : the unread badge reads GET /api/customer/chat/unread (count)
+
+== D. Send a text, image or product or order card ==
+U -> V : type a message, attach images, or attach a card
+V -> CC : POST /api/customer/chat/sessions/{id}/messages\n(message, images[], context {type, id})
+CC -> CS : send(sessionId, userId, input)
+CS -> SSR : findById(sessionId) and sideOf(session, userId)
+alt empty text and no images
+  CS --> CC : 400 "Tin nhắn không được để trống."
+  CC --> V : 400
+else images present
+  alt an image URL does not start with https://
+    CS --> CC : 400 "Ảnh đính kèm không hợp lệ."
+    CC --> V : 400
+  else valid
+    alt context type is not NONE
+      alt context id missing
+        CS --> CC : 400 "Thiếu mã đối tượng đính kèm."
+        CC --> V : 400
+      else
+        alt PRODUCT card
+          CS -> PR : findById(id) of the session shop
+          alt product of another shop
+            CS --> CC : 400 "Sản phẩm không thuộc cửa hàng này."
+            CC --> V : 400
+          end
+        else CUSTOM_ORDER card
+          CS -> OR : findById(id) (order) or CustomOrderRequest of the same customer and shop
+          alt not linked to this conversation
+            CS --> CC : 400 "Đơn hoa riêng không thuộc cuộc trò chuyện này." / "Yêu cầu custom không thuộc cuộc trò chuyện này."
+            CC --> V : 400
+          end
+        end
+        CS -> CS : snapshot card (name, price, image or status), stored as JSON
+      end
+    end
+    CS -> MR : saveAndFlush(ChatMessage: text or null, media JSON, senderType, context)
+    MR --> CS : ChatMessage
+    CS -> SSR : update lastMessageAt, preview (80 chars), unread of the other side +1; saveAndFlush
+    CS -> NS : notifyUser(recipient, "Tin nhắn mới", ...) (skipped while the previous bell for this link is unread)
+    CS -> EV : publish MessageEvent (inside the transaction)
+    CS --> CC : MessageDto
+    CC --> V : 201 Created
+    V --> U : bubble appended
+  end
+end
+
+== E. Real-time push after the commit ==
+EV -> CB : onMessage(MessageEvent) (AFTER_COMMIT)
+CB -> STOMP : convertAndSend /topic/chat/{sessionId} (MessageDto)
+CB -> STOMP : convertAndSend /topic/chat-inbox/{customerId} (preview, unread, total)
+CB -> STOMP : convertAndSend /topic/chat-inbox/{ownerId} (preview, unread, total)
+STOMP --> V : frames delivered to subscribed clients
+note over CB : a rolled-back transaction sends nothing
+
+== F. Upload an image into a chat ==
+U -> V : choose a picture
+V -> CC : POST /api/customer/chat/sessions/{id}/images\n(multipart file)
+CC -> CS : uploadImage(sessionId, userId, file)
+CS -> CS : sideOf(session, userId)
+alt empty or larger than 5 MB
+  CS --> CC : 400 "Ảnh phải có dung lượng từ 1 byte đến 5 MB."
+  CC --> V : 400
+else
+  CS -> CS : ImageIO.read: not decodable: 400 "Tệp tải lên không phải ảnh hợp lệ."
+  alt width or height above 4096
+    CS --> CC : 400 "Kích thước ảnh tối đa 4096 × 4096 pixel."
+    CC --> V : 400
+  else
+    CS -> CS : re-encode as PNG
+    CS -> CL : upload(png bytes, "chat-<uuid>.png")
+    CL -> CDN : POST upload (folder flowershop/products)
+    CDN --> CL : secure URL
+    CL --> CS : URL
+    CS --> CC : url
+    CC --> V : 200 {url}
+    V --> U : image attached to the draft
+  end
+end
+note over CS
+  The URL is only accepted by send() when it starts with https://.
+end note
+
+== G. Mark the conversation as read ==
+U -> V : open the conversation
+V -> CC : POST /api/customer/chat/sessions/{id}/read
+CC -> CS : markRead(sessionId, userId)
+CS -> MR : markRead(sessionId, other side's sender type) (is_read = true)
+note right of MR : clearAutomatically: the session is reloaded and saved again
+CS -> SSR : own unread counter = 0; saveAndFlush
+CS -> EV : publish ReadEvent
+CC --> V : 204 No Content
+EV -> CB : onRead(ReadEvent) (AFTER_COMMIT)
+CB -> STOMP : /topic/chat-inbox/{readerId} (unread 0, total)
+CB -> STOMP : /topic/chat/{sessionId}/read ("CUSTOMER" or "SHOP")
+STOMP --> V : the other side shows read ticks
+
+== H. Real-time connection and subscription ==
+V -> WS : CONNECT /ws\nAuthorization: Bearer <JWT>
+alt header missing or not a Bearer token
+  WS --> V : ERROR "Thiếu thông tin đăng nhập."
+else
+  WS -> TA : authenticate(token)
+  alt invalid or expired
+    TA --> WS : error
+    WS --> V : ERROR "Phiên đăng nhập không hợp lệ hoặc đã hết hạn."
+  else valid
+    TA --> WS : CurrentUser
+    WS --> V : CONNECTED (user bound to the STOMP session)
+  end
+end
+V -> WS : SUBSCRIBE /topic/chat-inbox/{userId}
+alt userId is not the logged-in user
+  WS --> V : ERROR "Không có quyền."
+else own inbox
+  WS --> V : subscription active
+end
+V -> WS : SUBSCRIBE /topic/chat/{sessionId} (or /read)
+WS -> CS : canAccess(sessionId, userId) (sideOf, false instead of exception)
+alt not a participant of the session
+  WS --> V : ERROR "Không có quyền."
+else participant
+  WS --> V : subscription active
+end
+alt other destination
+  WS --> V : ERROR "Kênh không hợp lệ."
+end
+V -> WS : SEND (any destination)
+WS --> V : ERROR "Gửi tin qua WebSocket không được hỗ trợ."
+note over WS
+  Only SUBSCRIBE is authorized here: access is checked once, at subscription time.
+end note
+
+== I. Shop side uses the same flow ==
+O -> V : open shop chat inbox
+V -> MC : GET /api/shop/mine/{shopId}/chat/sessions
+MC -> CS : shopSessions(shopId, userId) (owner or active staff only)
+CS -> SSR : forShop(shopId) (sessions with at least one message)
+CS --> MC : List<SessionDto>
+MC --> V : 200 OK
+note over MC
+  POST /api/shop/mine/{shopId}/chat/sessions/{id}/messages, read and images use ChatService with the
+  session id only: the shopId path variable is not compared with session.shop.
+end note
+
+@enduml

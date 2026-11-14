@@ -1,0 +1,155 @@
+@startuml
+!pragma layout smetana
+title 12.1 Shop Owner Registration - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+  BackgroundColor<<DTO>> #ECECEC
+  BackgroundColor<<Scheduler>> #FFE8CC
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class ManagerApplicationController <<Controller>> {
+  submit(u, body): Result
+  mine(u): List<Result>
+  list(status, page): Results
+  decide(id, u, body): Result
+}
+class ManagerApplicationService <<Service>> {
+  submit(actor, input): Result
+  mine(actor): List<Result>
+  list(status, page): Results
+  decide(id, admin, decision): Result
+  -eligible(user)
+  -response(application): Result
+}
+class "ManagerApplicationService.Input" as Input <<DTO>> {
+  fullName <= 100
+  phone: [+]?[0-9]{9,15}
+  shopName <= 255
+  description <= 5000
+  addressLine, city, district, ward
+}
+class "ManagerApplicationService.Decision" as Decision <<DTO>> {
+  approve: Boolean
+  note <= 1000
+}
+class "ManagerApplicationService.Result" as Result <<DTO>> {
+  id
+  email
+  status
+  reviewNote
+  submittedAt
+  shopId
+}
+interface ManagerApplicationRepository <<Repository>> {
+  findByUserId(userId): Optional<ManagerApplication>
+  applicantId(id): Optional<String>
+  lock(id): Optional<ManagerApplication>
+  findByStatus(status, pageable): Page<ManagerApplication>
+}
+class UserRepository <<Repository>> {
+  findByIdForUpdate(id): Optional<User>
+}
+class ShopRepository <<Repository>> {
+  findByOwnerIdOrderByNameAsc(ownerId): List<Shop>
+  saveAndFlush(shop): Shop
+}
+class AddressRepository <<Repository>> {
+  save(address): Address
+}
+interface AuthSessionRepository <<Repository>> {
+  revokeAll(userId): int
+}
+class ManagerApplication <<Entity>> {
+  id
+  fullName, phone, shopName, description
+  addressLine, city, district, ward
+  status: PENDING | APPROVED | REJECTED
+  reviewNote
+  submittedAt, reviewedAt, reviewedBy
+  shopId
+}
+class User <<Entity>> {
+  id
+  email
+  role: CUSTOMER | SHOP | SHOP_STAFF | ADMIN
+  status: ACTIVE | ...
+  isEmailVerified
+}
+class Shop <<Entity>> {
+  id
+  name
+  description
+  status: PENDING | ACTIVE | INACTIVE | BANNED
+  createdBy, lastModifyBy
+}
+class Address <<Entity>> {
+  addressLine, city, district, ward
+  isDefault
+  ghnDistrictId, ghnWardCode
+}
+
+View --> ManagerApplicationController : POST /api/customer/manager-applications\nGET /api/account/manager-applications\nGET /api/admin/shops/applications?status&page\nPUT /api/admin/shops/applications/{id}
+ManagerApplicationController --> ManagerApplicationService
+ManagerApplicationController ..> Input : reads
+ManagerApplicationController ..> Decision : reads
+ManagerApplicationController ..> Result : returns
+ManagerApplicationService --> ManagerApplicationRepository
+ManagerApplicationService --> UserRepository
+ManagerApplicationService --> ShopRepository
+ManagerApplicationService --> AddressRepository
+ManagerApplicationService --> AuthSessionRepository
+ManagerApplicationService ..> Result : builds
+ManagerApplicationRepository ..> ManagerApplication
+UserRepository ..> User
+ShopRepository ..> Shop
+AddressRepository ..> Address
+ManagerApplication "*" --> "1" User : applicant (unique)
+Shop "*" --> "1" User : owner (unique)
+Address "*" --> "0..1" Shop : pickup address (user is null)
+
+note bottom of ManagerApplicationService
+  One application per user (unique user_id). A REJECTED row is reused on re-submit.
+  Submit: 409 unless the user is CUSTOMER, ACTIVE, email verified and owns no shop.
+  Approve: creates Shop (ACTIVE) + default pickup Address, sets role SHOP,
+  revokes all sessions of the applicant (re-login needed).
+  No email and no in-app notification is sent for manager applications.
+end note
+
+note bottom of Address
+  Created on approval without GHN codes (ManagerApplicationService.java:63).
+  The owner must save the pickup address (12.2) before GHN fees can be computed.
+end note
+
+note bottom of Shop
+  Two ways to become a shop owner:
+  1) this item: approval creates the Shop already ACTIVE.
+  2) POST /api/auth/register-shop (AuthService.registerShop): OTP verification creates
+     the user with role SHOP and the Shop as PENDING; AdminShopService.transition
+     ("approve", PUT /api/admin/shops/{id}/approve) moves it to ACTIVE.
+end note
+
+note bottom of View
+  Customer: ManagerApplicationView (CustomerDashboardView, HomeView) sends submit and status.
+  Admin: AdminManagerApplicationsView (AdminDashboardView) lists PENDING by default, approve or reject with note.
+  Role gates: /api/customer/** CUSTOMER, /api/admin/** ADMIN (SecurityConfig.java:78-83) plus @PreAuthorize.
+end note
+
+@enduml

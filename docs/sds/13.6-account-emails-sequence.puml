@@ -1,0 +1,156 @@
+@startuml
+title 13.6 Account Emails - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor Customer as CU
+actor "Shop owner" as SO
+participant "View" as V <<View>> #EADCFF
+participant AuthController as C <<Controller>> #D8F3DC
+participant OtpService as O <<Service>> #DCECFF
+participant AuthService as A <<Service>> #DCECFF
+participant StaffApplicationController as SAC <<Controller>> #D8F3DC
+participant StaffApplicationService as SA <<Service>> #DCECFF
+participant StaffInvitationController as SIC <<Controller>> #D8F3DC
+participant StaffInvitationService as SI <<Service>> #DCECFF
+participant UserRepository as UR <<Repository>> #FFF1C9
+participant "ApplicationEventPublisher" as EVT <<Service>> #DCECFF
+participant VerificationMailSender as M <<Service>> #DCECFF
+participant "SMTP server" as SMTP <<External>> #FFE0E0
+
+== A. Registration OTP (full flow in 1.3) ==
+CU -> V : submit the registration form
+V -> C : POST /api/auth/register
+C -> A : registerCustomer(request)
+A -> UR : existsByEmail(email)
+alt email already registered
+  A --> C : 409 "Email đã được đăng ký."
+  C --> V : 409, no mail
+else email is free
+  A -> A : canIssue(), new 6-digit OTP, expires in 300 s
+  A -> EVT : publish AuthMailEvent(REGISTER_OTP, code)
+  EVT -> M : BEFORE_COMMIT sendOtp(event)
+  M -> SMTP : send "FlowerShop - Mã xác thực đăng ký"
+  alt SMTP fails
+    M --> C : 503 "Chưa gửi được email OTP..." (transaction rolled back, no pending row kept)
+  else mail accepted
+    A --> C : return, transaction commits
+    C --> V : 202 Accepted
+  end
+end
+
+== B. Password reset code (full flow in 1.5) ==
+CU -> V : enter email on "forgot password"
+V -> C : POST /api/auth/forgot-password
+C -> O : forgotPassword(email, captchaId, captchaAnswer)
+O -> UR : findUserIdByEmail(email), then findByIdForUpdate(userId)
+alt unknown email, or account not ACTIVE / not verified / no password
+  O --> C : return, nothing stored, nothing sent
+  C --> V : 202 (same message as every case)
+else eligible
+  O -> O : issue RESET_PASSWORD code (captcha required after 6 failed attempts)
+  O -> EVT : publish AuthMailEvent(RESET_OTP, code)
+  EVT -> M : BEFORE_COMMIT sendOtp(event)
+  M -> SMTP : send "FlowerShop - Mã đặt lại mật khẩu"
+  alt SMTP fails
+    M --> C : 503 "Chưa gửi được email OTP..." (transaction rolled back)
+  else mail accepted
+    O --> C : return, transaction commits
+    C --> V : 202 Accepted
+  end
+end
+
+== C. Welcome email after the email is verified ==
+CU -> V : enter the OTP
+V -> C : POST /api/auth/verify-email
+C -> A : verify(email, code, captchaId, captchaAnswer)
+A -> UR : saveAndFlush(User: ACTIVE, email verified); pending row deleted
+A -> EVT : publish AuthMailEvent(WELCOME)
+note over A : the transaction commits when verify() returns
+EVT --> M : AFTER_COMMIT send(WELCOME)
+M -> SMTP : send "FlowerShop - Đăng ký thành công"
+note over M
+  SMTP failure: warning logged only. The account already exists.
+end note
+A --> C : return
+C --> V : 200 OK
+V --> CU : account created, go to sign in
+
+== D. Password changed notice ==
+CU -> V : enter code, new password, confirmation
+V -> C : POST /api/auth/reset-password
+C -> O : resetPassword(email, code, password, confirmation, captchaId, captchaAnswer)
+O -> O : password checks, consume the OTP, set the new hash, revoke all sessions
+O -> EVT : publish AuthMailEvent(PASSWORD_CHANGED)
+note over O : the transaction commits when resetPassword() returns
+EVT --> M : AFTER_COMMIT send(PASSWORD_CHANGED)
+M -> SMTP : send "FlowerShop - Mật khẩu đã được thay đổi"
+note over M
+  SMTP failure: warning logged only. The new password is already saved.
+end note
+O --> C : return
+C --> V : 200 "Đặt lại mật khẩu thành công."
+
+== E. Staff application: new-application mail to the shop owner ==
+CU -> V : apply to a shop (name, phone, introduction)
+V -> SAC : POST /api/customer/shops/{shopId}/applications
+SAC -> SA : apply(shopId, userId, input)
+SA -> UR : findByIdForUpdate(userId)
+SA -> SA : CUSTOMER, ACTIVE and verified (409); shop found (404) and ACTIVE (409); not already staff (409); no open application (409)
+SA -> SA : save StaffApplication with status PENDING
+SA -> EVT : publish AuthMailEvent(STAFF_APPLICATION_NEW, owner email, shop name)
+note over SA : the transaction commits when apply() returns
+EVT --> M : AFTER_COMMIT send(event)
+M -> SMTP : send "FlowerShop - Có đơn đăng ký làm nhân viên mới" to the shop owner
+note over M : SMTP failure: warning logged only
+SA --> SAC : result
+SAC --> V : 200 OK
+
+== F. Approve or reject: mail to the applicant ==
+SO -> V : approve or reject the application
+V -> SAC : PUT /api/shop/mine/{shopId}/applications/{id}
+SAC -> SA : decide(shopId, id, ownerId, approve)
+SA -> UR : findByIdForUpdate(applicant)
+SA -> SA : owner and shop checks (404); application still PENDING (409)
+alt approve
+  SA -> SA : applicant still CUSTOMER, ACTIVE and verified (409); add ShopStaff; role SHOP_STAFF; revoke applicant sessions
+end
+SA -> SA : status APPROVED or REJECTED
+SA -> EVT : publish AuthMailEvent(APPROVED or REJECTED, applicant email, shop name)
+EVT --> M : AFTER_COMMIT send(event)
+M -> SMTP : send "FlowerShop - Đơn ứng tuyển đã được duyệt" or "FlowerShop - Kết quả ứng tuyển"
+SA --> SAC : result
+SAC --> V : 200 OK
+
+== G. Staff invitation mail ==
+SO -> V : enter the invitee email, click send
+V -> SIC : POST /api/shop/mine/{id}/invitations (email)
+SIC -> SI : send(shopId, ownerId, email)
+SI -> SI : owner check (404); shop ACTIVE (403)
+SI -> UR : findByEmail(email)
+alt existing account is not ACTIVE, or not CUSTOMER / SHOP_STAFF
+  SI --> SIC : 400 "Email không đủ điều kiện nhận lời mời nhân viên."
+  SIC --> V : 400
+else no account, or an eligible account
+  SI -> SI : already linked to the shop (409); resend limits (429); store token hash, expires in 24 h, status PENDING
+  SI -> EVT : publish AuthMailEvent(STAFF_INVITATION, invitee email, shop name and invitation code)
+  EVT --> M : AFTER_COMMIT send(event)
+  M -> SMTP : send "FlowerShop - Lời mời làm nhân viên cửa hàng" with the accept link
+  note over M
+    No skip rule: the invitee does not need an account yet.
+    SMTP failure: warning logged only; the invitation stays PENDING.
+  end note
+  SI --> SIC : InvitationResponse
+  SIC --> V : 202 Accepted
+end
+
+@enduml

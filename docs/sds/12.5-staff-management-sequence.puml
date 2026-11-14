@@ -1,0 +1,168 @@
+@startuml
+title 12.5 Staff Management - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor "Shop owner" as M
+actor "Shop staff" as S
+participant "View" as V <<View>> #EADCFF
+participant ManagerShopController as MC <<Controller>> #D8F3DC
+participant StaffShopController as SC <<Controller>> #D8F3DC
+participant ManagerProductController as PC <<Controller>> #D8F3DC
+participant StaffRefundController as RC <<Controller>> #D8F3DC
+participant ManagerShopService as MS <<Service>> #DCECFF
+participant ManagerProductService as PS <<Service>> #DCECFF
+participant StaffRefundService as RS <<Service>> #DCECFF
+participant ShopOperationGuard as G <<Service>> #DCECFF
+participant ShopRepository as SR <<Repository>> #FFF1C9
+participant ShopStaffRepository as SSR <<Repository>> #FFF1C9
+participant UserRepository as UR <<Repository>> #FFF1C9
+
+== A. Owner lists the staff of the shop ==
+M -> V : open the staff page of the shop
+V -> MC : GET /api/shop/mine/{id}/staff
+MC -> MS : staff(id, ownerId)
+MS -> SR : findById(id)
+alt shop missing or the actor is not the owner
+  MS --> MC : 404 "Không tìm thấy cửa hàng hoặc nhân viên."
+  MC --> V : 404
+  V --> M : error message
+else owner
+  MS -> SSR : findByShopIdOrderByIdAsc(id)
+  SSR --> MS : List<ShopStaff>
+  MS --> MC : List<StaffResponse> (userId, email, fullName, active)
+  MC --> V : 200 OK
+  V --> M : staff table with an active / inactive status
+end
+note right of V
+  /api/shop/mine/{id}/staff is for role SHOP only: a SHOP_STAFF user gets 403 before the service.
+  Staff are added through applications (12.3) and invitations (12.4), not on this page.
+end note
+
+== B. Owner activates or deactivates a staff member ==
+M -> V : toggle the staff member
+V -> MC : PUT /api/shop/mine/{id}/staff/{userId}\n{ active: true | false }
+alt @Valid fails: active is null
+  MC --> V : 400 "Dữ liệu không hợp lệ" with field errors
+else valid
+  MC -> MS : active(id, ownerId, userId, active)
+  MS -> SR : findForUpdate(id)
+  alt shop missing or the actor is not the owner
+    MS --> MC : 404 "Không tìm thấy cửa hàng hoặc nhân viên."
+  else owner
+    alt shop status is not ACTIVE or PENDING
+      MS --> MC : 403 "Shop bị khóa hoặc ngừng hoạt động, chỉ được xem."
+    else shop status is PENDING
+      MS --> MC : 403 "Shop phải đang hoạt động."
+    else shop ACTIVE
+      MS -> SSR : findByShopIdAndUserId(id, userId)
+      alt no ShopStaff row
+        MS --> MC : 404 "Không tìm thấy cửa hàng hoặc nhân viên."
+      else found
+        alt active = true and the user is not SHOP_STAFF, not ACTIVE or e-mail not verified
+          MS --> MC : 400 "Tài khoản nhân viên chưa đủ điều kiện."
+        else allowed
+          MS -> MS : ShopStaff.setActive(active), saved by the transaction
+          MS --> MC : StaffResponse
+          MC --> V : 200 OK
+          V --> M : the row shows the new status
+        end
+      end
+    end
+  end
+end
+note right of V
+  Deactivating does not change the user role and does not revoke the staff session.
+  Access stops at the next request because ShopStaff.active is read every time (see C and D).
+end note
+
+== C. Staff sees the shops they work in ==
+S -> V : open the shop switcher
+V -> SC : GET /api/staff/shops
+SC -> MS : assigned(staffId)
+MS -> SSR : findByUserIdAndActiveTrue(staffId)
+SSR --> MS : active ShopStaff rows
+MS --> SC : List<ShopResponse> (id, name, status, owner)
+SC --> V : 200 OK
+V --> S : only the shops where the staff row is active
+note right of V
+  /api/staff/** is for role SHOP_STAFF only.
+  A deactivated member gets an empty list.
+end note
+
+== D. What an active staff member may do in the shop ==
+group D1. Hide a product (owner or active staff)
+  S -> V : hide a product
+  V -> PC : DELETE /api/shop/mine/{shopId}/products/{id}
+  PC -> PS : hide(shopId, id, staffId)
+  PS -> SR : findForUpdate(shopId)
+  PS -> SSR : findByShopIdAndUserId(shopId, staffId) (the actor is not the owner)
+  alt shop missing, or the actor is neither the owner nor an active staff member
+    PS --> PC : 404 "Không tìm thấy shop hoặc sản phẩm."
+    PC --> V : 404
+    V --> S : error message
+  else member
+    alt shop not ACTIVE, or the owner is not SHOP or not ACTIVE
+      PS --> PC : 403 "Shop phải được duyệt và đang hoạt động để quản lý mặt hàng."
+    else ok
+      PS -> PS : product status = INACTIVE
+      PS --> PC : 204 No Content
+      PC --> V : 204
+      V --> S : product hidden
+    end
+  end
+end
+group D2. Delete a product (owner only)
+  S -> V : delete a product
+  V -> PC : DELETE /api/shop/mine/{shopId}/products/{id}/remove
+  PC -> PS : remove(shopId, id, staffId)
+  PS -> PS : same membership and shop checks as D1 (404 or 403)
+  alt the actor is not the owner
+    PS --> PC : 403 "Chỉ chủ shop được xóa sản phẩm."
+    PC --> V : 403
+    V --> S : error message
+  else owner
+    PS --> PC : 204 (product marked deleted)
+  end
+end
+group D3. Refund requests (owner or active staff)
+  S -> V : open the refund list
+  V -> RC : GET /api/staff/shops/{shopId}/refunds
+  RC -> RS : list(shopId, staffId)
+  RS -> G : requireAccess(shopId, staffId)
+  G -> SR : findForUpdate(shopId)
+  alt shop missing
+    G --> RS : 404 "Không tìm thấy cửa hàng."
+  else shop not ACTIVE
+    G --> RS : 403 "Cửa hàng chưa được phép hoạt động."
+  else shop ACTIVE
+    G -> UR : findById(staffId)
+    G -> SSR : findByShopIdAndUserId(shopId, staffId)
+    alt user not ACTIVE or e-mail not verified, or neither the owner nor an active staff row
+      G --> RS : 403 "Không có quyền làm việc tại cửa hàng này."
+      RS --> RC : 403
+      RC --> V : 403
+      V --> S : error message
+    else allowed
+      G --> RS : Shop
+      RS --> RC : List<RefundResponse>
+      RC --> V : 200 OK
+      V --> S : refunds of the shop, the status can be updated through POST .../refunds/{id}/status
+    end
+  end
+end
+note over G
+  Orders, chat and custom orders have their own copy of the same rule: owner or ShopStaff.active.
+  Only StaffRefundService calls ShopOperationGuard, although its Javadoc asks all business services to.
+end note
+
+@enduml

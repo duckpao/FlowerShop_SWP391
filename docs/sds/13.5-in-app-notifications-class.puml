@@ -1,0 +1,124 @@
+@startuml
+!pragma layout smetana
+title 13.5 In-App Notifications - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+  BackgroundColor<<DTO>> #ECECEC
+  BackgroundColor<<Scheduler>> #FFE8CC
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class NotificationController <<Controller>> {
+  mine(user): List<NotificationResponse>
+  unreadCount(user): {count: long}
+  markAllAsRead(user): 204
+}
+class NotificationService <<Service>> {
+  mine(userId): List<NotificationResponse>
+  unreadCount(userId): long
+  markAllAsRead(userId)
+  notifyUser(user, title, message, link)
+  notifyOrderPlaced(order)
+  notifyPaymentPending(order)
+  notifyPaymentSuccess(order, paymentType)
+  notifyPaymentFailed(order, reason)
+  notifyRefundRequested(refund)
+  notifyRefundResolved(refund)
+  -create(user, title, message, link)
+  -toResponse(notification): NotificationResponse
+}
+interface NotificationRepository <<Repository>> {
+  findByUserIdOrderByCreatedDateDesc(userId): List<Notification>
+  findFirstByUserIdAndLinkOrderByCreatedDateDesc(userId, link): Optional<Notification>
+  countByUserIdAndReadFalse(userId): long
+  @Modifying markAllAsRead(userId)
+}
+interface ShopStaffRepository <<Repository>> {
+  findByShopIdAndActiveTrue(shopId): List<ShopStaff>
+}
+class NotificationResponse <<DTO>> {
+  id
+  title
+  message
+  link
+  read
+  createdDate
+}
+class Notification <<Entity>> {
+  id
+  title
+  message (TEXT)
+  link
+  read (is_read)
+  createdDate
+}
+class User <<Entity>> {
+  id
+  fullName
+  phone
+}
+class OrderService <<Service>>
+class ChatService <<Service>>
+class OccasionReminderService <<Service>> {
+  sendDueReminders(now): int
+}
+
+View --> NotificationController : GET /api/account/notifications\nGET /api/account/notifications/unread-count\nPUT /api/account/notifications/read-all
+NotificationController --> NotificationService
+NotificationController ..> NotificationResponse : returns
+NotificationService --> NotificationRepository
+NotificationService --> ShopStaffRepository : refund requests: active staff of the shop
+NotificationService ..> NotificationResponse : builds
+NotificationService ..> Notification : creates
+NotificationRepository ..> Notification
+Notification "*" --> "1" User : user (lazy)
+OrderService --> NotificationService : order placed, payment pending, payment failed
+ChatService --> NotificationService : notifyUser (new chat message)
+ChatService --> NotificationRepository : dedupe: latest notification with the same link
+OccasionReminderService --> NotificationService : notifyUser (see 13.2)
+
+note bottom of NotificationController
+  Class-level @PreAuthorize hasAnyRole('ADMIN','CUSTOMER','SHOP','SHOP_STAFF'). Every call uses the logged-in user id only.
+  There is no endpoint that marks one notification as read.
+end note
+
+note bottom of NotificationService
+  Creation: one row per recipient, saved in the caller's transaction (no after-commit step).
+  Callers: OrderService, SePayGatewayService (notifyPaymentSuccess), ChatService, OccasionReminderService,
+  CustomerRefundService / ManagerOrderService / StaffRefundService (refund requests and results),
+  CustomOrderWorkflowService, ShopPlanService, SubscriptionReminderService.
+  Titles, messages and links are free text chosen by the caller; links point to the app page of the recipient.
+  The list has no paging and no unread filter; newest first.
+end note
+
+note bottom of ChatService
+  notifyRecipient(): if the latest notification with the same link (chat session) is still unread,
+  no new bell item is created. The link is /chat?session=... for the customer and
+  /shop-admin/chat?session=... for the shop.
+end note
+
+note bottom of View
+  Bell (NotificationDropdown): list and unread count load on mount and when the user changes.
+  No timer or polling: a new notification shows after a page reload.
+  Opening the bell calls read-all when the unread count is above 0.
+  "View All Notifications" links to "/" (no notification page was found in the client).
+end note
+
+@enduml

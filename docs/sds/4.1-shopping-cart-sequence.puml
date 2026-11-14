@@ -1,0 +1,134 @@
+@startuml
+title 4.1 Shopping Cart - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor Customer as U
+participant "View" as V <<View>> #EADCFF
+participant CartController as C <<Controller>> #D8F3DC
+participant CartService as S <<Service>> #DCECFF
+participant ProductQuotaService as Q <<Service>> #DCECFF
+participant UserRepository as UR <<Repository>> #FFF1C9
+participant ProductRepository as PR <<Repository>> #FFF1C9
+participant CartItemRepository as CR <<Repository>> #FFF1C9
+participant ProductImageRepository as IR <<Repository>> #FFF1C9
+participant MaintenanceJob as J <<Scheduler>> #FFE8CC
+
+== A. Add a product to the cart ==
+U -> V : click "Add to cart" (productId, quantity)
+alt guest (not logged in)
+  V -> V : GET /api/public/products/{id} for name, price, stock
+  V -> V : keep the item in the guest cart (localStorage, 7 days)
+  note right of V
+    quantity above stock: error shown in the page, nothing saved.
+    The guest cart is merged into the account at the next login (see E).
+  end note
+else customer
+  V -> C : POST /api/cart/{userId}/add\n(productId, quantity)
+  C -> C : requireOwner(userId, currentUser)
+  note right of C : userId differs from the token: 403
+  C -> S : addToCart(userId, request)
+  S -> UR : findById(userId)
+  UR --> S : User (else 404)
+  S -> PR : findById(productId)
+  PR --> S : Product (else 404)
+  S -> Q : requireAllowed(product)
+  Q --> S : ok (else 400 product locked by the shop plan limit)
+  S -> S : product INACTIVE: 400 no longer sold
+  S -> S : not CUSTOM and stock < quantity: 400 exceeds stock
+  S -> CR : findByUserIdAndProductId(userId, productId)
+  CR --> S : Optional<CartItem>
+  alt already in the cart
+    S -> S : newQuantity = old + quantity\n(not CUSTOM and stock < newQuantity: 400 total exceeds stock)
+  else new product
+    S -> S : create CartItem(user, product, quantity)
+  end
+  S -> CR : save(cartItem)
+  S -> IR : findByProductIdOrderByDisplayOrderAsc(productId)
+  IR --> S : images
+  S --> C : CartItemResponse
+  C --> V : 201 Created
+  V -> V : reload the cart, update the cart badge
+end
+
+== B. View the cart ==
+U -> V : open /cart
+alt guest
+  V -> V : build the cart from the guest items\n(prices and stock refreshed once per page load, sold-out items dropped)
+else customer
+  V -> C : GET /api/cart/{userId}
+  C -> S : getCart(userId)
+  S -> UR : existsById(userId)
+  UR --> S : true (else 404)
+  S -> CR : findByUserId(userId)
+  CR --> S : List<CartItem>
+  loop each cart item
+    S -> IR : findByProductIdOrderByDisplayOrderAsc(productId)
+    S -> Q : allowed(product)
+    note right of Q : stock shown as 0 when the product is locked by the plan limit
+    S -> S : itemTotal = current price x quantity
+  end
+  S --> C : CartResponse (items, totalItems, totalQuantity, grandTotal)
+  C --> V : 200 OK
+end
+V --> U : items grouped by shop, tick boxes, totals of the ticked items
+
+== C. Change the quantity ==
+U -> V : change quantity (absolute value >= 1)
+alt guest
+  V -> V : check against the stock saved in the item, update the guest cart
+else customer
+  V -> C : PUT /api/cart/{userId}/items/{itemId}\n(quantity)
+  C -> C : requireOwner(userId, currentUser)
+  C -> S : updateCartItem(userId, itemId, request)
+  S -> CR : findById(itemId)
+  CR --> S : CartItem (else 404; item of another user: 403)
+  S -> Q : requireAllowed(product)
+  S -> S : not CUSTOM and stock < quantity: 400 exceeds stock
+  S -> CR : save(cartItem with new quantity)
+  S --> C : CartItemResponse
+  C --> V : 200 OK
+end
+note over V
+  An error (stock, locked product) is shown as a message and the cart is kept as it was.
+end note
+
+== D. Remove an item ==
+U -> V : click remove
+V -> V : confirmation dialog
+alt guest
+  V -> V : delete the line from the guest cart
+else customer
+  V -> C : DELETE /api/cart/{userId}/items/{itemId}
+  C -> C : requireOwner(userId, currentUser)
+  C -> S : removeCartItem(userId, itemId)
+  S -> CR : findById(itemId)
+  CR --> S : CartItem (else 404; item of another user: 403)
+  S -> CR : delete(cartItem)
+  C --> V : 204 No Content
+end
+V --> U : cart updated
+
+== E. Guest cart merged at login ==
+U -> V : log in (after "Checkout" asked for an account)
+loop each guest item
+  V -> C : POST /api/cart/{userId}/add\n(productId, quantity)
+  note right of C : same rules as A, quantities add to items already in the account cart
+end
+V -> V : clear the guest cart (kept if a request fails, tried again later)
+V -> V : reload the cart
+
+== F. Cleanup ==
+J -> CR : deleteNotModifiedSince(now - 30 days)
+note right of J : every Sunday 03:00, removes items nobody touched for 30 days
+
+@enduml

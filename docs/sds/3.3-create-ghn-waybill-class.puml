@@ -1,6 +1,6 @@
 @startuml
 !pragma layout smetana
-title Create GHN Waybill - class diagram
+title 3.3 Create GHN Waybill - class diagram
 skinparam shadowing false
 skinparam defaultFontName Arial
 skinparam wrapWidth 240

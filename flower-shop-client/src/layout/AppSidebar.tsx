@@ -46,8 +46,7 @@ const adminNavItems: NavItem[] = [
   { name: 'Danh mục & kiểm duyệt', path: '/admin/categories', icon: <TableIcon fontSize={24} /> },
   { name: 'Đơn hàng', path: '/admin/orders', icon: <ListIcon fontSize={24} /> },
   { name: 'Hoàn tiền', path: '/admin/refunds', icon: <ListIcon fontSize={24} /> },
-  { name: 'Đánh giá sản phẩm', path: '/admin/reviews', icon: <ListIcon fontSize={24} /> },
-  { name: 'Xem khiếu nại', path: '#', icon: <ListIcon fontSize={24} /> }
+  { name: 'Đánh giá sản phẩm', path: '/admin/reviews', icon: <ListIcon fontSize={24} /> }
 ];
 
 // SRS 4.4: staff chỉ dùng các chức năng vận hành, không vào shop, nhân sự, gói Pro, voucher.

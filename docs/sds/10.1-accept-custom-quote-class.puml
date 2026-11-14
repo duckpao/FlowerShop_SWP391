@@ -1,0 +1,179 @@
+@startuml
+!pragma layout smetana
+title 10.1 Accept Shop Quote - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+  BackgroundColor<<DTO>> #ECECEC
+  BackgroundColor<<Scheduler>> #FFE8CC
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class CustomOrderWorkflowController <<Controller>> {
+  vouchers(id, currentUser, body: VoucherInput): CustomPaymentPreview
+  accept(id, currentUser, body: Accept): Receipt
+}
+class CustomOrderWorkflowService <<Service>> {
+  previewVouchers(actor, id, input: VoucherInput): CustomPaymentPreview
+  accept(actor, id, input: Accept): Receipt
+  -locked(id): Order
+  -requireCustom(order)
+  -depositPercent(order): Integer
+  -context(order): CouponService.Context
+}
+class CouponService <<Service>> {
+  preview(context, orderCode, shippingCode): Preview
+  apply(order, context, orderCode, shippingCode): Preview
+  release(order)
+}
+class OrderRepository <<Repository>> {
+  findByIdForUpdate(id): Optional<Order>
+  findByIdAndCustomerId(id, customerId): Optional<Order>
+}
+class OrderDetailRepository <<Repository>> {
+  findCustomDesignByOrderId(orderId): Optional<OrderDetail>
+}
+class PaymentRepository <<Repository>> {
+  save(payment): Payment
+}
+class Order <<Entity>> {
+  id
+  orderType
+  status
+  subTotal
+  shippingFee
+  discountAmount
+  shippingDiscountAmount
+  couponCode
+  shippingCouponCode
+  totalAmount
+  depositAmount
+  paymentStartedAt
+}
+class OrderDetail <<Entity>> {
+  customMaterials
+  price
+  quantity
+}
+class Payment <<Entity>> {
+  paymentType
+  paymentMethod
+  amount
+  status
+}
+class Address <<Entity>> {
+  ghnDistrictId
+  ghnWardCode
+}
+class "CustomOrderWorkflowService.Accept" as Accept <<DTO>> {
+  paymentMethod
+  expectedTotal
+  couponCode
+  shippingCouponCode
+  paymentType
+  expectedDeposit
+}
+class "CustomOrderWorkflowService.VoucherInput" as VoucherInput <<DTO>> {
+  couponCode
+  shippingCouponCode
+}
+class CustomPaymentPreview <<DTO>> {
+  orderVouchers
+  shippingVouchers
+  discountAmount
+  totalAmount
+  depositAmount
+  remainingAmount
+  depositPercent
+}
+class "CustomOrderWorkflowService.Receipt" as Receipt <<DTO>> {
+  orderId
+  status
+}
+
+View --> CustomOrderWorkflowController : POST /api/customer/orders/{id}/voucher-preview\nPOST /api/customer/orders/{id}/accept-quote
+CustomOrderWorkflowController --> CustomOrderWorkflowService
+CustomOrderWorkflowController ..> VoucherInput : reads
+CustomOrderWorkflowController ..> Accept : reads
+CustomOrderWorkflowController ..> CustomPaymentPreview : returns
+CustomOrderWorkflowController ..> Receipt : returns
+CustomOrderWorkflowService --> OrderRepository
+CustomOrderWorkflowService --> OrderDetailRepository
+CustomOrderWorkflowService --> PaymentRepository
+CustomOrderWorkflowService --> CouponService : apply (accept) / preview
+CustomOrderWorkflowService ..> CustomPaymentPreview : builds
+CustomOrderWorkflowService ..> Receipt : builds
+CouponService ..> Order : locks vouchers, usedCount + 1,\nwrites discount and total
+OrderRepository ..> Order
+OrderDetailRepository ..> OrderDetail
+PaymentRepository ..> Payment
+OrderDetail "*" --> "1" Order : order
+Payment "*" --> "1" Order : order
+Order "*" --> "1" Address : deliveryAddress
+
+note bottom of CustomOrderWorkflowService
+  accept() runs in one transaction, in this order:
+  1. order locked (FOR UPDATE), type CUSTOM, owner = customer (404 otherwise)
+  2. status must be QUOTED (409)
+  3. paymentType null means FULL; only FULL or DEPOSIT (409)
+  4. DEPOSIT with COD is refused (409)
+  5. CouponService.apply() locks vouchers and sets discount/total
+  6. expectedTotal must equal order.totalAmount (409)
+  7. delivery address must be set (409)
+  8. DEPOSIT: depositAmount computed, expectedDeposit compared (409), status AWAITING_DEPOSIT
+     FULL + COD: status PROCESSING and Payment FULL COD PENDING saved
+     FULL + ONLINE: status PENDING, no Payment row (created later by SePay)
+  Any 409 after apply() rolls back the whole transaction, including usedCount.
+end note
+
+note bottom of OrderDetail
+  Quote line: price = quoted amount, quantity 1,
+  customMaterials = design JSON written at creation (path 10.3 workflow).
+end note
+
+note bottom of Order
+  OrderStatus used here: QUOTED, AWAITING_DEPOSIT, PENDING, PROCESSING.
+  After accept, the customer pays through SePay (see 5.1 and 10.2).
+end note
+
+note bottom of View
+  Customer chooses FULL or DEPOSIT. The client always sends paymentMethod ONLINE,
+  so the COD branches are reachable only through the API.
+end note
+
+note bottom of CustomPaymentPreview
+  Shared with the request-based deposit (10.2): CustomOrderPricing.deposit(...)
+  is the same rounding for preview and accept.
+end note
+
+note bottom of CustomOrderWorkflowController
+  CustomOrderPricing is a static utility (not a Spring bean), kept out of the diagram.
+  deposit(subTotal, discount, total, depositPercent):
+  percent null: 50% of total; percent set: percent x (subTotal - discount).
+  Whole VND, minimum 1, maximum total.
+end note
+
+note bottom of CustomOrderWorkflowService
+  Deposit percent problem (code as is): depositPercent(order) reads
+  design.preferences.depositPercent. The order-based design never sets it
+  (CustomFlowerOrderService.design() returns null, Quote has no percent),
+  so this path always uses the 50% of total fallback.
+end note
+
+@enduml

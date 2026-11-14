@@ -1,0 +1,69 @@
+@startuml
+title 9.5 Customer Dashboard - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor Customer as U
+participant "View" as V <<View>> #EADCFF
+participant CustomerOrderController as C <<Controller>> #D8F3DC
+participant CustomerOrderService as S <<Service>> #DCECFF
+participant OrderRepository as OR <<Repository>> #FFF1C9
+participant AccountController as AC <<Controller>> #D8F3DC
+participant AccountService as AS <<Service>> #DCECFF
+participant AddressRepository as AR <<Repository>> #FFF1C9
+
+== A. Open /dashboard ==
+U -> V : open /dashboard
+alt not logged in
+  V --> U : "Đăng nhập" link to /login?next=%2Fdashboard (no request)
+else role is not CUSTOMER
+  V --> U : "Trang này dành cho khách hàng." (no request)
+else customer
+  par block 1: "Đơn đang giao"
+    V -> C : GET /api/customer/orders?page=0&status=DELIVERING
+    C -> S : list(userId, 0, DELIVERING)
+    S -> OR : findByCustomerIdAndStatus(customerId, DELIVERING, page of 20)
+    OR --> S : Page<Order>
+    S --> C : Results (order summaries as in 9.1)
+    C --> V : 200 OK
+    V --> U : up to 3 orders with "Theo dõi" link, or "Bạn chưa có đơn nào đang giao."
+  else block 2: "Đơn hàng gần đây"
+    V -> C : GET /api/customer/orders?page=0
+    C -> S : list(userId, 0, null)
+    S -> OR : findByCustomerIdOrderByCreatedDateDesc(customerId, page of 20)
+    OR --> S : Page<Order>
+    S --> C : Results
+    C --> V : 200 OK
+    V --> U : table of the first 5 (code, shop, total, status, date), link "Xem tất cả đơn hàng" to /orders
+  else block 3: "Địa chỉ giao hàng mặc định"
+    V -> AC : GET /api/account/addresses
+    AC -> AS : list(userId)
+    AS -> AR : findByUserIdAndShopIsNullOrderByCreatedDateAscIdAsc(userId)
+    AR --> AS : List<Address>
+    AS --> AC : List<AddressResponse>
+    AC --> V : 200 OK
+    V --> U : default address line, or "Bạn chưa có địa chỉ." with link to /account
+  end
+end
+
+== B. Error in one block ==
+note over V
+  A failed request only fills its own block with the message (role=alert);
+  the other two blocks still show. The page never shows a global error for these reads.
+end note
+
+== C. Read only ==
+note over V
+  The dashboard sends no write request. Links lead to /orders/{id}, /orders, /account and /products.
+end note
+
+@enduml

@@ -1,0 +1,78 @@
+@startuml
+title 7.5 Checkout Vouchers - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor Customer as U
+participant "View" as V <<View>> #EADCFF
+participant OrderController as C <<Controller>> #D8F3DC
+participant OrderService as S <<Service>> #DCECFF
+participant CartItemRepository as CIR <<Repository>> #FFF1C9
+participant ProductQuotaService as Q <<Service>> #DCECFF
+participant GhnService as GHN <<Service>> #DCECFF
+participant "GHN API" as GAPI <<External>> #FFE0E0
+participant CouponService as CS <<Service>> #DCECFF
+participant CouponRepository as CR <<Repository>> #FFF1C9
+
+== A. Checkout shows the usable vouchers for each shop ==
+U -> V : open /checkout (ticked cart items, delivery address)
+loop each shop group (250 ms after each change)
+  V -> C : POST /api/orders/{userId}/voucher-preview\n(shopId, cartItemIds, deliveryAddressId, couponId = chosen code,\nshippingCouponCode, merchandiseOnly)
+  note right of V : merchandiseOnly = true while the shop's shipping fee is not known yet
+  C -> C : requireOwner(userId, currentUser)
+  alt not the logged-in user
+    C --> V : 403 "Không có quyền truy cập đơn hàng này."
+  else
+    C -> S : previewVouchers(userId, request, merchandiseOnly)
+    alt merchandiseOnly and a shipping code was sent
+      S --> C : 400 "Cần tính phí giao hàng trước khi áp mã phí ship."
+    else
+      S -> S : duplicate cart item ids: 400 "Danh sách sản phẩm bị trùng."
+      loop each cart item id
+        S -> CIR : findById(cartItemId)
+        CIR --> S : CartItem
+        S -> S : belongs to user and shop, product and shop ACTIVE\n(else 400 "Sản phẩm không thuộc giỏ hàng/shop đang chọn hoặc đã ngừng bán.")
+      end
+      S -> Q : requireAllowed(product) for each item
+      Q --> S : ok (else 400 product locked by the shop plan limit)
+      opt not merchandiseOnly
+        S -> GHN : calculateFee (shop origin, delivery address)
+        GHN -> GAPI : fee request
+        GAPI --> GHN : fee
+        GHN --> S : shippingFee
+      end
+      S -> CS : preview(context: shopId, subTotal, shippingFee, productTotals,\norderCode, shippingCode)
+      CS -> CR : available(shopId)
+      CR --> CS : List<Coupon> (platform + this shop, not deleted)
+      CS -> CS : reason() per coupon (status, dates, usage, shop, minimum order, saving > 0)
+      CS -> CS : selected codes: unknown 400 "Mã giảm giá không tồn tại hoặc không áp dụng cho shop này."\nineligible 400 "CODE: reason"
+      CS -> CS : sort money and shipping lists, each with eligible, saving, reason
+      CS --> S : Preview (no usedCount change)
+      S --> C : Preview
+      C --> V : 200 OK
+    end
+  end
+end
+V --> U : "Ưu đãi cho đơn hàng": radio lists "Giảm phí giao hàng" and\n"Giảm tiền hàng / sản phẩm", "Không dùng mã" first, ineligible ones greyed out with reason
+
+== B. Rules shown in the list ==
+note over CS
+  At most one money voucher and one shipping voucher.
+  With a shipping voucher selected, only the money voucher with the lowest eligible saving is allowed.
+  Money choices that break this rule are marked "mã voucher không phù hợp".
+end note
+note over V
+  Changing the shipping choice also clears the money choice (the eligible list changes).
+  While the request runs, "Đặt hàng" stays disabled.
+end note
+
+@enduml

@@ -1,0 +1,159 @@
+@startuml
+!pragma layout smetana
+title 12.4 Staff Invitation - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+  BackgroundColor<<DTO>> #ECECEC
+  BackgroundColor<<Scheduler>> #FFE8CC
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class StaffInvitationController <<Controller>> {
+  list(id, u): List<InvitationResponse>
+  send(id, u, body): InvitationResponse
+  cancel(id, invitationId, u)
+  accept(u, body): MessageResponse
+}
+class StaffInvitationService <<Service>> {
+  list(shopId, actor): List<InvitationResponse>
+  send(shopId, actor, email): InvitationResponse
+  cancel(shopId, actor, id)
+  accept(actor, code)
+  -owned(shopId, actor, write): Shop
+  -response(invitation): InvitationResponse
+  -hash(raw): String
+}
+class "StaffInvitationService.SendRequest" as SendRequest <<DTO>> {
+  email @NotBlank @Email <= 50 @ValidEmail
+}
+class "StaffInvitationService.AcceptRequest" as AcceptRequest <<DTO>> {
+  code @NotBlank <= 100
+  toString() redacted
+}
+class "StaffInvitationService.InvitationResponse" as InvitationResponse <<DTO>> {
+  id, shopId, shopName, email
+  status: PENDING | ACCEPTED | CANCELLED | EXPIRED (computed)
+  expiresAt
+}
+class AuthMailEvent <<DTO>> {
+  userId, email, kind = STAFF_INVITATION
+  code = shop name + "Mã lời mời: " + id + "." + token
+}
+class VerificationMailSender <<Service>> {
+  send(event) AFTER_COMMIT
+  deliver(event): invitation URL /invitations/accept?code&email
+}
+class "SMTP server" as SMTP <<External>> {
+  JavaMailSender
+}
+interface StaffInvitationRepository <<Repository>> {
+  findShopId(id): Optional<String>
+  findByShopIdAndEmail(shopId, email): Optional<StaffInvitation>
+  findByShopIdOrderByIssuedAtDesc(shopId): List<StaffInvitation>
+  countByShopIdAndIssuedAtAfter(shopId, after): long
+}
+class ShopRepository <<Repository>> {
+  findById(id): Optional<Shop>
+  findForUpdate(id): Optional<Shop>
+}
+class UserRepository <<Repository>> {
+  findByEmail(email): Optional<User>
+  findByIdForUpdate(id): Optional<User>
+}
+interface ShopStaffRepository <<Repository>> {
+  findByShopIdAndUserId(shopId, userId): Optional<ShopStaff>
+  save(member): ShopStaff
+}
+interface AuthSessionRepository <<Repository>> {
+  revokeAll(userId): int
+}
+class StaffInvitation <<Entity>> {
+  id
+  email
+  tokenHash: SHA-256 hex
+  issuedAt, expiresAt (+24 h)
+  windowStart, sendCount
+  status: PENDING | ACCEPTED | CANCELLED
+}
+class Shop <<Entity>> {
+  id
+  name
+  status
+  owner
+}
+class ShopStaff <<Entity>> {
+  id
+  active
+}
+class User <<Entity>> {
+  id
+  email
+  role
+  status
+  isEmailVerified
+}
+
+View --> StaffInvitationController : GET /api/shop/mine/{id}/invitations\nPOST /api/shop/mine/{id}/invitations\nDELETE /api/shop/mine/{id}/invitations/{invitationId}\nPOST /api/account/staff-invitations/accept
+StaffInvitationController --> StaffInvitationService
+StaffInvitationController ..> SendRequest : reads
+StaffInvitationController ..> AcceptRequest : reads
+StaffInvitationController ..> InvitationResponse : returns
+StaffInvitationService --> ShopRepository
+StaffInvitationService --> UserRepository
+StaffInvitationService --> StaffInvitationRepository
+StaffInvitationService --> ShopStaffRepository
+StaffInvitationService --> AuthSessionRepository
+StaffInvitationService ..> AuthMailEvent : publishes (after commit)
+StaffInvitationService ..> InvitationResponse : builds
+VerificationMailSender ..> AuthMailEvent : listens
+VerificationMailSender --> SMTP : send text mail
+StaffInvitationRepository ..> StaffInvitation
+ShopRepository ..> Shop
+UserRepository ..> User
+ShopStaffRepository ..> ShopStaff
+StaffInvitation "*" --> "1" Shop : shop
+ShopStaff "*" --> "1" Shop : shop
+ShopStaff "*" --> "1" User : member
+
+note bottom of StaffInvitationService
+  send(): owner only (404) and shop ACTIVE (403). Email normalised to lower case.
+  Existing account must be ACTIVE and CUSTOMER or SHOP_STAFF (400), not already linked (409).
+  Rate limit (429): 60 s between sends; 3 sends per invitation per hour;
+  20 invitations per shop per hour. Token: 32 random bytes, base64url;
+  only the SHA-256 hash is stored. The raw token is sent by email only.
+  accept(): code must be "invitationId.token"; the account must match invitation email;
+  hash compared in constant time; PENDING, not expired, shop ACTIVE, account ACTIVE and verified.
+  Any invalid-invitation check returns the same 400 message; already linked is 409. Success: ShopStaff(active) created,
+  role SHOP_STAFF, invitation ACCEPTED, all sessions revoked.
+end note
+
+note bottom of StaffInvitation
+  Unique (shop_id, email): one row per shop and address; resend rotates the token.
+  EXPIRED is not stored; InvitationResponse shows it when PENDING and past expiresAt.
+end note
+
+note bottom of View
+  Owner: ShopInvitationsView (inside ManagerShopsView) calls the three owner endpoints.
+  Invitee: AcceptInvitationView at /invitations/accept (public route, SecurityConfig) posts the code
+  with useAcceptInvitationController. The email query parameter is not checked by the backend.
+  accept requires role CUSTOMER or SHOP_STAFF (SHOP gets 403).
+end note
+
+@enduml

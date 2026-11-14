@@ -1,0 +1,107 @@
+@startuml
+!pragma layout smetana
+title 4.2 Shipping Fee at Checkout - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+  BackgroundColor<<DTO>> #ECECEC
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class AccountController <<Controller>> {
+  addresses(currentUser): List<AddressResponse>
+}
+class AccountService <<Service>> {
+  list(userId): List<AddressResponse>
+}
+class OrderController <<Controller>> {
+  estimateShippingFee(userId, shopId, addressId, currentUser): Map shippingFee
+  shippingFee(userId, request, currentUser): Map shippingFee
+  -requireOwner(userId, currentUser)
+}
+class OrderService <<Service>> {
+  estimateShippingFee(userId, shopId, deliveryAddressId): BigDecimal
+  quoteShippingFee(userId, request): BigDecimal
+  -quoteFee(shop, destination): BigDecimal
+  -resolveDestination(userId, addressId): Address
+}
+class GhnService <<Service>> {
+  ~DEFAULT_WEIGHT_GRAM = 2000
+  calculateFee(fromDistrictId, fromWardCode, toDistrictId, toWardCode, weightGram): BigDecimal
+  -post(path, body): JsonNode
+}
+class "GHN API\n/v2/shipping-order/fee" as GHNAPI <<External>>
+class ShippingFeeRequest <<DTO>> {
+  shopId
+  deliveryAddressId
+}
+class ShopRepository <<Repository>> {
+  findById(id): Optional<Shop>
+}
+class AddressRepository <<Repository>> {
+  findById(id): Optional<Address>
+  findByUserIdAndShopIsNullOrderByCreatedDateAscIdAsc(userId): List<Address>
+  findByShopIdAndUserIsNullOrderByCreatedDateAscIdAsc(shopId): List<Address>
+}
+class Address <<Entity>> {
+  id
+  addressLine
+  ward / district / city
+  ghnDistrictId
+  ghnWardCode
+  isDefault
+}
+class Shop <<Entity>> {
+  id
+  name
+}
+
+View --> AccountController : GET /api/account/addresses
+View --> OrderController : GET /api/orders/{userId}/shipping-fee?shopId&addressId
+AccountController --> AccountService
+AccountService --> AddressRepository
+OrderController --> OrderService
+OrderController ..> ShippingFeeRequest : POST variant reads
+OrderService --> ShopRepository
+OrderService --> AddressRepository
+OrderService --> GhnService
+GhnService ..> GHNAPI : POST fee (service type 2)
+AddressRepository ..> Address
+ShopRepository ..> Shop
+Shop "1" <-- "*" Address : pickup address\n(user is null)
+Address "*" --> "0..1" Shop
+
+note bottom of OrderService
+  Fee = GHN price from the shop's pickup address (default one, else the first)
+  to the customer's saved address, fixed parcel weight 2000 g.
+  Both addresses must carry GHN district and ward codes, otherwise 400.
+  The fee is only an estimate: makeOrder() asks GHN again when the order is created.
+end note
+
+note bottom of GhnService
+  Any GHN failure (HTTP error, bad body, GHN code, no connection) = 502 naming GHN.
+  No GHN token configured = 503.
+end note
+
+note bottom of OrderController
+  POST /api/orders/{userId}/shipping-fee (body shopId, deliveryAddressId) does the same;
+  the checkout page only uses the GET form.
+end note
+
+@enduml

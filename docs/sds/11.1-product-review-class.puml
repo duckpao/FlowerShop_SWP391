@@ -1,0 +1,184 @@
+@startuml
+!pragma layout smetana
+title 11.1 Product Review and Shop Reply - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+  BackgroundColor<<DTO>> #ECECEC
+  BackgroundColor<<Scheduler>> #FFE8CC
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class ProductReviewController <<Controller>> {
+  mine(id, currentUser): ReviewResult
+  write(id, currentUser, body): 201 ReviewResult
+  update(id, currentUser, body): ReviewResult
+  delete(id, currentUser): 204
+  reply(shopId, reviewId, currentUser, body): ReviewResult
+}
+class AdminOversightController <<Controller>> {
+  reviews(page): ReviewPageDto
+  deleteReview(id): 204
+}
+class ProductReviewService <<Service>> {
+  mine(productId, actor): ReviewResult
+  write(productId, actor, input): ReviewResult
+  update(productId, actor, input): ReviewResult
+  delete(productId, actor)
+  reply(shopId, reviewId, actor, reply): ReviewResult
+  -visibleProduct(productId): Product
+  -findCompletedOrderContainingProduct(customerId, productId): Order
+  -result(review): ReviewResult
+}
+class AdminOversightService <<Service>> {
+  reviews(page): ReviewPageDto
+  deleteReview(id)
+}
+interface ProductReviewRepository <<Repository>> {
+  findByProductIdAndUserId(productId, userId): Optional<ProductReview>
+  findById(id): Optional<ProductReview>
+  findAll(pageable): Page<ProductReview>
+  saveAndFlush(review): ProductReview
+  delete(review)
+}
+class OrderRepository <<Repository>> {
+  findByCustomerIdAndStatusOrderByCreatedDateDesc(customerId, status): List<Order>
+}
+class OrderDetailRepository <<Repository>> {
+  findByOrderId(orderId): List<OrderDetail>
+}
+class ProductRepository <<Repository>> {
+  findById(id): Optional<Product>
+}
+class UserRepository <<Repository>> {
+  findById(id): Optional<User>
+}
+class ShopRepository <<Repository>> {
+  findForUpdate(id): Optional<Shop>
+  findById(id): Optional<Shop>
+}
+class ReviewInput <<DTO>> {
+  rating: 1..5
+  comment <= 2000
+}
+class ReplyInput <<DTO>> {
+  reply <= 2000 (required)
+}
+class ReviewResult <<DTO>> {
+  id
+  productId
+  reviewerName
+  rating
+  comment
+  shopReply
+  createdAt
+  updatedAt
+}
+class ReviewRow <<DTO>> {
+  id
+  productName
+  shopName
+  userName
+}
+class "ReviewPage" as ReviewPageDto <<DTO>> {
+  content
+  page
+  totalPages
+  totalElements
+}
+class ProductReview <<Entity>> {
+  id
+  rating
+  comment
+  shopReply
+  media (not used)
+  createdDate
+  lastModifyBy
+}
+class Order <<Entity>> {
+  id
+  status
+}
+class OrderDetail <<Entity>> {
+  id
+}
+class Product <<Entity>> {
+  id
+  name
+  status
+  isDeleted
+  isAdminHidden
+}
+class Shop <<Entity>> {
+  id
+  status
+}
+class User <<Entity>> {
+  id
+  fullName
+}
+
+View --> ProductReviewController : GET /api/customer/products/{id}/reviews\nPOST /api/customer/products/{id}/reviews\nPUT /api/customer/products/{id}/reviews\nDELETE /api/customer/products/{id}/reviews\nPUT /api/shop/mine/{shopId}/reviews/{reviewId}/reply
+View --> AdminOversightController : GET /api/admin/reviews?page\nDELETE /api/admin/reviews/{id}
+ProductReviewController --> ProductReviewService
+ProductReviewController ..> ReviewInput : reads
+ProductReviewController ..> ReplyInput : reads
+ProductReviewController ..> ReviewResult : returns
+AdminOversightController --> AdminOversightService
+AdminOversightService ..> ReviewPageDto : returns
+ReviewPageDto *-- ReviewRow
+ProductReviewService --> ProductReviewRepository
+ProductReviewService --> ProductRepository
+ProductReviewService --> UserRepository
+ProductReviewService --> ShopRepository
+ProductReviewService --> OrderRepository
+ProductReviewService --> OrderDetailRepository
+ProductReviewService ..> ReviewResult : builds
+AdminOversightService --> ProductReviewRepository
+ProductReviewRepository ..> ProductReview
+OrderRepository ..> Order
+OrderDetailRepository ..> OrderDetail
+ProductRepository ..> Product
+UserRepository ..> User
+ShopRepository ..> Shop
+ProductReview "0..*" --> "1" Product
+ProductReview "0..*" --> "1" User : user
+ProductReview "0..*" --> "1" Order : order
+Product "*" --> "1" Shop
+
+note bottom of ProductReviewService
+  Product visible = not deleted, ACTIVE, not admin-hidden, shop ACTIVE (ProductCardAssembler.visible, static).
+  Write: product must be visible (else 404), one review per product per customer (else 409),
+  and the customer must have a COMPLETED order containing the product (else 403).
+  Update/delete: only the review of the logged-in customer for that product.
+  Reply: only the owner of the shop (not staff), shop must be ACTIVE (else 403),
+  review must belong to a product of that shop (else 404). Blank reply clears it.
+end note
+
+note bottom of ProductReview
+  DB unique key is (order_id, product_id); the service enforces one review per (product, user).
+  The media column exists but no service writes it: reviews have no images.
+end note
+
+note bottom of View
+  Reading reviews (GET /api/public/products/{id}/reviews) is in 2.2.
+  Admin: no reason, no notice to the customer, no record of the deletion.
+end note
+
+@enduml

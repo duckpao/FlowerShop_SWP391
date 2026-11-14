@@ -1,0 +1,62 @@
+@startuml
+title 7.4 Delete Voucher - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor "Admin / Shop" as U
+participant "View" as V <<View>> #EADCFF
+participant CouponController as C <<Controller>> #D8F3DC
+participant CouponService as S <<Service>> #DCECFF
+participant ShopRepository as SR <<Repository>> #FFF1C9
+participant CouponRepository as CR <<Repository>> #FFF1C9
+
+== A. Ask for confirmation ==
+U -> V : click "Xóa mã" on a voucher row
+V -> V : dialog "Xóa mã <code>?"\n"Mã sẽ ngừng áp dụng. Đơn hàng đã sử dụng vẫn giữ nguyên ưu đãi."
+alt "Quay lại"
+  V -> V : close the dialog, nothing sent
+else "Xóa mã" confirmed
+  U -> V : confirm "Xóa mã"
+  V -> V : buttons disabled while the request runs
+end
+
+== B. Soft delete ==
+V -> C : DELETE /api/admin/vouchers/{id}\nor DELETE /api/shop/mine/{shopId}/vouchers/{id}
+C -> S : delete(userId, shopId or null, id)
+opt shop scope
+  S -> SR : findById(shopId)
+  alt not the owner
+    SR --> S : not found
+    S --> C : 404 "Không tìm thấy cửa hàng thuộc quyền quản lý."
+  else owner
+    SR --> S : Shop
+  end
+end
+S -> CR : findLocked(id)
+CR --> S : Optional<Coupon>
+alt missing, already deleted, or outside the scope
+  S --> C : 404 "Không tìm thấy mã giảm giá thuộc quyền quản lý."
+else found
+  S -> S : deleted = true, status = DISABLED, lastModifyBy = actor
+  S --> C : committed
+  C --> V : 204 No Content
+  V -> V : close dialog, show "Đã xóa mã giảm giá.", reload the list
+  V --> U : voucher gone from the list
+end
+V --> U : error text in the page (dialog stays open)
+
+note over S
+  Soft delete only. The row and the code stay (see 7.4 class note).
+  Orders placed earlier keep their voucher snapshot.
+end note
+
+@enduml

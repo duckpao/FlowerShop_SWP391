@@ -1,0 +1,148 @@
+@startuml
+!pragma layout smetana
+title 8.8 Admin Grants Pro - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+  BackgroundColor<<DTO>> #ECECEC
+  BackgroundColor<<Scheduler>> #FFE8CC
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class AdminShopPlanController <<Controller>> {
+  activate(shopId, admin, body): AdminStatus
+}
+class ShopPlanService <<Service>> {
+  adminGrant(shopId, actor, input): AdminStatus
+  adminStatus(shopId, actor): AdminStatus
+  -requireAdmin(actor)
+  -adminShop(shopId, lock): Shop
+  -activate(shop, plan, months, source, actor, note, paymentId, requestId)
+  -active(subscription): boolean
+}
+class UserRepository <<Repository>> {
+  findByIdAndRoleAndStatus(id, role, status): Optional<User>
+}
+class ShopRepository <<Repository>> {
+  findForUpdate(id): Optional<Shop>
+}
+class ShopPlanRepository <<Repository>> {
+  findById(id): Optional<ShopPlan>
+}
+class ShopSubscriptionRepository <<Repository>> {
+  forShop(shopId): Optional<ShopSubscription>
+  save(subscription): ShopSubscription
+}
+class ShopProActivationRepository <<Repository>> {
+  findById(requestId): Optional<ShopProActivation>
+  save(activation): ShopProActivation
+}
+class FeaturedProductRepository <<Repository>> {
+  forShop(shopId): List<FeaturedProduct>
+  deleteAll(featured)
+}
+class NotificationService <<Service>> {
+  notifyUser(user, title, message, link): void
+}
+class ShopPlanClock <<Service>> {
+  now(): LocalDateTime
+}
+class "ShopPlanService.AdminGrant" as AdminGrant <<DTO>> {
+  planId: @NotBlank, max 20
+  note: @NotBlank, max 1000
+  requestId: UUID
+}
+class "ShopPlanService.AdminStatus" as AdminStatus <<DTO>> {
+  subscription: Status
+  payments: List<PendingPayment>
+  history: List<Activation>
+}
+class Shop <<Entity>> {
+  id
+  status
+  owner: User
+}
+class User <<Entity>> {
+  id
+  role
+  status
+}
+class ShopPlan <<Entity>> {
+  id
+  durationMonths
+  price
+  enabled
+}
+class ShopSubscription <<Entity>> {
+  id
+  startedAt
+  endsAt
+  plan: ShopPlan
+}
+class ShopProActivation <<Entity>> {
+  id (= requestId)
+  source: "ADMIN_GRANT"
+  paymentId: null
+  actorId
+  note
+  startsAt
+  endsAt
+  plan: ShopPlan
+}
+class FeaturedProduct <<Entity>> {
+  id (= productId)
+}
+
+View --> AdminShopPlanController : POST /api/admin/shops/{shopId}/subscription/activate
+AdminShopPlanController --> ShopPlanService
+AdminShopPlanController ..> AdminGrant : reads (@Valid body)
+ShopPlanService ..> AdminStatus : returns
+ShopPlanService --> UserRepository
+ShopPlanService --> ShopRepository
+ShopPlanService --> ShopPlanRepository
+ShopPlanService --> ShopSubscriptionRepository
+ShopPlanService --> ShopProActivationRepository
+ShopPlanService --> FeaturedProductRepository
+ShopPlanService --> NotificationService
+ShopPlanService --> ShopPlanClock
+UserRepository ..> User
+ShopRepository ..> Shop
+ShopPlanRepository ..> ShopPlan
+ShopSubscriptionRepository ..> ShopSubscription
+ShopProActivationRepository ..> ShopProActivation
+FeaturedProductRepository ..> FeaturedProduct
+ShopSubscription "*" --> "1" Shop
+ShopSubscription "*" --> "1" ShopPlan
+ShopProActivation "*" --> "1" Shop
+ShopProActivation "*" --> "1" ShopPlan
+
+note bottom of ShopPlanService
+  adminGrant(): requireAdmin (403), adminShop(lock) (404 / 409), then the requestId check:
+  same source, shop, admin, plan and note gives the current status (no new activation),
+  any other reuse gives 409. Otherwise the plan must be enabled, months > 0, price > 0 (else 404).
+end note
+
+note bottom of ShopPlanService
+  activate(): active Pro extends from the current endsAt. Otherwise starts now,
+  sets startedAt and deletes all featured rows of the shop. Saves the subscription,
+  the ShopProActivation (paymentId null), then notifies the owner.
+  Grant does not create a ShopPlanPayment.
+end note
+
+@enduml

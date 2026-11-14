@@ -1,0 +1,107 @@
+@startuml
+title 3.3 Assign Order to Delivery (alternative view) - class diagram
+!pragma layout smetana
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<DTO>> #FCE7F3
+  BackgroundColor<<Scheduler>> #FFE8CC
+  BackgroundColor<<External>> #FFE0E0
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class ManagerOrderController <<Controller>> {
+  ship(shopId, id, user)
+  refreshStatus(shopId, id, user)
+  pushGhnStatus(shopId, id, user, body)
+}
+class ManagerOrderService <<Service>> {
+  ship(shopId, actor, orderId): ShipResult
+  refreshStatus(shopId, actor, orderId): DeliveryInfo
+  pushGhnStatus(shopId, actor, orderId, targetStatus): DeliveryInfo
+}
+class GhnService <<Service>> {
+  createOrder(toName, toPhone, to: Place, fromName, fromPhone, from: Place, codAmount, productName, quantity, price): CreateOrderResult
+  track(orderCode): Tracking
+  switchStatus(orderCode, action)
+}
+class DeliverySync <<Service>> {
+  apply(order, delivery, tracking, actor)
+  complete(order, actor)
+}
+class OrderRepository <<Repository>>
+class OrderDetailRepository <<Repository>>
+class DeliveryRepository <<Repository>>
+class PaymentRepository <<Repository>>
+class AddressRepository <<Repository>>
+class Order <<Entity>> {
+  status
+  totalAmount
+  recipientName
+  recipientPhone
+}
+class Delivery <<Entity>> {
+  deliveryPartnerId
+  trackingCode
+  status
+  ghnStatus
+}
+class Payment <<Entity>> {
+  paymentType
+  paymentMethod
+  status
+  amount
+}
+class Address <<Entity>> {
+  addressLine
+  ward
+  district
+  city
+}
+enum DeliveryStatus <<Entity>> {
+  PENDING
+  PICKED_UP
+  ON_THE_WAY
+  DELIVERED
+  FAILED
+  RETURNING
+  RETURNED
+}
+
+View ..> ManagerOrderController : POST /api/shop/mine/{shopId}/orders/{id}/ship
+View ..> ManagerOrderController : POST /api/shop/mine/{shopId}/orders/{id}/refresh-status
+View ..> ManagerOrderController : POST /api/shop/mine/{shopId}/orders/{id}/ghn-status
+ManagerOrderController --> ManagerOrderService
+ManagerOrderService --> GhnService
+ManagerOrderService --> DeliverySync
+ManagerOrderService --> OrderRepository
+ManagerOrderService --> OrderDetailRepository
+ManagerOrderService --> DeliveryRepository
+ManagerOrderService --> PaymentRepository
+ManagerOrderService --> AddressRepository
+DeliverySync --> PaymentRepository
+OrderRepository ..> Order
+DeliveryRepository ..> Delivery
+PaymentRepository ..> Payment
+AddressRepository ..> Address
+Delivery "0..1" --> "1" Order
+Payment "*" --> "1" Order
+Order "*" --> "0..1" Address : deliveryAddress
+Delivery --> DeliveryStatus
+
+@enduml

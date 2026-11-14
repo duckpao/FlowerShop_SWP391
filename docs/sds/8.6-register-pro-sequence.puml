@@ -1,5 +1,5 @@
 @startuml
-title Register Pro - sequence diagram
+title 8.6 Register Pro - sequence diagram
 autonumber
 skinparam shadowing false
 skinparam defaultFontName Arial

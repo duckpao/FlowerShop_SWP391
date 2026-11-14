@@ -1,0 +1,96 @@
+@startuml
+!pragma layout smetana
+title 6.2 Follow Shop - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+  BackgroundColor<<DTO>> #ECECEC
+  BackgroundColor<<Scheduler>> #FFE8CC
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class FavoriteShopController <<Controller>> {
+  add(user, shopId): 204
+  status(user, shopId): FavoriteStatus
+}
+class FavoriteShopService <<Service>> {
+  add(userId, shopId)
+  status(userId, shopId): FavoriteStatus
+}
+class "FavoriteShopService.FavoriteStatus" as FavoriteStatus <<DTO>> {
+  favorite
+}
+class ShopRepository <<Repository>> {
+  findById(id): Optional<Shop>
+}
+class UserRepository <<Repository>> {
+  findById(id): Optional<User>
+}
+interface FavoriteShopRepository <<Repository>> {
+  existsById(id): boolean
+  saveAndFlush(favorite): FavoriteShop
+}
+class FavoriteShop <<Entity>> {
+  id: FavoriteShopId
+  user
+  shop
+  createdDate
+  createdBy
+  lastModifyBy
+}
+class FavoriteShopId <<Entity>> {
+  userId
+  shopId
+}
+class Shop <<Entity>> {
+  id
+  name
+  status: ShopStatus
+}
+class User <<Entity>> {
+  id
+}
+
+View --> FavoriteShopController : PUT /api/customer/favorite-shops/{shopId}\nGET /api/customer/favorite-shops/{shopId}
+FavoriteShopController --> FavoriteShopService
+FavoriteShopController ..> FavoriteStatus : returns (GET)
+FavoriteShopService ..> FavoriteStatus : builds (GET)
+FavoriteShopService --> ShopRepository
+FavoriteShopService --> UserRepository
+FavoriteShopService --> FavoriteShopRepository
+ShopRepository ..> Shop
+UserRepository ..> User
+FavoriteShopRepository ..> FavoriteShop
+FavoriteShop *-- FavoriteShopId : composite key
+FavoriteShop "*" --> "1" Shop
+FavoriteShop "*" --> "1" User
+
+note bottom of FavoriteShopService
+  add(): shop must exist (404) and be ACTIVE (400).
+  Already followed: nothing is written, still 204.
+  The follower is always the logged-in user (the path has no userId).
+  status() does not check that the shop exists: it returns favorite = false.
+end note
+
+note bottom of View
+  Guest: the follow button sends the browser to /login?next=<current path>, no backend call.
+  Customer: the button is disabled while the request runs ("Đang xử lý...").
+end note
+
+@enduml

@@ -1,6 +1,6 @@
 @startuml
 !pragma layout smetana
-title Display Product List - class diagram
+title 2.1 Display Product List - class diagram
 skinparam shadowing false
 skinparam defaultFontName Arial
 skinparam wrapWidth 240

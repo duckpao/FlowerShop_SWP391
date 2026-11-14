@@ -1,0 +1,146 @@
+@startuml
+!pragma layout smetana
+title 13.6 Account Emails - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+  BackgroundColor<<DTO>> #ECECEC
+  BackgroundColor<<Scheduler>> #FFE8CC
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class AuthController <<Controller>> {
+  register(request): 202 MessageResponse
+  registerShop(request): 202 MessageResponse
+  verifyEmail(request): 200 MessageResponse
+  resendVerification(request): 202 MessageResponse
+  forgotPassword(request): 202 MessageResponse
+  resetPassword(request): 200 MessageResponse
+}
+class AuthService <<Service>> {
+  registerCustomer(request)
+  registerShop(request)
+  resend(email, captchaId, captchaAnswer)
+  verify(email, code, captchaId, captchaAnswer)
+}
+class OtpService <<Service>> {
+  forgotPassword(email, captchaId, captchaAnswer)
+  resetPassword(email, code, password, confirmation, captchaId, captchaAnswer)
+  -issue(userId, purpose, captchaId, captchaAnswer)
+  -eligible(user, purpose): boolean
+}
+class StaffApplicationController <<Controller>> {
+  apply(shopId, user, body): 200 Result
+  decide(shopId, id, user, body): 200 Result
+}
+class StaffApplicationService <<Service>> {
+  apply(shopId, actor, input): Result
+  decide(shopId, id, actor, approve): Result
+}
+class StaffInvitationController <<Controller>> {
+  send(id, user, body): 202 InvitationResponse
+}
+class StaffInvitationService <<Service>> {
+  send(shopId, actor, email): InvitationResponse
+}
+class AuthMailEvent <<DTO>> {
+  userId
+  email
+  kind: Kind
+  code
+}
+class VerificationMailSender <<Service>> {
+  send(event) : AFTER_COMMIT
+  sendOtp(event) : BEFORE_COMMIT
+  -isOtp(event): boolean
+  -deliver(event)
+}
+class UserRepository <<Repository>> {
+  existsByEmail(email): boolean
+  findByEmail(email): Optional<User>
+  findUserIdByEmail(email): Optional<String>
+  findByIdForUpdate(id): Optional<User>
+}
+class User <<Entity>> {
+  id
+  email
+  fullName
+  isEmailVerified
+  status
+  role
+}
+class "SMTP server" as SMTP <<External>>
+
+View --> AuthController : POST /api/auth/register\nPOST /api/auth/register-shop\nPOST /api/auth/verify-email\nPOST /api/auth/resend-verification\nPOST /api/auth/forgot-password\nPOST /api/auth/reset-password
+View --> StaffApplicationController : POST /api/customer/shops/{shopId}/applications\nPUT /api/shop/mine/{shopId}/applications/{id}
+View --> StaffInvitationController : POST /api/shop/mine/{id}/invitations
+AuthController --> AuthService : register, resend, verify
+AuthController --> OtpService : forgot password, reset password
+StaffApplicationController --> StaffApplicationService
+StaffInvitationController --> StaffInvitationService
+AuthService --> UserRepository
+OtpService --> UserRepository
+StaffApplicationService --> UserRepository
+StaffInvitationService --> UserRepository
+AuthService ..> AuthMailEvent : publishes REGISTER_OTP, WELCOME
+OtpService ..> AuthMailEvent : publishes RESET_OTP, PASSWORD_CHANGED
+StaffApplicationService ..> AuthMailEvent : publishes STAFF_APPLICATION_NEW / APPROVED / REJECTED
+StaffInvitationService ..> AuthMailEvent : publishes STAFF_INVITATION
+VerificationMailSender ..> AuthMailEvent : listens
+VerificationMailSender --> SMTP : plain text via JavaMailSender
+UserRepository ..> User
+
+note bottom of AuthMailEvent
+  Kind: REGISTER_OTP, RESET_OTP, WELCOME, PASSWORD_CHANGED, STAFF_INVITATION,
+  STAFF_APPLICATION_NEW, STAFF_APPLICATION_APPROVED, STAFF_APPLICATION_REJECTED.
+  Published through Spring ApplicationEventPublisher; toString() prints "[redacted]",
+  so OTP codes and invitation tokens never reach the logs.
+end note
+
+note bottom of VerificationMailSender
+  OTP kinds (REGISTER_OTP, RESET_OTP) are sent BEFORE_COMMIT. SMTP failure throws 503
+  "Chưa gửi được email OTP. Vui lòng thử lại sau; nếu vẫn lỗi, liên hệ quản trị kiểm tra cấu hình gửi mail."
+  and the transaction is rolled back.
+  Other kinds are sent AFTER_COMMIT. An SMTP failure is only logged ("Auth email delivery failed ...")
+  and not retried; the account change stays.
+  Mails are plain text (SimpleMailMessage), not HtmlMailSender. Subjects start with "FlowerShop - ".
+end note
+
+note bottom of OtpService
+  Silent skips (202, same message for every case, nothing stored, nothing sent):
+  - email unknown, or account not ACTIVE;
+  - reset requested for an account that is not verified or has no password.
+  Register OTP (AuthService) is different: an existing account gives 409 "Email đã được đăng ký.".
+  After a successful reset, PASSWORD_CHANGED is published; all sessions are revoked.
+end note
+
+note bottom of StaffInvitationService
+  Mail link: frontendBaseUrl/invitations/accept?code=<invitationId>.<token>&email=<invitee>. Valid 24 h.
+  No skip rule for an unverified address: the invitee may not have an account yet.
+  Before the mail: 400 if an existing account is not ACTIVE or not CUSTOMER / SHOP_STAFF,
+  409 if already linked to the shop, 429 "Chờ ít nhất 60 giây; tối đa 3 thư/email và 20 email/shop trong một giờ.".
+end note
+
+note bottom of StaffApplicationService
+  Apply and approve need a CUSTOMER account that is ACTIVE and email-verified (409 otherwise).
+  Mails go to the stored address (owner for NEW, applicant for APPROVED / REJECTED); no verified-email check before sending.
+  Approval sets the role to SHOP_STAFF and revokes the applicant's sessions.
+end note
+
+@enduml

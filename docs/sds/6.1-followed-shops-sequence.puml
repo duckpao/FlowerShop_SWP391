@@ -1,0 +1,49 @@
+@startuml
+title 6.1 Followed Shops - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor Customer as U
+participant "View" as V <<View>> #EADCFF
+participant FavoriteShopController as C <<Controller>> #D8F3DC
+participant FavoriteShopService as S <<Service>> #DCECFF
+participant FavoriteShopRepository as FR <<Repository>> #FFF1C9
+
+== A. Open the followed shop list ==
+U -> V : open /following-shops
+alt not logged in
+  V -> V : redirect to /login?next=%2Ffollowing-shops
+else logged in but role is not CUSTOMER
+  V --> U : "Chỉ tài khoản khách hàng có danh sách cửa hàng theo dõi."
+else customer
+  V -> C : GET /api/customer/favorite-shops
+  C -> S : mine(userId)
+  S -> FR : findByIdUserIdOrderByCreatedDateDesc(userId)
+  FR --> S : List<FavoriteShop>
+  loop each followed shop
+    S -> S : ShopFavoriteResponse (shop id, name, description, logo,\nactive = status ACTIVE, followedAt = createdDate)
+  end
+  S --> C : List<ShopFavoriteResponse>
+  C --> V : 200 OK
+  alt no follows
+    V --> U : "Bạn chưa theo dõi cửa hàng nào." with link "Khám phá cửa hàng"
+  else
+    V --> U : one card per shop (logo, name, description,\n"Cửa hàng hiện không hoạt động." when not active,\n"Theo dõi từ <date>", button "Bỏ theo dõi")
+  end
+end
+
+note over V
+  A failed request shows the message "Không thể tải danh sách cửa hàng đã theo dõi."
+  (or the server message). Cards link to /shops/{shopId}.
+end note
+
+@enduml

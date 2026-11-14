@@ -1,0 +1,79 @@
+@startuml
+title 4.2 Shipping Fee at Checkout - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor Customer as U
+participant "View" as V <<View>> #EADCFF
+participant AccountController as AC <<Controller>> #D8F3DC
+participant AccountService as AS <<Service>> #DCECFF
+participant OrderController as C <<Controller>> #D8F3DC
+participant OrderService as S <<Service>> #DCECFF
+participant ShopRepository as SR <<Repository>> #FFF1C9
+participant AddressRepository as AR <<Repository>> #FFF1C9
+participant GhnService as GHN <<Service>> #DCECFF
+participant "GHN API" as API <<External>> #FFE0E0
+
+== A. Load the saved addresses ==
+U -> V : open /checkout?item=...
+V -> AC : GET /api/account/addresses
+AC -> AS : list(userId)
+AS -> AR : findByUserIdAndShopIsNullOrderByCreatedDateAscIdAsc(userId)
+AR --> AS : List<Address>
+AS --> AC : List<AddressResponse>
+AC --> V : 200 OK
+V -> V : select the default address (else the first one)
+note right of V
+  No saved address: a link to /account to add one and the order button stays disabled.
+  The recipient name and phone follow the selected address (still editable).
+end note
+
+== B. Estimate the fee (once per shop, in parallel) ==
+V -> V : group the ticked items by shop
+loop each shop in the order
+  V -> C : GET /api/orders/{userId}/shipping-fee?shopId=...&addressId=...
+  C -> C : requireOwner(userId, currentUser)
+  C -> S : estimateShippingFee(userId, shopId, addressId)
+  S -> SR : findById(shopId)
+  SR --> S : Shop (else 404)
+  S -> AR : findById(addressId)
+  AR --> S : Address
+  S -> S : address belongs to the user, else 400 choose a saved address
+  S -> S : address has ghnDistrictId and ghnWardCode, else 400
+  S -> AR : findByShopIdAndUserIsNullOrderByCreatedDateAscIdAsc(shopId)
+  AR --> S : pickup addresses of the shop
+  S -> S : pick the default one, else the first\n(none, or no GHN codes: 400 shop has no pickup address)
+  S -> GHN : calculateFee(fromDistrict, fromWard, toDistrict, toWard, 2000 g)
+  GHN -> API : POST /shiip/public-api/v2/shipping-order/fee
+  alt GHN answers with a price
+    API --> GHN : 200 total
+    GHN --> S : fee
+    S --> C : fee
+    C --> V : 200 {"shippingFee": fee}
+  else GHN error (HTTP, body, GHN code, no connection)
+    API --> GHN : error or no answer
+    GHN --> C : 502 "Lỗi từ GHN: ..." (503 when no GHN token is configured)
+    C --> V : error message
+    V -> V : show the message under that shop, its fee stays empty
+  end
+end
+
+== C. Show the totals ==
+V -> V : fee per shop, total shipping = sum of the fees
+V --> U : shipping line per shop and total
+note over V
+  Changing the address estimates again for every shop.
+  "Place order" stays disabled until every shop has a fee.
+  The voucher picker also asks for the fee when a shipping voucher is selected (7.6).
+end note
+
+@enduml

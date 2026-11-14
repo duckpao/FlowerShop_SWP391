@@ -1,0 +1,204 @@
+@startuml
+!pragma layout smetana
+title 10.4 Shop Quote Custom Request - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+  BackgroundColor<<DTO>> #ECECEC
+  BackgroundColor<<Scheduler>> #FFE8CC
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class CustomOrderWorkflowController <<Controller>> {
+  quote(shopId, id, currentUser, body: Quote)
+}
+class ManagerOrderController <<Controller>> {
+  cancel(shopId, id, body: Map, currentUser)
+}
+class CustomFlowerOrderController <<Controller>> {
+  list(shopId, currentUser, status, page): Results
+  shopDetail(shopId, id, currentUser): Result
+  decide(shopId, id, currentUser, input: Decision): Result
+}
+class CustomOrderWorkflowService <<Service>> {
+  quote(shopId, actor, id, quote: Quote)
+  design(order): Design
+  hasCarrierAddress(address): boolean
+  -requireCustom(order)
+  -requireShop(order, shopId, actor)
+}
+class ManagerOrderService <<Service>> {
+  cancel(shopId, actor, orderId, reason)
+  -owned(shopId, actor): Shop
+}
+class CustomFlowerOrderService <<Service>> {
+  shopRequests(shopId, actor, status, page): Results
+  shopRequest(shopId, actor, id): Result
+  decide(shopId, actor, id, input: Decision): Result
+  -ownedShop(id, actor): Shop
+}
+class GhnService <<Service>> {
+  calculateFee(fromDistrictId, fromWardCode, toDistrictId, toWardCode, weightGram): BigDecimal
+}
+class CouponService <<Service>> {
+  release(order)
+}
+class NotificationService <<Service>> {
+  notifyUser(user, title, message, link)
+}
+class OrderRepository <<Repository>> {
+  findByIdForUpdate(id): Optional<Order>
+  findByIdAndShopIdForUpdate(id, shopId): Optional<Order>
+  findLinkedCustomOrder(referenceId, customerId, shopId): Optional<Order>
+}
+class OrderDetailRepository <<Repository>> {
+  findCustomDesignByOrderId(orderId): Optional<OrderDetail>
+  findByOrderId(orderId): List<OrderDetail>
+}
+class AddressRepository <<Repository>> {
+  findPickupByShopId(shopId): Optional<Address>
+}
+class ShopRepository <<Repository>> {
+  findById(id): Optional<Shop>
+}
+interface ShopStaffRepository <<Repository>> {
+  findByShopIdAndUserId(shopId, userId): Optional<ShopStaff>
+}
+class PaymentRepository <<Repository>> {
+  failPendingByOrderId(orderId, actor)
+}
+class CustomOrderRequestRepository <<Repository>> {
+  findByShopId(shopId, pageable): Page<CustomOrderRequest>
+  findByShopIdAndStatus(shopId, status, pageable): Page<CustomOrderRequest>
+  findLocked(id): Optional<CustomOrderRequest>
+  saveAndFlush(request): CustomOrderRequest
+}
+class "GHN API" as GhnApi <<External>>
+class Order <<Entity>> {
+  id
+  orderType: CUSTOM
+  status: AWAITING_QUOTE | QUOTED | CANCELLED
+  subTotal
+  shippingFee
+  totalAmount
+  shopNote
+  cancelReason
+}
+class OrderDetail <<Entity>> {
+  customMaterials: JSON
+  price
+  quantity
+}
+class Address <<Entity>> {
+  ghnDistrictId
+  ghnWardCode
+  shop (pickup, user is null)
+}
+class CustomOrderRequest <<Entity>> {
+  id
+  status: REQUESTED | NEGOTIATING | ACCEPTED | REJECTED
+  desiredComponents: JSON
+}
+class Shop <<Entity>> {
+  id
+  status
+  owner
+}
+class ShopStaff <<Entity>> {
+  active
+}
+class "CustomOrderWorkflowService.Quote" as Quote <<DTO>> {
+  amount @NotNull @DecimalMin(1) @Digits(10,2)
+  note @Size(max 2000)
+}
+class "CustomFlowerOrderService.Decision" as Decision <<DTO>> {
+  status @NotNull
+  note @Size(max 2000)
+  quotedPrice 1.00..9999999999.99
+  depositPercent 10..100
+}
+class "CustomFlowerOrderService.Result" as Result <<DTO>> {
+  id
+  status
+  design
+  orderId
+}
+
+View --> CustomOrderWorkflowController : POST /api/shop/mine/{shopId}/orders/{id}/quote  body { amount, note }
+View --> ManagerOrderController : POST /api/shop/mine/{shopId}/orders/{id}/cancel  body { reason } (reject)
+View --> CustomFlowerOrderController : GET /api/shop/mine/{shopId}/custom-orders\nGET /api/shop/mine/{shopId}/custom-orders/{id}\nPUT /api/shop/mine/{shopId}/custom-orders/{id}  body { status, note, quotedPrice, depositPercent }
+CustomOrderWorkflowController --> CustomOrderWorkflowService
+CustomOrderWorkflowController ..> Quote : reads
+ManagerOrderController --> ManagerOrderService
+CustomFlowerOrderController --> CustomFlowerOrderService
+CustomFlowerOrderController ..> Decision : reads
+CustomFlowerOrderController ..> Result : returns
+CustomOrderWorkflowService --> OrderRepository
+CustomOrderWorkflowService --> OrderDetailRepository
+CustomOrderWorkflowService --> AddressRepository
+CustomOrderWorkflowService --> ShopStaffRepository
+CustomOrderWorkflowService --> GhnService : calculateFee
+CustomOrderWorkflowService --> NotificationService : customer bell
+GhnService --> GhnApi : POST /shiip/public-api/v2/shipping-order/fee
+ManagerOrderService --> ShopRepository
+ManagerOrderService --> ShopStaffRepository
+ManagerOrderService --> OrderRepository
+ManagerOrderService --> OrderDetailRepository
+ManagerOrderService --> PaymentRepository
+ManagerOrderService --> CouponService : release
+CustomFlowerOrderService --> ShopRepository
+CustomFlowerOrderService --> CustomOrderRequestRepository
+CustomFlowerOrderService --> OrderRepository : findLinkedCustomOrder
+CustomFlowerOrderService ..> Result : builds
+OrderRepository ..> Order
+OrderDetailRepository ..> OrderDetail
+AddressRepository ..> Address
+CustomOrderRequestRepository ..> CustomOrderRequest
+ShopRepository ..> Shop
+ShopStaffRepository ..> ShopStaff
+OrderDetail "*" --> "1" Order : order
+CustomOrderRequest "*" --> "1" Shop : shop
+
+note bottom of CustomOrderWorkflowService
+  quote() (owner or active staff, one transaction, order row locked):
+  order must be CUSTOM (409 "Chức năng này chỉ dành cho đơn hoa theo yêu cầu."), the shop must match the order (404),
+  shop and owner ACTIVE (409 "Cửa hàng phải đang hoạt động."), status AWAITING_QUOTE or QUOTED (409 "Đơn không còn chờ báo giá."),
+  design present, customer address and shop pickup address both have GHN codes (409).
+  Shipping fee comes from GHN with a fixed weight (DEFAULT_WEIGHT_GRAM 2000 g).
+  Result: subTotal = amount, totalAmount = amount + shippingFee, shopNote, status QUOTED, OrderDetail.price = amount.
+  The customer gets a bell notification "Shop đã báo giá hoa theo yêu cầu" (in-app, no e-mail).
+  A quoted order can be quoted again while it is still QUOTED.
+end note
+
+note bottom of ManagerOrderService
+  Reject = cancel(): reason is required (400 "Vui lòng nhập lý do hủy đơn."), owner or active staff (404 / 403).
+  Allowed for AWAITING_QUOTE and QUOTED (else 400 "Chỉ có thể hủy đơn hàng trước khi bắt đầu giao.").
+  Order becomes CANCELLED with cancelReason, vouchers released, PENDING payments failed.
+  Nothing was paid at this stage, so no Refund is created. No notification is sent to the customer.
+  set-status cannot quote: AWAITING_QUOTE and QUOTED are refused (409) because they belong to the design workflow.
+end note
+
+note bottom of CustomFlowerOrderService
+  Request path (status REQUESTED, see 10.3): the shop OWNER only (SHOP role) lists and opens requests
+  and answers with decide(): NEGOTIATING, ACCEPTED or REJECTED (REQUESTED is refused, 400).
+  ACCEPTED needs quotedPrice and depositPercent (400). ACCEPTED and REJECTED are final (409).
+  The quote, note and deposit percent are stored inside desiredComponents. No Order is created and no notification is sent.
+end note
+
+@enduml

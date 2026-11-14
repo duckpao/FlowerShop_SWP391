@@ -1,0 +1,113 @@
+@startuml
+title 5.4 Refund Management - class diagram
+!pragma layout smetana
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<DTO>> #FCE7F3
+  BackgroundColor<<Scheduler>> #FFE8CC
+  BackgroundColor<<External>> #FFE0E0
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class StaffRefundController <<Controller>> {
+  list(shopId, user)
+  updateStatus(shopId, id, user, body: StatusRequest)
+}
+class StaffRefundService <<Service>> {
+  -NEXT: Map<RefundStatus, Set<RefundStatus>>
+  list(shopId, actor): List<RefundResponse>
+  updateStatus(shopId, actor, refundId, status, note): RefundResponse
+  -apply(refund, actor, status, note)
+}
+class CustomerOrderController <<Controller>> {
+  requestRefund(user, id, input)
+  cancelRefund(user, id, refundId)
+}
+class CustomerRefundService <<Service>> {
+  request(customerId, orderId, input): RefundResult
+  cancel(customerId, orderId, refundId): RefundResult
+}
+class ManagerOrderController <<Controller>> {
+  cancel(shopId, id, user, body)
+}
+class ShopOperationGuard <<Service>> {
+  requireAccess(shopId, actorId)
+}
+class ManagerOrderService <<Service>> {
+  cancel(shopId, actor, orderId, reason)
+}
+class NotificationService <<Service>> {
+  notifyRefundRequested(refund)
+  notifyRefundResolved(refund)
+}
+interface RefundRepository <<Repository>> {
+  findByOrderShopIdOrderByCreatedDateDesc(shopId)
+  findById(id)
+}
+interface ShopStaffRepository <<Repository>>
+interface NotificationRepository <<Repository>>
+class Refund <<Entity>> {
+  id
+  amount
+  reason
+  shopResponse
+  gatewayRefundId
+  status
+}
+class Order <<Entity>> {
+  id
+  status
+}
+class Shop <<Entity>>
+class ShopStaff <<Entity>> {
+  active
+}
+enum RefundStatus <<Entity>> {
+  REQUESTED
+  APPROVED
+  PROCESSED
+  REJECTED
+  CANCELLED
+}
+
+View ..> StaffRefundController : GET /api/staff/shops/{shopId}/refunds
+View ..> StaffRefundController : POST /api/staff/shops/{shopId}/refunds/{id}/status
+View ..> CustomerOrderController : POST /api/customer/orders/{id}/refunds
+View ..> CustomerOrderController : POST /api/customer/orders/{id}/refunds/{refundId}/cancel
+View ..> ManagerOrderController : POST /api/shop/mine/{shopId}/orders/{id}/cancel
+StaffRefundController --> StaffRefundService
+StaffRefundService --> ShopOperationGuard
+StaffRefundService --> RefundRepository
+StaffRefundService --> NotificationService
+CustomerOrderController --> CustomerRefundService
+CustomerRefundService --> RefundRepository
+CustomerRefundService --> NotificationService
+ShopOperationGuard --> ShopStaffRepository
+ManagerOrderController --> ManagerOrderService
+ManagerOrderService --> RefundRepository : creates REQUESTED refund
+ManagerOrderService --> NotificationService
+NotificationService --> NotificationRepository
+RefundRepository ..> Refund
+ShopStaffRepository ..> ShopStaff
+Refund "*" --> "1" Order
+Order "*" --> "1" Shop
+ShopStaff "*" --> "1" Shop
+Refund --> RefundStatus
+
+@enduml

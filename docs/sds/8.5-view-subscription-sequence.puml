@@ -1,5 +1,5 @@
 @startuml
-title View Shop Subscription - sequence diagram
+title 8.5 View Shop Subscription - sequence diagram
 autonumber
 skinparam shadowing false
 skinparam defaultFontName Arial

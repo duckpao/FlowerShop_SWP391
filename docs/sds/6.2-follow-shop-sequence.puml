@@ -1,0 +1,78 @@
+@startuml
+title 6.2 Follow Shop - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor Customer as U
+participant "View" as V <<View>> #EADCFF
+participant FavoriteShopController as C <<Controller>> #D8F3DC
+participant FavoriteShopService as S <<Service>> #DCECFF
+participant ShopRepository as SR <<Repository>> #FFF1C9
+participant UserRepository as UR <<Repository>> #FFF1C9
+participant FavoriteShopRepository as FR <<Repository>> #FFF1C9
+
+== A. The follow button shows the current state ==
+U -> V : open a shop page (shop directory or public shop page)
+alt guest (not logged in)
+  V --> U : button "♡ Theo dõi cửa hàng" sends the browser to /login?next=<current path>
+else customer
+  V -> C : GET /api/customer/favorite-shops/{shopId}
+  C -> S : status(userId, shopId)
+  S -> FR : existsById(FavoriteShopId(userId, shopId))
+  FR --> S : boolean
+  S --> C : FavoriteStatus(favorite)
+  C --> V : 200 OK {favorite}
+  V --> U : "♥ Đang theo dõi" or "♡ Theo dõi cửa hàng"
+end
+
+== B. Follow a shop ==
+U -> V : click "♡ Theo dõi cửa hàng"
+V -> V : button disabled, shows "Đang xử lý..."
+V -> C : PUT /api/customer/favorite-shops/{shopId}
+C -> S : add(userId, shopId)
+S -> SR : findById(shopId)
+SR --> S : Shop
+alt shop not found
+  S --> C : 404 "Không tìm thấy cửa hàng."
+else shop not ACTIVE
+  S --> C : 400 "Cửa hàng hiện không hoạt động."
+else shop ACTIVE
+  S -> FR : existsById(FavoriteShopId(userId, shopId))
+  FR --> S : boolean
+  alt already followed
+    S --> C : return, nothing written
+  else not followed yet
+    S -> UR : findById(userId)
+    UR --> S : User
+    alt user not found
+      S --> C : 404 "Không tìm thấy người dùng."
+    else user found
+      S -> FR : saveAndFlush(FavoriteShop: id, user, shop,\ncreatedBy = lastModifyBy = userId)
+      FR --> S : saved
+      S --> C : ok
+    end
+  end
+end
+C --> V : 204 No Content (or the 400 / 404 message above)
+V --> U : button "♥ Đang theo dõi" with the text\n"Bạn sẽ nhận email khi cửa hàng đăng sản phẩm mới."\n(error: message under the button, role alert)
+
+note over V
+  Repeated clicks are blocked while the request runs.
+  Following again after a success is a no-op on the server.
+end note
+
+note over S
+  The follow does not send any mail. New-product mails only go to
+  followers at the moment a product is first published (see 6.4).
+end note
+
+@enduml

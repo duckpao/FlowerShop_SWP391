@@ -1,0 +1,144 @@
+@startuml
+!pragma layout smetana
+title 5.2 SePay Return and Reconcile - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+  BackgroundColor<<DTO>> #ECECEC
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class PaymentReturnController <<Controller>> {
+  returnToFrontend(result, request): ModelAndView
+}
+class PaymentController <<Controller>> {
+  getPaymentByInvoice(invoiceNumber, currentUser): PaymentStatusResponse
+  getPaymentByOrder(orderId, currentUser): PaymentStatusResponse
+  cancelCheckout(invoiceNumber, currentUser): Map paid
+}
+class PaymentService <<Service>> {
+  checkPaymentStatus(orderId, userId): PaymentStatusResponse
+  -requireOwner(order, userId)
+}
+class SePayGatewayService <<Service>> {
+  getStatusByInvoice(invoiceNumber, userId): PaymentStatusResponse
+  reconcileWithSePayGateway(invoiceNumber): boolean
+  cancelCheckout(invoiceNumber, userId): boolean
+  -applyPaid(invoice, amount, transactionNo, body, actor): PaidOutcome
+  -applyGroupPaid(groupInvoice, members, amount, transactionNo, body): boolean
+  -cancelAtSePay(invoice)
+  -callSePayApi(method, path, json): String
+  -buildStatus(payment, userId): PaymentStatusResponse
+  -buildGroupStatus(groupInvoice, members, userId): PaymentStatusResponse
+}
+class OrderService <<Service>> {
+  cancelPendingOrder(orderId, reason, actor): boolean
+  restoreCancelledOrderItems(order)
+}
+class NotificationService <<Service>> {
+  notifyPaymentSuccess(order, type)
+  notifyRefundRequested(refund)
+}
+class PaymentStatusResponse <<DTO>> {
+  orderId
+  orderStatus
+  isPaid
+  paidAmount
+  transactionNo
+  message
+  orderType / paymentType
+  totalAmount / depositAmount
+  totalPaid / remainingAmount
+  nextPaymentType
+}
+class PaymentRepository <<Repository>> {
+  findByInvoiceNumber(invoice): Optional<Payment>
+  findByInvoiceNumberForUpdate(invoice): Optional<Payment>
+  findByGroupInvoice(groupInvoice): List<Payment>
+  findTopByOrderIdOrderByCreatedDateDesc(orderId): Optional<Payment>
+  save(payment): Payment
+}
+class OrderRepository <<Repository>> {
+  findById(id): Optional<Order>
+  findByIdForUpdate(id): Optional<Order>
+  save(order): Order
+}
+interface RefundRepository <<Repository>> {
+  save(refund): Refund
+}
+class "SePay REST API\n/v1/order/detail, /v1/order/cancel" as API <<External>>
+class Order <<Entity>> {
+  id
+  orderType
+  status
+  totalAmount
+}
+class Payment <<Entity>> {
+  invoiceNumber
+  groupInvoice
+  paymentType
+  paymentMethod
+  amount
+  status: PENDING | SUCCESS | FAILED
+  gatewayTransactionNo
+  gatewayResponse
+}
+class Refund <<Entity>> {
+  amount
+  reason
+  status = REQUESTED
+}
+
+View --> PaymentReturnController : GET /payment/{success|error|cancel}?invoice_number=
+View --> PaymentController : GET /api/payments/status-by-invoice/{invoice}\nGET /api/payments/status-by-order/{orderId}\nPOST /api/payments/sepay/cancel/{invoice}
+PaymentController --> SePayGatewayService
+PaymentController --> PaymentService
+PaymentController ..> PaymentStatusResponse : returns
+PaymentService --> SePayGatewayService : reconcileWithSePayGateway
+PaymentService --> OrderRepository
+PaymentService --> PaymentRepository
+SePayGatewayService --> PaymentRepository
+SePayGatewayService --> OrderRepository
+SePayGatewayService --> RefundRepository
+SePayGatewayService --> OrderService
+SePayGatewayService --> NotificationService
+SePayGatewayService ..> API : Basic auth, 6 s timeout
+SePayGatewayService ..> PaymentStatusResponse : builds
+PaymentRepository ..> Payment
+OrderRepository ..> Order
+RefundRepository ..> Refund
+Order "1" --> "*" Payment
+Order "1" --> "*" Refund
+
+note bottom of SePayGatewayService
+  SePay never calls the backend (no webhook). Money is confirmed only when the backend asks
+  GET /v1/order/detail/{invoice} and the status is CAPTURED, from every status request
+  (success page polling, cancel page, order status) and from the expiry job (5.3).
+  applyPaid() runs in one transaction with the order then the payment locked:
+  PAID, ALREADY_PAID, AMOUNT_MISMATCH (Payment FAILED, order unchanged),
+  REFUND_REQUIRED (order cancelled or paid by another invoice: Payment SUCCESS + Refund REQUESTED).
+  A group invoice (GRP-...) is applied order by order, total must equal the sum of the payments.
+end note
+
+note bottom of PaymentReturnController
+  Only needed when the configured return URL points to the backend host:
+  forwards to the React build served by the same host, otherwise redirects to the frontend.
+end note
+
+@enduml

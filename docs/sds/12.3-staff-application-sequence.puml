@@ -1,0 +1,142 @@
+@startuml
+title 12.3 Staff Application - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor Customer as U
+actor "Shop owner" as O
+participant "View" as V <<View>> #EADCFF
+participant StaffApplicationController as C <<Controller>> #D8F3DC
+participant StaffApplicationService as S <<Service>> #DCECFF
+participant VerificationMailSender as MS <<Service>> #DCECFF
+participant UserRepository as UR <<Repository>> #FFF1C9
+participant ShopRepository as SR <<Repository>> #FFF1C9
+participant ShopStaffRepository as STR <<Repository>> #FFF1C9
+participant StaffApplicationRepository as AR <<Repository>> #FFF1C9
+participant AuthSessionRepository as SESS <<Repository>> #FFF1C9
+participant "SMTP server" as SMTP <<External>> #FFE0E0
+
+== A. Customer applies to a shop ==
+U -> V : open a shop from search, fill fullName, phone, introduction, click "Apply"
+V -> C : POST /api/customer/shops/{shopId}/applications\n(fullName, phone, introduction)
+note right of C : @PreAuthorize CUSTOMER. @Valid fails: 400 "Dữ liệu không hợp lệ"
+C -> S : apply(shopId, customerId, input)
+S -> UR : findByIdForUpdate(customerId)
+UR --> S : User
+S -> S : eligible(user): not CUSTOMER, not ACTIVE, or email not verified\n409 "Tài khoản phải là Customer đang hoạt động và đã xác thực email."
+S -> SR : findForUpdate(shopId)
+SR --> S : Shop (else 404 "Không tìm thấy shop.")
+alt shop status is not ACTIVE
+  S --> C : 409 "Shop chưa hoạt động."
+  C --> V : 409
+  V --> U : error message
+else shop ACTIVE
+  S -> STR : findByShopIdAndUserId(shopId, customerId)
+  STR --> S : Optional<ShopStaff>
+  alt already a staff row for this shop
+    S --> C : 409 "Bạn đã thuộc shop này."
+    C --> V : 409
+  else not staff yet
+    S -> AR : findByShopIdAndUserId(shopId, customerId)
+    AR --> S : Optional<StaffApplication>
+    alt existing application is not REJECTED
+      S --> C : 409 "Bạn đã gửi đơn cho shop này."
+      C --> V : 409
+    else no application, or a REJECTED one
+      S -> S : new row, or reuse the REJECTED row\nstatus = PENDING, submittedAt = now
+      S -> AR : saveAndFlush(application)
+      AR --> S : StaffApplication
+      S --> MS : AuthMailEvent STAFF_APPLICATION_NEW to the shop owner
+      note right of MS : after commit: "Shop {name} vừa nhận được đơn ứng tuyển..."
+      S --> C : Result (status PENDING)
+      C --> V : 200 OK
+      V --> U : "application sent"
+    end
+  end
+end
+
+== B. Customer checks own applications ==
+U -> V : open my applications
+V -> C : GET /api/account/staff-applications
+C -> S : mine(customerId)
+S -> AR : findByUserIdOrderBySubmittedAtDesc(customerId)
+AR --> S : List<StaffApplication>
+S --> C : List<Result>
+C --> V : 200 OK
+V --> U : status per shop
+
+== C. Owner lists applications ==
+O -> V : open staff applications of the shop
+note right of V : The applications view is not mounted in the client; the endpoint is still live.
+V -> C : GET /api/shop/mine/{shopId}/applications
+note right of C : SecurityConfig /api/shop/** and @PreAuthorize: SHOP only
+C -> S : list(shopId, ownerId)
+S -> SR : findById(shopId)
+SR --> S : Shop (else 404 "Không tìm thấy shop.")
+alt owner differs from logged-in user
+  S --> C : 404 "Không tìm thấy shop."
+  C --> V : 404
+else owner
+  S -> AR : findByShopIdOrderBySubmittedAtDesc(shopId)
+  AR --> S : List<StaffApplication>
+  S --> C : List<Result>
+  C --> V : 200 OK
+  V --> O : applications with status
+end
+
+== D. Owner approves or rejects ==
+O -> V : click Approve or Reject
+V -> C : PUT /api/shop/mine/{shopId}/applications/{id}\n(approve)
+C -> S : decide(shopId, id, ownerId, approve)
+S -> AR : findById(id)
+AR --> S : StaffApplication (else 404 "Không tìm thấy đơn.")
+S -> UR : findByIdForUpdate(applicantId)
+UR --> S : User
+S -> SR : findForUpdate(shopId)
+SR --> S : Shop (else 404 "Không tìm thấy shop.")
+alt shop owner differs, or application belongs to another shop
+  S --> C : 404 "Không tìm thấy đơn."
+  C --> V : 404
+else owner matches
+  S -> AR : refresh(application) (PESSIMISTIC_WRITE)
+  alt shop not ACTIVE, or application not PENDING
+    S --> C : 409 "Shop hoặc đơn không còn đủ điều kiện xử lý."
+    C --> V : 409
+  else still PENDING
+    alt approve = true
+      S -> S : eligible(applicant) (same 409 as A)
+      S -> STR : findByShopIdAndUserId(shopId, applicantId)
+      alt already a member
+        S --> C : 409 "Đã có nhân viên này."
+        C --> V : 409
+      else not a member
+        S -> STR : save(ShopStaff: active = true)
+        S -> UR : user.role = SHOP_STAFF
+        S -> SESS : revokeAll(applicantId)
+      end
+    end
+    S -> S : application.status = APPROVED or REJECTED
+    S --> MS : AuthMailEvent STAFF_APPLICATION_APPROVED or _REJECTED to applicant
+    note right of MS : after commit
+    S --> C : Result
+    C --> V : 200 OK
+    V --> O : "Đã duyệt đơn và chuyển tài khoản thành Staff." or "Đã từ chối đơn. Tài khoản vẫn là Customer."
+  end
+end
+
+== E. Mail delivery (after commit) ==
+MS -> SMTP : send text mail (subject per kind)
+note over MS
+  Failure is only logged. Staff mails never change the HTTP result.
+end note
+
+@enduml

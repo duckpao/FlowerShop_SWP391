@@ -1,0 +1,79 @@
+@startuml
+title 13.4 Notify Order Delivered via Email - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor "Shop Manager" as M
+actor Customer
+participant "View" as V <<View>> #EADCFF
+participant ManagerOrderController as MOC <<Controller>> #D8F3DC
+participant CustomerOrderController as COC <<Controller>> #D8F3DC
+participant ManagerOrderService as S <<Service>> #DCECFF
+participant CustomerOrderService as CS <<Service>> #DCECFF
+participant GhnService as G <<Service>> #DCECFF
+participant DeliverySync as DS <<Service>> #DCECFF
+participant OrderStatusListener as L <<Service>> #DCECFF
+participant OrderMailSender as MAIL <<Service>> #DCECFF
+participant HtmlMailSender as H <<Service>> #DCECFF
+participant "SMTP server" as SMTP <<External>> #FFE0E0
+database MySQL
+
+== Path A: shop syncs from GHN ==
+M -> V : click Refresh
+V -> MOC : POST /api/shop/mine/{shopId}/orders/{id}/refresh-status
+MOC -> S : refreshStatus(shopId, actor, orderId)
+S -> G : track(trackingCode)
+G --> S : Tracking(ghnStatus = "delivered", DELIVERED)
+S -> DS : apply(order, delivery, tracking, actor)
+DS --> S : DeliveryInfo
+S --> MOC : DeliveryInfo
+MOC --> V : JSON
+V --> M : order status (COMPLETED, or unchanged when GHN is not delivered)
+
+== Path B: customer opens a DELIVERING order ==
+Customer -> V : open order page
+V -> COC : POST /api/customer/orders/{id}/refresh-tracking
+COC -> CS : refreshTracking(customerId, orderId)
+CS -> G : track(trackingCode)
+G --> CS : Tracking(ghnStatus = "delivered")
+CS -> DS : apply(order, delivery, tracking, customerId)
+DS --> CS : DeliveryInfo
+CS --> COC : DeliveryInfo
+COC --> V : JSON
+V --> Customer : order status
+
+== Common path (inside apply, both paths) ==
+alt order is DELIVERING and ghnStatus is delivered
+  DS -> DS : complete(order): status = COMPLETED, COD payments = SUCCESS
+  DS -> MySQL : commit UPDATE Orders, Deliveries, Payments
+  MySQL --> L : @PostUpdate
+  L -> L : statusSnapshot DELIVERING differs from COMPLETED
+  L --> MAIL : OrderStatusChangedEvent(DELIVERING to COMPLETED), after commit
+  MAIL -> MySQL : read order, customer, pickup and delivery places, review state
+  alt customer email missing or not verified
+    MAIL -> MAIL : skip
+  else can mail
+    MAIL -> MAIL : buildStatusMail: "Giao hàng thành công" (places and review sections)
+    MAIL -> H : send(email, subject, html with order link)
+    H -> SMTP : send message
+    SMTP --> Customer : delivered email
+  end
+else order not DELIVERING, or GHN says not delivered yet
+  DS --> DS : Delivery updated, order status unchanged, no mail
+end
+
+note over M, SMTP
+The same status mail is sent when the manager sets COMPLETED manually
+with changeStatus(...). GHN never calls the system (no webhook).
+end note
+
+@enduml

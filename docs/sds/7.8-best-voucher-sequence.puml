@@ -1,0 +1,68 @@
+@startuml
+title 7.8 Best Voucher - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor Customer as U
+participant "View" as V <<View>> #EADCFF
+participant OrderController as C <<Controller>> #D8F3DC
+participant OrderService as S <<Service>> #DCECFF
+participant CouponService as CS <<Service>> #DCECFF
+participant CouponRepository as CR <<Repository>> #FFF1C9
+
+== A. Every preview carries a suggestion ==
+U -> V : open checkout or change items, address or voucher
+V -> C : POST /api/orders/{userId}/voucher-preview (as in 7.5)
+C -> S : previewVouchers(userId, request, merchandiseOnly)
+S -> CS : preview(context, couponCode, shippingCouponCode)
+CS -> CR : available(shopId)
+CR --> CS : List<Coupon>
+CS -> CS : evaluate: eligible money vouchers sorted by saving,\nbestMoney = highest saving, lowest = lowest saving
+alt an eligible shipping voucher exists
+  CS -> CS : combined = best shipping saving + lowest money saving
+  alt combined > saving of bestMoney
+    CS -> CS : recommend shipping voucher + lowest money voucher, bestSaving = combined
+  else
+    CS -> CS : recommend bestMoney only
+  end
+else no eligible shipping voucher
+  CS -> CS : recommend bestMoney only (bestSaving = 0 when none)
+end
+CS --> S : Preview (recommendedOrderCode, recommendedShippingCode, bestSaving)
+S --> C : Preview
+C --> V : 200 OK
+alt bestSaving > 0
+  V --> U : "Gợi ý tiết kiệm nhất: CODE1 + CODE2 — giảm X"\nwith button "Dùng ưu đãi tốt nhất"
+else
+  V --> U : no suggestion box
+end
+
+== B. The customer takes the suggestion ==
+U -> V : click "Dùng ưu đãi tốt nhất"
+V -> V : couponCode = recommendedOrderCode (or empty),\nshippingCouponCode = recommendedShippingCode (or empty)
+V -> C : POST /api/orders/{userId}/voucher-preview (the two recommended codes)
+C -> S : previewVouchers(userId, request, merchandiseOnly)
+S -> CS : preview(context, recommendedOrderCode, recommendedShippingCode)
+CS -> CR : available(shopId)
+CR --> CS : List<Coupon>
+CS -> CS : evaluate and check both codes (same rules as a manual choice)
+CS --> S : Preview (discount and totalAmount for the chosen codes)
+S --> C : Preview
+C --> V : 200 OK
+V --> U : the two codes are ticked, discount lines and total updated
+
+note over CS
+  Read-only: no usedCount change, no order created.
+  Usage is counted only when the order is placed (7.6 apply()).
+end note
+
+@enduml

@@ -1,0 +1,46 @@
+@startuml
+title 8.1 View Pro Plans - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor Shop as U
+participant "View" as V <<View>> #EADCFF
+participant ShopPlanController as C <<Controller>> #D8F3DC
+participant ShopPlanService as S <<Service>> #DCECFF
+participant ShopPlanRepository as R <<Repository>> #FFF1C9
+
+== A. Show the plan list on the subscription page ==
+U -> V : open /shop-admin/subscription
+V -> C : GET /api/shop/plans
+C -> C : @PreAuthorize hasRole('SHOP')
+alt caller is not a SHOP account
+  C --> V : 403 (Spring Security)
+else SHOP
+  C -> S : plans()
+  S -> R : findAll(Sort by durationMonths)
+  R --> S : List<ShopPlan>
+  S -> S : keep enabled plans, map to Plan
+  S --> C : List<Plan>
+  C --> V : 200 OK
+  V --> U : one card per plan: name, price, "Tối đa N sản phẩm" or "Sản phẩm không giới hạn", featured slots
+  note right of V
+    Plan with durationMonths 0 shows "Gói mặc định" and no button.
+    Buy button disabled while the shop is not ACTIVE.
+  end note
+end
+
+note over S
+  The list is only for SHOP accounts (not public). Shop status and
+  current subscription come from 8.5, shown on the same page.
+end note
+
+@enduml

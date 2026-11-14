@@ -1,0 +1,65 @@
+@startuml
+title 8.3 Update Pro Plan - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor Admin as U
+participant "View" as V <<View>> #EADCFF
+participant AdminShopPlanController as C <<Controller>> #D8F3DC
+participant ShopPlanService as S <<Service>> #DCECFF
+participant UserRepository as UR <<Repository>> #FFF1C9
+participant ShopPlanRepository as PR <<Repository>> #FFF1C9
+
+== A. Edit a plan ==
+U -> V : click "Sửa / bật lại" on a plan row
+V -> V : load the plan into the form (the FREE row has no button)
+U -> V : change fields and click "Lưu"
+V -> C : PUT /api/admin/shop-plans/{id}\n(name, durationMonths, price, productLimit | null, featuredLimit, enabled)
+C -> C : @PreAuthorize hasRole('ADMIN'), @Valid PlanInput
+alt bean validation fails
+  C --> V : 400 "Dữ liệu không hợp lệ" + field errors
+else valid
+  C -> S : savePlan(adminId, id, input)
+  S -> UR : findByIdAndRoleAndStatus(adminId, ADMIN, ACTIVE)
+  alt not an active admin
+    S --> C : 403 "Chỉ admin đang hoạt động được kích hoạt Pro."
+  else admin
+    alt id = "FREE"
+      S --> C : 409 "Gói Free cố định 5 sản phẩm và không có sản phẩm nổi bật."
+    else id is another plan
+      alt productLimit not null and featuredLimit > productLimit
+        S --> C : 409 "Số sản phẩm nổi bật không được vượt giới hạn sản phẩm."
+      else valid limits
+        S -> PR : findLocked(id) (row lock)
+        alt plan not found
+          PR --> S : empty
+          S --> C : 404 "Không tìm thấy gói, cửa hàng hoặc giao dịch thuộc quyền truy cập."
+        else found
+          S -> S : set name (stripped), durationMonths, price, productLimit, featuredLimit, enabled
+          S -> PR : saveAndFlush(plan)
+          PR --> S : saved plan
+          S --> C : Plan
+          C --> V : 200 OK
+          V --> U : "Đã lưu cấu hình gói." and the list reloads
+        end
+      end
+    end
+  end
+end
+
+note over S
+  New limits apply at once to every shop on this plan (same row).
+  Existing payments and activations keep their own amount and months.
+  Lowering productLimit does not hide products. Extra products become locked (see 8.12).
+end note
+
+@enduml

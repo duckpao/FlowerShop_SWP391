@@ -1,5 +1,5 @@
 @startuml
-title Login and Session Refresh - sequence diagram
+title 1.4 Login and Session Refresh - sequence diagram
 autonumber
 skinparam shadowing false
 skinparam defaultFontName Arial

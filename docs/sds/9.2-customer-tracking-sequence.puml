@@ -1,0 +1,124 @@
+@startuml
+title 9.2 Customer Order Tracking - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor Customer
+participant "View" as V <<View>> #EADCFF
+participant CustomerOrderController as C <<Controller>> #D8F3DC
+participant CustomerOrderService as S <<Service>> #DCECFF
+participant "OrderRepository\nDeliveryRepository" as R <<Repository>> #FFF1C9
+participant GhnService as G <<Service>> #DCECFF
+participant "GHN API\n(dev-online-gateway.ghn.vn)" as GHN <<External>> #FFE0E0
+participant DeliverySync as DS <<Service>> #DCECFF
+database MySQL
+
+== Open the order page ==
+Customer -> V : open /orders/:id
+V -> C : GET /api/customer/orders/{id}
+C -> S : detail(customerId, orderId)
+S -> R : order filtered by customer
+alt order not found or not owned
+  S --> C : 404 Không tìm thấy dữ liệu.
+  C --> V : 404 {message}
+  V --> Customer : page error
+else found
+  S --> C : OrderDetailResponse (status, delivery, shippingFee)
+  C --> V : 200 JSON
+end
+
+== Refresh tracking automatically (only when DELIVERING with a waybill) ==
+opt order.status is DELIVERING and delivery is present
+  V -> C : POST /api/customer/orders/{id}/refresh-tracking
+  C -> S : refreshTracking(customerId, orderId)
+  S -> R : findById filtered by customer
+  alt status not DELIVERING, COMPLETED or REFUNDED
+    S --> C : 409 Đơn hàng chưa được bàn giao cho đơn vị vận chuyển.
+    C --> V : 409 {message}
+  else allowed status
+    S -> R : deliveries.findByOrderId(orderId)
+    alt no Delivery row
+      S --> C : 404 Đơn hàng chưa có vận đơn.
+      C --> V : 404 {message}
+    else Delivery exists
+      S -> G : track(trackingCode)
+      G -> GHN : GET /shiip/public-api/v2/shipping-order/detail?order_code=
+      alt HTTP 200 and code 200
+        GHN --> G : data.status
+        G --> S : Tracking(ghnStatus, DeliveryStatus)
+        S -> DS : apply(order, delivery, tracking, customerId)
+        DS -> MySQL : Delivery updated, Order changed only if DELIVERING (see 3.4)
+        S --> C : DeliveryInfo
+        C --> V : 200 JSON
+        V -> V : applyDelivery(): replace delivery, mirror DELIVERED to COMPLETED and RETURNED to REFUNDED
+      else GHN failure (HTTP != 200, non-JSON, code != 200, timeout)
+        G --> S : 502 with GHN message
+        S --> C : 502 {message}
+        C --> V : 502 {message}
+        V -> V : setTrackingError(message)
+        V --> Customer : alert text under "Cập nhật trạng thái GHN"
+      end
+    end
+  end
+end
+
+== Shipping fee (fired in parallel, does not wait for tracking) ==
+V -> C : GET /api/customer/orders/{id}/shipping-fee
+C -> S : calculateShippingFeeForOrder(customerId, orderId)
+S -> R : findById filtered by customer
+alt delivery address lacks ghnDistrictId or ghnWardCode
+  S --> C : 400 Địa chỉ nhận hàng chưa có thông tin GHN hợp lệ.
+  C --> V : 400 {message}
+  V --> Customer : error under the fee line
+else address has GHN codes
+  S -> S : quote(shop, destination): pickupAddress(shop), 400 if the shop has no GHN pickup address
+  S -> G : calculateFee(pickup district/ward, destination district/ward, 2000 g)
+  G -> GHN : POST /shiip/public-api/v2/shipping-order/fee
+  alt HTTP 200 and code 200
+    GHN --> G : data.total
+    G --> S : BigDecimal fee
+    S --> C : ShippingFeeResponse(shippingFee)
+    C --> V : 200 {shippingFee}
+    V --> Customer : "Phí ship (GHN)" shows the live fee
+  else GHN failure
+    G --> S : 502 with GHN message
+    S --> C : 502 {message}
+    C --> V : 502 {message}
+    V --> Customer : alert "... Đang hiển thị phí đã lưu của đơn."
+  end
+end
+
+== Tracking steps (computed in the View, no extra call) ==
+note over V
+  getTrackingStage(order):
+  -1 : AWAITING_QUOTE, QUOTED, AWAITING_DEPOSIT, CANCELLED (no step lit)
+  2 : REFUNDED, or delivery.status FAILED / RETURNING / RETURNED (problem step label)
+  3 : status COMPLETED, or delivery.status DELIVERED
+  2 : delivery.status PICKED_UP or ON_THE_WAY
+  1 : status DELIVERING
+  0 : PENDING, DEPOSIT_PAID, PROCESSING (shop is preparing)
+end note
+
+== Manual refresh ==
+Customer -> V : click "Cập nhật trạng thái GHN"
+note right of V
+  Button shown when order.delivery is set and status
+  is not CANCELLED or REFUNDED. The backend allows REFUNDED,
+  so the View hides a path the server would accept.
+end note
+V -> C : POST /api/customer/orders/{id}/refresh-tracking
+note right of V
+  Same response handling as the automatic call above.
+  Error is shown under the button (setTrackingError).
+end note
+
+@enduml

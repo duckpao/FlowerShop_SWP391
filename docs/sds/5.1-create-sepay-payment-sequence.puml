@@ -1,0 +1,112 @@
+@startuml
+title 5.1 Create SePay Payment - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor Customer as U
+participant "View" as V <<View>> #EADCFF
+participant PaymentController as C <<Controller>> #D8F3DC
+participant SePayGatewayService as GW <<Service>> #DCECFF
+participant OrderRepository as OR <<Repository>> #FFF1C9
+participant PaymentRepository as PR <<Repository>> #FFF1C9
+participant "SePay Gateway\n(checkout page)" as SEPAY <<External>> #FFE0E0
+
+== A. Where the payment starts ==
+note over V
+  The View starts a SePay payment from three places:
+  1. right after checkout with ONLINE (4.3), one order or a group of orders;
+  2. /payment/pending ("Pay again" while the 10 minutes last);
+  3. the order list (pay again, deposit of a custom order, 10.2) and the success page (remaining part, FINAL).
+  One order: POST /sepay/create (paymentType FULL; DEPOSIT or FINAL for custom orders).
+  Several orders of one checkout: POST /sepay/create-group.
+end note
+
+== B. One order ==
+U -> V : click pay
+V -> C : POST /api/payments/sepay/create\n(orderId, paymentType, paymentMethod?)
+C -> GW : createPayment(request, currentUser.id)
+GW -> GW : secret key and merchant id configured, else 400 "Cổng thanh toán chưa được cấu hình."
+GW -> GW : paymentMethod empty or CARD / BANK_TRANSFER / NAPAS_BANK_TRANSFER, else 400
+GW -> OR : findByIdForUpdate(orderId)
+OR --> GW : Order (row locked), else 404
+alt order is not the caller's
+  GW --> C : 403 Bạn không có quyền thanh toán cho đơn hàng này.
+else COMPLETED
+  GW --> C : 400 đã hoàn thành
+else CANCELLED
+  GW --> C : 400 đã bị hủy
+else expired (PENDING over 10 min, AWAITING_DEPOSIT over 24 h)
+  GW --> C : 400 đã hết hạn thanh toán (the scheduler cancels it, see 5.3)
+else status not PENDING, AWAITING_DEPOSIT or DEPOSIT_PAID
+  GW --> C : 400 không còn chờ thanh toán
+else ok
+  GW -> PR : findByOrderId(orderId)
+  PR --> GW : List<Payment>
+  alt the order has a COD payment
+    GW --> C : 400 Đơn COD không thể thanh toán trực tuyến.
+  else ONLINE
+    GW -> GW : check paymentType against the order
+    note right of GW
+      STANDARD order: FULL only.
+      CUSTOM order paid in full: FULL only. DEPOSIT_PAID: FINAL only.
+      FINAL needs DEPOSIT_PAID. DEPOSIT is refused once the deposit is paid.
+      Each mismatch is a 400 with its own message.
+    end note
+    alt FULL
+      GW -> GW : amount = order total
+    else DEPOSIT
+      GW -> GW : amount = deposit of the order (50% when no deposit is stored)
+    else FINAL
+      GW -> GW : amount = total - successful payments (not above 0, else 400 fully paid)
+    end
+    loop older ONLINE payments of the same type still PENDING
+      GW -> PR : save(status = FAILED)
+    end
+    GW -> PR : save(Payment PENDING, invoice INV-<order>-<type>-<random>)
+    GW -> GW : signedCheckoutFields(invoice, amount, description, customerId, method)
+    note right of GW : fields in order, last one is the HMAC signature;\nsuccess, error and cancel URL carry ?invoice_number=<invoice>
+    GW --> C : CreatePaymentResponse(checkoutUrl, paymentId, invoiceNumber, orderId, amount, fields)
+    C --> V : 200 OK
+  end
+end
+
+== C. Several orders in one payment ==
+U -> V : click pay (orders created together at checkout)
+V -> C : POST /api/payments/sepay/create-group\n(orderIds, paymentMethod?)
+C -> GW : createGroupPayment(request, currentUser.id)
+GW -> GW : same configuration and method checks as B
+loop order ids, distinct and sorted
+  GW -> OR : findByIdForUpdate(id)
+  OR --> GW : Order (404 when missing)
+  GW -> GW : owner (403), STANDARD and PENDING (400), not expired (400)
+  GW -> PR : findByOrderId(id)
+  PR --> GW : payments (a COD payment: 400)
+end
+GW -> GW : groupInvoice = GRP-<16 random>
+loop each order
+  GW -> PR : older ONLINE PENDING payments to FAILED
+  GW -> PR : save(Payment FULL PENDING, amount = order total, groupInvoice)
+end
+GW -> GW : signedCheckoutFields(groupInvoice, sum of totals, "Thanh toan N don hoa", ...)
+GW --> C : CreatePaymentResponse(invoiceNumber = groupInvoice, amount = total, fields)
+C --> V : 200 OK
+
+== D. Go to SePay ==
+V -> V : remember the invoice in sessionStorage (flower_pending_invoice)
+V -> SEPAY : POST hidden form with the signed fields (browser leaves the app)
+SEPAY --> U : payment page
+note over SEPAY
+  The result comes back through the return URLs and is confirmed by the backend, see 5.2.
+  A failure to create the payment shows the message in the page (and checkout goes to /payment/pending).
+end note
+
+@enduml

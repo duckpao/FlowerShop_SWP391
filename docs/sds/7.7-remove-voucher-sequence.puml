@@ -1,0 +1,64 @@
+@startuml
+title 7.7 Remove Voucher - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor Customer as U
+participant "View" as V <<View>> #EADCFF
+participant OrderController as C <<Controller>> #D8F3DC
+participant OrderService as S <<Service>> #DCECFF
+participant CouponService as CS <<Service>> #DCECFF
+participant CouponRepository as CR <<Repository>> #FFF1C9
+
+== A. Remove the money voucher ==
+U -> V : choose "Không dùng mã" in "Giảm tiền hàng / sản phẩm"
+V -> V : couponCode = "" (shipping choice kept), preview cleared,\n"Đặt hàng" disabled
+V -> C : POST /api/orders/{userId}/voucher-preview (couponId empty)
+C -> S : previewVouchers(userId, request, merchandiseOnly)
+S -> CS : preview(context, null, shippingCode)
+CS -> CR : available(shopId)
+CR --> CS : List<Coupon>
+CS --> S : Preview (discountAmount = 0, totalAmount recomputed)
+S --> C : Preview
+C --> V : 200 OK
+V --> U : discount line 0, payable total updated, "Đặt hàng" enabled again
+
+== B. Remove the shipping voucher ==
+U -> V : choose "Không dùng mã" in "Giảm phí giao hàng"
+V -> V : shippingCouponCode = "" and couponCode = "" (both cleared)
+V -> C : POST /api/orders/{userId}/voucher-preview (no codes)
+C -> S : previewVouchers(userId, request, merchandiseOnly)
+S -> CS : preview(context, null, null)
+CS -> CR : available(shopId)
+CR --> CS : List<Coupon>
+CS --> S : Preview (both discounts 0)
+S --> C : Preview
+C --> V : 200 OK
+V --> U : both discount lines 0, total = subtotal + shipping fee
+
+== C. A stale code breaks the preview ==
+V -> C : POST /api/orders/{userId}/voucher-preview (code no longer valid)
+C -> S : previewVouchers(...)
+S -> CS : preview(context, code, shippingCode)
+CS --> S : 400 "CODE: reason" (e.g. "Mã đã hết hạn")
+S --> C : 400
+C --> V : 400 message
+V --> U : error text with "Thử lại" and "Bỏ mã đã chọn"
+U -> V : click "Bỏ mã đã chọn"
+V -> V : both codes cleared, new preview sent (as in A)
+
+note over V
+  Nothing is written on the server while the voucher is removed.
+  The order is created later by the batch call; couponId = null means no voucher.
+end note
+
+@enduml

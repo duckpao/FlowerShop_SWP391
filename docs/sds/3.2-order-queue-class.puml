@@ -1,6 +1,6 @@
 @startuml
 !pragma layout smetana
-title Order Queue and Cancel - class diagram
+title 3.2 Order Queue and Cancel - class diagram
 skinparam shadowing false
 skinparam defaultFontName Arial
 skinparam wrapWidth 240

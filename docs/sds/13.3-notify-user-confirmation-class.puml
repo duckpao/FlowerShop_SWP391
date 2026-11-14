@@ -1,0 +1,96 @@
+@startuml
+title 13.3 Notify User Confirmation - class diagram
+!pragma layout smetana
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<DTO>> #FCE7F3
+  BackgroundColor<<Scheduler>> #FFE8CC
+  BackgroundColor<<External>> #FFE0E0
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class OrderController <<Controller>> {
+  makeOrders(userId, request)
+}
+class ManagerOrderController <<Controller>> {
+  confirm(shopId, id, user)
+}
+class OrderService <<Service>> {
+  makeOrders(userId, request)
+}
+class ManagerOrderService <<Service>> {
+  confirm(shopId, actor, orderId)
+}
+class OrderPlacedEvent <<Service>> {
+  orderIds
+}
+class OrderStatusListener <<Service>> {
+  remember(order) @PostLoad
+  publishIfChanged(order) @PostUpdate
+}
+class OrderStatusChangedEvent <<Service>> {
+  orderId
+  from
+  to
+}
+class OrderMailSender <<Service>> {
+  onPlaced(event) @Async AFTER_COMMIT
+  onStatusChanged(event) @Async AFTER_COMMIT
+  -buildReceipt(orderIds)
+  -buildStatusMail(event)
+  -canMail(customer)
+}
+class HtmlMailSender <<Service>> {
+  send(to, subject, html): boolean
+  url(path)
+  layout(heading, bodyHtml, buttonLabel, buttonUrl)
+}
+class OrderRepository <<Repository>>
+class OrderDetailRepository <<Repository>>
+class PaymentRepository <<Repository>>
+class Order <<Entity>> {
+  id
+  status
+  totalAmount
+}
+class User <<Entity>> {
+  email
+  fullName
+  isEmailVerified
+}
+class "SMTP server" as SMTP <<External>>
+
+View ..> OrderController : POST /api/orders/{userId}/batch
+View ..> ManagerOrderController : POST /api/shop/mine/{shopId}/orders/{id}/confirm
+OrderController --> OrderService
+ManagerOrderController --> ManagerOrderService
+OrderService ..> OrderPlacedEvent : publishes
+ManagerOrderService --> Order : status PENDING to PROCESSING
+Order ..> OrderStatusListener : @EntityListeners
+OrderStatusListener ..> OrderStatusChangedEvent : publishes
+OrderMailSender ..> OrderPlacedEvent : listens AFTER_COMMIT
+OrderMailSender ..> OrderStatusChangedEvent : listens AFTER_COMMIT
+OrderMailSender --> OrderRepository
+OrderMailSender --> OrderDetailRepository
+OrderMailSender --> PaymentRepository
+OrderMailSender --> HtmlMailSender
+HtmlMailSender --> SMTP
+Order "*" --> "1" User : customer
+
+@enduml

@@ -1,0 +1,84 @@
+@startuml
+title 9.4 Invoice and Transaction History - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor Customer as U
+participant "View" as V <<View>> #EADCFF
+participant CustomerOrderController as C <<Controller>> #D8F3DC
+participant CustomerOrderService as S <<Service>> #DCECFF
+participant PaymentRepository as PR <<Repository>> #FFF1C9
+participant OrderRepository as OR <<Repository>> #FFF1C9
+participant OrderDetailRepository as DR <<Repository>> #FFF1C9
+
+== A. Transaction history (/transactions) ==
+U -> V : open "Lịch sử giao dịch" from the user menu
+alt not logged in
+  V --> U : "Vui lòng đăng nhập." (no request)
+else customer
+  V -> C : GET /api/customer/orders/transactions?page=0
+  C -> C : class check hasRole('CUSTOMER') (other roles: 403 from Spring Security)
+  C -> S : transactions(userId, page)
+  S -> PR : findByOrderCustomerId(customerId, page of 20, createdDate desc, id asc)
+  PR --> S : Page<Payment>
+  loop each payment
+    S -> S : TransactionLine(orderId, shopName, paymentType, paymentMethod,\namount, status, invoiceNumber, gatewayTransactionNo,\ncreatedDate, paidAt = lastModifyDate if SUCCESS)
+  end
+  S --> C : TransactionResults(content, page, totalPages, totalElements)
+  C --> V : 200 OK
+  alt no rows
+    V --> U : "Chưa có giao dịch nào."
+  else rows
+    V --> U : table: time (paidAt, else createdDate), order link with shop name,\ntype and method, transaction no (gateway no, else invoice no, else —),\namount, status badge (Đang chờ / Thành công / Thất bại)
+  end
+end
+
+== B. Change page ==
+U -> V : "Trang sau" or "Trang trước"
+V -> C : GET /api/customer/orders/transactions?page=<n>
+note right of V : buttons disabled while loading, "Trang n / total"
+C -> S : transactions(userId, page)
+S -> PR : findByOrderCustomerId(customerId, page of 20, ...)
+PR --> S : Page<Payment>
+S --> C : TransactionResults
+C --> V : 200 OK
+V --> U : next page of rows
+
+== C. Open the invoice of a paid order ==
+U -> V : open the order detail, click "Xem hóa đơn"
+note right of V : shown when status is not CANCELLED and\nthe SUCCESS payments cover totalAmount
+V -> V : go to /orders/{id}/invoice (print layout, no app menu)
+V -> C : GET /api/customer/orders/{id}
+C -> S : detail(userId, orderId)
+S -> OR : findById(orderId) filtered by customer
+alt not found or not owned
+  S --> C : 404 Không tìm thấy dữ liệu.
+  C --> V : 404 {message}
+  V --> U : error text on the invoice page
+else found
+  S -> DR : findByOrderId(orderId)
+  DR --> S : OrderDetail list (items)
+  S -> PR : findByOrderId(orderId), sorted createdDate asc
+  PR --> S : payments
+  S --> C : OrderDetailResponse (totals, recipient, deliveryAddress, payments as PaymentLine)
+  C --> V : 200 OK
+  V -> V : paid = sum of SUCCESS payments
+  alt paid < totalAmount
+    V --> U : "Đơn hàng #<code> chưa thanh toán đủ nên chưa có hóa đơn." and back link
+  else paid >= totalAmount
+    V --> U : invoice: number, order date, "Thanh toán xong" (latest paidAt),\nrecipient, item lines, subtotal, discount, shipping, total,\npayment rows (SUCCESS only), "Đã thanh toán"
+    U -> V : "In / Lưu PDF"
+    V -> V : browser print dialog (no server call)
+  end
+end
+
+@enduml

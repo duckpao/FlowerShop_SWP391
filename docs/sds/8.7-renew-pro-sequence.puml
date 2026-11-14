@@ -1,5 +1,5 @@
 @startuml
-title Renew Pro - sequence diagram
+title 8.7 Renew Pro - sequence diagram
 autonumber
 skinparam shadowing false
 skinparam defaultFontName Arial

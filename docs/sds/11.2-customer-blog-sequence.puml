@@ -1,0 +1,172 @@
+@startuml
+title 11.2 Care Blog for Customers - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor Customer as U
+actor Visitor as G
+participant "View" as V <<View>> #EADCFF
+participant PublicBlogController as PC <<Controller>> #D8F3DC
+participant BlogInteractionController as IC <<Controller>> #D8F3DC
+participant BlogService as BS <<Service>> #DCECFF
+participant BlogInteractionService as IS <<Service>> #DCECFF
+participant BlogRepository as BR <<Repository>> #FFF1C9
+participant BlogInteractionRepository as IR <<Repository>> #FFF1C9
+participant BlogCommentRepository as CR <<Repository>> #FFF1C9
+participant UserRepository as UR <<Repository>> #FFF1C9
+
+== A. Browse and view a blog post ==
+G -> V : open /blogs (optionally filter by shop, search text)
+V -> PC : GET /api/public/blogs?shopId&q&page
+PC -> BS : listPublic(shopId, q, page)
+alt q longer than 100 characters
+  BS --> PC : 400 "Từ khóa tối đa 100 ký tự."
+  PC --> V : 400
+else ok
+  BS -> BR : searchPublic(PUBLISHED, ACTIVE, shopId, q, page of 12, newest first)
+  BR --> BS : Page<Blog>
+  BS --> PC : BlogResults
+  PC --> V : 200 OK
+  V --> G : post cards
+end
+G -> V : open a post
+V -> PC : GET /api/public/blogs/{id}
+PC -> BS : publicDetail(id)
+BS -> BR : findByIdAndStatusAndShop_Status(id, PUBLISHED, ACTIVE)
+alt not found, DRAFT, HIDDEN or shop not ACTIVE
+  BS --> PC : 404 "Không tìm thấy bài viết."
+  PC --> V : 404
+else visible
+  BR --> BS : Blog
+  BS --> PC : BlogResult (images, shop summary)
+  PC --> V : 200 OK
+  V --> G : post content and images
+end
+V -> IC : GET /api/public/blogs/{blogId}/engagement
+IC -> IS : engagement(blogId)
+IS -> BR : findByIdAndStatusAndShop_Status(...)
+IS -> IR : countByIdBlogIdAndIdInteractionType(blogId, LIKE)
+IS -> CR : countByBlogId(blogId)
+IS --> IC : EngagementResult(likeCount, commentCount)
+IC --> V : 200 OK
+V -> IC : GET /api/public/blogs/{blogId}/comments?page
+IC -> IS : comments(blogId, page)
+IS -> CR : findByBlogId(blogId, page of 10, newest first)
+CR --> IS : Page<BlogComment>
+IS --> IC : CommentResults (author name, avatar)
+IC --> V : 200 OK
+
+== B. Customer checks own like and save state ==
+U -> V : open a post while logged in
+V -> IC : GET /api/customer/blogs/{blogId}/interactions
+IC -> IS : mine(blogId, userId)
+IS -> BR : findByIdAndStatusAndShop_Status(...)
+IS -> IR : existsByIdUserIdAndIdBlogIdAndIdInteractionType(userId, blogId, LIKE)
+IS -> IR : existsByIdUserIdAndIdBlogIdAndIdInteractionType(userId, blogId, SAVE)
+IS --> IC : InteractionResult(liked, saved)
+IC --> V : 200 OK
+
+== C. Like or unlike ==
+U -> V : click the heart
+V -> IC : PUT /api/customer/blogs/{blogId}/likes (unlike: DELETE)
+IC -> IS : setInteraction(blogId, userId, LIKE, active = true | false)
+IS -> BR : findByIdAndStatusAndShop_Status(...)
+alt blog not visible
+  IS --> IC : 404 "Không tìm thấy bài viết."
+  IC --> V : 404
+else visible
+  IS -> IR : existsByIdUserIdAndIdBlogIdAndIdInteractionType(userId, blogId, LIKE)
+  alt active and not yet liked
+    IS -> UR : findById(userId)
+    alt user missing
+      IS --> IC : 404 "Không tìm thấy người dùng."
+      IC --> V : 404
+    else found
+      IS -> IR : saveAndFlush(BlogInteraction(userId, blogId, LIKE))
+    end
+  else inactive and liked
+    IS -> IR : deleteByIdUserIdAndIdBlogIdAndIdInteractionType(userId, blogId, LIKE)
+    IS -> IR : flush()
+  else already in the requested state
+    note over IS : nothing written
+  end
+  IS -> IR : existsBy... (LIKE) and existsBy... (SAVE)
+  IS --> IC : InteractionResult(liked, saved)
+  IC --> V : 200 OK
+  V --> U : heart state and count updated
+end
+
+== D. Save or unsave ==
+U -> V : click the bookmark
+V -> IC : PUT /api/customer/blogs/{blogId}/saves (unsave: DELETE)
+IC -> IS : setInteraction(blogId, userId, SAVE, active = true | false)
+note right of IS : same rules as C, with interaction type SAVE
+IS --> IC : InteractionResult(liked, saved)
+IC --> V : 200 OK
+V --> U : bookmark state updated
+
+== E. Saved posts list ==
+U -> V : open saved posts
+V -> IC : GET /api/customer/blogs/saved?page
+IC -> IS : saved(userId, page)
+IS -> IR : findVisibleBlogsByUserAndType(userId, SAVE, page of 12, newest saved first)
+note right of IR : only PUBLISHED blogs of ACTIVE shops are returned
+IR --> IS : Page<Blog>
+IS --> IC : BlogResults
+IC --> V : 200 OK
+V --> U : saved post cards
+
+== F. Comment on a post ==
+U -> V : write a comment (max 2000 characters)
+V -> IC : POST /api/customer/blogs/{blogId}/comments\n(content)
+IC -> IS : addComment(blogId, userId, input)
+IS -> BR : findByIdAndStatusAndShop_Status(...)
+alt blog not visible
+  IS --> IC : 404 "Không tìm thấy bài viết."
+  IC --> V : 404
+else visible
+  IS -> UR : findById(userId)
+  alt user missing
+    IS --> IC : 404 "Không tìm thấy người dùng."
+    IC --> V : 404
+  else found
+    IS -> CR : saveAndFlush(BlogComment(content stripped))
+    CR --> IS : BlogComment
+    IS --> IC : CommentResult
+    IC --> V : 201 Created
+    V --> U : comment appended to the list
+  end
+end
+note over IS : blank content is refused by validation (400); no moderation step
+
+== G. Delete an own comment ==
+U -> V : click delete on own comment
+V -> V : confirmation dialog
+alt confirmed
+  V -> IC : DELETE /api/customer/blogs/{blogId}/comments/{commentId}
+  IC -> IS : deleteComment(blogId, commentId, userId)
+  IS -> BR : findByIdAndStatusAndShop_Status(...)
+  IS -> CR : findByIdAndBlogId(commentId, blogId)
+  alt comment not on this blog
+    IS --> IC : 404 "Không tìm thấy bình luận."
+    IC --> V : 404
+  else comment found but written by someone else
+    IS --> IC : 404 "Không tìm thấy bình luận."
+    IC --> V : 404
+  else own comment
+    IS -> CR : delete(comment)
+    IC --> V : 204 No Content
+    V --> U : comment removed
+  end
+end
+
+@enduml

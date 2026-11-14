@@ -1,0 +1,118 @@
+@startuml
+title 3.8 GHN Master Data and Shipping Fee Quote - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor Customer
+participant "View" as V <<View>> #EADCFF
+participant PublicGhnController as PC <<Controller>> #D8F3DC
+participant OrderController as OC <<Controller>> #D8F3DC
+participant OrderService as OS <<Service>> #DCECFF
+participant GhnService as G <<Service>> #DCECFF
+participant "GHN API\n(dev-online-gateway.ghn.vn)" as GHN <<External>> #FFE0E0
+database MySQL
+
+== A. Address picker (public, no login) ==
+Customer -> V : open address form
+V -> PC : GET /api/public/ghn/provinces
+PC -> G : provinces()
+alt token or shopId not configured
+  G --> PC : 503 Chưa cấu hình GHN trên server.
+  PC --> V : 503 {message}
+  V --> Customer : error text from the address picker
+else configured
+  G -> GHN : GET /shiip/public-api/master-data/province
+  GHN --> G : data [ProvinceID, ProvinceName]
+  G --> PC : List<Option>
+  PC --> V : 200 JSON
+end
+Customer -> V : choose province
+V -> PC : GET /api/public/ghn/provinces/{id}/districts
+PC -> G : districts(provinceId)
+G -> GHN : GET /shiip/public-api/master-data/district?province_id=
+GHN --> G : data [DistrictID, DistrictName]
+G --> PC : List<Option>
+PC --> V : 200 JSON
+Customer -> V : choose district
+V -> PC : GET /api/public/ghn/districts/{id}/wards
+PC -> G : wards(districtId)
+G -> GHN : GET /shiip/public-api/master-data/ward?district_id=
+GHN --> G : data [WardCode (string), WardName]
+G --> PC : List<Option>
+PC --> V : 200 JSON
+V --> Customer : saves city, district, ward and ghnDistrictId, ghnWardCode
+alt GHN HTTP not 200, non-JSON, or code not 200
+  G --> PC : 502 with GHN message
+  PC --> V : 502 {message}
+  V --> Customer : error text (or generic GHN message when no body)
+else connection failure or timeout
+  G --> PC : 502 "Không thể kết nối tới GHN ..."
+  PC --> V : 502 {message}
+  V --> Customer : error text
+end
+
+== B. Checkout shipping fee quote ==
+Customer -> V : open checkout (selected address, one group per shop)
+loop for each shopId in the cart
+  V -> OC : GET /api/orders/{userId}/shipping-fee?shopId=&addressId=
+  OC -> OC : requireOwner(userId, currentUser)
+  alt caller is not the user
+    OC --> V : 403 Không có quyền truy cập đơn hàng này.
+  else owner
+    OC -> OS : estimateShippingFee(userId, shopId, addressId)
+    OS -> OS : shopRepository.findById(shopId)
+    alt shop not found
+      OS --> OC : 404 Không tìm thấy cửa hàng.
+      OC --> V : 404 {message}
+    else shop found
+      OS -> OS : resolveDestination: address must belong to user
+      alt address not saved for user or no ghnDistrictId / ghnWardCode
+        OS --> OC : 400 Vui lòng chọn một địa chỉ đã lưu trong tài khoản. or GHN codes missing
+        OC --> V : 400 {message}
+      else destination has GHN codes
+        OS -> OS : quoteFee: default (or first) shop address must have GHN codes
+        alt shop has no pickup address with GHN codes
+          OS --> OC : 400 Cửa hàng chưa có địa chỉ lấy hàng theo danh mục GHN ...
+          OC --> V : 400 {message}
+        else
+          OS -> G : calculateFee(from district/ward, to district/ward, 2000 g)
+          G -> GHN : POST /shiip/public-api/v2/shipping-order/fee
+          alt HTTP 200 and code 200
+            GHN --> G : data.total
+            G --> OS : BigDecimal fee
+            OS --> OC : fee
+            OC --> V : 200 {shippingFee}
+          else GHN failure (HTTP not 200, non-JSON, code not 200, timeout)
+            G --> OS : 502 with GHN message
+            OS --> OC : 502 {message}
+            OC --> V : 502 {message}
+            note right of V : feeErrors[shopId] = message (red box under that shop)
+          end
+        end
+      end
+    end
+  end
+end
+V --> Customer : "Phí vận chuyển (GHN)" per shop; error shown in red under that shop
+
+note over G
+  ensureConfigured() runs before every GHN call: 503 when
+  app.ghn.token or app.ghn.shop-id is blank. Checkout
+  shows that 503 message in the same per-shop error box.
+end note
+
+note over V
+  POST /api/customer/orders/fee (CustomerOrderService.calculateFee)
+  exists in the backend, but the View never calls this endpoint.
+end note
+
+@enduml

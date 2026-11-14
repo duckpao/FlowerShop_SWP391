@@ -1,5 +1,5 @@
 @startuml
-title Register and Verify Email - sequence diagram
+title 1.3 Register and Verify Email - sequence diagram
 autonumber
 skinparam shadowing false
 skinparam defaultFontName Arial

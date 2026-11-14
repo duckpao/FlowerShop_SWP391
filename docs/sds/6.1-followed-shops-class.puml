@@ -1,0 +1,78 @@
+@startuml
+!pragma layout smetana
+title 6.1 Followed Shops - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+  BackgroundColor<<DTO>> #ECECEC
+  BackgroundColor<<Scheduler>> #FFE8CC
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class FavoriteShopController <<Controller>> {
+  mine(user): List<ShopFavoriteResponse>
+}
+class FavoriteShopService <<Service>> {
+  mine(userId): List<ShopFavoriteResponse>
+  -toResponse(favorite): ShopFavoriteResponse
+}
+class "FavoriteShopService.ShopFavoriteResponse" as ShopFavoriteResponse <<DTO>> {
+  shopId
+  name
+  description
+  logoUrl
+  active
+  followedAt
+}
+interface FavoriteShopRepository <<Repository>> {
+  findByIdUserIdOrderByCreatedDateDesc(userId): List<FavoriteShop>
+}
+class FavoriteShop <<Entity>> {
+  id: (userId, shopId)
+  createdDate
+}
+class Shop <<Entity>> {
+  id
+  name
+  description
+  logoUrl
+  status: ShopStatus
+}
+
+View --> FavoriteShopController : GET /api/customer/favorite-shops
+FavoriteShopController --> FavoriteShopService
+FavoriteShopController ..> ShopFavoriteResponse : returns list
+FavoriteShopService --> FavoriteShopRepository
+FavoriteShopService ..> ShopFavoriteResponse : builds
+FavoriteShopRepository ..> FavoriteShop
+FavoriteShop "*" --> "1" Shop
+
+note bottom of FavoriteShopService
+  Only the logged-in customer's rows, newest follow first (createdDate desc).
+  active = shop status is ACTIVE. Shops that are not active are still listed.
+  Read-only transaction, no paging.
+end note
+
+note bottom of FavoriteShopController
+  Class-level @PreAuthorize hasRole('CUSTOMER'): other roles get 403.
+  Customer page (View): a guest is sent to /login?next=%2Ffollowing-shops,
+  other roles see a text message and no request is sent.
+end note
+
+@enduml

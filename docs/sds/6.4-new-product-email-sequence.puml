@@ -1,0 +1,112 @@
+@startuml
+title 6.4 New Product Email - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor "Shop owner / staff" as U
+actor Follower as F
+participant "View" as V <<View>> #EADCFF
+participant ManagerProductController as C <<Controller>> #D8F3DC
+participant ManagerProductService as S <<Service>> #DCECFF
+participant ProductQuotaService as Q <<Service>> #DCECFF
+participant ShopProductNotificationService as N <<Service>> #DCECFF
+participant ShopProductPublicationRepository as PUB <<Repository>> #FFF1C9
+participant FavoriteShopRepository as FR <<Repository>> #FFF1C9
+participant ShopProductMailRepository as MR <<Repository>> #FFF1C9
+participant ProductRepository as PDR <<Repository>> #FFF1C9
+participant UserRepository as UR <<Repository>> #FFF1C9
+participant ShopProductMailJob as J <<Scheduler>> #FFE8CC
+participant ShopProductMailDelivery as D <<Service>> #DCECFF
+participant "SMTP server" as SMTP <<External>> #FFE0E0
+
+== A. Shop publishes a product (mails are queued) ==
+U -> V : save product (create, edit, or unhide)
+V -> C : POST /api/shop/mine/{shopId}/products (create)\nPUT /api/shop/mine/{shopId}/products/{id} (edit)\nPUT /api/shop/mine/{shopId}/products/{id}/unhide (unhide)
+alt unhide
+  C -> S : unhide(shopId, id, actor)
+  S -> Q : requireAllowed(product)
+  Q --> S : ok (else 400 product locked by the shop plan limit)
+  S -> S : status = ACTIVE
+else create or edit
+  C -> S : save(shopId, id, actor, input, images, videos)
+  S -> S : product, images and videos saved in one transaction
+end
+S -> N : published(product)
+N -> PUB : existsById(productId)
+PUB --> N : boolean
+alt not ACTIVE, admin-hidden, shop not ACTIVE, or already published
+  N --> S : return, no mail queued
+else first publication
+  N -> PUB : save(ShopProductPublication)
+  N -> FR : findByIdShopId(shopId)
+  FR --> N : follows (user loaded with each)
+  loop each follow
+    alt user not CUSTOMER, not ACTIVE, or email not verified
+      N -> N : skip this follower
+    else
+      N -> MR : save(ShopProductMail: PENDING, nextAttemptAt = now)
+    end
+  end
+end
+N --> S : ok
+S --> C : Result
+C --> V : 201 Created (create), 200 OK (edit), 204 No Content (unhide)
+V --> U : product saved
+
+note over N
+  Mail rows commit together with the product. Nothing is sent here:
+  the job in B sends them later. This is not an after-commit send.
+end note
+
+== B. Job sends the queued mails (every 30 s, fixed delay) ==
+J -> MR : due(now, first 20 rows, oldest first)
+MR --> J : ids of PENDING rows with nextAttemptAt <= now
+loop each due id
+  J -> D : deliver(id)
+  D -> MR : findLocked(id) (row lock)
+  MR --> D : ShopProductMail
+  alt missing, not PENDING, or nextAttemptAt in the future
+    D --> J : return
+  else due
+    D -> PDR : findById(productId)
+    PDR --> D : Product
+    D -> UR : findById(userId)
+    UR --> D : User
+    D -> FR : existsById(userId, shopId)
+    FR --> D : boolean
+    alt product not ACTIVE or admin-hidden, shop not ACTIVE,\nuser not a valid customer, or follow removed
+      D -> D : status = CANCELLED, no mail
+    else still valid
+      D -> D : attempts + 1, build text (shop, product, price,\ndescription, product and shop links, unfollow link)
+      D -> SMTP : send(SimpleMailMessage)
+      alt sent
+        SMTP --> D : ok
+        D -> D : status = SENT, sentAt = now
+      else MailException
+        SMTP --> D : error
+        alt attempts >= 5
+          D -> D : status = FAILED
+        else attempts < 5
+          D -> D : nextAttemptAt = now + 2^attempts minutes
+        end
+      end
+    end
+  end
+end
+SMTP --> F : email "FlowerShop - <shop> có sản phẩm mới"
+
+note over D
+  Retry plan: failures 1 to 4 wait 2, 4, 8 and 16 minutes; the 5th failure is FAILED.
+  Other RuntimeExceptions are not counted (see report).
+end note
+
+@enduml

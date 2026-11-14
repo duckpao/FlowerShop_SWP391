@@ -1,0 +1,156 @@
+@startuml
+!pragma layout smetana
+title 6.4 New Product Email - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+  BackgroundColor<<DTO>> #ECECEC
+  BackgroundColor<<Scheduler>> #FFE8CC
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class ManagerProductController <<Controller>> {
+  create(shopId, user, product, images, videos): 201 Result
+  update(shopId, id, user, product, images, videos): Result
+  unhide(shopId, id, user): 204
+}
+class ManagerProductService <<Service>> {
+  save(shopId, id, actor, input, images, videos): Result
+  unhide(shopId, id, actor)
+}
+class ProductQuotaService <<Service>> {
+  requireAllowed(product)
+}
+class ShopProductNotificationService <<Service>> {
+  published(product)
+}
+class ShopProductMailJob <<Scheduler>> {
+  sendPending()
+}
+class ShopProductMailDelivery <<Service>> {
+  deliver(id)
+}
+interface ShopProductPublicationRepository <<Repository>> {
+  existsById(productId): boolean
+  save(publication): ShopProductPublication
+}
+interface FavoriteShopRepository <<Repository>> {
+  findByIdShopId(shopId): List<FavoriteShop>
+  existsById(id): boolean
+}
+interface ShopProductMailRepository <<Repository>> {
+  save(mail): ShopProductMail
+  due(now, page): List<String>
+  findLocked(id): Optional<ShopProductMail>
+}
+class ProductRepository <<Repository>> {
+  findById(id): Optional<Product>
+}
+class UserRepository <<Repository>> {
+  findById(id): Optional<User>
+}
+class "JavaMailSender (SMTP server)" as SMTP <<External>> {
+  send(message)
+}
+class ShopProductPublication <<Entity>> {
+  productId
+  publishedAt
+}
+class ShopProductMail <<Entity>> {
+  id
+  productId
+  shopId
+  userId
+  status: PENDING | SENT | FAILED | CANCELLED
+  attempts
+  nextAttemptAt
+  createdAt
+  sentAt
+}
+class FavoriteShop <<Entity>> {
+  id: (userId, shopId)
+}
+class Product <<Entity>> {
+  id
+  name
+  price
+  status: ProductStatus
+  adminHidden
+}
+class Shop <<Entity>> {
+  id
+  name
+  status: ShopStatus
+}
+class User <<Entity>> {
+  id
+  email
+  fullName
+  role: UserRole
+  status: UserStatus
+  isEmailVerified
+}
+
+View --> ManagerProductController : POST /api/shop/mine/{shopId}/products\nPUT /api/shop/mine/{shopId}/products/{id}\nPUT /api/shop/mine/{shopId}/products/{id}/unhide
+ManagerProductController --> ManagerProductService
+ManagerProductService --> ProductQuotaService : unhide only
+ManagerProductService --> ShopProductNotificationService : published(product)
+ShopProductNotificationService --> ShopProductPublicationRepository
+ShopProductNotificationService --> FavoriteShopRepository : followers of the shop
+ShopProductNotificationService --> ShopProductMailRepository : queue one mail per follower
+ShopProductMailJob --> ShopProductMailRepository : due(now, 20)
+ShopProductMailJob --> ShopProductMailDelivery : deliver(id) per due id
+ShopProductMailDelivery --> ShopProductMailRepository : findLocked(id)
+ShopProductMailDelivery --> ProductRepository
+ShopProductMailDelivery --> UserRepository
+ShopProductMailDelivery --> FavoriteShopRepository : existsById(user, shop)
+ShopProductMailDelivery --> SMTP : send
+ShopProductPublicationRepository ..> ShopProductPublication
+ShopProductMailRepository ..> ShopProductMail
+FavoriteShopRepository ..> FavoriteShop
+ProductRepository ..> Product
+UserRepository ..> User
+ShopProductMail ..> Product : productId
+ShopProductMail ..> User : userId
+Product "*" --> "1" Shop
+FavoriteShop "*" --> "1" User
+FavoriteShop "*" --> "1" Shop
+
+note bottom of ShopProductNotificationService
+  Publication is recorded once per product (Shop_Product_Publications), so
+  unhide after an earlier publication queues no mail again.
+  Only followers at that moment: role CUSTOMER, ACTIVE, verified email.
+  One mail row per (product, follower), unique constraint uk_shop_product_mail.
+  The rows are written in the same transaction as the product.
+end note
+
+note bottom of ShopProductMailJob
+  Fixed delay 30 s (first run after 30 s). Takes up to 20 PENDING rows with
+  nextAttemptAt <= now, oldest first. Off when app.shop-follow-mail.enabled=false.
+  Each id goes to its own deliver() call: a RuntimeException is logged and skipped.
+end note
+
+note bottom of ShopProductMailDelivery
+  Before sending: product ACTIVE and not admin-hidden, shop ACTIVE, user CUSTOMER and ACTIVE
+  with verified email, still following. Otherwise the mail becomes CANCELLED.
+  attempts + 1 before sending. MailException: attempts >= 5 gives FAILED,
+  else nextAttemptAt = now + 2^attempts minutes (2, 4, 8, 16).
+end note
+
+@enduml

@@ -1,0 +1,99 @@
+@startuml
+title 3.7 Update Order Status - class diagram
+!pragma layout smetana
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<DTO>> #FCE7F3
+  BackgroundColor<<Scheduler>> #FFE8CC
+  BackgroundColor<<External>> #FFE0E0
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class ManagerOrderController <<Controller>> {
+  confirm(shopId, id, user)
+  setStatus(shopId, id, user, body)
+  cancel(shopId, id, user, body)
+}
+class ManagerOrderService <<Service>> {
+  confirm(shopId, actor, orderId)
+  changeStatus(shopId, actor, orderId, target): StatusResult
+  cancel(shopId, actor, orderId, reason)
+}
+class StatusResult <<DTO>> {
+  status
+  warning
+}
+class OrderStatusListener <<Service>> {
+  remember(order) @PostLoad
+  publishIfChanged(order) @PostUpdate
+}
+class OrderStatusChangedEvent <<Service>> {
+  orderId
+  from
+  to
+}
+class OrderMailSender <<Service>> {
+  onStatusChanged(event) @Async AFTER_COMMIT
+}
+class OrderRepository <<Repository>>
+class DeliveryRepository <<Repository>>
+class PaymentRepository <<Repository>>
+class Order <<Entity>> {
+  id
+  status
+  statusSnapshot
+  cancelReason
+}
+class Delivery <<Entity>> {
+  ghnStatus
+  status
+}
+class Payment <<Entity>> {
+  status
+}
+enum OrderStatus <<Entity>> {
+  PENDING
+  AWAITING_DEPOSIT
+  DEPOSIT_PAID
+  PROCESSING
+  DELIVERING
+  COMPLETED
+  CANCELLED
+  REFUNDED
+  AWAITING_QUOTE
+  QUOTED
+}
+
+View ..> ManagerOrderController : POST /api/shop/mine/{shopId}/orders/{id}/confirm
+View ..> ManagerOrderController : POST /api/shop/mine/{shopId}/orders/{id}/set-status
+View ..> ManagerOrderController : POST /api/shop/mine/{shopId}/orders/{id}/cancel
+ManagerOrderController --> ManagerOrderService
+ManagerOrderService --> OrderRepository
+ManagerOrderService --> DeliveryRepository
+ManagerOrderService --> PaymentRepository
+ManagerOrderService ..> StatusResult : returns
+OrderRepository ..> Order
+DeliveryRepository ..> Delivery
+PaymentRepository ..> Payment
+Order --> OrderStatus
+Order ..> OrderStatusListener : @EntityListeners
+OrderStatusListener ..> OrderStatusChangedEvent : publishes
+OrderMailSender ..> OrderStatusChangedEvent : listens AFTER_COMMIT
+
+@enduml

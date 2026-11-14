@@ -1,0 +1,111 @@
+@startuml
+!pragma layout smetana
+title 5.1 Create SePay Payment - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+  BackgroundColor<<DTO>> #ECECEC
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class PaymentController <<Controller>> {
+  createPayment(request, currentUser): CreatePaymentResponse
+  createGroupPayment(request, currentUser): CreatePaymentResponse
+}
+class SePayGatewayService <<Service>> {
+  +PAYMENT_WINDOW_MINUTES = 10
+  +DEPOSIT_DEADLINE_MINUTES = 1440
+  createPayment(request, authenticatedUserId): CreatePaymentResponse
+  createGroupPayment(request, userId): CreatePaymentResponse
+  -signedCheckoutFields(invoice, amount, description, customerId, method): Map
+  -isExpired(order): boolean
+  ~requiredDeposit(order): BigDecimal
+  -getShortOrderCode(orderId): String
+}
+class CreatePaymentRequest <<DTO>> {
+  orderId
+  paymentType: FULL | DEPOSIT | FINAL
+  paymentMethod: CARD | BANK_TRANSFER | NAPAS_BANK_TRANSFER | null
+}
+class CreateGroupPaymentRequest <<DTO>> {
+  orderIds (not empty)
+  paymentMethod
+}
+class CreatePaymentResponse <<DTO>> {
+  checkoutUrl
+  paymentId
+  invoiceNumber
+  orderId
+  amount
+  fields (signed form)
+}
+class OrderRepository <<Repository>> {
+  findByIdForUpdate(id): Optional<Order>
+}
+class PaymentRepository <<Repository>> {
+  findByOrderId(orderId): List<Payment>
+  save(payment): Payment
+}
+class Order <<Entity>> {
+  id
+  orderType: STANDARD | CUSTOM
+  status
+  totalAmount
+  depositAmount
+  paymentStartedAt
+}
+class Payment <<Entity>> {
+  id
+  paymentType
+  paymentMethod: ONLINE | COD
+  amount
+  invoiceNumber
+  groupInvoice
+  status
+}
+class "SePay Gateway\n(checkout page)" as SEPAY <<External>>
+
+View --> PaymentController : POST /api/payments/sepay/create\nPOST /api/payments/sepay/create-group
+View ..> SEPAY : POST signed form (browser redirect)
+PaymentController --> SePayGatewayService
+PaymentController ..> CreatePaymentRequest : reads
+PaymentController ..> CreateGroupPaymentRequest : reads
+PaymentController ..> CreatePaymentResponse : returns
+SePayGatewayService --> OrderRepository
+SePayGatewayService --> PaymentRepository
+SePayGatewayService ..> CreatePaymentResponse : builds
+OrderRepository ..> Order
+PaymentRepository ..> Payment
+Order "1" --> "*" Payment
+
+note bottom of SePayGatewayService
+  The amount is computed on the server: FULL = order total, DEPOSIT = deposit of the order,
+  FINAL = total - paid so far. The browser never sends an amount.
+  Every call creates a new invoice; older PENDING ONLINE payments of the same type become FAILED.
+  Invoice: INV-<8 hex of order id>-<type>-<8 random>; group invoice: GRP-<16 random>.
+  Group payment: standard PENDING orders only, one Payment (FULL) per order sharing groupInvoice,
+  SePay only sees the group invoice and the summed amount.
+end note
+
+note bottom of CreatePaymentResponse
+  fields are signed with HMAC-SHA256 (static helper SePaySignatureUtil) over the form fields in order:
+  merchant, amount, invoice, success / error / cancel URL, ... The secret key never leaves the server.
+end note
+
+@enduml

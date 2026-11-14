@@ -1,0 +1,67 @@
+@startuml
+!pragma layout smetana
+title 6.3 Unfollow Shop - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+  BackgroundColor<<DTO>> #ECECEC
+  BackgroundColor<<Scheduler>> #FFE8CC
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class FavoriteShopController <<Controller>> {
+  remove(user, shopId): 204
+}
+class FavoriteShopService <<Service>> {
+  remove(userId, shopId)
+}
+interface FavoriteShopRepository <<Repository>> {
+  findById(id): Optional<FavoriteShop>
+  delete(favorite)
+}
+class FavoriteShop <<Entity>> {
+  id: FavoriteShopId
+  user
+  shop
+}
+class FavoriteShopId <<Entity>> {
+  userId
+  shopId
+}
+
+View --> FavoriteShopController : DELETE /api/customer/favorite-shops/{shopId}
+FavoriteShopController --> FavoriteShopService
+FavoriteShopService ..> FavoriteShopId : builds key
+FavoriteShopService --> FavoriteShopRepository
+FavoriteShopRepository ..> FavoriteShop
+FavoriteShop *-- FavoriteShopId : composite key
+
+note bottom of FavoriteShopService
+  findById first, delete only when the row exists.
+  Unknown shop or shop not followed: no error, still 204.
+  No check that the shop exists or is ACTIVE, so an inactive shop can be unfollowed.
+end note
+
+note bottom of View
+  Shop page: "♥ Đang theo dõi" button toggles off (no confirmation).
+  "Cửa hàng đang theo dõi" page: "Bỏ theo dõi" removes the card without a dialog.
+  Failure text: "Không thể thay đổi trạng thái theo dõi." or "Không thể bỏ theo dõi cửa hàng."
+end note
+
+@enduml

@@ -1,0 +1,99 @@
+@startuml
+!pragma layout smetana
+title 7.1 View Vouchers - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+  BackgroundColor<<DTO>> #ECECEC
+  BackgroundColor<<Scheduler>> #FFE8CC
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class CouponController <<Controller>> {
+  adminList(user): List<View>
+  shopList(user, shopId): List<View>
+}
+class CouponService <<Service>> {
+  list(actor, shopId): List<View>
+  -owned(shopId, actor): Shop
+}
+class "CouponService.View" as CouponView <<DTO>> {
+  id
+  code
+  shopId
+  target
+  discountType
+  discountValue
+  minOrderValue
+  maxDiscountValue
+  startDate
+  endDate
+  usageLimit
+  usedCount
+  status
+  productId
+}
+class ShopRepository <<Repository>> {
+  findById(id): Optional<Shop>
+}
+class CouponRepository <<Repository>> {
+  managed(shopId): List<Coupon>
+}
+class Coupon <<Entity>> {
+  id
+  code
+  target
+  discountType
+  discountValue
+  usageLimit
+  usedCount
+  status: CouponStatus
+  deleted
+  shop
+  product
+}
+class Shop <<Entity>> {
+  id
+  owner: User
+  status: ShopStatus
+}
+
+View --> CouponController : GET /api/admin/vouchers\nGET /api/shop/mine/{shopId}/vouchers
+CouponController --> CouponService
+CouponService ..> CouponView : returns
+CouponService --> ShopRepository : owner check (shop scope)
+CouponService --> CouponRepository
+ShopRepository ..> Shop
+CouponRepository ..> Coupon
+Coupon "0..*" --> "0..1" Shop
+
+note bottom of CouponService
+  ADMIN (shopId = null): only vouchers with no shop (platform vouchers).
+  SHOP: only the vouchers of its own shop. Not the owner: 404.
+  Deleted rows are hidden. Sorted by createdDate desc, then id.
+  No public or customer voucher list exists; customers see vouchers only in checkout (7.5).
+end note
+
+note bottom of CouponRepository
+  Status is the stored value. ACTIVE vouchers past endDate become EXPIRED
+  in MaintenanceJob.expireCoupons (daily at 00:00). The page computes its own label
+  from endDate and startDate.
+end note
+
+@enduml

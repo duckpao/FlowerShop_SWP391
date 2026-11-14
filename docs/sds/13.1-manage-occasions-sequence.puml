@@ -1,0 +1,118 @@
+@startuml
+title 13.1 Manage Occasions - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor Customer as U
+participant "View" as V <<View>> #EADCFF
+participant OccasionController as C <<Controller>> #D8F3DC
+participant OccasionService as S <<Service>> #DCECFF
+participant CustomerOccasionRepository as OR <<Repository>> #FFF1C9
+participant UserRepository as UR <<Repository>> #FFF1C9
+database MySQL
+
+== A. List the occasions ==
+U -> V : open "Dịp đặc biệt" (logged in as customer)
+V -> C : GET /api/customer/occasions
+C -> S : mine(userId)
+S -> OR : findByCustomerIdOrderByOccasionDateAsc(userId)
+OR -> MySQL : SELECT Customer_Occasions of the customer
+MySQL --> OR : rows
+OR --> S : List<CustomerOccasion>
+S -> S : toResponse() per occasion (next occurrence, remindAt, reminded), sorted by next occurrence
+S --> C : List<OccasionResponse>
+C --> V : 200 OK
+V --> U : "Sắp tới" and "Đã qua" sections with countdown and reminder status
+note right of C
+  Other roles: 403 "Không có quyền truy cập." (class-level @PreAuthorize)
+end note
+
+== B. Add an occasion ==
+U -> V : fill title, date, optional "Nhắc vào lúc", optional "Lặp lại hằng năm", click "Lưu"
+note right of V
+  Client side: title required (max 255), date min = today,
+  reminder time max = occasion day 23:59. "Lưu" is disabled while saving.
+end note
+V -> C : POST /api/customer/occasions\n(title, occasionDate, notifyAt?, recurringYearly)
+alt title blank or over 255 chars, or occasionDate missing
+  C --> V : 400 "Dữ liệu không hợp lệ" + errors per field
+else body valid
+  C -> S : create(userId, request)
+  S -> OR : countByCustomerId(userId)
+  OR --> S : count
+  alt count >= 100
+    S --> C : 400 "Bạn đã đạt giới hạn 100 dịp đặc biệt."
+  else count < 100
+    S -> UR : findById(userId)
+    UR --> S : User (else 404 "Không tìm thấy tài khoản.")
+    S -> S : apply(): check the date rule and notifyAt window, derive notifyDaysBefore and notifyTime
+    alt one-time occasion with occasionDate before today
+      S --> C : 400 "Ngày diễn ra dịp không được ở quá khứ."
+    else notifyAt outside 0 to 365 days before occasionDate
+      S --> C : 400 "Thời điểm nhắc phải trước hoặc đúng ngày diễn ra dịp, tối đa 365 ngày."
+    else valid
+      S -> OR : save(new CustomerOccasion: UUID id, reminderSent = false)
+      OR -> MySQL : INSERT Customer_Occasions
+      S --> C : OccasionResponse
+      C --> V : 201 Created
+      V -> V : close the form, reload the list
+    end
+  end
+end
+V --> U : new occasion shown with its reminder time
+
+== C. Edit an occasion ==
+U -> V : click "Sửa", change fields, click "Lưu"
+V -> C : PUT /api/customer/occasions/{id}\n(same body as create)
+alt body invalid
+  C --> V : 400 "Dữ liệu không hợp lệ" + errors per field
+else body valid
+  C -> S : update(userId, id, request)
+  S -> OR : findByIdAndCustomerId(id, userId)
+  alt not found, or owned by another customer
+    S --> C : 404 "Không tìm thấy dịp đặc biệt."
+  else found
+    S -> S : apply(): same rules as B (a past one-time date is rejected here too)
+    alt one-time occasion with occasionDate before today, or notifyAt out of range
+      S --> C : 400 (same messages as B)
+    else valid
+      S -> S : if date, notify time, days or recurring changed: reminderSent = false, lastRemindedFor = null
+      S -> OR : save(occasion)
+      OR -> MySQL : UPDATE Customer_Occasions
+      S --> C : OccasionResponse
+      C --> V : 200 OK
+      V -> V : close the form, reload the list
+    end
+  end
+end
+
+== D. Delete an occasion ==
+U -> V : click "Xóa"
+V -> V : confirm dialog "Xóa "<title>"? Bạn sẽ không nhận nhắc nhở cho dịp này nữa."
+alt dialog cancelled
+  V --> U : nothing changes
+else confirmed
+  V -> C : DELETE /api/customer/occasions/{id}
+  C -> S : delete(userId, id)
+  S -> OR : findByIdAndCustomerId(id, userId)
+  alt not found, or owned by another customer
+    S --> C : 404 "Không tìm thấy dịp đặc biệt."
+  else found
+    S -> OR : delete(occasion)
+    OR -> MySQL : DELETE Customer_Occasions
+    S --> C : done
+    C --> V : 204 No Content
+    V -> V : reload the list
+  end
+end
+
+@enduml

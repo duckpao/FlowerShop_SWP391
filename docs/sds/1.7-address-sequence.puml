@@ -1,5 +1,5 @@
 @startuml
-title Manage Customer Address - sequence diagram
+title 1.7 Manage Customer Address - sequence diagram
 autonumber
 skinparam shadowing false
 skinparam defaultFontName Arial

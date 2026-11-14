@@ -1,5 +1,5 @@
 @startuml
-title Lock or Unlock Customer Account - sequence diagram
+title 1.8 Lock or Unlock Customer Account - sequence diagram
 autonumber
 skinparam shadowing false
 skinparam defaultFontName Arial

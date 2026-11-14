@@ -1,0 +1,92 @@
+@startuml
+!pragma layout smetana
+title 2.7 Home Page - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<DTO>> #FCE7F3
+  BackgroundColor<<Scheduler>> #FFE8CC
+  BackgroundColor<<External>> #FFE0E0
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class PublicCatalogController <<Controller>> {
+  browse(q, categoryId, shopId, type, minPrice, maxPrice, sort, page, size)
+  detail(id)
+  categories()
+}
+class CatalogService <<Service>> {
+  browse(q, categoryId, shopId, type, minPrice, maxPrice, sort, page, size): Results
+  detail(productId): ProductDetail
+  categories(): List<CategoryCard>
+}
+class ProductCardAssembler <<Service>>
+class PublicShopController <<Controller>> {
+  search(q)
+  detail(id)
+}
+class NotificationController <<Controller>> {
+  mine(user)
+  unreadCount(user)
+  markAllAsRead(user)
+}
+class NotificationService <<Service>> {
+  mine(userId)
+  unreadCount(userId)
+  markAllAsRead(userId)
+}
+class ProductRepository <<Repository>>
+class ShopRepository <<Repository>>
+interface NotificationRepository <<Repository>>
+class Product <<Entity>> {
+  id
+  name
+  price
+  status
+}
+class Shop <<Entity>> {
+  id
+  name
+  description
+  logoUrl
+}
+class Notification <<Entity>> {
+  id
+  title
+  message
+  link
+  read
+}
+
+View ..> PublicCatalogController : GET /api/public/products
+View ..> PublicShopController : GET /api/public/shops
+View ..> PublicShopController : GET /api/public/shops?q=
+View ..> NotificationController : GET /api/account/notifications
+View ..> NotificationController : GET /api/account/notifications/unread-count
+PublicCatalogController --> CatalogService
+CatalogService --> ProductCardAssembler
+CatalogService --> ProductRepository
+PublicShopController --> ShopRepository
+NotificationController --> NotificationService
+NotificationService --> NotificationRepository
+ProductRepository ..> Product
+ShopRepository ..> Shop
+NotificationRepository ..> Notification
+Product "*" --> "1" Shop
+
+@enduml
