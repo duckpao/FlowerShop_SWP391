@@ -1,0 +1,139 @@
+@startuml
+title 12.2 Manage Shop Info - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor "Shop owner" as O
+participant "View" as V <<View>> #EADCFF
+participant ManagerShopController as C <<Controller>> #D8F3DC
+participant ManagerShopService as S <<Service>> #DCECFF
+participant CloudinaryService as CL <<Service>> #DCECFF
+participant ShopRepository as SR <<Repository>> #FFF1C9
+participant AddressRepository as AR <<Repository>> #FFF1C9
+participant "Cloudinary API" as CDN <<External>> #FFE0E0
+
+== A. Open the shop settings ==
+O -> V : open shop settings
+V -> C : GET /api/shop/mine
+C -> S : mine(ownerId)
+S -> SR : findByOwnerIdOrderByNameAsc(ownerId)
+SR --> S : shops
+S --> C : List<ShopResponse>
+C --> V : 200 OK
+V -> C : GET /api/shop/mine/{id}/address
+C -> S : address(id, ownerId)
+S -> SR : findById(id)
+SR --> S : Shop (else 404 "Không tìm thấy cửa hàng hoặc nhân viên.")
+S -> S : owner differs: 404 (same message)
+S -> AR : findByShopIdAndUserIsNullOrderByCreatedDateAscIdAsc(id)
+AR --> S : pickup addresses
+S --> C : List<AddressResponse>
+C --> V : 200 OK
+V --> O : name, description, logo, pickup address with GHN codes
+
+== B. Owner check used by every write ==
+note over S
+  Reused below. Write path loads the shop with a row lock.
+end note
+S -> SR : findForUpdate(id)
+SR --> S : Shop (else 404 "Không tìm thấy cửa hàng hoặc nhân viên.")
+alt owner differs from logged-in user
+  S --> C : 404 "Không tìm thấy cửa hàng hoặc nhân viên."
+else status INACTIVE or BANNED
+  S --> C : 403 "Shop bị khóa hoặc ngừng hoạt động, chỉ được xem."
+else status PENDING or ACTIVE
+  S -> S : continue with the write
+end
+
+== C. Edit name and description ==
+O -> V : edit name and description, click save
+V -> C : PUT /api/shop/mine/{id}\n(name, description)
+note right of C : @Valid: name required (max 255), description not null (max 5000). Failure: 400 "Dữ liệu không hợp lệ"
+C -> S : update(id, ownerId, profile)
+S -> S : owned(id, ownerId, write) (section B)
+S -> S : name and description stripped; lastModifyBy = ownerId
+S -> SR : flush()
+S --> C : ShopResponse
+C --> V : 200 OK
+V --> O : "Đã cập nhật hồ sơ shop."
+
+== D. Upload the logo (Cloudinary) ==
+O -> V : choose an image file and upload
+V -> C : POST /api/shop/mine/{id}/logo\n(multipart field "file")
+C -> S : uploadLogo(id, ownerId, file)
+S -> S : owned(id, ownerId, write) (section B)
+alt file missing or empty
+  S --> C : 400 "Vui lòng chọn ảnh logo để tải lên."
+else file larger than 5 MB
+  S --> C : 400 "Logo không được vượt quá 5MB."
+else type not image/jpeg, image/png or image/webp
+  S --> C : 400 "Chỉ nhận ảnh JPEG, PNG hoặc WebP."
+else valid file
+  S -> CL : uploadShopLogo(bytes, originalFilename, contentType)
+  alt Cloudinary not configured on the server
+    CL --> S : 503 "Chưa cấu hình Cloudinary trên server."
+    S --> C : 503
+  else configured
+    CL -> CDN : POST /v1_1/{cloud}/image/upload\n(folder flowershop/shop-logos, signature)
+    alt Cloudinary returns an error or no secure_url
+      CDN --> CL : error
+      CL --> S : 502 "Upload logo lên Cloudinary thất bại." (or Cloudinary message)
+      S --> C : 502
+    else secure_url returned
+      CDN --> CL : secure_url
+      CL --> S : logo URL
+      S -> S : shop.logoUrl = url; owner.avatarUrl = url
+      S -> SR : flush()
+      S --> C : ShopResponse
+      C --> V : 200 OK
+      V --> O : new logo shown
+    end
+  end
+end
+note over S
+  Bytes cannot be read from the upload: 500 "Không thể đọc dữ liệu ảnh. Vui lòng thử lại."
+  Cloudinary is unreachable: 502 "Không thể kết nối tới Cloudinary."
+end note
+
+== E. Remove the logo ==
+O -> V : click remove logo
+V -> C : DELETE /api/shop/mine/{id}/logo
+C -> S : removeLogo(id, ownerId)
+S -> S : owned(id, ownerId, write) (section B)
+S -> S : shop.logoUrl = ""; owner.avatarUrl = null
+S -> SR : flush()
+S --> C : ShopResponse
+C --> V : 200 OK
+V --> O : logo removed
+
+== F. Save the pickup address (GHN) ==
+O -> V : pick province, district and ward from GHN lists, fill house number, save
+note right of V : GHN lists come from public GET /api/public/ghn/** (client side, no login)
+V -> C : PUT /api/shop/mine/{id}/address\n(addressLine, city, district, ward, ghnDistrictId, ghnWardCode)
+note right of C : @Valid: each field required; messages like "Vui lòng chọn phường/xã từ danh mục GHN."
+C -> S : saveAddress(id, ownerId, input)
+S -> S : owned(id, ownerId, write) (section B)
+S -> AR : findByShopIdAndUserIsNullOrderByCreatedDateAscIdAsc(id)
+AR --> S : pickup addresses
+alt a default pickup address exists
+  S -> S : reuse it (else reuse first row, or create a new one)
+else none
+  S -> S : create Address(shop, createdBy = ownerId)
+end
+S -> S : other rows: isDefault = false; this row: fields, GHN codes, isDefault = true
+S -> AR : save(address)
+AR --> S : Address
+S --> C : AddressResponse
+C --> V : 200 OK
+V --> O : "Đã lưu địa chỉ cửa hàng."
+
+@enduml

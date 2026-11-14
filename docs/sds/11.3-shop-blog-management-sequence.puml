@@ -1,0 +1,164 @@
+@startuml
+title 11.3 Shop Manages Blog Posts - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor "Shop owner or staff" as U
+participant "View" as V <<View>> #EADCFF
+participant ManagerBlogController as C <<Controller>> #D8F3DC
+participant BlogService as S <<Service>> #DCECFF
+participant CloudinaryService as CL <<Service>> #DCECFF
+participant ShopRepository as SR <<Repository>> #FFF1C9
+participant ShopStaffRepository as STR <<Repository>> #FFF1C9
+participant BlogRepository as BR <<Repository>> #FFF1C9
+participant "Cloudinary API" as CDN <<External>> #FFE0E0
+
+== A. List the shop's posts ==
+U -> V : open blog management
+V -> C : GET /api/shop/mine/{shopId}/blogs?page
+C -> S : listManaged(shopId, userId, page)
+S -> SR : findById(shopId)
+alt shop not found
+  SR --> S : empty
+  S --> C : 404 "Không tìm thấy bài viết."
+  C --> V : 404
+else found
+  S -> STR : findByShopIdAndUserId(shopId, userId) (only if not the owner)
+  alt not owner and not active staff
+    S --> C : 404 "Không tìm thấy bài viết."
+    C --> V : 404
+  else owner or active staff
+    S -> BR : findByShopId(shopId, page of 12, newest first)
+    BR --> S : Page<Blog> (DRAFT, PUBLISHED and HIDDEN)
+    S --> C : BlogResults
+    C --> V : 200 OK
+    V --> U : table with status of each post
+  end
+end
+
+== B. Create a post ==
+U -> V : fill title, content, status (DRAFT or PUBLISHED), add images
+V -> C : POST /api/shop/mine/{shopId}/blogs\npart "blog" (JSON: title, content, status, retainedImages) + images[]
+C -> S : save(shopId, null, userId, input, images)
+S -> SR : findById(shopId) and owner or staff check (as in A)
+alt not allowed to read the shop
+  S --> C : 404 "Không tìm thấy bài viết."
+  C --> V : 404
+else allowed
+  S -> S : shop ACTIVE, owner role SHOP and owner ACTIVE?
+  alt not allowed to publish
+    S --> C : 403 "Shop phải được duyệt và đang hoạt động để đăng bài."
+    C --> V : 403
+  else allowed
+    alt status is HIDDEN
+      S --> C : 400 "Hãy dùng thao tác ẩn bài viết."
+      C --> V : 400
+    else
+      alt retained + new images > 10
+        S --> C : 400 "Mỗi bài viết chỉ được dùng tối đa 10 ảnh."
+        C --> V : 400
+      else
+        loop each new image
+          S -> S : empty: 400 "Vui lòng chọn ảnh để tải lên."\nover 5 MB: 400 "Ảnh không được vượt quá 5MB."\nnot JPEG/PNG/WebP: 400 "Chỉ nhận ảnh JPEG, PNG hoặc WebP."
+        end
+        loop each new image
+          S -> CL : uploadBlogImage(bytes, name, contentType)
+          CL -> CDN : POST upload (folder flowershop/blogs)
+          alt upload fails
+            CDN --> CL : error
+            CL --> S : 502 "Upload ảnh bài viết lên Cloudinary thất bại."
+            S --> C : 502
+            C --> V : 502
+          else uploaded
+            CDN --> CL : secure URL
+            CL --> S : URL
+          end
+        end
+        S -> BR : saveAndFlush(Blog: id, shop, title, content stripped, status, images JSON, createdBy)
+        BR --> S : Blog
+        S --> C : BlogResult
+        C --> V : 201 Created
+        V --> U : post added to the list
+      end
+    end
+  end
+end
+note over S
+  Image bytes are read and validated before any upload. Uploaded URLs are not removed
+  again if the database save fails later.
+end note
+
+== C. Update a post ==
+U -> V : edit the post, keep or remove images, add new ones
+V -> C : PUT /api/shop/mine/{shopId}/blogs/{id}\npart "blog" + images[]
+C -> S : save(shopId, id, userId, input, images)
+S -> S : owner or staff check, shop ACTIVE and owner check (as in B)
+S -> BR : findByIdAndShopId(id, shopId)
+alt post not in this shop
+  S --> C : 404 "Không tìm thấy bài viết."
+  C --> V : 404
+else found
+  alt retainedImages not all present in the post
+    S --> C : 400 "Danh sách ảnh giữ lại không hợp lệ."
+    C --> V : 400
+  else
+    S -> CL : uploadBlogImage for each new image (same errors as B)
+    CL -> CDN : POST upload
+    CDN --> CL : URL
+    S -> BR : saveAndFlush(Blog: new title, content, status, images = kept + new)
+    note right of BR : a removed image is dropped from the list only; Cloudinary keeps the file
+    BR --> S : Blog
+    S --> C : BlogResult
+    C --> V : 200 OK
+  end
+end
+note over S
+  Status can be set to DRAFT or PUBLISHED here; HIDDEN is refused (400).
+end note
+
+== D. Publish a post ==
+U -> V : click publish
+V -> C : PUT /api/shop/mine/{shopId}/blogs/{id}/publish
+C -> S : publish(shopId, id, userId)
+S -> S : owner or staff check, shop ACTIVE and owner check
+S -> BR : findByIdAndShopId(id, shopId)
+alt post not in this shop
+  S --> C : 404 "Không tìm thấy bài viết."
+  C --> V : 404
+else found
+  S -> BR : status = PUBLISHED, lastModifyBy = userId (flushed on commit)
+  C --> V : 204 No Content
+  V --> U : post shown on the public blog page
+end
+
+== E. Hide a post ("delete") ==
+U -> V : click delete
+V -> V : confirmation dialog
+alt confirmed
+  V -> C : DELETE /api/shop/mine/{shopId}/blogs/{id}
+  C -> S : hide(shopId, id, userId)
+  S -> S : owner or staff check, shop ACTIVE and owner check
+  S -> BR : findByIdAndShopId(id, shopId)
+  alt post not in this shop
+    S --> C : 404 "Không tìm thấy bài viết."
+    C --> V : 404
+  else found
+    S -> BR : status = HIDDEN, lastModifyBy = userId (flushed on commit)
+    C --> V : 204 No Content
+    V --> U : post removed from the public list and kept in management
+  end
+end
+note over S
+  No row is deleted. Hidden posts can be published again with action D.
+end note
+
+@enduml

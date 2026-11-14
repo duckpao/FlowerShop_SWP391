@@ -1,0 +1,145 @@
+@startuml
+!pragma layout smetana
+title 9.1 Customer Order List - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+  BackgroundColor<<DTO>> #ECECEC
+  BackgroundColor<<Scheduler>> #FFE8CC
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class CustomerOrderController <<Controller>> {
+  list(user, page = 0, status): Results
+}
+class CustomerOrderService <<Service>> {
+  list(customerId, page, status): Results
+  -summary(order): OrderSummary
+}
+class OrderRepository <<Repository>> {
+  findByCustomerIdOrderByCreatedDateDesc(customerId, pageable): Page<Order>
+  findByCustomerIdAndStatus(customerId, status, pageable): Page<Order>
+}
+class OrderDetailRepository <<Repository>> {
+  findByOrderId(orderId): List<OrderDetail>
+}
+class ProductImageRepository <<Repository>> {
+  findByProductIdInOrderByDisplayOrderAscIdAsc(productIds): List<ProductImage>
+}
+class PaymentRepository <<Repository>> {
+  findByOrderId(orderId): List<Payment>
+}
+class SePayGatewayService <<Service>> {
+  +PAYMENT_WINDOW_MINUTES = 10
+}
+class "CustomerOrderService.Results" as Results <<DTO>> {
+  content
+  page
+  totalPages
+  totalElements
+}
+class "CustomerOrderService.OrderSummary" as OrderSummary <<DTO>> {
+  id
+  shopId, shopName
+  status
+  totalAmount, subTotal, shippingFee
+  createdDate
+  checkoutGroup
+  paymentMethod: ONLINE | COD | null
+  paymentStatus
+  paymentSecondsLeft
+  items: List<OrderLine>
+}
+class "CustomerOrderService.OrderLine" as OrderLine <<DTO>> {
+  productId
+  productName
+  imageUrl
+  price
+  quantity
+}
+class Order <<Entity>> {
+  id
+  status: OrderStatus
+  totalAmount, subTotal, shippingFee
+  createdDate
+  paymentStartedAt
+  checkoutGroup
+  getPaymentWindowStart(): paymentStartedAt or createdDate
+}
+class OrderDetail <<Entity>> {
+  productName (snapshot)
+  price
+  quantity
+}
+class ProductImage <<Entity>> {
+  imageUrl
+  displayOrder
+}
+class Payment <<Entity>> {
+  paymentMethod: ONLINE | COD
+  status: PENDING | SUCCESS | FAILED
+  createdDate
+}
+class Shop <<Entity>> {
+  id
+  name
+}
+
+View --> CustomerOrderController : GET /api/customer/orders?page=&status=
+CustomerOrderController --> CustomerOrderService : list(user.id(), page, status)
+CustomerOrderService --> OrderRepository
+CustomerOrderService --> OrderDetailRepository
+CustomerOrderService --> ProductImageRepository
+CustomerOrderService --> PaymentRepository
+CustomerOrderService ..> SePayGatewayService : PAYMENT_WINDOW_MINUTES
+CustomerOrderService ..> Results : returns
+Results *-- OrderSummary
+OrderSummary *-- OrderLine
+OrderRepository ..> Order
+OrderDetailRepository ..> OrderDetail
+ProductImageRepository ..> ProductImage
+PaymentRepository ..> Payment
+Order "*" --> "1" Shop
+Order "1" --> "*" OrderDetail
+Order "1" --> "*" Payment
+
+note bottom of CustomerOrderService
+  list(): only the orders of the logged-in customer, 20 per page, sorted createdDate desc then id asc.
+  status empty = all orders. A status that is not an OrderStatus name: 400 "Trạng thái không hợp lệ: <status>".
+  summary() runs 3 to 4 queries per order (details, images, payments).
+  paymentMethod: COD if a COD payment exists, ONLINE if an ONLINE payment exists, or ONLINE for a PENDING
+  order with no payment row yet. paymentStatus: SUCCESS if any payment succeeded, else the latest payment status.
+end note
+
+note bottom of CustomerOrderService
+  paymentSecondsLeft is set only for a PENDING ONLINE order not paid yet:
+  600 - seconds since getPaymentWindowStart(), never below 0. Computed on the server.
+end note
+
+note bottom of CustomerOrderController
+  Class-level @PreAuthorize("hasRole('CUSTOMER')"). The customer id comes from the token, not from the URL.
+end note
+
+note bottom of View
+  Client side (CustomerOrdersView): one card per checkoutGroup (or per order id), totals summed over the group.
+  Tabs: AWAITING_QUOTE, QUOTED, all, PENDING, PROCESSING, DELIVERING, COMPLETED, CANCELLED.
+  DEPOSIT_PAID, AWAITING_DEPOSIT and REFUNDED have no tab; they appear only under "Tất cả".
+end note
+
+@enduml

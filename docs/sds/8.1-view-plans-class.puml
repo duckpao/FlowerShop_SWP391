@@ -1,0 +1,78 @@
+@startuml
+!pragma layout smetana
+title 8.1 View Pro Plans - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+  BackgroundColor<<DTO>> #ECECEC
+  BackgroundColor<<Scheduler>> #FFE8CC
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class ShopPlanController <<Controller>> {
+  plans(): List<Plan>
+}
+class ShopPlanService <<Service>> {
+  plans(): List<Plan>
+  -planView(plan): Plan
+}
+class ShopPlanRepository <<Repository>> {
+  findAll(sort): List<ShopPlan>
+}
+class "ShopPlanService.Plan" as Plan <<DTO>> {
+  id
+  name
+  durationMonths
+  price
+  productLimit (null = unlimited)
+  featuredLimit
+  enabled
+}
+class ShopPlan <<Entity>> {
+  id
+  name
+  durationMonths
+  price
+  productLimit
+  featuredLimit
+  enabled
+}
+
+View --> ShopPlanController : GET /api/shop/plans
+ShopPlanController --> ShopPlanService
+ShopPlanService --> ShopPlanRepository
+ShopPlanService ..> Plan : builds
+ShopPlanRepository ..> ShopPlan
+
+note bottom of ShopPlanService
+  Only enabled plans are returned, ordered by durationMonths.
+  Controller requires hasRole('SHOP'). No public plan endpoint exists,
+  and no check that the shop belongs to the caller.
+end note
+
+note bottom of ShopPlanRepository
+  findAll(sort) is inherited from HibernateRepository.
+end note
+
+note bottom of View
+  A plan with durationMonths 0 is shown as "Gói mặc định" with no buy button.
+  The buy button is disabled while the shop is not ACTIVE (client check only).
+end note
+
+@enduml

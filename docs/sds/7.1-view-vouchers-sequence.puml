@@ -1,0 +1,58 @@
+@startuml
+title 7.1 View Vouchers - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor "Admin / Shop" as U
+participant "View" as V <<View>> #EADCFF
+participant CouponController as C <<Controller>> #D8F3DC
+participant CouponService as S <<Service>> #DCECFF
+participant ShopRepository as SR <<Repository>> #FFF1C9
+participant CouponRepository as CR <<Repository>> #FFF1C9
+
+== A. Admin lists platform vouchers ==
+U -> V : open /admin/vouchers
+V -> C : GET /api/admin/vouchers
+C -> S : list(userId, null)
+S -> CR : managed(null)
+note right of CR : deleted = false and shop is null,\norder createdDate desc, id
+CR --> S : List<Coupon>
+S --> C : List<CouponService.View>
+C --> V : 200 OK
+V --> U : table of vouchers (code, type, value, min order,\nmax discount, dates, usage, status label)
+
+== B. Shop lists its vouchers ==
+U -> V : open /shop-admin/vouchers (first shop of the user)
+V -> C : GET /api/shop/mine/{shopId}/vouchers
+C -> S : list(userId, shopId)
+S -> SR : findById(shopId)
+alt not the owner or shop missing
+  SR --> S : not found
+  S --> C : 404 "Không tìm thấy cửa hàng thuộc quyền quản lý."
+  C --> V : 404 (message shown on the page)
+else owner
+  SR --> S : Shop
+  S -> CR : managed(shopId)
+  note right of CR : deleted = false and shop.id = shopId
+  CR --> S : List<Coupon>
+  S --> C : List<CouponService.View>
+  C --> V : 200 OK
+  V --> U : table of the shop's vouchers
+end
+
+note over V
+  Status label on the page: DISABLED = "Tạm ngừng", past endDate or EXPIRED = "Hết hạn",
+  startDate in the future = "Sắp bắt đầu", otherwise "Đang bật".
+  Edit fills the form from the list row (no GET by id). Other roles see "Bạn không có quyền quản lý mã giảm giá."
+end note
+
+@enduml

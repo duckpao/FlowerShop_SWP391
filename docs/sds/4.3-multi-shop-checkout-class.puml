@@ -1,0 +1,171 @@
+@startuml
+!pragma layout smetana
+title 4.3 Multi-shop Checkout - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+  BackgroundColor<<DTO>> #ECECEC
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class OrderController <<Controller>> {
+  makeOrders(userId, request, currentUser): 201 List<OrderResponse>
+  makeOrder(userId, request, currentUser): 201 OrderResponse
+  -requireOwner(userId, currentUser)
+}
+class OrderService <<Service>> {
+  makeOrders(userId, request): List<OrderResponse>
+  makeOrder(userId, request): OrderResponse
+  -quoteFee(shop, destination): BigDecimal
+  -resolveDestination(userId, addressId): Address
+  -voucherContext(shopId, items, shippingFee): Context
+  -firstNonBlank(first, second): String
+}
+class CouponService <<Service>> {
+  apply(order, ctx, orderCode, shippingCode): Preview
+}
+class ProductQuotaService <<Service>> {
+  requireAllowed(product)
+}
+class GhnService <<Service>> {
+  calculateFee(...): BigDecimal
+}
+class NotificationService <<Service>> {
+  notifyOrderPlaced(order)
+  notifyPaymentPending(order)
+}
+class OrderPlacedEvent <<DTO>> {
+  orderIds
+}
+class OrderMailSender <<Service>> {
+  onPlaced(event)
+}
+class MakeOrdersRequest <<DTO>> {
+  deliveryAddressId
+  paymentMethod
+  recipientName
+  phone
+  shops: ShopOrder[] (not empty)
+}
+class "MakeOrdersRequest.ShopOrder" as ShopOrder <<DTO>> {
+  shopId
+  cartItemIds (not empty)
+  couponId
+  shippingCouponCode
+  expectedTotal >= 1
+}
+class OrderResponse <<DTO>> {
+  id
+  status
+  subTotal
+  discountAmount
+  shippingFee
+  totalAmount
+  items
+  createdDate
+}
+class OrderRepository <<Repository>> {
+  save(order): Order
+  findById(id): Optional<Order>
+}
+class OrderDetailRepository <<Repository>> {
+  save(detail): OrderDetail
+}
+interface CartItemRepository <<Repository>> {
+  findById(id): Optional<CartItem>
+  deleteAll(items)
+}
+class ProductRepository <<Repository>> {
+  findByIdForUpdate(id): Optional<Product>
+  save(product): Product
+}
+class AddressRepository <<Repository>> {
+  findById(id): Optional<Address>
+  findByShopIdAndUserIsNullOrderByCreatedDateAscIdAsc(shopId): List<Address>
+}
+class UserRepository <<Repository>> {
+  findById(id): Optional<User>
+}
+class Order <<Entity>> {
+  id
+  checkoutGroup
+  orderType = STANDARD
+  status = PENDING
+  subTotal
+  shippingFee
+  totalAmount
+  recipientName
+  recipientPhone
+}
+class OrderDetail <<Entity>> {
+  productName (snapshot)
+  price (snapshot)
+  quantity
+}
+class CartItem <<Entity>> {
+  id
+  quantity
+}
+class Product <<Entity>> {
+  price
+  stock
+  type
+  status
+}
+
+View --> OrderController : POST /api/orders/{userId}/batch
+OrderController --> OrderService
+OrderController ..> MakeOrdersRequest : reads
+OrderController ..> OrderResponse : returns
+MakeOrdersRequest *-- ShopOrder
+OrderService --> CartItemRepository
+OrderService --> ProductRepository
+OrderService --> AddressRepository
+OrderService --> UserRepository
+OrderService --> OrderRepository
+OrderService --> OrderDetailRepository
+OrderService --> GhnService
+OrderService --> CouponService
+OrderService --> ProductQuotaService
+OrderService --> NotificationService
+OrderService ..> OrderPlacedEvent : publishes after the last order
+OrderPlacedEvent ..> OrderMailSender : handled after commit
+OrderService ..> OrderResponse : builds
+OrderRepository ..> Order
+OrderDetailRepository ..> OrderDetail
+CartItemRepository ..> CartItem
+ProductRepository ..> Product
+Order "1" *-- "*" OrderDetail
+OrderDetail "*" --> "0..1" Product
+CartItem "*" --> "1" Product
+
+note bottom of OrderService
+  makeOrders(): shops sorted by shopId (stable lock order), duplicate shopId = 400,
+  one makeOrder() per shop inside one transaction (any failure rolls back every shop).
+  More than one shop: all orders get the same checkoutGroup (one payment, one receipt).
+  makeOrder(): validates, locks products, asks GHN for the fee, applies vouchers,
+  compares expectedTotal, saves Order + OrderDetail, lowers stock, deletes the cart items.
+  Prices, fee and discounts are always computed on the server.
+end note
+
+note bottom of OrderController
+  POST /api/orders/{userId} (one shop) exists, but the checkout page only calls /batch.
+end note
+
+@enduml

@@ -1,0 +1,104 @@
+@startuml
+!pragma layout smetana
+title 8.3 Update Pro Plan - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+  BackgroundColor<<DTO>> #ECECEC
+  BackgroundColor<<Scheduler>> #FFE8CC
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class AdminShopPlanController <<Controller>> {
+  update(admin, id, input): Plan
+}
+class ShopPlanService <<Service>> {
+  savePlan(actor, id, input): Plan
+  -requireAdmin(actor)
+  -planView(plan): Plan
+}
+class UserRepository <<Repository>> {
+  findByIdAndRoleAndStatus(id, role, status): Optional<User>
+}
+class ShopPlanRepository <<Repository>> {
+  findLocked(id): Optional<ShopPlan>
+  saveAndFlush(plan): ShopPlan
+}
+class "ShopPlanService.PlanInput" as PlanInput <<DTO>> {
+  name: @NotBlank, max 100
+  durationMonths: 1..120
+  price: >= 1, max 10 integer digits, 2 decimals
+  productLimit: >= 1 or null (null = unlimited)
+  featuredLimit: 0..10000
+  enabled
+}
+class "ShopPlanService.Plan" as Plan <<DTO>> {
+  id
+  name
+  durationMonths
+  price
+  productLimit
+  featuredLimit
+  enabled
+}
+class ShopPlan <<Entity>> {
+  id
+  name
+  durationMonths
+  price
+  productLimit
+  featuredLimit
+  enabled
+}
+class ShopSubscription <<Entity>> {
+  id
+  endsAt
+  plan: ShopPlan
+}
+class User <<Entity>> {
+  id
+  role
+  status
+}
+
+View --> AdminShopPlanController : PUT /api/admin/shop-plans/{id}
+AdminShopPlanController --> ShopPlanService
+AdminShopPlanController ..> PlanInput : reads (@Valid body)
+ShopPlanService ..> PlanInput : reads
+ShopPlanService --> UserRepository
+ShopPlanService --> ShopPlanRepository
+ShopPlanService ..> Plan : returns
+ShopPlanRepository ..> ShopPlan : locks and saves
+UserRepository ..> User
+ShopSubscription "0..*" --> "1" ShopPlan : plan (limits read live)
+
+note bottom of ShopPlanService
+  savePlan(actor, id, input): requireAdmin, then id "FREE" gives 409,
+  then featuredLimit > productLimit gives 409, then findLocked(id)
+  (missing gives 404), then the fields are overwritten and saved.
+end note
+
+note bottom of ShopSubscription
+  Subscriptions reference the same ShopPlan row. productLimit and
+  featuredLimit are read on every check, so an edit changes the limits
+  of every shop on that plan immediately. The price and duration
+  of already created payments and activations are snapshots and do not change.
+end note
+
+@enduml

@@ -1,0 +1,275 @@
+@startuml
+!pragma layout smetana
+title 11.4 Chat between Customer and Shop - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 40
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+  BackgroundColor<<DTO>> #ECECEC
+  BackgroundColor<<Scheduler>> #FFE8CC
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class CustomerChatController <<Controller>> {
+  sessions(currentUser): List<SessionDto>
+  open(currentUser, body): SessionDto
+  unread(currentUser): count
+  messages(currentUser, id, before, size): List<MessageDto>
+  send(currentUser, id, body): 201 MessageDto
+  read(currentUser, id): 204
+  image(currentUser, id, file): url
+}
+class ManagerChatController <<Controller>> {
+  sessions(shopId, currentUser): List<SessionDto>
+  open(shopId, currentUser, body): SessionDto
+  unread(shopId, currentUser): count
+  messages(shopId, currentUser, id, before, size): List<MessageDto>
+  send(shopId, currentUser, id, body): 201 MessageDto
+  read(shopId, currentUser, id): 204
+  image(shopId, currentUser, id, file): url
+}
+class WebSocketConfig <<Service>> {
+  configureMessageBroker(): /topic, /app
+  registerStompEndpoints(): /ws
+  configureClientInboundChannel(): CONNECT, SUBSCRIBE, SEND checks
+  -authenticate(authorizationHeader): UsernamePasswordAuthenticationToken
+  -authorize(accessor)
+}
+class TokenAuthService <<Service>> {
+  authenticate(rawToken): CurrentUser
+}
+class ChatService <<Service>> {
+  openForCustomer(customerId, shopId): SessionDto
+  openForShop(shopId, ownerId, customOrderId): SessionDto
+  openForShopByOrder(shopId, ownerId, orderId): SessionDto
+  customerSessions(customerId)
+  shopSessions(shopId, ownerId)
+  history(sessionId, userId, before, size): List<MessageDto>
+  send(sessionId, userId, input): MessageDto
+  markRead(sessionId, userId)
+  uploadImage(sessionId, userId, file): String
+  canAccess(sessionId, userId): boolean
+  sideOf(session, userId): SenderType
+  -snapshotOf(session, type, id): Map
+  -notifyRecipient(session, from)
+}
+class ChatBroadcaster <<Service>> {
+  onMessage(MessageEvent)
+  onRead(ReadEvent)
+}
+class NotificationService <<Service>> {
+  notifyUser(user, title, body, link)
+}
+class CloudinaryService <<Service>> {
+  upload(bytes, filename, contentType): String
+}
+class SimpMessagingTemplate <<Service>> {
+  convertAndSend(destination, payload)
+}
+interface ChatSessionRepository <<Repository>> {
+  findByCustomerIdAndShopId(customerId, shopId): Optional<ChatSession>
+  forCustomer(customerId): List<ChatSession>
+  forShop(shopId): List<ChatSession>
+  customerUnreadTotal(customerId): long
+  shopUnreadTotal(shopId): long
+}
+interface ChatMessageRepository <<Repository>> {
+  latest(sessionId, page): List<ChatMessage>
+  olderThan(sessionId, before, page): List<ChatMessage>
+  markRead(sessionId, sender): int
+}
+class ShopRepository <<Repository>> {
+  findById(id): Optional<Shop>
+}
+interface ShopStaffRepository <<Repository>> {
+  findByShopIdAndUserId(shopId, userId): Optional<ShopStaff>
+}
+class UserRepository <<Repository>> {
+  findById(id): Optional<User>
+  getReferenceById(id): User
+}
+class ProductRepository <<Repository>> {
+  findById(id): Optional<Product>
+}
+class OrderRepository <<Repository>> {
+  findById(id): Optional<Order>
+}
+class CustomOrderRequestRepository <<Repository>> {
+  findById(id): Optional<CustomOrderRequest>
+}
+class SendInput <<DTO>> {
+  message (max 2000)
+  images (max 4, https URLs)
+  context: ContextInput
+}
+class ContextInput <<DTO>> {
+  type: NONE, PRODUCT, CUSTOM_ORDER
+  id (max 36)
+}
+class OpenForCustomer <<DTO>> {
+  shopId
+}
+class OpenForShop <<DTO>> {
+  customOrderId
+  orderId
+}
+class SessionDto <<DTO>> {
+  id
+  shopId
+  shopName
+  customerId
+  customerName
+  lastMessageAt
+  lastMessagePreview
+  unread
+}
+class MessageDto <<DTO>> {
+  id
+  sessionId
+  senderType
+  senderId
+  message
+  images
+  contextType
+  contextId
+  context (snapshot)
+  createdDate
+  read
+}
+class MessageEvent <<DTO>> {
+  message
+  customerId
+  ownerId
+  customerUnread
+  shopUnread
+  customerTotal
+  shopTotal
+}
+class ReadEvent <<DTO>> {
+  sessionId
+  customerId
+  ownerId
+  customerRead
+}
+class InboxEvent <<DTO>> {
+  sessionId
+  preview
+  lastMessageAt
+  unread
+  totalUnread
+}
+class ChatSession <<Entity>> {
+  id
+  lastMessageAt
+  lastMessagePreview
+  customerUnreadCount
+  shopUnreadCount
+}
+class ChatMessage <<Entity>> {
+  id
+  message
+  media (JSON)
+  senderType
+  contextType
+  contextId
+  contextSnapshot (JSON)
+  isRead
+  createdDate
+}
+class Shop <<Entity>> {
+  id
+  name
+  status
+}
+class ShopStaff <<Entity>> {
+  isActive
+}
+class User <<Entity>> {
+  id
+  fullName
+  avatarUrl
+}
+class CloudinaryApi <<External>> {
+  POST https://api.cloudinary.com/v1_1/{cloud}/image/upload
+}
+
+View --> CustomerChatController : /api/customer/chat/sessions\n/api/customer/chat/sessions/{id}/messages\n/api/customer/chat/sessions/{id}/read\n/api/customer/chat/sessions/{id}/images\n/api/customer/chat/unread
+View --> ManagerChatController : /api/shop/mine/{shopId}/chat/sessions\n/api/shop/mine/{shopId}/chat/sessions/{id}/messages\n/api/shop/mine/{shopId}/chat/sessions/{id}/read\n/api/shop/mine/{shopId}/chat/unread
+View ..> WebSocketConfig : STOMP /ws: CONNECT (Authorization: Bearer)\nSUBSCRIBE /topic/chat/{sessionId}\nSUBSCRIBE /topic/chat-inbox/{userId}
+CustomerChatController --> ChatService
+ManagerChatController --> ChatService
+CustomerChatController ..> SendInput : reads
+CustomerChatController ..> OpenForCustomer : reads
+ManagerChatController ..> OpenForShop : reads
+ManagerChatController ..> SendInput : reads
+ChatService ..> SessionDto : builds
+ChatService ..> MessageDto : builds
+ChatService ..> MessageEvent : publishes
+ChatService ..> ReadEvent : publishes
+ChatService --> ChatSessionRepository
+ChatService --> ChatMessageRepository
+ChatService --> ShopRepository
+ChatService --> ShopStaffRepository
+ChatService --> UserRepository
+ChatService --> ProductRepository
+ChatService --> OrderRepository
+ChatService --> CustomOrderRequestRepository
+ChatService --> NotificationService
+ChatService --> CloudinaryService
+CloudinaryService --> CloudinaryApi
+WebSocketConfig --> TokenAuthService : authenticate
+WebSocketConfig --> ChatService : canAccess
+ChatBroadcaster --> SimpMessagingTemplate : convertAndSend
+ChatBroadcaster ..> InboxEvent : builds
+ChatSessionRepository ..> ChatSession
+ChatMessageRepository ..> ChatMessage
+ShopRepository ..> Shop
+ShopStaffRepository ..> ShopStaff
+UserRepository ..> User
+ChatSession "*" --> "1" User : customer
+ChatSession "*" --> "1" Shop
+ChatMessage "*" --> "1" ChatSession
+ChatMessage "*" --> "1" User : sender
+ShopStaff "*" --> "1" Shop
+
+note bottom of ChatService
+  One session per (customer, shop). Only the customer or the shop owner/ACTIVE staff can read or send
+  (else 403 "Không có quyền truy cập cuộc trò chuyện này.").
+  Messages: text (max 2000) or images, at least one. Images must start with https://, max 4.
+  Context card: PRODUCT must belong to the session shop; CUSTOM_ORDER must belong to the same customer and shop.
+  Unread counter of the other side +1; notification bell only when the last one for this link is read.
+end note
+
+note bottom of ChatBroadcaster
+  @TransactionalEventListener(AFTER_COMMIT): nothing is pushed if the transaction rolls back.
+  Topics: /topic/chat/{sessionId} (message), /topic/chat/{sessionId}/read ("CUSTOMER" or "SHOP"),
+  /topic/chat-inbox/{userId} for the customer and the shop owner (preview, unread counts).
+end note
+
+note bottom of WebSocketConfig
+  Simple in-memory broker on /topic. Endpoint /ws is registered without SockJS and only allows
+  origins http://localhost:* and http://127.0.0.1:*. Sending through STOMP is refused.
+  Class is a Spring configuration class; ChatDtos is a static holder of the records shown above.
+end note
+
+note bottom of View
+  Customer REST and shop REST share ChatService. Shop endpoints check the shopId path variable only
+  for listing and opening; see the note in 11.4 sequence.
+end note
+
+@enduml

@@ -1,5 +1,5 @@
 @startuml
-title Product Details and Reviews - sequence diagram
+title 2.2 Product Details and Reviews - sequence diagram
 autonumber
 skinparam shadowing false
 skinparam defaultFontName Arial

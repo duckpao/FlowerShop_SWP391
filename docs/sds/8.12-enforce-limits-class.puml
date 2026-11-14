@@ -1,0 +1,145 @@
+@startuml
+!pragma layout smetana
+title 8.12 Enforce Subscription Limits - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+  BackgroundColor<<DTO>> #ECECEC
+  BackgroundColor<<Scheduler>> #FFE8CC
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class OrderController <<Controller>> {
+  makeOrders(userId, request): 201 List<OrderResponse>
+}
+class OrderService <<Service>> {
+  makeOrders(userId, request)
+  makeOrder(userId, request): OrderResponse
+  previewVouchers(userId, request, merchandiseOnly)
+}
+class CartService <<Service>> {
+  addToCart(userId, request)
+  updateCartItem(userId, cartItemId, request)
+  toCartItemResponse(cartItem, available)
+}
+class CustomerOrderService <<Service>> {
+  calculateFee(customerId, req)
+  checkout(customerId, req)
+  previewVouchers(customerId, req)
+}
+class CatalogService <<Service>> {
+  browse(q, categoryId, shopId, type, ...)
+  categories()
+  detail(productId)
+}
+class CustomFlowerOrderService <<Service>> {
+  suggestions(budget, quantity, shopId, q, page)
+}
+class ProductCardAssembler <<Service>> {
+  cards(products)
+}
+class ManagerProductService <<Service>> {
+  save(shopId, id, actor, input, images, ...)
+  saveProduct(shopId, id, actor, ...) (private)
+  unhide(shopId, id, actor)
+}
+class ShopPlanService <<Service>> {
+  assertCanCreate(shop)
+  feature(shopId, actor, productId, enabled)
+  featured(): List<ProductCard>
+}
+class ProductQuotaService <<Service>> {
+  allowedSpecification(): Specification<Product>
+  allowedIds(candidates): Set<String>
+  allowed(product): boolean
+  requireAllowed(product): void
+}
+class ShopPlanClock <<Service>> {
+  now(): LocalDateTime
+}
+class ProductRepository <<Repository>> {
+  findAll(specification, pageable): Page<Product>
+  countForShop(shopId): long
+}
+class ShopSubscriptionRepository <<Repository>> {
+  forShop(shopId): Optional<ShopSubscription>
+}
+class Product <<Entity>> {
+  id
+  createdDate
+  deleted
+  status
+  shop: Shop
+}
+class ShopSubscription <<Entity>> {
+  id
+  endsAt
+  shop: Shop
+  plan: ShopPlan
+}
+class ShopPlan <<Entity>> {
+  id
+  productLimit (null = unlimited)
+}
+
+View --> OrderController : POST /api/orders/{userId}/batch
+OrderController --> OrderService
+OrderService --> ProductQuotaService : requireAllowed
+CartService --> ProductQuotaService : requireAllowed, allowed
+CustomerOrderService --> ProductQuotaService : requireAllowed
+CatalogService --> ProductQuotaService : allowedSpecification, allowed
+CustomFlowerOrderService --> ProductQuotaService : allowedSpecification
+ProductCardAssembler --> ProductQuotaService : allowedIds
+ManagerProductService --> ProductQuotaService : requireAllowed, allowed
+ManagerProductService --> ShopPlanService : assertCanCreate, recordCreation
+ShopPlanService --> ProductQuotaService : requireAllowed, allowed
+ProductQuotaService --> ShopPlanClock : now()
+ProductQuotaService --> ProductRepository : findAll(allowedSpec AND id in ids)
+ShopPlanService --> ShopSubscriptionRepository : forShop (assertCanCreate)
+ShopPlanService --> ProductRepository : countForShop (assertCanCreate)
+ProductRepository ..> Product
+ShopSubscriptionRepository ..> ShopSubscription
+ShopSubscription "*" --> "1" ShopPlan
+
+note bottom of ProductQuotaService
+  allowedSpecification(): Spring Data Specification<Product>.
+  Allowed = not deleted AND (an active Pro with null productLimit exists
+  OR rank <= effective limit). Rank = number of undeleted products of the shop
+  created earlier (createdDate, then id). Effective limit = active plan productLimit, else 5.
+  requireAllowed(): 400 "Sản phẩm đang bị khóa do vượt giới hạn gói của shop...".
+  Excess products are blocked, not deleted.
+end note
+
+note bottom of ShopPlanService
+  assertCanCreate(shop) is the creation guard (ManagerProductService.save, 2 call sites):
+  countForShop >= limit gives 409 "Gói hiện tại giới hạn N sản phẩm...".
+  Caller holds the shop write lock. It is not a live guard like requireAllowed.
+end note
+
+note bottom of CartService
+  getCart() and toCartItemResponse() use allowed(): a locked product shows stock 0.
+  Other call sites are listed in the arrows above.
+end note
+
+note bottom of ProductQuotaService
+  ShopPlanClock is annotated @Component in the code, not @Service.
+  Drawn as Service to match the other clock use in 8.5.
+end note
+
+@enduml

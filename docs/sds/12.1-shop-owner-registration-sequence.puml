@@ -1,0 +1,116 @@
+@startuml
+title 12.1 Shop Owner Registration - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor Customer as U
+actor Admin as A
+participant "View" as V <<View>> #EADCFF
+participant ManagerApplicationController as C <<Controller>> #D8F3DC
+participant ManagerApplicationService as S <<Service>> #DCECFF
+participant UserRepository as UR <<Repository>> #FFF1C9
+participant ManagerApplicationRepository as AR <<Repository>> #FFF1C9
+participant ShopRepository as SR <<Repository>> #FFF1C9
+participant AddressRepository as AD <<Repository>> #FFF1C9
+participant AuthSessionRepository as SESS <<Repository>> #FFF1C9
+
+== A. Customer submits a shop application ==
+U -> V : fill the shop form and click "Send application"
+V -> C : POST /api/customer/manager-applications\n(fullName, phone, shopName, description, addressLine, city, district, ward)
+note right of C : @PreAuthorize CUSTOMER. @Valid fails: 400 "Dữ liệu không hợp lệ"
+C -> S : submit(userId, input)
+S -> UR : findByIdForUpdate(userId)
+UR --> S : User (else 404 "Không tìm thấy đơn.")
+S -> S : eligible(user): role is not CUSTOMER, status not ACTIVE,\nor email not verified: 409 "Chỉ Customer đang hoạt động, đã xác thực email được mở shop."
+S -> SR : findByOwnerIdOrderByNameAsc(userId)
+SR --> S : shops
+alt user already owns a shop
+  S --> C : 409 "Tài khoản đã sở hữu shop."
+  C --> V : 409
+  V --> U : error message
+else no shop yet
+  S -> AR : findByUserId(userId)
+  AR --> S : Optional<ManagerApplication>
+  alt existing application is not REJECTED
+    S --> C : 409 "Bạn đã có đơn đang chờ hoặc đã được duyệt."
+    C --> V : 409
+    V --> U : error message
+  else no application, or a REJECTED one
+    S -> S : new row, or reuse the REJECTED row\nstatus = PENDING, submittedAt = now,\nreviewedAt / reviewedBy / reviewNote cleared
+    S -> AR : saveAndFlush(application)
+    AR --> S : ManagerApplication
+    S --> C : Result (status PENDING)
+    C --> V : 200 OK
+    V --> U : application shown as PENDING
+  end
+end
+
+== B. Customer checks the status ==
+U -> V : open the shop application page
+V -> C : GET /api/account/manager-applications
+C -> S : mine(userId)
+S -> AR : findByUserId(userId)
+AR --> S : Optional<ManagerApplication>
+S --> C : List<Result>
+C --> V : 200 OK
+V --> U : PENDING / APPROVED / REJECTED with reviewNote
+
+== C. Admin reviews the queue ==
+A -> V : open shop applications (default filter PENDING)
+V -> C : GET /api/admin/shops/applications?status=PENDING&page=0
+note right of C : @PreAuthorize ADMIN
+C -> S : list(status, page)
+alt status not PENDING / APPROVED / REJECTED, or page < 0 or page > 100000
+  S --> C : 400 "Bộ lọc không hợp lệ."
+  C --> V : 400
+else valid filter
+  S -> AR : findByStatus(status, page of 20, sort submittedAt desc)
+  AR --> S : Page<ManagerApplication>
+  S --> C : Results (content, page, totalPages, totalElements)
+  C --> V : 200 OK
+  V --> A : queue list
+end
+
+== D. Admin approves or rejects ==
+A -> V : choose Approve or Reject and write a note (max 1000)
+V -> C : PUT /api/admin/shops/applications/{id}\n(approve, note)
+C -> S : decide(id, adminId, decision)
+S -> AR : applicantId(id)
+AR --> S : applicant userId (else 404 "Không tìm thấy đơn.")
+S -> UR : findByIdForUpdate(applicantId)
+UR --> S : User
+S -> AR : lock(id) (PESSIMISTIC_WRITE)
+AR --> S : ManagerApplication (else 404)
+alt status is not PENDING
+  S --> C : 409 "Đơn đã được xử lý. Hãy tải lại."
+  C --> V : 409
+  V --> A : error, reload the queue
+else status PENDING
+  alt approve = true
+    S -> S : eligible(applicant) (same 409 rules as A)
+    S -> SR : saveAndFlush(Shop: owner = applicant, status ACTIVE, createdBy = adminId)
+    S -> AD : save(Address: shop default, addressLine, city, district, ward)\nno GHN codes stored
+    S -> UR : user.role = SHOP (flushed on commit)
+    S -> SESS : revokeAll(applicantId)
+    S -> S : application.shopId = shop.id
+  end
+  S -> AR : status = APPROVED or REJECTED, reviewNote, reviewedBy, reviewedAt
+  S --> C : Result
+  C --> V : 200 OK
+  V --> A : "Đã tạo shop và cấp quyền Manager. Người dùng cần đăng nhập lại." or "Đã từ chối. Tài khoản giữ nguyên quyền."
+end
+note over S
+  No email or notification is sent to the applicant. The customer sees the
+  result on the next status check (B). Approved users must log in again (sessions revoked).
+end note
+
+@enduml

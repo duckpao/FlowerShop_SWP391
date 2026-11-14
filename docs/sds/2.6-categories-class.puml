@@ -1,6 +1,6 @@
 @startuml
 !pragma layout smetana
-title Display Categories - class diagram
+title 2.6 Display Categories - class diagram
 skinparam shadowing false
 skinparam defaultFontName Arial
 skinparam wrapWidth 240

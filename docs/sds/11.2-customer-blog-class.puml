@@ -1,0 +1,194 @@
+@startuml
+!pragma layout smetana
+title 11.2 Care Blog for Customers - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+  BackgroundColor<<DTO>> #ECECEC
+  BackgroundColor<<Scheduler>> #FFE8CC
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class PublicBlogController <<Controller>> {
+  list(shopId, q, page): BlogResults
+  detail(id): BlogResult
+}
+class BlogInteractionController <<Controller>> {
+  engagement(blogId): EngagementResult
+  comments(blogId, page): CommentResults
+  mine(blogId, currentUser): InteractionResult
+  saved(currentUser, page): BlogResults
+  like(blogId, currentUser): InteractionResult
+  unlike(blogId, currentUser): InteractionResult
+  save(blogId, currentUser): InteractionResult
+  unsave(blogId, currentUser): InteractionResult
+  addComment(blogId, currentUser, body): 201 CommentResult
+  deleteComment(blogId, commentId, currentUser): 204
+}
+class BlogService <<Service>> {
+  listPublic(shopId, q, page): BlogResults
+  publicDetail(id): BlogResult
+  results(page): BlogResults
+  result(blog): BlogResult
+  -pageable(page): PageRequest
+}
+class BlogInteractionService <<Service>> {
+  engagement(blogId): EngagementResult
+  mine(blogId, actor): InteractionResult
+  saved(actor, page): BlogResults
+  setInteraction(blogId, actor, type, active): InteractionResult
+  comments(blogId, page): CommentResults
+  addComment(blogId, actor, input): CommentResult
+  deleteComment(blogId, commentId, actor)
+  -visibleBlog(blogId): Blog
+}
+interface BlogRepository <<Repository>> {
+  findByIdAndStatusAndShop_Status(id, status, shopStatus): Optional<Blog>
+  searchPublic(status, shopStatus, shopId, q, pageable): Page<Blog>
+}
+interface BlogInteractionRepository <<Repository>> {
+  countByIdBlogIdAndIdInteractionType(blogId, type): long
+  existsByIdUserIdAndIdBlogIdAndIdInteractionType(userId, blogId, type): boolean
+  deleteByIdUserIdAndIdBlogIdAndIdInteractionType(userId, blogId, type)
+  findVisibleBlogsByUserAndType(userId, type, pageable): Page<Blog>
+}
+interface BlogCommentRepository <<Repository>> {
+  findByBlogId(blogId, pageable): Page<BlogComment>
+  countByBlogId(blogId): long
+  findByIdAndBlogId(id, blogId): Optional<BlogComment>
+}
+class UserRepository <<Repository>> {
+  findById(id): Optional<User>
+}
+class BlogResult <<DTO>> {
+  id
+  shop: ShopSummary
+  title
+  content
+  images
+  status
+}
+class BlogResults <<DTO>> {
+  content
+  page
+  totalPages
+  totalElements
+}
+class EngagementResult <<DTO>> {
+  likeCount
+  commentCount
+}
+class InteractionResult <<DTO>> {
+  liked
+  saved
+}
+class CommentInput <<DTO>> {
+  content (not blank, max 2000)
+}
+class CommentResult <<DTO>> {
+  id
+  authorId
+  authorName
+  authorAvatarUrl
+  content
+  createdDate
+}
+class CommentResults <<DTO>> {
+  content
+  page
+  totalPages
+  totalElements
+}
+class Blog <<Entity>> {
+  id
+  title
+  content
+  images
+  status
+}
+class BlogInteraction <<Entity>> {
+  createdDate
+}
+class BlogInteractionId <<Entity>> {
+  userId
+  blogId
+  interactionType (LIKE or SAVE)
+}
+class BlogComment <<Entity>> {
+  id
+  content
+  createdDate
+  parentComment (not used)
+}
+class User <<Entity>> {
+  id
+  fullName
+  avatarUrl
+}
+
+View --> PublicBlogController : GET /api/public/blogs?shopId&q&page\nGET /api/public/blogs/{id}
+View --> BlogInteractionController : GET /api/public/blogs/{blogId}/engagement\nGET /api/public/blogs/{blogId}/comments?page\nGET /api/customer/blogs/{blogId}/interactions\nGET /api/customer/blogs/saved?page\nPUT/DELETE /api/customer/blogs/{blogId}/likes\nPUT/DELETE /api/customer/blogs/{blogId}/saves\nPOST /api/customer/blogs/{blogId}/comments\nDELETE /api/customer/blogs/{blogId}/comments/{commentId}
+PublicBlogController --> BlogService
+BlogInteractionController --> BlogInteractionService
+BlogInteractionController ..> CommentInput : reads
+BlogInteractionController ..> InteractionResult : returns
+BlogService ..> BlogResult : builds
+BlogService ..> BlogResults : builds
+BlogInteractionService --> BlogService : results(), saved list
+BlogInteractionService --> BlogRepository
+BlogInteractionService --> BlogInteractionRepository
+BlogInteractionService --> BlogCommentRepository
+BlogInteractionService --> UserRepository
+BlogService --> BlogRepository
+BlogInteractionService ..> CommentResult : builds
+BlogInteractionService ..> EngagementResult : builds
+CommentResults *-- CommentResult
+BlogResults *-- BlogResult
+BlogRepository ..> Blog
+BlogInteractionRepository ..> BlogInteraction
+BlogCommentRepository ..> BlogComment
+UserRepository ..> User
+BlogInteraction *-- BlogInteractionId : id
+BlogInteraction "*" --> "1" User
+BlogInteraction "*" --> "1" Blog
+BlogComment "*" --> "1" Blog
+BlogComment "*" --> "1" User : author
+
+note bottom of BlogInteractionService
+  A blog is visible only when PUBLISHED and its shop is ACTIVE (else 404 "Không tìm thấy bài viết.").
+  Like and save are idempotent: PUT creates the row if missing, DELETE removes it if present.
+  Both return the current state {liked, saved}.
+  Comment: content stripped, 1-2000 characters. Delete: only the author (else 404 "Không tìm thấy bình luận.").
+end note
+
+note bottom of BlogInteractionService
+  Hidden blog: like, save and comment calls return 404, so a user cannot undo
+  an earlier like or save while the blog is hidden. The saved list skips such blogs.
+end note
+
+note bottom of BlogComment
+  Comments are never moderated (no admin endpoint for blogs). parentComment exists
+  in the entity, but the service never sets it: there are no replies.
+end note
+
+note bottom of View
+  Customer role only for the interactions. Public endpoints need no login.
+end note
+
+@enduml

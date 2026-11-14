@@ -1,6 +1,6 @@
 @startuml
 !pragma layout smetana
-title Product Details and Reviews - class diagram
+title 2.2 Product Details and Reviews - class diagram
 skinparam shadowing false
 skinparam defaultFontName Arial
 skinparam wrapWidth 240

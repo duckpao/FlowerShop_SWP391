@@ -1,0 +1,86 @@
+@startuml
+title 8.9 Admin Confirms Pro Payment - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor Admin as U
+participant "View" as V <<View>> #EADCFF
+participant AdminShopPlanController as C <<Controller>> #D8F3DC
+participant ShopPlanService as S <<Service>> #DCECFF
+participant UserRepository as UR <<Repository>> #FFF1C9
+participant ShopRepository as SR <<Repository>> #FFF1C9
+participant ShopPlanPaymentRepository as PAY <<Repository>> #FFF1C9
+participant ShopSubscriptionRepository as SSR <<Repository>> #FFF1C9
+participant ShopProActivationRepository as AR <<Repository>> #FFF1C9
+participant NotificationService as N <<Service>> #DCECFF
+
+== A. Admin sees a waiting transaction ==
+U -> V : open the shop's subscription panel
+V -> C : GET /api/admin/shops/{shopId}/subscription
+C -> S : adminStatus(shopId, adminId)
+S --> C : AdminStatus (payments: PENDING "Chờ xác nhận" or REVIEW "Cần kiểm tra")
+C --> V : 200 OK
+V --> U : "Giao dịch cần xác nhận" list: invoice, plan, amount
+
+== B. Confirm and activate ==
+U -> V : type the note (required) and click "Xác nhận & kích hoạt"
+V -> V : button disabled until the note is filled and shop and owner are ACTIVE
+V -> V : confirm dialog with invoice, amount, plan (cancel sends nothing)
+V -> C : POST /api/admin/shops/{shopId}/subscription/payments/{invoice}/confirm\n(note)
+C -> C : @PreAuthorize hasRole('ADMIN'), @Valid AdminConfirmation
+C -> S : adminConfirm(shopId, adminId, invoice, input)
+S -> UR : findByIdAndRoleAndStatus(adminId, ADMIN, ACTIVE)
+alt not an active admin
+  S --> C : 403 "Chỉ admin đang hoạt động được kích hoạt Pro."
+else admin
+  S -> SR : findForUpdate(shopId) (shop lock)
+  alt shop not found
+    SR --> S : empty
+    S --> C : 404 "Không tìm thấy gói, cửa hàng hoặc giao dịch thuộc quyền truy cập."
+  else shop found
+    alt shop, owner not ACTIVE, or owner role is not SHOP
+      S --> C : 409 "Cửa hàng và chủ shop phải đang hoạt động để kích hoạt Pro."
+    else valid shop
+      S -> PAY : invoice(invoice), must belong to this shop
+      alt invoice missing or another shop's
+        PAY --> S : empty
+        S --> C : 404 "Không tìm thấy gói, cửa hàng hoặc giao dịch thuộc quyền truy cập."
+      else found
+        alt status SUCCESS
+          S --> C : AdminStatus (no new activation)
+        else status not PENDING or REVIEW
+          S --> C : 409 "Giao dịch không còn chờ xác nhận."
+        else PENDING or REVIEW
+          S -> SSR : forShop(shopId)
+          SSR --> S : ShopSubscription or null
+          S -> S : extend from current endsAt if still active, else start now
+          S -> SSR : save(subscription: payment plan, endsAt + payment durationMonths)
+          S -> AR : save(ShopProActivation source ADMIN_CONFIRM, paymentId = payment id)
+          S -> N : notifyUser(owner, "Admin đã kích hoạt/gia hạn Pro", "Gói Pro có hiệu lực đến ...", /shop-admin/subscription)
+          S -> PAY : status = SUCCESS, confirmedAt = now, flush
+          S -> S : return adminStatus(shopId)
+          S --> C : AdminStatus
+        end
+      end
+    end
+  end
+end
+C --> V : 200 OK
+V --> U : "Đã xác nhận giao dịch và kích hoạt/gia hạn Pro." the transaction leaves the list
+
+note over S
+  No SePay call and no amount check. A REVIEW payment (amount mismatch)
+  can be confirmed here, so the admin must check the money first.
+  If SePay later reports the same invoice, reconcile() sees SUCCESS and does nothing.
+end note
+
+@enduml

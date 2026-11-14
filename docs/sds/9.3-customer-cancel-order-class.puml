@@ -1,0 +1,150 @@
+@startuml
+!pragma layout smetana
+title 9.3 Customer Cancels Order - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+  BackgroundColor<<DTO>> #ECECEC
+  BackgroundColor<<Scheduler>> #FFE8CC
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class OrderController <<Controller>> {
+  cancelOrder(userId, orderId, body, currentUser): 204
+  -requireOwner(userId, currentUser)
+}
+class OrderService <<Service>> {
+  cancelByCustomer(userId, orderId, reason)
+  -releaseStockAndCoupon(order, actor): List<OrderDetail>
+}
+class OrderRepository <<Repository>> {
+  findByIdForUpdate(id): Optional<Order>
+  save(order): Order
+}
+class PaymentRepository <<Repository>> {
+  findByOrderId(orderId): List<Payment>
+  failPendingByOrderId(orderId, actor): int
+}
+class OrderDetailRepository <<Repository>> {
+  findByOrderId(orderId): List<OrderDetail>
+}
+class ProductRepository <<Repository>> {
+  findByIdForUpdate(id): Optional<Product>
+  save(product): Product
+}
+interface RefundRepository <<Repository>> {
+  save(refund): Refund
+}
+class CouponService <<Service>> {
+  release(order)
+}
+class NotificationService <<Service>> {
+  notifyRefundRequested(refund)
+}
+class OrderStatusListener <<Service>> {
+  publishIfChanged(order)
+}
+class OrderMailSender <<Service>> {
+  onStatusChanged(event)
+}
+class "OrderStatusChangedEvent" as StatusEvent <<DTO>> {
+  orderId
+  from
+  to
+}
+class Order <<Entity>> {
+  id
+  status: PENDING | AWAITING_DEPOSIT | DEPOSIT_PAID | PROCESSING | AWAITING_QUOTE | QUOTED -> CANCELLED
+  cancelReason
+  couponsReleased
+  lastModifyBy
+}
+class OrderDetail <<Entity>> {
+  quantity
+}
+class Product <<Entity>> {
+  stock
+  type
+}
+class Payment <<Entity>> {
+  amount
+  paymentMethod: ONLINE | COD
+  status: PENDING | SUCCESS | FAILED
+}
+class Refund <<Entity>> {
+  amount
+  reason
+  status = REQUESTED
+  createdBy
+}
+
+View --> OrderController : POST /api/orders/{userId}/{orderId}/cancel\n{ "reason": "..." } (optional)
+OrderController --> OrderService : cancelByCustomer(userId, orderId, reason)
+OrderService --> OrderRepository
+OrderService --> PaymentRepository
+OrderService --> OrderDetailRepository
+OrderService --> ProductRepository
+OrderService --> RefundRepository : only when paid > 0
+OrderService --> CouponService : release(order)
+OrderService --> NotificationService : notifyRefundRequested(refund)
+OrderRepository ..> Order
+OrderDetailRepository ..> OrderDetail
+ProductRepository ..> Product
+PaymentRepository ..> Payment
+RefundRepository ..> Refund
+Order "1" --> "*" OrderDetail
+Order "1" --> "*" Payment
+Order "1" --> "*" Refund
+OrderDetail "*" --> "0..1" Product
+OrderStatusListener ..> StatusEvent : publishes on @PostUpdate
+StatusEvent ..> OrderMailSender : after commit
+
+note bottom of OrderService
+  cancelByCustomer(): the order is locked with SELECT ... FOR UPDATE and filtered by owner.
+  Not found or owned by another customer: 404 "Không tìm thấy đơn hàng."
+  Status not in CUSTOMER_CANCELLABLE (DELIVERING, COMPLETED, CANCELLED, REFUNDED ...): 400
+  "Đơn đã giao cho đơn vị vận chuyển hoặc đã kết thúc, không thể hủy."
+  CUSTOMER_CANCELLABLE = PENDING, AWAITING_DEPOSIT, DEPOSIT_PAID, PROCESSING, AWAITING_QUOTE, QUOTED.
+  Order.cancelReason = "Khách hủy đơn" + (": " + trimmed reason, or ".").
+end note
+
+note bottom of OrderService
+  releaseStockAndCoupon(): each product line (not CUSTOM) gets its quantity back to Product.stock.
+  CouponService.release() does nothing when Order.couponsReleased is already true.
+  paid = sum of SUCCESS payments. paid > 0: Refund REQUESTED for that amount, shop owner notified.
+  The cart is NOT restored here (unlike cancelPendingOrder, 5.3). No call to SePay /v1/order/cancel.
+end note
+
+note bottom of OrderController
+  requireOwner(): userId in the URL differs from the token: 403 "Không có quyền truy cập đơn hàng này."
+  reason longer than 255 characters: 400 "Lý do hủy tối đa 255 ký tự."
+  Success: 204 No Content.
+end note
+
+note bottom of OrderStatusListener
+  @EntityListeners on Order: any status change sends OrderStatusChangedEvent.
+  OrderMailSender sends "Đơn hàng đã bị hủy" after the commit (13.3), only with a verified email.
+end note
+
+note bottom of View
+  Button "Hủy đơn hàng" shown for the same six statuses as the backend list (CustomerOrderDetailView).
+  Reason optional, max 255. Paid amount shown as a warning. "Giữ đơn" closes the box.
+end note
+
+@enduml

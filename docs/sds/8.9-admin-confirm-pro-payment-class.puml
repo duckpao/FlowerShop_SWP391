@@ -1,0 +1,132 @@
+@startuml
+!pragma layout smetana
+title 8.9 Admin Confirms Pro Payment - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+  BackgroundColor<<DTO>> #ECECEC
+  BackgroundColor<<Scheduler>> #FFE8CC
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class AdminShopPlanController <<Controller>> {
+  confirm(shopId, invoice, admin, body): AdminStatus
+}
+class ShopPlanService <<Service>> {
+  adminConfirm(shopId, actor, invoice, input): AdminStatus
+  -requireAdmin(actor)
+  -adminShop(shopId, lock): Shop
+  -requirePayment(shopId, invoice): ShopPlanPayment
+  -activate(shop, plan, months, source, actor, note, paymentId, requestId)
+}
+class "ShopPlanService.AdminConfirmation" as AdminConfirmation <<DTO>> {
+  note: @NotBlank, max 1000
+}
+class UserRepository <<Repository>> {
+  findByIdAndRoleAndStatus(id, role, status): Optional<User>
+}
+class ShopRepository <<Repository>> {
+  findForUpdate(id): Optional<Shop>
+}
+class ShopPlanPaymentRepository <<Repository>> {
+  invoice(invoice): Optional<ShopPlanPayment>
+  flush()
+}
+class ShopSubscriptionRepository <<Repository>> {
+  forShop(shopId): Optional<ShopSubscription>
+  save(subscription): ShopSubscription
+}
+class ShopProActivationRepository <<Repository>> {
+  save(activation): ShopProActivation
+}
+class NotificationService <<Service>> {
+  notifyUser(user, title, message, link): void
+}
+class ShopPlanClock <<Service>> {
+  now(): LocalDateTime
+}
+class ShopPlanPayment <<Entity>> {
+  id
+  invoiceNumber
+  amount
+  durationMonths
+  status: String (PENDING, REVIEW, SUCCESS)
+  confirmedAt
+  transactionNo
+  shop: Shop
+  plan: ShopPlan
+}
+class ShopSubscription <<Entity>> {
+  id
+  startedAt
+  endsAt
+  plan: ShopPlan
+}
+class ShopProActivation <<Entity>> {
+  id
+  source: "ADMIN_CONFIRM"
+  paymentId (unique)
+  actorId
+  note
+  startsAt
+  endsAt
+}
+class Shop <<Entity>> {
+  id
+  status
+  owner: User
+}
+class User <<Entity>> {
+  id
+  role
+  status
+}
+
+View --> AdminShopPlanController : POST /api/admin/shops/{shopId}/subscription/payments/{invoice}/confirm
+AdminShopPlanController --> ShopPlanService
+AdminShopPlanController ..> AdminConfirmation : reads (@Valid body)
+ShopPlanService ..> AdminConfirmation : reads
+ShopPlanService --> UserRepository
+ShopPlanService --> ShopRepository
+ShopPlanService --> ShopPlanPaymentRepository
+ShopPlanService --> ShopSubscriptionRepository
+ShopPlanService --> ShopProActivationRepository
+ShopPlanService --> NotificationService
+ShopPlanService --> ShopPlanClock
+UserRepository ..> User
+ShopRepository ..> Shop
+ShopPlanPaymentRepository ..> ShopPlanPayment
+ShopSubscriptionRepository ..> ShopSubscription
+ShopProActivationRepository ..> ShopProActivation
+ShopPlanPayment "*" --> "1" Shop
+ShopSubscription "*" --> "1" Shop
+
+note bottom of ShopPlanService
+  adminConfirm(): requireAdmin (403), adminShop(lock) (404 / 409), requirePayment (404 if the
+  invoice belongs to another shop). SUCCESS returns the status (idempotent).
+  Any status other than PENDING or REVIEW gives 409. Then activate() using the payment's
+  own plan and durationMonths, status = SUCCESS, confirmedAt = now, flush.
+  No SePay call and no amount comparison: the admin decides.
+end note
+
+note bottom of ShopProActivation
+  paymentId is unique, so one payment can activate Pro only once.
+end note
+
+@enduml

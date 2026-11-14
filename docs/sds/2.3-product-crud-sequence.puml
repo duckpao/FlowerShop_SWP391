@@ -1,5 +1,5 @@
 @startuml
-title Shop/Admin Product Management - sequence diagram
+title 2.3 Shop/Admin Product Management - sequence diagram
 autonumber
 skinparam shadowing false
 skinparam defaultFontName Arial

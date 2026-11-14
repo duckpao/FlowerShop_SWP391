@@ -1,0 +1,77 @@
+@startuml
+!pragma layout smetana
+title 7.4 Delete Voucher - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+  BackgroundColor<<DTO>> #ECECEC
+  BackgroundColor<<Scheduler>> #FFE8CC
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class CouponController <<Controller>> {
+  adminDelete(user, id): 204
+  shopDelete(user, shopId, id): 204
+}
+class CouponService <<Service>> {
+  delete(actor, shopId, id)
+  -managed(actor, shopId, id): Coupon
+  -owned(shopId, actor): Shop
+}
+class ShopRepository <<Repository>> {
+  findById(id): Optional<Shop>
+}
+class CouponRepository <<Repository>> {
+  findLocked(id): Optional<Coupon>
+}
+class Coupon <<Entity>> {
+  id
+  code
+  deleted
+  status: CouponStatus
+  lastModifyBy
+  shop
+  product
+}
+class Shop <<Entity>> {
+  id
+  owner: User
+}
+
+View --> CouponController : DELETE /api/admin/vouchers/{id}\nDELETE /api/shop/mine/{shopId}/vouchers/{id}
+CouponController --> CouponService
+CouponService --> ShopRepository : owner check (shop scope)
+CouponService --> CouponRepository : findLocked(id)
+ShopRepository ..> Shop
+CouponRepository ..> Coupon : soft delete (update)
+Coupon "0..*" --> "0..1" Shop
+
+note bottom of CouponService
+  Soft delete: deleted = true, status = DISABLED, lastModifyBy = actor.
+  The row stays, so Order snapshots (couponId, code, discount) and CouponService.release()
+  still work. A deleted or other-shop voucher gives 404.
+  No check for pending orders: they keep their discount.
+end note
+
+note bottom of CouponRepository
+  The code stays reserved after delete: findByCodeIgnoreCase does not filter deleted,
+  and Coupon.code is unique. Saving a new voucher with the same code gives 400 "Mã giảm giá đã tồn tại.".
+end note
+
+@enduml

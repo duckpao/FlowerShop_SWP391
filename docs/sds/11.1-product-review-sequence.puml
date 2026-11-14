@@ -1,0 +1,168 @@
+@startuml
+title 11.1 Product Review and Shop Reply - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor Customer as U
+actor "Shop owner" as O
+actor Admin as A
+participant "View" as V <<View>> #EADCFF
+participant ProductReviewController as C <<Controller>> #D8F3DC
+participant AdminOversightController as AC <<Controller>> #D8F3DC
+participant ProductReviewService as S <<Service>> #DCECFF
+participant AdminOversightService as AS <<Service>> #DCECFF
+participant ProductRepository as PR <<Repository>> #FFF1C9
+participant ProductReviewRepository as RR <<Repository>> #FFF1C9
+participant OrderRepository as OR <<Repository>> #FFF1C9
+participant OrderDetailRepository as DR <<Repository>> #FFF1C9
+participant UserRepository as UR <<Repository>> #FFF1C9
+participant ShopRepository as SR <<Repository>> #FFF1C9
+
+== A. Customer writes a review ==
+U -> V : write rating (1-5) and comment (max 2000) on a product
+V -> C : POST /api/customer/products/{id}/reviews\n(rating, comment)
+C -> S : write(productId, userId, body)
+S -> PR : findById(productId)
+PR --> S : Product
+alt product missing, deleted, admin-hidden, inactive, or shop not ACTIVE
+  S --> C : 404 "Không tìm thấy dữ liệu."
+  C --> V : 404
+else visible
+  S -> RR : findByProductIdAndUserId(productId, userId)
+  RR --> S : Optional<ProductReview>
+  alt already reviewed
+    S --> C : 409 "Bạn đã đánh giá sản phẩm này."
+    C --> V : 409
+  else not yet reviewed
+    S -> OR : findByCustomerIdAndStatusOrderByCreatedDateDesc(userId, COMPLETED)
+    OR --> S : completed orders, newest first
+    loop each completed order until one contains the product
+      S -> DR : findByOrderId(orderId)
+      DR --> S : order details
+    end
+    alt no completed order contains the product
+      S --> C : 403 "Bạn chỉ có thể đánh giá sản phẩm đã mua trong đơn hàng hoàn thành."
+      C --> V : 403
+    else found
+      S -> UR : findById(userId)
+      UR --> S : User (else 404 "Không tìm thấy dữ liệu.")
+      S -> RR : saveAndFlush(review: order, rating, comment stripped)
+      RR --> S : ProductReview
+      S --> C : ReviewResult
+      C --> V : 201 Created
+      V --> U : review shown with the shop reply (empty until the shop answers)
+    end
+  end
+end
+
+== B. Customer loads or edits the own review ==
+U -> V : open the review form for this product
+V -> C : GET /api/customer/products/{id}/reviews
+C -> S : mine(productId, userId)
+S -> RR : findByProductIdAndUserId(productId, userId)
+alt no review
+  S --> C : 404 "Không tìm thấy dữ liệu."
+  C --> V : 404 (form opens in create mode)
+else found
+  RR --> S : ProductReview
+  S --> C : ReviewResult
+  C --> V : 200 OK (form opens in edit mode)
+end
+U -> V : change rating or comment
+V -> C : PUT /api/customer/products/{id}/reviews\n(rating, comment)
+C -> S : update(productId, userId, body)
+S -> RR : findByProductIdAndUserId(productId, userId)
+alt no review
+  S --> C : 404 "Không tìm thấy dữ liệu."
+  C --> V : 404
+else found
+  S -> RR : saveAndFlush(rating, comment stripped, lastModifyBy = userId)
+  note right of S : the purchase and product visibility are not checked again; shopReply is kept
+  RR --> S : ProductReview
+  S --> C : ReviewResult
+  C --> V : 200 OK
+end
+
+== C. Customer deletes the own review ==
+U -> V : click delete
+V -> V : confirmation dialog "Xóa đánh giá của bạn?"
+alt confirmed
+  V -> C : DELETE /api/customer/products/{id}/reviews
+  C -> S : delete(productId, userId)
+  S -> RR : findByProductIdAndUserId(productId, userId)
+  alt no review
+    S --> C : 404 "Không tìm thấy dữ liệu."
+    C --> V : 404
+  else found
+    S -> RR : delete(review)
+    C --> V : 204 No Content
+    V --> U : review removed
+  end
+end
+
+== D. Shop owner replies to a review ==
+O -> V : write the reply
+V -> C : PUT /api/shop/mine/{shopId}/reviews/{reviewId}/reply\n(reply, required, max 2000)
+note right of C : @PreAuthorize hasRole('SHOP'): a SHOP_STAFF user is refused with 403 "Không có quyền truy cập." before the service runs
+C -> S : reply(shopId, reviewId, ownerId, reply)
+S -> SR : findForUpdate(shopId) (pessimistic lock)
+alt shop not found or caller is not the owner
+  S --> C : 404 "Không tìm thấy dữ liệu."
+  C --> V : 404
+else owner
+  alt shop not ACTIVE
+    S --> C : 403 "Shop phải đang hoạt động."
+    C --> V : 403
+  else ACTIVE
+    S -> RR : findById(reviewId)
+    alt review missing or its product belongs to another shop
+      S --> C : 404 "Không tìm thấy dữ liệu."
+      C --> V : 404
+    else belongs to this shop
+      S -> S : shopReply = reply stripped (blank: cleared to null)
+      S -> RR : saveAndFlush(review, lastModifyBy = ownerId)
+      RR --> S : ProductReview
+      S --> C : ReviewResult
+      C --> V : 200 OK
+      V --> O : reply shown under the review
+    end
+  end
+end
+note over S
+  No notification is sent to the customer for the reply.
+end note
+
+== E. Admin moderates reviews ==
+A -> V : open review list
+V -> AC : GET /api/admin/reviews?page
+AC -> AS : reviews(page)
+AS -> RR : findAll(page of 20, createdDate desc)
+RR --> AS : Page<ProductReview>
+AS --> AC : ReviewPage (product, shop, customer name)
+AC --> V : 200 OK
+A -> V : delete an inappropriate review
+V -> AC : DELETE /api/admin/reviews/{id}
+AC -> AS : deleteReview(id)
+AS -> RR : findById(id)
+alt not found
+  AS --> AC : 404 "Không tìm thấy đánh giá."
+  AC --> V : 404
+else found
+  AS -> RR : delete(review)
+  AC --> V : 204 No Content
+  V --> A : review removed from the product page
+end
+note over AS
+  Admin deletion has no reason field, no customer notice and no audit row.
+end note
+
+@enduml

@@ -1,0 +1,59 @@
+@startuml
+title 8.4 Deactivate Pro Plan - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor Admin as U
+participant "View" as V <<View>> #EADCFF
+participant AdminShopPlanController as C <<Controller>> #D8F3DC
+participant ShopPlanService as S <<Service>> #DCECFF
+participant UserRepository as UR <<Repository>> #FFF1C9
+participant ShopPlanRepository as PR <<Repository>> #FFF1C9
+
+== A. Stop selling a plan ==
+U -> V : click "Xóa / ngừng bán" on an enabled plan
+V -> V : confirm dialog "Ngừng bán gói" (cancel sends nothing)
+V -> C : DELETE /api/admin/shop-plans/{id}
+C -> C : @PreAuthorize hasRole('ADMIN')
+C -> S : removePlan(adminId, id)
+S -> UR : findByIdAndRoleAndStatus(adminId, ADMIN, ACTIVE)
+alt not an active admin
+  S --> C : 403 "Chỉ admin đang hoạt động được kích hoạt Pro."
+else admin
+  alt id = "FREE"
+    S --> C : 409 "Không thể xóa gói Free."
+  else another plan
+    S -> PR : findLocked(id) (row lock)
+    alt plan not found
+      PR --> S : empty
+      S --> C : 404 "Không tìm thấy gói, cửa hàng hoặc giao dịch thuộc quyền truy cập."
+    else found
+      S -> S : enabled = false (row kept)
+      S --> C : void
+      C --> V : 200 OK (empty body)
+      V -> V : reload the list, row shows "Ngừng bán"
+      V --> U : plan is marked "Ngừng bán", can be re-enabled by editing (8.3)
+    end
+  end
+end
+
+== B. Effect on shops ==
+note over S
+  Plan list (8.1) no longer returns the plan.
+  checkout() (8.6) and adminGrant() (8.8) filter enabled plans, so a new purchase or grant gets 404.
+end note
+note over S
+  Shops already on the plan keep endsAt and their limits. Pending
+  SePay invoices for it still reconcile, because reconcile() does not check enabled.
+end note
+
+@enduml

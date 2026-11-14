@@ -1,0 +1,132 @@
+@startuml
+!pragma layout smetana
+title 4.1 Shopping Cart - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+  BackgroundColor<<DTO>> #ECECEC
+  BackgroundColor<<Scheduler>> #FFE8CC
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class CartController <<Controller>> {
+  addToCart(userId, request, currentUser): 201 CartItemResponse
+  getCart(userId, currentUser): CartResponse
+  updateCartItem(userId, itemId, request, currentUser): CartItemResponse
+  removeCartItem(userId, itemId, currentUser): 204
+  -requireOwner(userId, currentUser)
+}
+class CartService <<Service>> {
+  addToCart(userId, request): CartItemResponse
+  getCart(userId): CartResponse
+  updateCartItem(userId, cartItemId, request): CartItemResponse
+  removeCartItem(userId, cartItemId)
+  -getCartItemOrThrow(cartItemId, userId): CartItem
+  -availableStock(userId, product): int
+  ~toCartItemResponse(cartItem): CartItemResponse
+}
+class ProductQuotaService <<Service>> {
+  allowed(product): boolean
+  requireAllowed(product)
+}
+interface CartItemRepository <<Repository>> {
+  findByUserId(userId): List<CartItem>
+  findByUserIdAndProductId(userId, productId): Optional<CartItem>
+  findByUserIdAndProductIdForUpdate(userId, productId): Optional<CartItem>
+  deleteNotModifiedSince(cutoff): int
+}
+class ProductRepository <<Repository>> {
+  findById(id): Optional<Product>
+}
+class ProductImageRepository <<Repository>> {
+  findByProductIdOrderByDisplayOrderAsc(productId): List<ProductImage>
+}
+class UserRepository <<Repository>> {
+  findById(id): Optional<User>
+  existsById(id): boolean
+}
+class MaintenanceJob <<Scheduler>> {
+  cleanUpAbandonedCartItems()
+}
+class AddToCartRequest <<DTO>> {
+  productId
+  quantity >= 1
+}
+class UpdateCartItemRequest <<DTO>> {
+  quantity >= 1
+}
+class CartResponse <<DTO>> {
+  items
+  totalItems
+  totalQuantity
+  grandTotal
+}
+class CartItemResponse <<DTO>> {
+  id
+  product: ProductSummary
+  quantity
+  itemTotal
+}
+class CartItem <<Entity>> {
+  id
+  quantity
+}
+class Product <<Entity>> {
+  id
+  name
+  price
+  stock
+  type
+  status
+}
+class User <<Entity>> {
+  id
+}
+
+View --> CartController : POST /api/cart/{userId}/add\nGET /api/cart/{userId}\nPUT /api/cart/{userId}/items/{itemId}\nDELETE /api/cart/{userId}/items/{itemId}
+CartController --> CartService
+CartController ..> AddToCartRequest : reads
+CartController ..> UpdateCartItemRequest : reads
+CartController ..> CartResponse : returns
+CartService --> CartItemRepository
+CartService --> ProductRepository
+CartService --> ProductImageRepository
+CartService --> UserRepository
+CartService --> ProductQuotaService
+CartService ..> CartItemResponse : builds
+CartResponse *-- CartItemResponse
+MaintenanceJob --> CartItemRepository : deleteNotModifiedSince(now - 30 days)
+CartItemRepository ..> CartItem
+ProductRepository ..> Product
+UserRepository ..> User
+CartItem "*" --> "1" User
+CartItem "*" --> "1" Product
+
+note bottom of CartService
+  One CartItem per (user, product): adding again adds to the quantity.
+  Stock is checked against Product.stock (PENDING orders already took their stock),
+  skipped for CUSTOM products. Every call requires userId = logged-in user (403 otherwise).
+end note
+
+note bottom of View
+  Guest (not logged in): cart kept in the browser (localStorage, 7 days), no backend call.
+  After login each guest item is sent to POST /api/cart/{userId}/add, then the guest cart is cleared.
+end note
+
+@enduml

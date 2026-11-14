@@ -1,0 +1,121 @@
+@startuml
+title 5.3 Expire Unpaid Order - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor Customer as U
+participant "View" as V <<View>> #EADCFF
+participant CustomerOrderController as COC <<Controller>> #D8F3DC
+participant CustomerOrderService as COS <<Service>> #DCECFF
+participant PaymentTimeoutScheduler as T <<Scheduler>> #FFE8CC
+participant SePayGatewayService as GW <<Service>> #DCECFF
+participant OrderService as OS <<Service>> #DCECFF
+participant CouponService as CS <<Service>> #DCECFF
+participant OrderRepository as OR <<Repository>> #FFF1C9
+participant PaymentRepository as PR <<Repository>> #FFF1C9
+participant OrderDetailRepository as DR <<Repository>> #FFF1C9
+participant ProductRepository as PDR <<Repository>> #FFF1C9
+participant CartItemRepository as CIR <<Repository>> #FFF1C9
+participant "SePay REST API" as API <<External>> #FFE0E0
+participant OrderMailSender as MAIL <<Service>> #DCECFF
+
+== A. The customer sees a countdown ==
+U -> V : open /payment/pending?order=<id>
+V -> COC : GET /api/customer/orders/by-ids?ids=<id>,...
+COC -> COS : byIds(customerId, ids)
+COS --> COC : OrderSummary (paymentSecondsLeft = 600 - seconds since payment window start,\nonly for PENDING ONLINE orders not paid yet)
+COC --> V : 200 OK
+V -> V : countdown from the server value
+alt time left
+  V --> U : pay again button (5.1)
+else time over
+  V -> V : reload the orders after 35 seconds (the job cancels the order in the meantime)
+  V --> U : cancelled message, link back to the cart
+end
+
+== B. The job finds expired orders (every 5 seconds) ==
+T -> OR : findByStatusAndPaymentWindowStartBefore(PENDING, now - 10 min)
+OR --> T : expired PENDING orders
+T -> OR : findByStatusAndPaymentWindowStartBefore(AWAITING_DEPOSIT, now - 24 h)
+OR --> T : expired AWAITING_DEPOSIT orders
+loop each expired order
+  T -> GW : expireUnpaidOrder(orderId)
+  note right of T : an exception on one order is logged, the next order still runs
+  GW -> OR : findById(orderId)
+  OR --> GW : Order
+  alt order missing or not expired
+    GW --> T : return
+  else expired
+    GW -> PR : findByOrderId(orderId)
+    PR --> GW : payments
+    alt a COD payment exists
+      GW --> T : return (COD orders never expire for non-payment)
+    else only ONLINE payments
+      loop each ONLINE invoice that is not SUCCESS (group invoice when there is one)
+        GW -> API : POST /v1/order/cancel {order_invoice_number}
+        API --> GW : result (a failure is only logged)
+      end
+      loop each of these invoices
+        GW -> API : GET /v1/order/detail/{invoice}
+        alt status CAPTURED (paid at the last moment)
+          GW -> GW : applyPaid, order becomes PROCESSING or DEPOSIT_PAID (5.2)
+          GW --> T : return, the order is not cancelled
+        end
+      end
+      GW -> OS : cancelExpiredOrder(orderId, reason)
+      note right of OS : reason "Quá hạn 10 phút không quét mã thanh toán"\nor "Quá hạn 24 giờ không thanh toán tiền cọc"
+    end
+  end
+end
+
+== C. Cancel the order and give everything back ==
+OS -> OR : findById(orderId)
+OS -> OS : window not over yet: return (checked again before cancelling)
+OS -> OS : cancelPending(orderId, reason, "SYSTEM_AUTO_CANCEL")
+OS -> OR : refresh the order with a write lock
+alt status is not PENDING or AWAITING_DEPOSIT
+  OS --> GW : false (paid or handled meanwhile)
+else
+  OS -> OR : save(status = CANCELLED)
+  OS -> DR : findByOrderId(orderId)
+  DR --> OS : details
+  loop each detail with a product that is not CUSTOM
+    OS -> PDR : findByIdForUpdate(productId)
+    OS -> PDR : save(stock + quantity)
+  end
+  OS -> CS : release(order)
+  note right of CS : gives back the voucher use (order and shipping voucher)
+  OS -> PR : failPendingByOrderId(orderId, actor)
+  note right of PR : PENDING payments become FAILED
+  loop each detail with a product
+    OS -> CIR : findByUserIdAndProductIdForUpdate(customer, productId)
+    alt not in the cart
+      OS -> CIR : save(new CartItem with the ordered quantity)
+    else fewer in the cart than ordered
+      OS -> CIR : save(quantity raised to the ordered quantity)
+    end
+  end
+  OR --> MAIL : OrderStatusChangedEvent(PENDING to CANCELLED) after commit
+  MAIL --> U : "Đơn hàng đã bị hủy" mail (only with a verified email, no reason text)
+end
+
+== D. Late money ==
+note over GW
+  If the customer pays after the order was cancelled, the next status request or reconcile finds CAPTURED:
+  Payment becomes SUCCESS and a Refund REQUESTED is created for the shop staff (5.2, 5.4).
+end note
+note over V
+  The same cancellation (without the 10 minutes) runs when the customer leaves the SePay page with the cancel button,
+  see 5.2 F, and when the customer cancels the order (9.3).
+end note
+
+@enduml

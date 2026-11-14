@@ -1,6 +1,6 @@
 @startuml
 !pragma layout smetana
-title Personal Profile and Avatar - class diagram
+title 1.6 Personal Profile and Avatar - class diagram
 skinparam shadowing false
 skinparam defaultFontName Arial
 skinparam wrapWidth 240

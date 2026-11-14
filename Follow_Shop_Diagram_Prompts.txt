@@ -1,18 +1,22 @@
+Quy ước sơ đồ trong docs/sds (xem e:\FlowerShop\docs\sds\README.md): sơ đồ lớp chỉ có class backend và một class <<View>> tượng trưng; sơ đồ tuần tự coi frontend là một participant <<View>>; participant backend mang stereotype <<Controller>>, <<Service>> hoặc <<Repository>>.
+
 6.2.1 Class Diagram
 Create a professional UML CLASS DIAGRAM image titled "6.2.1. Follow Shop - Class Diagram". White background, portrait high resolution, minimalist Visual Paradigm export look: pale gray headers, thin black connectors, compact class rectangles, clear readable black typography, no frontend/backend groups or colored bands. Match a traditional controller-to-service-to-repository-to-entity diagram. Only Follow Shop relevant members.
 
 Arrange the following exact classes top to bottom.
-Top center FavoriteShopController, operation "+ add(user: CurrentUser, shopId: String): void".
-Below center FavoriteShopService, operation "+ add(userId: String, shopId: String): void".
-Middle row three repository boxes: left ShopRepository (class, no interface stereotype), center FavoriteShopRepository with <<Interface>>, right UserRepository (class, no interface stereotype).
-ShopRepository operation "+ findById(id: String): Optional<Shop>".
+Top center a symbolic class <<View>> View with no attributes and no operations, with a solid open arrow downward to FavoriteShopController.
+Below it FavoriteShopController <<Controller>>, operation "+ add(user: CurrentUser, shopId: String): void".
+Below center FavoriteShopService <<Service>>, operation "+ add(userId: String, shopId: String): void".
+Middle row three repository boxes: left ShopRepository <<Repository>> (class), center FavoriteShopRepository <<Repository>> (interface), right UserRepository <<Repository>> (class).
+ShopRepository operation "+ findById(id: String): Optional<Shop>" (inherited from HibernateRepository).
 FavoriteShopRepository operations "+ existsById(id: FavoriteShopId): boolean", "+ saveAndFlush(favorite: FavoriteShop): FavoriteShop".
 Attach small note "extends JpaRepository<FavoriteShop, FavoriteShopId>" to FavoriteShopRepository.
 UserRepository operation "+ findById(id: String): Optional<User>".
-Under center repository place FavoriteShop, attributes "- id: FavoriteShopId", "- user: User", "- shop: Shop", "- createdDate: LocalDateTime", "- createdBy: String", "- lastModifyBy: String".
+Under center repository place FavoriteShop, attributes "- id: FavoriteShopId", "- user: User", "- shop: Shop", "- createdDate: LocalDateTime", "- createdBy: String", "- lastModifyDate: LocalDateTime", "- lastModifyBy: String".
 Bottom row: Shop on left with "- id: String", "- status: ShopStatus"; FavoriteShopId in center with "- userId: String", "- shopId: String"; User on right with "- id: String".
 
 Connectors:
+View solid open arrow downward to Controller.
 Controller solid open arrow downward to Service.
 Service solid open arrows to all three repositories.
 ShopRepository dashed dependency arrow to Shop.
@@ -21,28 +25,28 @@ FavoriteShopRepository dashed dependency arrow to FavoriteShop.
 FavoriteShop solid association to Shop labelled "shop", multiplicities "0..*" at FavoriteShop, "1" at Shop.
 FavoriteShop solid association to User labelled "user", multiplicities "0..*" at FavoriteShop, "1" at User.
 FavoriteShop composition to FavoriteShopId with filled black diamond at FavoriteShop, "1" at both ends.
-Keep all arrows separate, routed outside boxes; no crossing text. Small green dot icons on public operations and red squares on private attributes optional. Do not add any React classes, DTO classes or other operations. This is a static CLASS diagram, not a sequence diagram. All labels English. Ensure exact class names and clean hierarchy.
+Keep all arrows separate, routed outside boxes; no crossing text. Small green dot icons on public operations and red squares on private attributes optional. Do not add any other React classes (the only frontend element is the symbolic <<View>> class View), DTO classes or other operations. This is a static CLASS diagram, not a sequence diagram. All labels English. Ensure exact class names and clean hierarchy.
 
 6.2.2 Sequence Diagram
 Create one accurate UML SEQUENCE DIAGRAM image titled exactly "6.2.2. Follow Shop - Sequence Diagram". Landscape high resolution, white background, gray participant headers, crisp thin black lines, legible typography, vertical dashed lifelines, narrow activation rectangles. Traditional Visual Paradigm style, no frontend/backend bands, no decorative graphics. Use a customer stick figure. Time flows downward.
 
 Exactly seven participants left to right:
-Customer (actor), :PublicShopView (boundary), :FavoriteShopController, :FavoriteShopService, :ShopRepository, :FavoriteShopRepository, :UserRepository.
+Customer (actor), :View <<View>>, :FavoriteShopController <<Controller>>, :FavoriteShopService <<Service>>, :ShopRepository <<Repository>>, :FavoriteShopRepository <<Repository>>, :UserRepository <<Repository>>.
 Compact note at top: "Preconditions: authenticated CUSTOMER; valid CSRF token".
-A small note beside PublicShopView: "Calls favoriteShopService.add(shopId) via useFavoriteShopToggle".
+A small note beside View: "The View sends the follow request to the backend".
 All calls solid arrows to callee, returns dashed arrows to caller. Align activation bars and lifelines correctly.
 
 Draw main messages top down:
-1 Customer -> PublicShopView: "1: Click Follow"
-2 PublicShopView -> FavoriteShopController: "2: PUT /api/customer/favorite-shops/{shopId}"
+1 Customer -> View: "1: Click Follow"
+2 View -> FavoriteShopController: "2: PUT /api/customer/favorite-shops/{shopId}"
 3 FavoriteShopController -> FavoriteShopService: "3: add(user.id(), shopId)"
 4 FavoriteShopService -> ShopRepository: "4: findById(shopId)"
 5 ShopRepository --> FavoriteShopService: "5: Optional<Shop>"
 
-Then one BREAK combined fragment spanning PublicShopView through ShopRepository, not the actor or other repositories:
+Then one BREAK combined fragment spanning View through ShopRepository, not the actor or other repositories:
 guard "[shop not found OR shop.status != ACTIVE]"
 Service --> Controller dashed arrow "404 Not Found / 400 Bad Request"
-Controller --> PublicShopView dashed arrow "Show shop error"
+Controller --> View dashed arrow "Show shop error"
 A small note "Terminate this request". BREAK means the remainder of the sequence is skipped on this condition.
 
 Continue outside BREAK:
@@ -63,8 +67,8 @@ End ALT.
 
 Below ALT:
 14 FavoriteShopService --> FavoriteShopController: "14: void"
-15 FavoriteShopController --> PublicShopView: "15: HTTP 204 No Content"
-16 PublicShopView --> Customer: "16: Show Unfollow button"
+15 FavoriteShopController --> View: "15: HTTP 204 No Content"
+16 View --> Customer: "16: Show the followed state (Đang theo dõi)"
 
 Small footnote at bottom: "Favorite_Shops uses composite key (user_id, shop_id). Repeated follow requests do not create a second row."
 Do not add database lifeline, payment, email, creation of shop/user, React architecture groups, or unrelated operations. Avoid all overlapping arrows and text. Render class names exactly and ensure long HTTP/method labels wrap cleanly if necessary. Technical correctness over decorative complexity.

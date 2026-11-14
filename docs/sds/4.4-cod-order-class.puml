@@ -1,0 +1,127 @@
+@startuml
+!pragma layout smetana
+title 4.4 COD Order and Confirmation Page - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+  BackgroundColor<<DTO>> #ECECEC
+  BackgroundColor<<Scheduler>> #FFE8CC
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class OrderController <<Controller>> {
+  makeOrders(userId, request, currentUser): 201 List<OrderResponse>
+}
+class OrderService <<Service>> {
+  makeOrders(userId, request): List<OrderResponse>
+  makeOrder(userId, request): OrderResponse
+}
+class NotificationService <<Service>> {
+  notifyOrderPlaced(order)
+}
+class OrderPlacedEvent <<DTO>> {
+  orderIds
+}
+class OrderMailSender <<Service>> {
+  onPlaced(event)
+}
+class HtmlMailSender <<Service>> {
+  send(email, subject, html)
+}
+class "SMTP server" as SMTP <<External>>
+class CustomerOrderController <<Controller>> {
+  byIds(user, ids): List<OrderSummary>
+}
+class CustomerOrderService <<Service>> {
+  byIds(customerId, ids): List<OrderSummary>
+  -summary(order): OrderSummary
+}
+class "CustomerOrderService.OrderSummary" as OrderSummary <<DTO>> {
+  id
+  status
+  totalAmount
+  lines (name, quantity, image)
+  createdDate
+}
+class PaymentRepository <<Repository>> {
+  save(payment): Payment
+  findByOrderId(orderId): List<Payment>
+}
+class OrderRepository <<Repository>> {
+  save(order): Order
+  findById(id): Optional<Order>
+}
+class OrderDetailRepository <<Repository>> {
+  findByOrderId(orderId): List<OrderDetail>
+}
+class ProductImageRepository <<Repository>> {
+  findByProductIdInOrderByDisplayOrderAscIdAsc(ids): List<ProductImage>
+}
+class SePayGatewayService <<Service>> {
+  expireUnpaidOrder(orderId)
+}
+class PaymentTimeoutScheduler <<Scheduler>> {
+  scanAndCancelExpiredOrders()
+}
+class Order <<Entity>> {
+  id
+  status = PENDING
+  totalAmount
+  checkoutGroup
+}
+class Payment <<Entity>> {
+  id
+  paymentType = FULL
+  paymentMethod = COD
+  amount = order total
+  invoiceNumber = "COD-" + 8 chars
+  status = PENDING
+}
+
+View --> OrderController : POST /api/orders/{userId}/batch\n(paymentMethod = COD)
+View --> CustomerOrderController : GET /api/customer/orders/by-ids?ids=
+OrderController --> OrderService
+OrderService --> PaymentRepository : save COD Payment
+OrderService --> NotificationService
+OrderService ..> OrderPlacedEvent : publishes
+OrderPlacedEvent ..> OrderMailSender : after commit
+OrderMailSender --> HtmlMailSender
+HtmlMailSender ..> SMTP
+CustomerOrderController --> CustomerOrderService
+CustomerOrderService --> OrderRepository
+CustomerOrderService --> OrderDetailRepository
+CustomerOrderService --> ProductImageRepository
+CustomerOrderService ..> OrderSummary : returns
+PaymentTimeoutScheduler --> SePayGatewayService
+SePayGatewayService --> PaymentRepository : skips the order when a COD payment exists
+PaymentRepository ..> Payment
+OrderRepository ..> Order
+Order "1" --> "*" Payment
+
+note bottom of OrderService
+  COD: the order stays PENDING with a PENDING COD Payment for the full amount
+  (shipping included). No stock or voucher change here (done in makeOrder, 4.3).
+  The shop sees the new order in its queue and confirms it (3.2); money is collected at delivery.
+end note
+
+note bottom of CustomerOrderService
+  byIds(): only the orders of the logged-in customer, duplicates dropped, at most 20.
+end note
+
+@enduml

@@ -1,0 +1,270 @@
+@startuml
+!pragma layout smetana
+title 10.3 Create Custom Request - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+  BackgroundColor<<DTO>> #ECECEC
+  BackgroundColor<<Scheduler>> #FFE8CC
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class CustomFlowerOrderController <<Controller>> {
+  options(): List<Option>
+  suggestions(budget, quantity, shopId, q, page): Suggestions
+  create(currentUser, input: RequestInput): CustomRequestResult
+}
+class CustomOrderWorkflowController <<Controller>> {
+  create(currentUser, body: CreateInput): Receipt
+}
+class CustomFlowerCatalogService <<Service>> {
+  catalog(): List<Option>
+  validate(preferences: Preferences)
+  -validateOne(catalog, label, groups)
+}
+class CustomFlowerOrderService <<Service>> {
+  create(actor, input: RequestInput): CustomRequestResult
+  design(input: RequestInput): Design
+  suggestions(budget, quantity, shopId, q, page): Suggestions
+  -activeShop(id): Shop
+}
+class CustomOrderWorkflowService <<Service>> {
+  create(actor, input: CreateInput): Receipt
+}
+class ProductQuotaService <<Service>> {
+  allowedSpecification(): Specification<Product>
+}
+class ProductCardAssembler <<Service>> {
+  cards(products): List<ProductCard>
+}
+class NotificationService <<Service>> {
+  notifyUser(user, title, message, link)
+}
+class CustomFlowerOptionRepository <<Repository>> {
+  catalog(): List<CustomFlowerOption>
+}
+class CustomOrderRequestRepository <<Repository>> {
+  saveAndFlush(request): CustomOrderRequest
+}
+class OrderRepository <<Repository>> {
+  save(order): Order
+}
+class OrderDetailRepository <<Repository>> {
+  save(detail): OrderDetail
+}
+class ShopRepository <<Repository>> {
+  findByIdAndStatus(id, status): Optional<Shop>
+}
+class UserRepository <<Repository>> {
+  findByIdAndRoleAndStatus(id, role, status): Optional<User>
+}
+class AddressRepository <<Repository>> {
+  findByIdAndUserId(id, userId): Optional<Address>
+}
+class ProductRepository <<Repository>> {
+  findById(id): Optional<Product>
+  findAll(spec, pageable): Page<Product>
+}
+class CustomFlowerOption <<Entity>> {
+  id
+  optionGroup: Group (FLOWER, OCCASION, WRAPPING, ACCESSORY)
+  label
+  disabled
+  sortOrder
+}
+class CustomOrderRequest <<Entity>> {
+  id
+  description
+  desiredComponents: JSON
+  status: CustomOrderStatus
+  createdBy
+}
+class Order <<Entity>> {
+  id
+  orderType: CUSTOM
+  status: AWAITING_QUOTE
+  customerNote
+  recipientName
+  recipientPhone
+  subTotal
+  totalAmount
+}
+class OrderDetail <<Entity>> {
+  customMaterials: JSON
+  price
+  quantity
+}
+class Address <<Entity>> {
+  id
+  ghnDistrictId
+  ghnWardCode
+  recipientName
+  recipientPhone
+}
+class Shop <<Entity>> {
+  id
+  name
+  status
+}
+class User <<Entity>> {
+  id
+  role
+  status
+  fullName
+}
+class Product <<Entity>> {
+  id
+  name
+  price
+  stock
+  status
+  adminHidden
+}
+class "CustomFlowerOrderService.RequestInput" as RequestInput <<DTO>> {
+  shopId: max 36
+  quantity: 1..100
+  description: max 3000
+  preferences
+}
+class "CustomFlowerOrderService.Preferences" as Preferences <<DTO>> {
+  flowers: max 200
+  colors: max 100
+  occasion: max 100
+  wrapping: max 200
+  deliveryDate: max 10
+  referenceProductId: max 36
+}
+class "CustomOrderWorkflowService.CreateInput" as CreateInput <<DTO>> {
+  addressId
+  design: RequestInput
+}
+class "CustomFlowerOrderService.Design" as Design <<DTO>> {
+  quantity
+  flowers
+  colors
+  occasion
+  wrapping
+  deliveryDate
+  referenceProductId
+  estimatedTotal
+}
+class "CustomFlowerOrderService.Result" as CustomRequestResult <<DTO>> {
+  id
+  status
+  design
+  orderId
+}
+class "CustomOrderWorkflowService.Receipt" as Receipt <<DTO>> {
+  orderId
+  status
+}
+class "CustomFlowerCatalogService.Option" as Option <<DTO>> {
+  id
+  group
+  label
+  disabled
+}
+class "CustomFlowerOrderService.Suggestions" as Suggestions <<DTO>> {
+  content
+  budget
+  quantity
+}
+
+View --> CustomFlowerOrderController : GET /api/public/custom-orders/options\nGET /api/public/custom-orders/suggestions\nPOST /api/customer/custom-orders (request, REQUESTED)
+View --> CustomOrderWorkflowController : POST /api/customer/orders/custom (order, AWAITING_QUOTE)
+CustomFlowerOrderController --> CustomFlowerCatalogService : options
+CustomFlowerOrderController --> CustomFlowerOrderService
+CustomFlowerOrderController ..> RequestInput : reads
+CustomFlowerOrderController ..> Option : returns
+CustomFlowerOrderController ..> Suggestions : returns
+CustomFlowerOrderController ..> CustomRequestResult : returns
+CustomOrderWorkflowController --> CustomOrderWorkflowService
+CustomOrderWorkflowController ..> CreateInput : reads
+CustomOrderWorkflowController ..> Receipt : returns
+CustomFlowerOrderService --> CustomFlowerCatalogService : validate(preferences)
+CustomFlowerOrderService --> CustomOrderRequestRepository
+CustomFlowerOrderService --> ShopRepository
+CustomFlowerOrderService --> UserRepository
+CustomFlowerOrderService --> ProductRepository : reference product, suggestions
+CustomFlowerOrderService --> ProductQuotaService
+CustomFlowerOrderService --> ProductCardAssembler
+CustomFlowerOrderService ..> Design : builds
+CustomFlowerOrderService ..> CustomRequestResult : builds
+CustomOrderWorkflowService --> CustomFlowerOrderService : design(request)
+CustomOrderWorkflowService --> ShopRepository
+CustomOrderWorkflowService --> UserRepository
+CustomOrderWorkflowService --> AddressRepository
+CustomOrderWorkflowService --> OrderRepository
+CustomOrderWorkflowService --> OrderDetailRepository
+CustomOrderWorkflowService --> NotificationService : shop owner bell
+CustomFlowerCatalogService --> CustomFlowerOptionRepository
+CustomFlowerOptionRepository ..> CustomFlowerOption
+CustomOrderRequestRepository ..> CustomOrderRequest
+OrderRepository ..> Order
+OrderDetailRepository ..> OrderDetail
+ShopRepository ..> Shop
+UserRepository ..> User
+AddressRepository ..> Address
+ProductRepository ..> Product
+CustomOrderRequest "*" --> "1" Shop : shop
+CustomOrderRequest "*" --> "1" User : customer
+Order "*" --> "1" Address : deliveryAddress
+OrderDetail "*" --> "1" Order : order
+
+note bottom of CustomFlowerOrderService
+  design() validation (all errors are 400 unless stated):
+  quantity 1..100 ("Số lượng từ 1 đến 100.")
+  flowers, occasion: must be an ACTIVE option of their group (validate)
+  wrapping: comma list of WRAPPING or ACCESSORY options, no duplicates
+  deliveryDate: ISO date, not before today in Asia/Ho_Chi_Minh
+  referenceProductId: visible product of the same shop, stock >= quantity
+    (409 when short), total = price x quantity
+  No budget is stored by the form: CustomOrderWorkflowService.Design.budget is null.
+end note
+
+note bottom of CustomFlowerCatalogService
+  Options come from table Custom_Flower_Options. Groups: FLOWER (flowers),
+  OCCASION (occasions), WRAPPING and ACCESSORY (packages and accessories).
+  Disabled options are returned with disabled = true and are refused on save.
+end note
+
+note bottom of CustomOrderWorkflowService
+  create() (customer, one transaction): shop ACTIVE, customer ACTIVE,
+  address owned by the customer. Address GHN codes are NOT required here.
+  Order CUSTOM, status AWAITING_QUOTE, subTotal = 0, totalAmount = 0.
+  OrderDetail: price 0, quantity 1, customMaterials = {budget null, description, preferences}.
+  Shop owner gets a bell notification "Yêu cầu đặt hoa mới" (in-app, no e-mail).
+  Missing shop, customer or address: 404.
+end note
+
+note bottom of CustomFlowerOrderService
+  Request path (CustomFlowerOrderController.create): saves only
+  CustomOrderRequest with status REQUESTED. No Order, no notification.
+  The client (CustomFlowerOrderView) uses this path.
+  Order path (CustomOrderWorkflowController.create): status AWAITING_QUOTE.
+  The client service customerOrderService.createCustom has no caller.
+end note
+
+note bottom of ProductQuotaService
+  Quota: products locked by the shop plan are excluded from suggestions.
+  Suggestions: ACTIVE product, ACTIVE shop, price > 0, stock >= quantity,
+  price x quantity <= budget x 1.05, 12 per page sorted by price desc.
+end note
+
+@enduml

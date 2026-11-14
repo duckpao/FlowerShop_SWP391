@@ -1,129 +1,129 @@
 # Class and sequence diagrams per task
 
 Mỗi task có một class diagram và một sequence diagram, vẽ theo code trong `flowershop/src/main/java`.
-File nguồn PlantUML nằm trong [diagrams/](diagrams/), cạnh ảnh PNG. Màu class: tím là View (React), xanh lá là Controller, xanh dương là Service, vàng là Repository, xanh lá nhạt là Entity, đỏ nhạt là hệ thống ngoài.
+File nguồn PlantUML nằm trong [sds/](sds/), cạnh ảnh PNG. Màu class: tím là View (React), xanh lá là Controller, xanh dương là Service, vàng là Repository, xanh lá nhạt là Entity, đỏ nhạt là hệ thống ngoài.
 
-Render lại: `java -Dfile.encoding=UTF-8 -jar plantuml.jar -charset UTF-8 -tpng diagrams/*.puml`.
+Render lại: `java -Dfile.encoding=UTF-8 -jar plantuml.jar -charset UTF-8 -tpng sds/*.puml`.
 
 ## 1. Home Page
 
 Trang chính sau khi user đăng nhập. Lớp chính: `HomeView`, `PublicCatalogController`, `PublicShopController`, `NotificationController`.
 
-**Class diagram** ([nguồn](diagrams/01-home-page-class.puml))
+**Class diagram** ([nguồn](sds/2.7-home-page-class.puml))
 
-![Home Page class](diagrams/01-home-page-class.png)
+![Home Page class](sds/2.7-home-page-class.png)
 
-**Sequence diagram** ([nguồn](diagrams/01-home-page-sequence.puml))
+**Sequence diagram** ([nguồn](sds/2.7-home-page-sequence.puml))
 
-![Home Page sequence](diagrams/01-home-page-sequence.png)
+![Home Page sequence](sds/2.7-home-page-sequence.png)
 
 ## 2. Order Management
 
 Shop quản lý và xử lý đơn hàng (danh sách và filter, thêm mới, chỉnh sửa). Lớp chính: `ManagerOrderController`, `ManagerOrderService`.
 
-**Class diagram** ([nguồn](diagrams/02-order-management-class.puml))
+**Class diagram** ([nguồn](sds/3.9-order-management-class.puml))
 
-![Order Management class](diagrams/02-order-management-class.png)
+![Order Management class](sds/3.9-order-management-class.png)
 
-**Sequence diagram** ([nguồn](diagrams/02-order-management-sequence.puml))
+**Sequence diagram** ([nguồn](sds/3.9-order-management-sequence.puml))
 
-![Order Management sequence](diagrams/02-order-management-sequence.png)
+![Order Management sequence](sds/3.9-order-management-sequence.png)
 
 ## 3. Order Queue
 
 Danh sách đơn đang chờ xử lý. Lớp chính: `ManagerOrderService.queueCount`, `list(status)`.
 
-**Class diagram** ([nguồn](diagrams/03-order-queue-class.puml))
+**Class diagram** ([nguồn](sds/3.2-order-queue-alt-class.puml))
 
-![Order Queue class](diagrams/03-order-queue-class.png)
+![Order Queue class](sds/3.2-order-queue-alt-class.png)
 
-**Sequence diagram** ([nguồn](diagrams/03-order-queue-sequence.puml))
+**Sequence diagram** ([nguồn](sds/3.2-order-queue-alt-sequence.puml))
 
-![Order Queue sequence](diagrams/03-order-queue-sequence.png)
+![Order Queue sequence](sds/3.2-order-queue-alt-sequence.png)
 
 ## 4. Update Order Status
 
 Cập nhật trạng thái đơn. Lớp chính: `ManagerOrderService.confirm`, `changeStatus`, `OrderStatusListener`.
 
-**Class diagram** ([nguồn](diagrams/04-update-order-status-class.puml))
+**Class diagram** ([nguồn](sds/3.7-update-order-status-class.puml))
 
-![Update Order Status class](diagrams/04-update-order-status-class.png)
+![Update Order Status class](sds/3.7-update-order-status-class.png)
 
-**Sequence diagram** ([nguồn](diagrams/04-update-order-status-sequence.puml))
+**Sequence diagram** ([nguồn](sds/3.7-update-order-status-alt-sequence.puml))
 
-![Update Order Status sequence](diagrams/04-update-order-status-sequence.png)
+![Update Order Status sequence](sds/3.7-update-order-status-alt-sequence.png)
 
 ## 5. View Order Details
 
 Xem chi tiết đơn. Lớp chính: `ManagerOrderService.detail`, `buildDetail`.
 
-**Class diagram** ([nguồn](diagrams/05-view-order-details-class.puml))
+**Class diagram** ([nguồn](sds/3.1-order-details-alt-class.puml))
 
-![View Order Details class](diagrams/05-view-order-details-class.png)
+![View Order Details class](sds/3.1-order-details-alt-class.png)
 
-**Sequence diagram** ([nguồn](diagrams/05-view-order-details-sequence.puml))
+**Sequence diagram** ([nguồn](sds/3.1-order-details-alt-sequence.puml))
 
-![View Order Details sequence](diagrams/05-view-order-details-sequence.png)
+![View Order Details sequence](sds/3.1-order-details-alt-sequence.png)
 
 ## 6. Assign Order to Delivery
 
 Tích hợp giao hàng. Lớp chính: `ManagerOrderService.ship`, `refreshStatus`, `GhnService`, `DeliverySync`.
 
-**Class diagram** ([nguồn](diagrams/06-assign-order-to-delivery-class.puml))
+**Class diagram** ([nguồn](sds/3.3-create-ghn-waybill-alt-class.puml))
 
-![Assign Order to Delivery class](diagrams/06-assign-order-to-delivery-class.png)
+![Assign Order to Delivery class](sds/3.3-create-ghn-waybill-alt-class.png)
 
-**Sequence diagram** ([nguồn](diagrams/06-assign-order-to-delivery-sequence.puml))
+**Sequence diagram** ([nguồn](sds/3.3-create-ghn-waybill-alt-sequence.puml))
 
-![Assign Order to Delivery sequence](diagrams/06-assign-order-to-delivery-sequence.png)
+![Assign Order to Delivery sequence](sds/3.3-create-ghn-waybill-alt-sequence.png)
 
 ## 7. Notify User Confirmation
 
 Xác nhận đơn hàng qua mail. Lớp chính: `OrderMailSender.onPlaced`, `onStatusChanged`, `HtmlMailSender`.
 
-**Class diagram** ([nguồn](diagrams/07-notify-user-confirmation-class.puml))
+**Class diagram** ([nguồn](sds/13.3-notify-user-confirmation-class.puml))
 
-![Notify User Confirmation class](diagrams/07-notify-user-confirmation-class.png)
+![Notify User Confirmation class](sds/13.3-notify-user-confirmation-class.png)
 
-**Sequence diagram** ([nguồn](diagrams/07-notify-user-confirmation-sequence.puml))
+**Sequence diagram** ([nguồn](sds/13.3-notify-user-confirmation-sequence.puml))
 
-![Notify User Confirmation sequence](diagrams/07-notify-user-confirmation-sequence.png)
+![Notify User Confirmation sequence](sds/13.3-notify-user-confirmation-sequence.png)
 
 ## 8. Refund management for shop
 
 Shop quản lý hoàn tiền cho user. Lớp chính: `StaffRefundController`, `StaffRefundService`, `NotificationService`.
 
-**Class diagram** ([nguồn](diagrams/08-refund-management-class.puml))
+**Class diagram** ([nguồn](sds/5.4-refund-management-class.puml))
 
-![Refund management for shop class](diagrams/08-refund-management-class.png)
+![Refund management for shop class](sds/5.4-refund-management-class.png)
 
-**Sequence diagram** ([nguồn](diagrams/08-refund-management-sequence.puml))
+**Sequence diagram** ([nguồn](sds/5.4-refund-management-sequence.puml))
 
-![Refund management for shop sequence](diagrams/08-refund-management-sequence.png)
+![Refund management for shop sequence](sds/5.4-refund-management-sequence.png)
 
 ## 9. Notify Upcoming Occasion via Email
 
 Nhắc khách về sinh nhật, ngày lễ, kỷ niệm. Lớp chính: `OccasionReminderJob`, `OccasionReminderService`.
 
-**Class diagram** ([nguồn](diagrams/09-notify-upcoming-occasion-class.puml))
+**Class diagram** ([nguồn](sds/13.2-notify-upcoming-occasion-class.puml))
 
-![Notify Upcoming Occasion via Email class](diagrams/09-notify-upcoming-occasion-class.png)
+![Notify Upcoming Occasion via Email class](sds/13.2-notify-upcoming-occasion-class.png)
 
-**Sequence diagram** ([nguồn](diagrams/09-notify-upcoming-occasion-sequence.puml))
+**Sequence diagram** ([nguồn](sds/13.2-notify-upcoming-occasion-sequence.puml))
 
-![Notify Upcoming Occasion via Email sequence](diagrams/09-notify-upcoming-occasion-sequence.png)
+![Notify Upcoming Occasion via Email sequence](sds/13.2-notify-upcoming-occasion-sequence.png)
 
 ## 10. Notify Order Delivered via Email
 
 Thông báo đơn đã giao. Lớp chính: `DeliverySync`, `OrderStatusListener`, `OrderMailSender`.
 
-**Class diagram** ([nguồn](diagrams/10-notify-order-delivered-class.puml))
+**Class diagram** ([nguồn](sds/13.4-notify-order-delivered-class.puml))
 
-![Notify Order Delivered via Email class](diagrams/10-notify-order-delivered-class.png)
+![Notify Order Delivered via Email class](sds/13.4-notify-order-delivered-class.png)
 
-**Sequence diagram** ([nguồn](diagrams/10-notify-order-delivered-sequence.puml))
+**Sequence diagram** ([nguồn](sds/13.4-notify-order-delivered-sequence.puml))
 
-![Notify Order Delivered via Email sequence](diagrams/10-notify-order-delivered-sequence.png)
+![Notify Order Delivered via Email sequence](sds/13.4-notify-order-delivered-sequence.png)
 
 ## Ghi chú khớp với code
 

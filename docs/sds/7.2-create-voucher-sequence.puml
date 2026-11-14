@@ -1,5 +1,5 @@
 @startuml
-title Create Voucher - sequence diagram
+title 7.2 Create Voucher - sequence diagram
 autonumber
 skinparam shadowing false
 skinparam defaultFontName Arial

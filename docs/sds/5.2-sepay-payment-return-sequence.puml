@@ -1,0 +1,215 @@
+@startuml
+title 5.2 SePay Return, Reconcile and Cancel (no webhook) - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor Customer as U
+participant "SePay Gateway\n(checkout page)" as SEPAY <<External>> #FFE0E0
+participant "SePay REST API\n(/v1/order/detail, /v1/order/cancel)" as API <<External>> #FFE0E0
+participant PaymentReturnController as RC <<Controller>> #D8F3DC
+participant "View" as V <<View>> #EADCFF
+participant PaymentController as C <<Controller>> #D8F3DC
+participant PaymentService as PS <<Service>> #DCECFF
+participant SePayGatewayService as GW <<Service>> #DCECFF
+participant OrderService as OS <<Service>> #DCECFF
+participant PaymentRepository as PR <<Repository>> #FFF1C9
+participant OrderRepository as OR <<Repository>> #FFF1C9
+
+== A. Checkout created (see 10.2 D and 8.6 for the signed form) ==
+note over GW
+  Signed fields: success_url = app.frontend-base-url + /payment/success?invoice_number=...
+  (same for error_url and cancel_url). sepay.* URL properties override the default.
+end note
+V -> SEPAY : POST signed form (sent by View)
+
+== B. Customer result on the gateway ==
+alt paid
+  SEPAY -> U : redirect success_url
+else gateway error
+  SEPAY -> U : redirect error_url
+else customer leaves with cancel button or back
+  SEPAY -> U : redirect cancel_url
+end
+note over SEPAY
+  SePay never calls this backend (no webhook). The return URL only
+  brings the browser back. Money is confirmed only by reconcile in D.
+end note
+
+== C. Return URL on the backend host ==
+opt the configured return URL points to the backend host
+  U -> RC : GET /payment/{success|error|cancel}?invoice_number=...
+  alt same scheme, host and port as frontend-base-url
+    RC --> U : forward:/index.html (frontend served by the same host)
+  else other host
+    RC --> U : 302 redirect to frontend /payment/{result}?query
+  end
+end
+
+== D. Success page polls for the result ==
+U -> V : /payment/success?invoice_number=...
+loop up to 10 times, every 2.5 seconds, until isPaid or CANCELLED
+  V -> C : GET /api/payments/status-by-invoice/{invoice}
+  C -> GW : getStatusByInvoice(invoice, userId)
+  alt group invoice (GRP-...)
+    GW --> C : group status (all orders paid, not cancelled)
+  else single invoice
+    GW -> PR : findByInvoiceNumber(invoice)
+    alt unknown invoice
+      GW --> C : 404 Không tìm thấy thông tin thanh toán với mã hóa đơn
+    else found
+      alt payment owner is not the caller
+        GW --> C : 403 Bạn không có quyền xem thông tin giao dịch này.
+      else owner
+        alt payment ONLINE, not SUCCESS, order not CANCELLED
+          GW -> API : GET /v1/order/detail/{invoice} (Basic auth, 6 s timeout)
+          alt HTTP not 2xx, timeout, or order_status not CAPTURED
+            API --> GW : no change
+          else CAPTURED
+            API --> GW : order_amount, order_id, order_invoice_number
+            alt invoice mismatch or amount text missing
+              GW -> GW : no change
+            else amount compared with Payment.amount (in transaction, order and payment locked)
+              alt Payment.amount differs
+                GW -> PR : Payment FAILED, gatewayResponse AMOUNT_MISMATCH (order unchanged)
+              else Payment already SUCCESS
+                GW -> GW : ALREADY_PAID (no change)
+              else order is in the expected state
+                GW -> PR : Payment SUCCESS, transactionNo
+                alt paymentType is DEPOSIT (order AWAITING_DEPOSIT or PENDING)
+                  GW -> OR : status = DEPOSIT_PAID
+                else FULL (PENDING) or FINAL (DEPOSIT_PAID)
+                  GW -> OR : status = PROCESSING
+                end
+                GW -> GW : notifyPaymentSuccess(order, paymentType)
+              else order not in expected state (cancelled, already paid by another invoice)
+                GW -> PR : Payment SUCCESS (money is real)
+                GW -> OR : create Refund REQUESTED, notify staff (order unchanged)
+              end
+            end
+          end
+        end
+        GW -> PR : reload Payment
+        GW --> C : PaymentStatusResponse(isPaid, orderStatus, paymentStatus,\npaymentType, depositAmount, totalPaid, remainingAmount, message)
+      end
+    end
+  end
+  C --> V : 200 status
+end
+alt isPaid = true
+  V --> U : payment confirmed
+else orderStatus = CANCELLED
+  V --> U : cancelled message
+else still PENDING after 10 tries
+  V --> U : still waiting
+end
+
+== E. Error page ==
+U -> V : /payment/error?invoice_number=...
+V --> U : error message only (the View makes no backend call)
+
+== F. Cancel page routes the customer (no SePay cancel call) ==
+U -> V : /payment/cancel?invoice_number=...
+alt not logged in
+  V --> U : /login?next=/payment/cancel?invoice_number=...
+else logged in, invoice missing
+  V --> U : /payment/error
+else logged in
+  loop up to 5 retries, every 2 seconds on network error
+    V -> C : GET /api/payments/status-by-invoice/{invoice}
+    C -> GW : getStatusByInvoice (same reconcile as D)
+    alt isPaid
+      V --> U : /payment/success?invoice_number=...
+    else orderStatus = CANCELLED
+      V --> U : /payment/error?invoice_number=...
+    else paymentType DEPOSIT or FINAL
+      V --> U : /orders/{orderId} (order page resumes the rest)
+    else other
+      V --> U : /payment/pending?order=... (one or more ids)
+    end
+  end
+  alt still failing after 5 retries
+    V --> U : /payment/error
+  end
+end
+note over V
+  frontend paymentService.cancelCheckout exists but no page calls it.
+  Cancel at SePay happens only through the endpoint in H.
+end note
+
+== G. Order-level status (CustomOrderPayment, status-by-order) ==
+V -> C : GET /api/payments/status-by-order/{orderId}
+C -> PS : checkPaymentStatus(orderId, userId)
+alt not owner
+  PS --> C : 403
+else owner
+  alt order not CANCELLED and latest Payment is ONLINE and not SUCCESS
+    PS -> GW : reconcileWithSePayGateway(invoice)
+    note over GW : same GET /v1/order/detail as D
+  end
+  PS --> C : status (isPaid, nextPaymentType DEPOSIT or FINAL, remainingAmount)
+end
+
+== H. Cancel at SePay: POST /api/payments/sepay/cancel/{invoice} ==
+U -> C : POST /api/payments/sepay/cancel/{invoice}
+C -> GW : cancelCheckout(invoice, userId)
+alt group invoice (GRP-...)
+  GW -> GW : cancelGroupCheckout: owner check for every member (403),\nPOST /v1/order/cancel, reconcile, then cancelPendingOrder for each member
+  GW --> C : {paid: true} if reconcile saw money, otherwise {paid: false}
+else single invoice
+  alt Payment not found
+    GW --> C : 404 Không tìm thấy giao dịch cần hủy.
+  else found
+    alt caller is not the order owner
+      GW --> C : 403 Bạn không có quyền hủy giao dịch này.
+    else owner
+      alt payment method is COD
+        GW --> C : 400 Giao dịch này không thuộc cổng SePay.
+      else ONLINE
+        alt payment SUCCESS, or order PROCESSING
+          GW --> C : {paid: true}, nothing cancelled
+        else order CANCELLED
+          GW -> OS : restoreCancelledOrderItems(order)
+          GW --> C : {paid: false}
+        else order not PENDING (deposit invoice in AWAITING_DEPOSIT,\nor final invoice in DEPOSIT_PAID)
+          GW --> C : {paid: false}\nno SePay call, order and invoice unchanged
+        else order PENDING (full online payment)
+          GW -> API : POST /v1/order/cancel {order_invoice_number}\n(failure only logged)
+          GW -> API : GET /v1/order/detail (reconcile)
+          alt money captured
+            GW -> PR : apply payment as in D
+            GW --> C : {paid: true}
+          else not captured
+            GW -> OS : cancelPendingOrder(order, "Khách hàng hủy giao dịch tại cổng SePay")
+            OS -> OR : CANCELLED, restore stock and coupon, Payment PENDING to FAILED
+            GW --> C : {paid: false}
+          end
+        end
+      end
+    end
+  end
+end
+note over GW
+  Deposit and final invoices are not closed at SePay by this endpoint.
+  Only the scheduler (PaymentTimeoutScheduler, 10.2 G) closes them after 24 hours.
+  The customer order-cancel endpoint (POST /api/orders/{userId}/{orderId}/cancel)
+  does not call SePay at all; it cancels in the database and fails PENDING payments.
+end note
+
+== I. Timeout (scheduler, same reconcile before cancel) ==
+note over GW
+  PaymentTimeoutScheduler every 5 seconds: PENDING older than 10 minutes
+  (paymentWindowStart) and AWAITING_DEPOSIT older than 24 hours.
+  expireUnpaidOrder: POST /v1/order/cancel for open invoices, reconcile,
+  then cancelExpiredOrder when still unpaid.
+end note
+
+@enduml

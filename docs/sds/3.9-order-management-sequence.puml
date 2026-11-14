@@ -1,0 +1,85 @@
+@startuml
+title 3.9 Order Management - list, filter, edit - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor "Shop Manager / Staff" as M
+participant "View" as V <<View>> #EADCFF
+participant ManagerOrderController as C <<Controller>> #D8F3DC
+participant ManagerOrderService as S <<Service>> #DCECFF
+participant OrderRepository as R <<Repository>> #FFF1C9
+participant RefundRepository as RF <<Repository>> #FFF1C9
+participant NotificationService as N <<Service>> #DCECFF
+participant GhnService as G <<Service>> #DCECFF
+database MySQL
+
+== List and filter orders ==
+M -> V : open order list, choose status filter
+V -> C : GET /api/shop/mine/{shopId}/orders?page&status
+C -> S : list(shopId, actor, page, status)
+S -> S : owned(shopId, actor) - owner or active ShopStaff
+alt status given
+  S -> R : findByShopIdAndStatus(shopId, status, pageable)
+else no filter
+  S -> R : findByShopId(shopId, pageable)
+end
+R -> MySQL : SELECT Orders ORDER BY createdDate DESC, id (20 per page)
+MySQL --> R : page of Orders
+S --> C : Results(content, page, totalPages, totalElements)
+C --> V : JSON
+V --> M : order table
+
+== Cancel order (shop) ==
+M -> V : cancel order, enter reason
+V -> C : POST /{id}/cancel { reason }
+C -> S : cancel(shopId, actor, orderId, reason)
+alt reason blank
+  S --> C : 400 Vui lòng nhập lý do hủy đơn.
+else reason given
+  S -> R : findByIdAndShopIdForUpdate(orderId, shopId)
+  alt status not PENDING, AWAITING_DEPOSIT, DEPOSIT_PAID, PROCESSING, AWAITING_QUOTE, QUOTED
+    S --> C : 400 Chỉ có thể hủy đơn hàng trước khi bắt đầu giao.
+  else cancellable
+    S -> S : status = CANCELLED, cancelReason = reason
+    S -> MySQL : restore stock of non-custom products, release voucher
+    S -> MySQL : payments PENDING to FAILED
+    opt customer already paid (SUCCESS payments > 0)
+      S -> RF : save Refund(amount = paid, REQUESTED)
+      S -> N : notifyRefundRequested(refund) to owner and active staff
+    end
+    S --> C : 200 OK
+  end
+end
+C --> V : result
+
+== Update waybill on GHN ==
+M -> V : edit waybill note or weight
+V -> C : POST /{id}/update-ghn { fields }
+C -> S : updateGhn(shopId, actor, orderId, body)
+S -> R : findByIdAndShopId(orderId, shopId)
+alt no Delivery row
+  S --> C : 404 Đơn hàng chưa có vận đơn GHN để cập nhật.
+else has tracking code
+  S -> G : updateOrder(trackingCode, fields) POST shipping-order/update
+  alt GHN error
+    G --> S : 502 "Lỗi từ GHN: ..." / "GHN đang gặp sự cố (HTTP n)" / "Không thể kết nối tới GHN"
+  else ok
+    G --> S : ok
+    S --> C : 200 OK
+  end
+end
+note over M, MySQL
+New orders are not created by the shop. They arrive from customer checkout
+(OrderService.makeOrders) and then appear in this list.
+end note
+
+@enduml

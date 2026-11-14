@@ -1,0 +1,154 @@
+@startuml
+!pragma layout smetana
+title 12.3 Staff Application - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+  BackgroundColor<<DTO>> #ECECEC
+  BackgroundColor<<Scheduler>> #FFE8CC
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class StaffApplicationController <<Controller>> {
+  apply(shopId, user, body): Result
+  mine(user): List<Result>
+  list(shopId, user): List<Result>
+  decide(shopId, id, user, body): Result
+}
+class StaffApplicationService <<Service>> {
+  apply(shopId, actor, input): Result
+  mine(actor): List<Result>
+  list(shopId, actor): List<Result>
+  decide(shopId, id, actor, approve): Result
+  -eligible(user)
+  -result(application): Result
+  -refresh(application)
+}
+class "StaffApplicationService.Input" as Input <<DTO>> {
+  fullName @NotBlank <= 100
+  phone: [+0-9 ()-]{8,20}
+  introduction @NotBlank <= 1000
+}
+class "StaffApplicationController.Decision" as Decision <<DTO>> {
+  approve @NotNull
+}
+class "StaffApplicationService.Result" as Result <<DTO>> {
+  id, shopId, shopName, email
+  fullName, phone, introduction
+  status, submittedAt
+}
+class AuthMailEvent <<DTO>> {
+  userId, email, kind, code
+}
+class VerificationMailSender <<Service>> {
+  send(event) AFTER_COMMIT
+  deliver(event)
+}
+class "SMTP server" as SMTP <<External>> {
+  JavaMailSender
+}
+interface StaffApplicationRepository <<Repository>> {
+  findById(id): Optional<StaffApplication>
+  findByShopIdAndUserId(shopId, userId): Optional<StaffApplication>
+  findByShopIdOrderBySubmittedAtDesc(shopId): List<StaffApplication>
+  findByUserIdOrderBySubmittedAtDesc(userId): List<StaffApplication>
+}
+class ShopRepository <<Repository>> {
+  findById(id): Optional<Shop>
+  findForUpdate(id): Optional<Shop>
+}
+class UserRepository <<Repository>> {
+  findByIdForUpdate(id): Optional<User>
+}
+interface ShopStaffRepository <<Repository>> {
+  findByShopIdAndUserId(shopId, userId): Optional<ShopStaff>
+  save(member): ShopStaff
+}
+interface AuthSessionRepository <<Repository>> {
+  revokeAll(userId): int
+}
+class StaffApplication <<Entity>> {
+  id
+  fullName, phone, introduction
+  status: PENDING | APPROVED | REJECTED
+  submittedAt
+}
+class Shop <<Entity>> {
+  id
+  name
+  status: PENDING | ACTIVE | INACTIVE | BANNED
+  owner
+}
+class ShopStaff <<Entity>> {
+  id
+  active
+}
+class User <<Entity>> {
+  id
+  email
+  role: CUSTOMER | SHOP | SHOP_STAFF | ADMIN
+  status
+  isEmailVerified
+}
+
+View --> StaffApplicationController : POST /api/customer/shops/{shopId}/applications\nGET /api/account/staff-applications\nGET /api/shop/mine/{shopId}/applications\nPUT /api/shop/mine/{shopId}/applications/{id}
+StaffApplicationController --> StaffApplicationService
+StaffApplicationController ..> Input : reads
+StaffApplicationController ..> Decision : reads
+StaffApplicationController ..> Result : returns
+StaffApplicationService --> StaffApplicationRepository
+StaffApplicationService --> ShopRepository
+StaffApplicationService --> UserRepository
+StaffApplicationService --> ShopStaffRepository
+StaffApplicationService --> AuthSessionRepository
+StaffApplicationService ..> AuthMailEvent : publishes (after commit)
+StaffApplicationService ..> Result : builds
+VerificationMailSender ..> AuthMailEvent : listens
+VerificationMailSender --> SMTP : send text mail
+StaffApplicationRepository ..> StaffApplication
+ShopRepository ..> Shop
+UserRepository ..> User
+ShopStaffRepository ..> ShopStaff
+StaffApplication "*" --> "1" Shop : shop
+StaffApplication "*" --> "1" User : applicant
+ShopStaff "*" --> "1" Shop : shop
+ShopStaff "*" --> "1" User : member
+
+note bottom of StaffApplicationService
+  apply: the applicant must be CUSTOMER, ACTIVE and email verified (409),
+  the shop must be ACTIVE (409), not already staff (409), no open application (409).
+  A REJECTED application is reused on re-apply. Mail to the owner: STAFF_APPLICATION_NEW.
+  decide (owner only): application must be PENDING and shop ACTIVE (409).
+  Approve: ShopStaff(active = true) is created, user role becomes SHOP_STAFF,
+  all sessions revoked. Reject: role stays CUSTOMER. Mail to applicant after commit.
+  The review note is not accepted (Decision has only approve).
+end note
+
+note bottom of StaffApplication
+  Unique (shop_id, user_id). Status values are plain strings.
+end note
+
+note bottom of View
+  Customer applies from the shop search screen (useShopSearchController -> staffApplicationService.apply).
+  StaffApplicationsView (owner review) is NOT mounted in the client any more;
+  the endpoints below are still live.
+  Role gates: /api/customer/** CUSTOMER, /api/shop/** SHOP only (SecurityConfig.java:82-83).
+end note
+
+@enduml

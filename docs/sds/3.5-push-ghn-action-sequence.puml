@@ -1,5 +1,5 @@
 @startuml
-title Push GHN Action (cancel / return / storing) - sequence diagram
+title 3.5 Push GHN Action (cancel / return / storing) - sequence diagram
 autonumber
 skinparam shadowing false
 skinparam defaultFontName Arial

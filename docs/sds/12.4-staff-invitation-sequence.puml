@@ -1,0 +1,145 @@
+@startuml
+title 12.4 Staff Invitation - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor "Shop owner" as O
+actor Invitee as I
+participant "View" as V <<View>> #EADCFF
+participant StaffInvitationController as C <<Controller>> #D8F3DC
+participant StaffInvitationService as S <<Service>> #DCECFF
+participant VerificationMailSender as MS <<Service>> #DCECFF
+participant ShopRepository as SR <<Repository>> #FFF1C9
+participant UserRepository as UR <<Repository>> #FFF1C9
+participant StaffInvitationRepository as IR <<Repository>> #FFF1C9
+participant ShopStaffRepository as STR <<Repository>> #FFF1C9
+participant AuthSessionRepository as SESS <<Repository>> #FFF1C9
+participant "SMTP server" as SMTP <<External>> #FFE0E0
+
+== A. Owner sends an invitation ==
+O -> V : type an email, click "Invite"
+V -> C : POST /api/shop/mine/{id}/invitations\n(email)
+note right of C : @PreAuthorize SHOP. @Valid fails: 400. Success returns 202 Accepted.
+C -> S : send(shopId, ownerId, email)
+S -> SR : findForUpdate(shopId)
+SR --> S : Shop (else 404 "Không tìm thấy shop hoặc lời mời.")
+alt owner differs from logged-in user
+  S --> C : 404 "Không tìm thấy shop hoặc lời mời."
+  C --> V : 404
+else shop status is not ACTIVE
+  S --> C : 403 "Chỉ shop đang hoạt động mới quản lý lời mời."
+  C --> V : 403
+else shop ACTIVE
+  S -> S : email trimmed and lower-cased
+  S -> UR : findByEmail(email)
+  UR --> S : User or none
+  alt existing account is not ACTIVE, or role is not CUSTOMER / SHOP_STAFF
+    S --> C : 400 "Email không đủ điều kiện nhận lời mời nhân viên."
+    C --> V : 400
+  else account can be invited, or no account yet
+    alt account already linked to this shop
+      S -> STR : findByShopIdAndUserId(shopId, userId)
+      S --> C : 409 "Tài khoản đã được liên kết với shop; hãy dùng mục quản lý nhân viên."
+      C --> V : 409
+    else not linked
+      S -> IR : findByShopIdAndEmail(shopId, email) (PESSIMISTIC_WRITE), or a new row
+      IR --> S : StaffInvitation
+      alt sent less than 60 s ago, or 3 sends in this hour, or 20 invitations for this shop in the last hour
+        S --> C : 429 "Chờ ít nhất 60 giây; tối đa 3 thư/email và 20 email/shop trong một giờ."
+        C --> V : 429
+      else allowed
+        S -> S : new token (32 random bytes, base64url), store SHA-256 hash\nissuedAt = now, expiresAt = now + 24 h, status PENDING, sendCount + 1
+        S -> IR : saveAndFlush(invitation)
+        IR --> S : StaffInvitation
+        S --> MS : AuthMailEvent STAFF_INVITATION (shop name, "Mã lời mời: id.token")
+        note right of MS : after commit: mail with link /invitations/accept?code=...&email=...
+        S --> C : InvitationResponse (status PENDING)
+        C --> V : 202 Accepted
+        V --> O : invitation added to the list
+      end
+    end
+  end
+end
+
+== B. Owner lists or cancels invitations ==
+O -> V : open the invitation list of the shop
+V -> C : GET /api/shop/mine/{id}/invitations
+C -> S : list(shopId, ownerId)
+S -> SR : findById(shopId)
+SR --> S : Shop (owner check, else 404)
+S -> IR : findByShopIdOrderByIssuedAtDesc(shopId)
+IR --> S : List<StaffInvitation>
+S --> C : List<InvitationResponse> (PENDING past expiresAt shown as EXPIRED)
+C --> V : 200 OK
+O -> V : click cancel on a pending invitation
+V -> C : DELETE /api/shop/mine/{id}/invitations/{invitationId}
+C -> S : cancel(shopId, ownerId, invitationId)
+S -> SR : findForUpdate(shopId) (owner and ACTIVE checks)
+S -> IR : findById(invitationId), same shop only
+alt not found in this shop
+  S --> C : 404 "Không tìm thấy shop hoặc lời mời."
+  C --> V : 404
+else status is not PENDING
+  S --> C : 409 "Lời mời không còn chờ xác nhận."
+  C --> V : 409
+else PENDING
+  S -> S : status = CANCELLED
+  S --> C : 204 No Content
+  C --> V : 204
+  V --> O : invitation cancelled
+end
+
+== C. Invitee accepts the invitation ==
+I -> V : open the link from the email, log in (or register with OTP first)
+note right of V : The link carries code and email. The backend checks only the code and the logged-in account.
+V -> C : POST /api/account/staff-invitations/accept\n(code = "invitationId.token")
+note right of C : @PreAuthorize CUSTOMER or SHOP_STAFF. SHOP role: 403.
+C -> S : accept(userId, code)
+S -> UR : findByIdForUpdate(userId)
+UR --> S : User (else 404 "Không tìm thấy shop hoặc lời mời.")
+S -> S : split code on "." : not exactly 2 parts: 400 invalid
+S -> IR : findShopId(invitationId)
+IR --> S : shopId (else 400 invalid)
+S -> SR : findForUpdate(shopId)
+SR --> S : Shop (else 400 invalid)
+S -> IR : findByShopIdAndEmail(shopId, user.email) (PESSIMISTIC_WRITE)
+IR --> S : StaffInvitation (else 400 invalid)
+alt id differs, email differs, status not PENDING, expired, or token hash differs
+  S --> C : 400 "Lời mời không hợp lệ, đã hết hạn hoặc không dành cho tài khoản này."
+  C --> V : 400
+  V --> I : error message
+else invitation valid
+  alt shop not ACTIVE, account not ACTIVE or not verified, or role not CUSTOMER / SHOP_STAFF
+    S --> C : 400 (same message)
+    C --> V : 400
+  else eligible
+    S -> STR : findByShopIdAndUserId(shopId, userId)
+    alt already linked
+      S --> C : 409 "Bạn đã có liên kết với shop này."
+      C --> V : 409
+    else not linked
+      S -> STR : save(ShopStaff: active = true)
+      S -> UR : user.role = SHOP_STAFF
+      S -> IR : invitation.status = ACCEPTED
+      S -> SESS : revokeAll(userId)
+      S --> C : MessageResponse
+      C --> V : 200 OK
+      V --> I : "Đã tham gia cửa hàng. Hãy đăng nhập lại để dùng quyền nhân viên."
+    end
+  end
+end
+
+== D. Mail delivery (after commit) ==
+MS -> SMTP : send invitation mail (subject "FlowerShop - Lời mời làm nhân viên cửa hàng")
+note over MS : Failure is only logged. The owner still gets 202.
+
+@enduml

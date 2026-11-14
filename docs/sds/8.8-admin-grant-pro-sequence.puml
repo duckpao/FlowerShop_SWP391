@@ -1,0 +1,96 @@
+@startuml
+title 8.8 Admin Grants Pro - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor Admin as U
+participant "View" as V <<View>> #EADCFF
+participant AdminShopPlanController as C <<Controller>> #D8F3DC
+participant ShopPlanService as S <<Service>> #DCECFF
+participant UserRepository as UR <<Repository>> #FFF1C9
+participant ShopRepository as SR <<Repository>> #FFF1C9
+participant ShopPlanRepository as PR <<Repository>> #FFF1C9
+participant ShopSubscriptionRepository as SSR <<Repository>> #FFF1C9
+participant ShopProActivationRepository as AR <<Repository>> #FFF1C9
+participant FeaturedProductRepository as FR <<Repository>> #FFF1C9
+participant NotificationService as N <<Service>> #DCECFF
+
+== A. Admin opens the shop's subscription panel ==
+U -> V : open the shop in the admin shop list
+V -> C : GET /api/admin/shops/{shopId}/subscription (and plans, products)
+C -> S : adminStatus(shopId, adminId)
+S -> UR : findByIdAndRoleAndStatus(adminId, ADMIN, ACTIVE)
+S -> S : current status (8.5 read model), pending payments, last 50 activations
+S --> C : AdminStatus
+C --> V : 200 OK
+V --> U : plan, expiry, counts, pending payments, activation history
+
+== B. Grant Pro (no payment) ==
+U -> V : choose a plan, type the reason (required) and click "Xác nhận cấp Pro"
+V -> V : button disabled until plan, reason are filled and shop and owner are ACTIVE
+V -> V : confirm dialog "Kích hoạt Pro"
+V -> V : requestId = new UUID, kept for retries of the same (shop, plan, reason)
+V -> C : POST /api/admin/shops/{shopId}/subscription/activate\n(planId, note, requestId)
+C -> C : @PreAuthorize hasRole('ADMIN'), @Valid AdminGrant
+C -> S : adminGrant(shopId, adminId, input)
+S -> UR : findByIdAndRoleAndStatus(adminId, ADMIN, ACTIVE)
+alt not an active admin
+  S --> C : 403 "Chỉ admin đang hoạt động được kích hoạt Pro."
+else admin
+  S -> SR : findForUpdate(shopId) (shop lock)
+  alt shop not found or owner mismatch
+    SR --> S : empty
+    S --> C : 404 "Không tìm thấy gói, cửa hàng hoặc giao dịch thuộc quyền truy cập."
+  else shop found
+    alt shop, owner not ACTIVE, or owner role is not SHOP
+      S --> C : 409 "Cửa hàng và chủ shop phải đang hoạt động để kích hoạt Pro."
+    else valid shop
+      S -> AR : findById(requestId)
+      alt requestId already used
+        AR --> S : existing activation
+        alt same source, shop, admin, plan and note
+          S -> S : replay: return current status, no second activation
+          S --> C : AdminStatus
+        else different request
+          S --> C : 409 "Mã yêu cầu đã được dùng cho một lần kích hoạt khác."
+        end
+      else new request
+        S -> PR : findById(planId)
+        alt plan missing, disabled, months 0 or price 0
+          PR --> S : empty
+          S --> C : 404 "Không tìm thấy gói, cửa hàng hoặc giao dịch thuộc quyền truy cập."
+        else plan usable
+          S -> SSR : forShop(shopId)
+          SSR --> S : ShopSubscription or null
+          S -> S : active? start = current endsAt : start = now
+          alt not active before
+            S -> FR : deleteAll(featured rows of the shop)
+          end
+          S -> SSR : save(subscription: plan, endsAt = start + durationMonths)
+          S -> AR : save(ShopProActivation id = requestId, source ADMIN_GRANT, paymentId null)
+          S -> N : notifyUser(owner, "Admin đã kích hoạt/gia hạn Pro", "Gói Pro có hiệu lực đến ...", /shop-admin/subscription)
+          S -> S : return adminStatus(shopId)
+          S --> C : AdminStatus
+        end
+      end
+    end
+  end
+end
+C --> V : 200 OK
+V --> U : "Đã kích hoạt/gia hạn Pro và thông báo cho chủ shop." reason cleared
+
+note over S
+  Grant is a direct entitlement: no ShopPlanPayment row and no SePay call.
+  Remaining time is kept: a grant on an active shop adds months to endsAt.
+end note
+
+@enduml

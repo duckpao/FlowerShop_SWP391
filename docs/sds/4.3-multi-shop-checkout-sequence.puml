@@ -1,0 +1,126 @@
+@startuml
+title 4.3 Multi-shop Checkout - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor Customer as U
+participant "View" as V <<View>> #EADCFF
+participant OrderController as C <<Controller>> #D8F3DC
+participant OrderService as S <<Service>> #DCECFF
+participant UserRepository as UR <<Repository>> #FFF1C9
+participant AddressRepository as AR <<Repository>> #FFF1C9
+participant CartItemRepository as CR <<Repository>> #FFF1C9
+participant ProductRepository as PR <<Repository>> #FFF1C9
+participant ProductQuotaService as Q <<Service>> #DCECFF
+participant GhnService as GHN <<Service>> #DCECFF
+participant CouponService as CS <<Service>> #DCECFF
+participant OrderRepository as OR <<Repository>> #FFF1C9
+participant OrderDetailRepository as DR <<Repository>> #FFF1C9
+participant NotificationService as N <<Service>> #DCECFF
+
+== A. Cart page: choose the items ==
+U -> V : tick items (by item, by shop, or all)
+V -> V : block "Checkout" when a ticked item is above its stock
+alt not logged in
+  V --> U : go to /login?next=/cart (guest cart is merged after login, see 4.1)
+else not a CUSTOMER
+  V --> U : only customers can order
+else customer
+  V --> U : open /checkout?item=<cartItemId>&item=<cartItemId>
+end
+
+== B. Checkout page ==
+V -> V : GET /api/cart/{userId} again, keep only the ticked items
+note right of V
+  An item missing from the cart (removed in another tab): the page asks to choose again.
+end note
+V -> V : group the items by shop (one order per shop)
+V -> V : choose address, recipient, phone, payment method (ONLINE or COD)
+V -> V : shipping fee per shop (4.2), voucher per shop (7.6)
+V --> U : summary: items, shipping, discounts, total after discounts
+
+== C. Place the order ==
+U -> V : click place order
+V -> V : checks: name and phone filled, fees and voucher previews ready, stock OK, no double click
+V -> C : POST /api/orders/{userId}/batch\n(deliveryAddressId, recipientName, phone, paymentMethod,\nshops[]: shopId, cartItemIds, couponId, shippingCouponCode, expectedTotal)
+C -> C : requireOwner(userId, currentUser)
+C -> S : makeOrders(userId, request)
+S -> S : sort shops by shopId, same shop twice: 400
+S -> S : checkoutGroup = new UUID when there is more than one shop
+
+loop each shop (shopId order)
+  S -> S : makeOrder(userId, one shop)
+  S -> UR : findById(userId)
+  UR --> S : User (else 404)
+  S -> S : paymentMethod is COD or ONLINE, else 400
+  S -> S : recipient = request, else the account name and phone (none: 400)
+  S -> AR : findById(deliveryAddressId)
+  AR --> S : Address of this user with GHN codes (else 400)
+  S -> S : duplicate cartItemIds: 400
+  loop each cartItemId
+    S -> CR : findById(cartItemId)
+    CR --> S : CartItem (else 404; of another user: 403; of another shop: 400)
+  end
+  loop items sorted by productId
+    S -> PR : findByIdForUpdate(productId)
+    PR --> S : Product (row locked)
+    S -> S : product and shop ACTIVE, else 400
+    S -> Q : requireAllowed(product)
+    S -> S : not CUSTOM and stock < quantity: 400 not enough stock
+  end
+  S -> S : subTotal = sum(price x quantity)
+  S -> GHN : calculateFee(pickup address of the shop, delivery address)
+  GHN --> S : shippingFee (GHN failure: 502, whole batch rolls back)
+  S -> S : build Order (STANDARD, PENDING, subTotal, shippingFee)
+  S -> CS : apply(order, context, couponId, shippingCouponCode)
+  CS --> S : discounts and totalAmount (rules in 7.6)
+  alt expectedTotal differs from totalAmount
+    S --> C : 400 "Giá hoặc ưu đãi đã thay đổi"
+  else same amount
+    S -> OR : save(order)
+    loop each item
+      S -> DR : save(OrderDetail with name and price snapshot)
+      S -> PR : save(product with stock - quantity), not for CUSTOM
+    end
+    S -> CR : deleteAll(selected cart items)
+    alt paymentMethod = COD
+      S -> S : create COD Payment, see 4.4
+      S -> N : notifyOrderPlaced(order)
+    else paymentMethod = ONLINE
+      S -> N : notifyPaymentPending(order)
+    end
+  end
+  opt more than one shop
+    S -> OR : findById(orderId), set checkoutGroup, save
+  end
+end
+S -> S : publish OrderPlacedEvent(orderIds), one receipt mail after commit (13.3)
+S --> C : List<OrderResponse>
+C --> V : 201 Created
+
+alt error (400, 403, 404, 502)
+  C --> V : message, no order created in any shop
+  V --> U : show the message under the button, the customer can fix the cause and retry
+else paymentMethod = ONLINE
+  V --> U : go to the SePay payment (one order: single payment; several: one group payment), see 5.1
+else paymentMethod = COD
+  V -> V : reload the cart (the ordered items are gone)
+  V --> U : go to /payment/cod-success?order=... (4.4)
+end
+
+note over S
+  Orders of one checkout share one transaction: a failure in any shop (stock, voucher, GHN, price change)
+  cancels all of them and the cart is unchanged. The order stays PENDING;
+  an ONLINE order that is not paid in 10 minutes is cancelled and its items go back to the cart (5.3).
+end note
+
+@enduml

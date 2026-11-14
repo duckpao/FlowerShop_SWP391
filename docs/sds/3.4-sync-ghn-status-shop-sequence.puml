@@ -1,5 +1,5 @@
 @startuml
-title Sync GHN Status (Shop) - sequence diagram
+title 3.4 Sync GHN Status (Shop) - sequence diagram
 autonumber
 skinparam shadowing false
 skinparam defaultFontName Arial

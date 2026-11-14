@@ -1,5 +1,5 @@
 @startuml
-title Accept Shop Quote (custom order, FULL or DEPOSIT) - sequence diagram
+title 10.1 Accept Shop Quote (custom order, FULL or DEPOSIT) - sequence diagram
 autonumber
 skinparam shadowing false
 skinparam defaultFontName Arial

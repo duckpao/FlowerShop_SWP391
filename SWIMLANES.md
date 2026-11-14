@@ -18,7 +18,7 @@ Layout rules used in every diagram:
   diamond.
 - Loops use a labelled `repeat` decision inside a single lane.
 
-## 1.  
+## 1. Standard Cart Checkout
 
 Source flow: `POST /api/orders/{userId}/batch` in `OrderController` and
 `OrderService.makeOrders`.
@@ -81,7 +81,10 @@ endif
 ## 2. Online Payment and Payment Expiry
 
 Source flow: `PaymentController`, `SePayGatewayService`, and
-`PaymentTimeoutScheduler`.
+`PaymentTimeoutScheduler`. `PaymentReturnController` sends the customer back to
+the frontend `/payment/{success|error|cancel}` page. SePay has no webhook: the
+system asks SePay when the customer returns or polls status, and the scheduler
+(every 5 seconds) cancels standard orders still unpaid 10 minutes after creation.
 
 ```plantuml
 @startuml
@@ -115,13 +118,10 @@ if (Order can be paid online?) then (Yes)
   :Submit checkout form to SePay;
   |SePay|
   :Process the customer payment;
+  |Customer|
+  :Return to FlowerShop success, error, or cancel page;
   |System|
-  while (Still pending within payment window?) is (Yes)
-    :Request invoice status from SePay;
-    |SePay|
-    :Return invoice status;
-    |System|
-  endwhile (No)
+  :Query SePay order detail and reconcile the invoice;
   if (SePay reports CAPTURED and amount matches?) then (Yes)
     :Set Payment SUCCESS and standard Order PROCESSING;
     |Customer|
@@ -129,12 +129,20 @@ if (Order can be paid online?) then (Yes)
     stop
   else (No)
     |System|
-    :Mark payment failed or expired;
-    :Scheduler cancels the unpaid order;
-    :Restore cancelled standard-order items to cart;
-    |Customer|
-    :View cancelled order;
-    stop
+    if (Still within 10-minute payment window?) then (Yes)
+      :Keep Payment PENDING (amount mismatch sets it FAILED) and Order PENDING;
+      |Customer|
+      :View pending page and pay again;
+      stop
+    else (No)
+      |System|
+      :Scheduler cancels the invoice at SePay and cancels the order;
+      :Set Payment FAILED and Order CANCELLED;
+      :Release stock and coupon, restore items to cart;
+      |Customer|
+      :View cancelled order;
+      stop
+    endif
   endif
 else (No)
   |System|
@@ -149,7 +157,11 @@ endif
 ## 3. Shop Manager Order Processing and GHN Delivery
 
 Source flow: `ManagerOrderController`, `ManagerOrderService`, `GhnService`,
-and `DeliverySync`.
+and `DeliverySync`. Active shop staff use the same endpoints as the owner. GHN has
+no webhook: a waybill status changes only when the shop refreshes it, when a
+customer opens a DELIVERING order, or when the daily `MaintenanceJob` (02:00)
+completes a DELIVERED order that has no refund and was delivered at least 3 days
+earlier.
 
 ```plantuml
 @startuml
@@ -185,8 +197,9 @@ start
 :Prepare the flowers;
 :Request shipment;
 |System|
-:Validate PROCESSING or DEPOSIT_PAID status;
+:Validate PROCESSING or DEPOSIT_PAID status and that no waybill exists;
 :Read shop and recipient addresses;
+:Record unpaid balance as COD if none exists;
 :Request GHN createOrder;
 |GHN|
 :Create shipment and return tracking code;
@@ -214,9 +227,9 @@ if (Shipment created?) then (Yes)
   endif
 else (No)
   |System|
-  :Return the shipment creation error;
+  :Return the GHN error (HTTP 502); order stays PROCESSING or DEPOSIT_PAID;
   |Shop Manager|
-  :Review the error, then retry shipment or cancel the order;
+  :Review the error, then retry shipment or cancel the order with a reason;
   stop
 endif
 @enduml
@@ -225,7 +238,11 @@ endif
 ## 4. Custom Flower Order and Deposit
 
 Source flow: `CustomFlowerOrderController`, `OrderController`,
-`OrderService.makeCustomOrder`, and `SePayGatewayService`.
+`OrderService.makeCustomOrder`, and `SePayGatewayService`. Orders quoted on an
+existing custom order (`AWAITING_QUOTE` to `QUOTED`) use
+`CustomOrderWorkflowService.accept`, where the customer chooses FULL or DEPOSIT.
+DEPOSIT requires ONLINE payment, its errors return HTTP 409, and the deposit comes
+from `CustomOrderPricing.deposit`.
 
 ```plantuml
 @startuml
@@ -262,7 +279,14 @@ if (Shop declines request?) then (Yes)
   stop
 else (No)
   |Shop Manager|
-  :Accept the request with the quote;
+  if (Needs more discussion?) then (Yes)
+    :Mark request NEGOTIATING with a note;
+    |Customer|
+    :View shop note and discuss in chat;
+    stop
+  else (No)
+  |Shop Manager|
+  :Accept the request with quoted price and deposit percent;
   |System|
   :Mark custom request ACCEPTED;
   |Customer|
@@ -284,8 +308,8 @@ else (No)
   if (Deposit captured?) then (Yes)
     :Set Payment SUCCESS and Order DEPOSIT_PAID;
     |Shop Manager|
-    :Prepare accepted custom order;
-    :Create GHN shipment after order processing;
+    :Prepare the flowers;
+    :Create GHN shipment from DEPOSIT_PAID; GHN collects the balance;
     stop
   else (No)
     |System|
@@ -295,13 +319,15 @@ else (No)
     :View cancelled custom order;
     stop
   endif
+  endif
 endif
 @enduml
 ```
 
 ## 5. Manager Shop Application
 
-Source flow: `ManagerApplicationService`.
+Source flow: `ManagerApplicationService`. A REJECTED application can be submitted
+again. Admin decisions must include a `note` field, which may be blank.
 
 ```plantuml
 @startuml
@@ -362,7 +388,9 @@ endif
 
 ## 6. Staff Application
 
-Source flow: `StaffApplicationService`.
+Source flow: `StaffApplicationService`. Only the shop owner can review, and the
+owner's review screen (`StaffApplicationsView`) is currently not mounted in the
+UI, so reviews go through the API only. Shop staff cannot review applications.
 
 ```plantuml
 @startuml
@@ -387,8 +415,8 @@ skinparam activity {
 start
 :Complete staff application for an active shop;
 |System|
-:Check active CUSTOMER and active shop;
-:Save Staff_Application as PENDING;
+:Check active verified CUSTOMER, active shop, no current membership, and no pending application;
+:Save Staff_Application as PENDING and email the shop owner;
 |Shop Manager|
 :Review staff application;
 if (Approve?) then (Yes)
@@ -397,7 +425,7 @@ if (Approve?) then (Yes)
   :Create ShopStaff membership;
   :Change User role to SHOP_STAFF;
   :Revoke old sessions;
-  :Set application APPROVED;
+  :Set application APPROVED and email the applicant;
   |Customer|
   :View approved staff application;
   stop
@@ -405,7 +433,7 @@ else (No)
   |Shop Manager|
   :Reject the application;
   |System|
-  :Set staff application REJECTED;
+  :Set staff application REJECTED and email the applicant;
   |Customer|
   :View rejected staff application;
   stop
@@ -415,9 +443,12 @@ endif
 
 ## 7. Staff Refund Handling
 
-Source flow: `StaffRefundController` and `StaffRefundService`. Staff can list
-refunds for an assigned shop and update refund status; staff do not confirm
-orders, create GHN shipments, or operate chat in the current code.
+Source flow: `StaffRefundController` and `StaffRefundService`. The shop owner or an
+active staff member can list refunds for the shop and update refund status.
+Allowed moves: REQUESTED to APPROVED or REJECTED, and APPROVED to PROCESSED or
+REJECTED; other moves return HTTP 400. Only PROCESSED and REJECTED notify the
+customer. Active shop staff can also confirm orders and create GHN shipments
+(section 3) and use shop chat (section 8).
 
 ```plantuml
 @startuml
@@ -442,13 +473,13 @@ skinparam activity {
 start
 :Open refunds for an assigned shop;
 |System|
-:Check SHOP_STAFF role and shop assignment;
+:Check shop owner or active staff membership;
 :Return refund requests;
 |Shop Staff|
 :Review refund request;
 :Submit refund status update;
 |System|
-:Validate refund, shop, staff membership, and target status;
+:Validate refund, shop access, and status transition;
 if (Status update invalid?) then (Yes)
   :Return validation error;
   |Shop Staff|
@@ -456,10 +487,16 @@ if (Status update invalid?) then (Yes)
   stop
 else (No)
   |System|
-  :Save refund status;
-  |Customer|
-  :Receive refund status notification;
-  stop
+  :Save refund status and shop response;
+  if (Final status PROCESSED or REJECTED?) then (Yes)
+    :Send refund result notification;
+    |Customer|
+    :Receive refund result;
+    stop
+  else (No)
+    :Keep refund open for the next status update;
+    stop
+  endif
 endif
 @enduml
 ```
@@ -467,7 +504,7 @@ endif
 ## 8. Customer and Shop Manager Chat
 
 Source flow: `CustomerChatController`, `ManagerChatController`, and
-`ChatService`. Shop staff has no chat endpoint in the current implementation.
+`ChatService`. Active shop staff use the same shop chat endpoints as the owner.
 
 ```plantuml
 @startuml
@@ -487,7 +524,7 @@ skinparam activity {
 
 |#BFE3FF|Customer|
 |#D8F3DC|System|
-|#FDE8C8|Shop Manager|
+|#FDE8C8|Shop Manager or Staff|
 |Customer|
 start
 :Choose an active shop;
@@ -498,13 +535,13 @@ start
 :Send message or image;
 |System|
 :Save ChatMessage;
-:Update unread count and notification;
+:Update unread count and notify the recipient if no unread notice exists;
 :Broadcast through STOMP;
-|Shop Manager|
+|Shop Manager or Staff|
 :Receive message in shop chat;
 :Reply to customer;
 |System|
-:Authorize shop owner side of session;
+:Authorize shop owner or active staff side of session;
 :Save reply and broadcast through STOMP;
 |Customer|
 :Receive shop reply;

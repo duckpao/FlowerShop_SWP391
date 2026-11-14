@@ -1,0 +1,160 @@
+@startuml
+!pragma layout smetana
+title 9.4 Invoice and Transaction History - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+  BackgroundColor<<DTO>> #ECECEC
+  BackgroundColor<<Scheduler>> #FFE8CC
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class CustomerOrderController <<Controller>> {
+  transactions(user, page): TransactionResults
+  detail(user, id): OrderDetailResponse
+}
+class CustomerOrderService <<Service>> {
+  transactions(customerId, page): TransactionResults
+  detail(customerId, orderId): OrderDetailResponse
+}
+class PaymentRepository <<Repository>> {
+  findByOrderCustomerId(customerId, pageable): Page<Payment>
+  findByOrderId(orderId): List<Payment>
+}
+class OrderRepository <<Repository>> {
+  findById(id): Optional<Order>
+}
+class OrderDetailRepository <<Repository>> {
+  findByOrderId(orderId): List<OrderDetail>
+}
+interface RefundRepository <<Repository>> {
+  findByOrderIdOrderByCreatedDateAsc(orderId): List<Refund>
+}
+class "CustomerOrderService.TransactionResults" as TransactionResults <<DTO>> {
+  content
+  page
+  totalPages
+  totalElements
+}
+class "CustomerOrderService.TransactionLine" as TransactionLine <<DTO>> {
+  orderId
+  shopName
+  paymentType: FULL | DEPOSIT | FINAL
+  paymentMethod: ONLINE | COD
+  amount
+  status: PENDING | SUCCESS | FAILED
+  invoiceNumber
+  gatewayTransactionNo
+  createdDate
+  paidAt (SUCCESS only)
+}
+class "CustomerOrderService.OrderDetailResponse" as OrderDetailResponse <<DTO>> {
+  id, shopName, status
+  subTotal, discountAmount, shippingFee, totalAmount
+  createdDate
+  recipientName, recipientPhone, deliveryAddress
+  items: List<OrderItemResponse>
+  payments: List<PaymentLine>
+  refunds: List<RefundLine>
+}
+class "CustomerOrderService.PaymentLine" as PaymentLine <<DTO>> {
+  paymentType
+  paymentMethod
+  amount
+  status
+  invoiceNumber
+  gatewayTransactionNo
+  paidAt (SUCCESS only)
+}
+class Payment <<Entity>> {
+  id
+  paymentType: DEPOSIT | FINAL | FULL
+  paymentMethod: ONLINE | COD
+  amount
+  status: PENDING | SUCCESS | FAILED
+  invoiceNumber (unique)
+  groupInvoice
+  gatewayTransactionNo
+  createdDate
+  lastModifyDate
+}
+class Order <<Entity>> {
+  id
+  status
+  totalAmount, subTotal, shippingFee, discountAmount
+  recipientName, recipientPhone
+  deliveryAddress
+  createdDate
+}
+class OrderDetail <<Entity>> {
+  productName (snapshot)
+  price
+  quantity
+}
+class Shop <<Entity>> {
+  id
+  name
+}
+class Refund <<Entity>> {
+  amount
+  status
+}
+
+View --> CustomerOrderController : GET /api/customer/orders/transactions?page=\nGET /api/customer/orders/{id} (invoice page)
+CustomerOrderController --> CustomerOrderService
+CustomerOrderController ..> TransactionResults : returns
+CustomerOrderController ..> OrderDetailResponse : returns
+CustomerOrderService --> PaymentRepository
+CustomerOrderService --> OrderRepository
+CustomerOrderService --> OrderDetailRepository
+CustomerOrderService --> RefundRepository
+CustomerOrderService ..> TransactionResults : builds
+CustomerOrderService ..> OrderDetailResponse : builds
+TransactionResults *-- TransactionLine
+OrderDetailResponse *-- PaymentLine
+PaymentRepository ..> Payment
+OrderRepository ..> Order
+OrderDetailRepository ..> OrderDetail
+RefundRepository ..> Refund
+Payment "*" --> "1" Order
+Order "*" --> "1" Shop
+Order "1" --> "*" OrderDetail
+Order "1" --> "*" Refund
+
+note bottom of CustomerOrderService
+  transactions(): every payment of the customer's orders, newest first (createdDate desc, id asc), 20 per page.
+  paidAt = lastModifyDate, only for SUCCESS payments.
+  detail(): order not found or not owned: 404 "Không tìm thấy dữ liệu."
+  payments sorted by createdDate asc in the response.
+end note
+
+note bottom of CustomerOrderController
+  transactions: class-level @PreAuthorize("hasRole('CUSTOMER')"). The page number is echoed back as sent;
+  the query uses max(page, 0).
+end note
+
+note bottom of View
+  Invoice page /orders/:id/invoice (outside the main layout) reuses detail().
+  Shown only when the sum of SUCCESS payments >= totalAmount (the link "Xem hóa đơn" hides for CANCELLED).
+  "Số hóa đơn" = first 8 characters of the order id, upper case. No invoice table exists.
+  COD: the COD payment becomes SUCCESS when the order is COMPLETED (DeliverySync.complete), so the invoice appears after delivery.
+  Transactions page: 20 rows per page with "Trang trước / Trang sau", row order link goes to /orders/{id}.
+end note
+
+@enduml

@@ -1,0 +1,125 @@
+@startuml
+!pragma layout smetana
+title 13.1 Manage Occasions - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+  BackgroundColor<<DTO>> #ECECEC
+  BackgroundColor<<Scheduler>> #FFE8CC
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class OccasionController <<Controller>> {
+  mine(user): List<OccasionResponse>
+  create(user, request): 201 OccasionResponse
+  update(user, id, request): OccasionResponse
+  delete(user, id): 204
+}
+class OccasionService <<Service>> {
+  mine(customerId): List<OccasionResponse>
+  create(customerId, request): OccasionResponse
+  update(customerId, id, request): OccasionResponse
+  delete(customerId, id)
+  -find(customerId, id): CustomerOccasion
+  -apply(occasion, request, actor)
+  -toResponse(occasion, today): OccasionResponse
+}
+interface CustomerOccasionRepository <<Repository>> {
+  findByCustomerIdOrderByOccasionDateAsc(customerId): List<CustomerOccasion>
+  findByIdAndCustomerId(id, customerId): Optional<CustomerOccasion>
+  countByCustomerId(customerId): long
+}
+class UserRepository <<Repository>> {
+  findById(id): Optional<User>
+}
+class OccasionRequest <<DTO>> {
+  title: @NotBlank, max 255
+  occasionDate: @NotNull
+  notifyAt: optional, LocalDateTime
+  recurringYearly: optional, default false
+}
+class OccasionResponse <<DTO>> {
+  id
+  title
+  occasionDate
+  recurringYearly
+  nextOccurrence
+  notifyAt
+  notifyDaysBefore
+  notifyTime
+  customNotify
+  reminded
+}
+class CustomerOccasion <<Entity>> {
+  id
+  title
+  occasionDate
+  recurringYearly
+  notifyDaysBefore = 7
+  notifyTime = 08:00
+  reminderSent
+  lastRemindedFor
+  createdBy
+  lastModifyBy
+}
+class User <<Entity>> {
+  id
+  email
+  fullName
+}
+
+View --> OccasionController : GET /api/customer/occasions\nPOST /api/customer/occasions\nPUT /api/customer/occasions/{id}\nDELETE /api/customer/occasions/{id}
+OccasionController --> OccasionService
+OccasionController ..> OccasionRequest : reads
+OccasionController ..> OccasionResponse : returns
+OccasionService --> CustomerOccasionRepository
+OccasionService --> UserRepository : create: customer lookup
+OccasionService ..> OccasionRequest : reads
+OccasionService ..> OccasionResponse : builds
+CustomerOccasionRepository ..> CustomerOccasion
+UserRepository ..> User
+CustomerOccasion "*" --> "1" User : customer
+
+note bottom of OccasionController
+  Class-level @PreAuthorize hasRole('CUSTOMER'): other roles get 403 "Không có quyền truy cập."
+  Bad body (blank title, title over 255, missing date): 400 "Dữ liệu không hợp lệ" with errors per field.
+end note
+
+note bottom of OccasionService
+  Rules (400 unless stated):
+  - at most 100 occasions per customer: "Bạn đã đạt giới hạn 100 dịp đặc biệt."
+  - a one-time occasion cannot be in the past: "Ngày diễn ra dịp không được ở quá khứ."
+  - notifyAt must be on or before the occasion date and at most 365 days before it:
+    "Thời điểm nhắc phải trước hoặc đúng ngày diễn ra dịp, tối đa 365 ngày."
+  - every query uses the logged-in customer id; another customer's or unknown id gives
+    404 "Không tìm thấy dịp đặc biệt." (create without a customer: 404 "Không tìm thấy tài khoản.")
+  - changing the date, notify time, days before or recurring flag clears reminderSent and
+    lastRemindedFor, so the reminder can be sent again.
+end note
+
+note bottom of CustomerOccasion
+  OccasionSchedule (static helper, not a bean, no DB access):
+  - nextOccurrence: a one-time occasion is occasionDate; a yearly one is this year's date,
+    or next year's once it has passed (29/02 becomes 28/02 in a non-leap year).
+  - remindAt = nextOccurrence - notifyDaysBefore, at notifyTime (defaults: 7 days, 08:00).
+  - isDue: remindAt reached, occurrence today or later, and not yet reminded for this occurrence.
+  Sending is done by OccasionReminderJob every 15 min (see 13.2).
+end note
+
+@enduml

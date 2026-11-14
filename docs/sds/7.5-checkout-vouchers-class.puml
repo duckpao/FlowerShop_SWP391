@@ -1,0 +1,153 @@
+@startuml
+!pragma layout smetana
+title 7.5 Checkout Vouchers - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+  BackgroundColor<<DTO>> #ECECEC
+  BackgroundColor<<Scheduler>> #FFE8CC
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class OrderController <<Controller>> {
+  vouchers(userId, request, currentUser): Preview
+}
+class OrderService <<Service>> {
+  previewVouchers(userId, request, merchandiseOnly): Preview
+  -quoteFee(shop, address): BigDecimal
+}
+class "CartVoucherPreviewRequest" as CartVoucherPreviewRequest <<DTO>> {
+  shopId
+  cartItemIds
+  deliveryAddressId
+  couponId
+  shippingCouponCode
+  merchandiseOnly
+}
+interface CartItemRepository <<Repository>> {
+  findById(id): Optional<CartItem>
+}
+class ProductQuotaService <<Service>> {
+  requireAllowed(product)
+}
+class GhnService <<Service>> {
+  calculateFee(fromDistrictId, fromWardCode, toDistrictId, toWardCode, weightGram): BigDecimal
+}
+class "GHN API" as GHN <<External>> {
+  shipping fee
+}
+class CouponService <<Service>> {
+  preview(ctx, orderCode, shippingCode): Preview
+}
+class "CouponService.Context" as Context <<DTO>> {
+  shopId
+  subTotal
+  shippingFee
+  productTotals
+}
+class "CouponService.Choice" as Choice <<DTO>> {
+  id
+  code
+  scope: PLATFORM | SHOP
+  target
+  saving
+  eligible
+  reason
+  endDate
+}
+class "CouponService.Preview" as Preview <<DTO>> {
+  orderVouchers
+  shippingVouchers
+  recommendedOrderCode
+  recommendedShippingCode
+  bestSaving
+  discountAmount
+  shippingDiscountAmount
+  totalAmount
+}
+class CouponRepository <<Repository>> {
+  available(shopId): List<Coupon>
+}
+class CartItem <<Entity>> {
+  id
+  quantity
+  user
+  product
+}
+class Product <<Entity>> {
+  id
+  price
+  status: ProductStatus
+  shop
+}
+class Coupon <<Entity>> {
+  id
+  code
+  target
+  discountType
+  discountValue
+  maxDiscountValue
+  minOrderValue
+  usageLimit
+  usedCount
+  status: CouponStatus
+  deleted
+  shop
+  product
+}
+
+View --> OrderController : POST /api/orders/{userId}/voucher-preview
+OrderController --> OrderService
+OrderController ..> CartVoucherPreviewRequest : reads
+OrderController ..> Preview : returns
+OrderService ..> CartVoucherPreviewRequest : reads
+OrderService --> CartItemRepository
+OrderService --> ProductQuotaService
+OrderService --> GhnService : quoteFee (not when merchandiseOnly)
+OrderService --> CouponService : preview
+GhnService ..> GHN : fee request
+CouponService ..> Context : builds from cart items
+CouponService ..> Preview : returns
+CouponService ..> Choice : one per coupon
+Preview *-- "0..*" Choice : orderVouchers, shippingVouchers
+CouponService --> CouponRepository
+CouponRepository ..> Coupon
+CartItemRepository ..> CartItem
+CartItem "*" --> "1" Product
+
+note bottom of OrderService
+  Each cart item must belong to the user and to the shop, product and shop ACTIVE,
+  otherwise 400. quota.requireAllowed(product) for each item.
+  merchandiseOnly = true (fee not known yet): shipping is 0 and shipping codes are refused.
+end note
+
+note bottom of CouponService
+  preview() is read-only: usedCount does not change.
+  available(shopId) returns platform and this shop's vouchers that are not deleted;
+  each one gets eligible + reason (ACTIVE, dates, usage, shop, minimum order, saving > 0).
+  Unknown code: 400. Ineligible code: 400 "CODE: reason".
+  Max one money voucher and one shipping voucher.
+end note
+
+note bottom of View
+  CheckoutPage calls the preview once per shop group, 250 ms after each change.
+  The list shows all vouchers, ineligible ones greyed out with the reason.
+end note
+
+@enduml

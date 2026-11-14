@@ -1,0 +1,209 @@
+@startuml
+title 10.4 Shop Quote Custom Request - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor "Shop owner / staff" as M
+actor Customer as U
+participant "View" as V <<View>> #EADCFF
+participant CustomOrderWorkflowController as WC <<Controller>> #D8F3DC
+participant ManagerOrderController as MC <<Controller>> #D8F3DC
+participant CustomFlowerOrderController as FC <<Controller>> #D8F3DC
+participant CustomOrderWorkflowService as WS <<Service>> #DCECFF
+participant ManagerOrderService as MS <<Service>> #DCECFF
+participant CustomFlowerOrderService as FS <<Service>> #DCECFF
+participant GhnService as GHN <<Service>> #DCECFF
+participant CouponService as CS <<Service>> #DCECFF
+participant NotificationService as NS <<Service>> #DCECFF
+participant OrderRepository as OR <<Repository>> #FFF1C9
+participant OrderDetailRepository as ODR <<Repository>> #FFF1C9
+participant AddressRepository as AR <<Repository>> #FFF1C9
+participant ShopRepository as SR <<Repository>> #FFF1C9
+participant ShopStaffRepository as SSR <<Repository>> #FFF1C9
+participant PaymentRepository as PR <<Repository>> #FFF1C9
+participant CustomOrderRequestRepository as CR <<Repository>> #FFF1C9
+participant "GHN API" as API <<External>> #FFE0E0
+
+== A. Shop quotes an order waiting for a price (AWAITING_QUOTE or QUOTED) ==
+M -> V : open the order in the order queue
+note right of V
+  The design panel and the form "Xác nhận thiết kế & báo giá" are shown only
+  for CUSTOM orders in status AWAITING_QUOTE or QUOTED.
+end note
+V --> M : design, price field, feedback field, buttons "Xác nhận & gửi báo giá" and "Từ chối yêu cầu"
+M -> V : enter the flower price and an optional note, press the send button
+V -> WC : POST /api/shop/mine/{shopId}/orders/{id}/quote\n{ amount, note }
+alt @Valid fails: amount missing, below 1, more than 10 digits or 2 decimals, note longer than 2000
+  WC --> V : 400 "Dữ liệu không hợp lệ" with field errors
+else valid
+  WC -> WS : quote(shopId, userId, id, body)
+  WS -> OR : findByIdForUpdate(id)
+  alt order not found
+    OR --> WS : empty
+    WS --> WC : 404 "Không tìm thấy đơn hàng thuộc quyền truy cập của bạn."
+  else found
+    alt the order is not CUSTOM
+      WS --> WC : 409 "Chức năng này chỉ dành cho đơn hoa theo yêu cầu."
+    else CUSTOM
+      WS -> SSR : findByShopIdAndUserId(shopId, userId) (when the actor is not the shop owner)
+      alt other shop, or the actor is neither the owner nor an active staff member
+        WS --> WC : 404 "Không tìm thấy đơn hàng thuộc quyền truy cập của bạn."
+      else member of the shop
+        alt shop or owner not ACTIVE
+          WS --> WC : 409 "Cửa hàng phải đang hoạt động."
+        else active
+          alt status is not AWAITING_QUOTE or QUOTED
+            WS --> WC : 409 "Đơn không còn chờ báo giá."
+          else waiting for a quote
+            WS -> ODR : findCustomDesignByOrderId(id)
+            alt design missing
+              WS --> WC : 409 "Không tìm thấy thiết kế để báo giá."
+            else design found
+              WS -> AR : findPickupByShopId(shopId)
+              alt customer address has no GHN district / ward code
+                WS --> WC : 409 "Khách cần bổ sung địa chỉ nhận hoa trước khi shop chốt báo giá."
+              else shop pickup address has no GHN codes
+                WS --> WC : 409 "Cửa hàng cần cập nhật địa chỉ lấy hàng GHN trước khi báo giá."
+              else both addresses have GHN codes
+                WS -> GHN : calculateFee(pickupDistrict, pickupWard, destDistrict, destWard, 2000 g)
+                GHN -> API : POST /shiip/public-api/v2/shipping-order/fee
+                alt GHN is not configured (503) or GHN refuses (502)
+                  API --> GHN : error
+                  GHN --> WS : ResponseStatusException "Chưa cấu hình GHN trên server." or the GHN message
+                  WS --> WC : 503 / 502
+                else fee returned
+                  API --> GHN : total
+                  GHN --> WS : shippingFee
+                  WS -> WS : order.subTotal = amount, shippingFee,\ntotalAmount = amount + shippingFee, shopNote = note (strip), status = QUOTED
+                  WS -> ODR : line.price = amount (design line)
+                  WS -> NS : notifyUser(customer, "Shop đã báo giá hoa theo yêu cầu",\nlink /orders/{id})
+                  NS --> U : bell notification (in-app)
+                  WS --> WC : done (commit)
+                  WC --> V : 200 OK
+                  V --> M : order list refreshed, status QUOTED
+                end
+              end
+            end
+          end
+        end
+      end
+    end
+  end
+end
+note over WS
+  The customer then accepts the quote (10.1) or changes the delivery address,
+  which puts the order back to AWAITING_QUOTE so the shop must quote again.
+  A failure keeps the order unchanged: the error text is shown under the form.
+end note
+
+== B. Shop rejects the request ==
+M -> V : press "Từ chối yêu cầu"
+alt the feedback field is empty
+  V --> M : "Vui lòng nhập lý do từ chối trong phần phản hồi." (checked on the client, no request)
+else reason typed
+  V -> MC : POST /api/shop/mine/{shopId}/orders/{id}/cancel\n{ reason: note }
+  MC -> MS : cancel(shopId, userId, id, reason)
+  MS -> SR : findById(shopId)
+  alt shop not found
+    MS --> MC : 404 "Không tìm thấy shop."
+  else found
+    MS -> SSR : findByShopIdAndUserId(shopId, userId) (when the actor is not the owner)
+    alt neither the owner nor an active staff member
+      MS --> MC : 403 "Bạn không có quyền với shop này."
+    else member
+      alt reason blank (server check)
+        MS --> MC : 400 "Vui lòng nhập lý do hủy đơn."
+      else reason given
+        MS -> OR : findByIdAndShopIdForUpdate(id, shopId)
+        alt order not found in this shop
+          OR --> MS : empty
+          MS --> MC : 404
+        else found
+          alt status is not PENDING, AWAITING_DEPOSIT, DEPOSIT_PAID, PROCESSING, AWAITING_QUOTE or QUOTED
+            MS --> MC : 400 "Chỉ có thể hủy đơn hàng trước khi bắt đầu giao."
+          else cancellable
+            MS -> MS : status = CANCELLED, cancelReason = reason
+            MS -> ODR : findByOrderId(id)
+            note right of MS : the design line has no product, so no stock is given back
+            MS -> CS : release(order)
+            MS -> PR : failPendingByOrderId(id, userId)
+            note right of MS : nothing is paid before the quote is accepted:\nno Refund is created and the customer is not notified
+            MS --> MC : done (commit)
+            MC --> V : 200 OK
+            V --> M : order list refreshed, status CANCELLED
+          end
+        end
+      end
+    end
+  end
+end
+note over V
+  The customer sees the reason in the order detail ("Lý do từ chối / hủy").
+end note
+
+== C. Request path (status REQUESTED, see 10.3): owner answers ==
+M -> V : open the custom request list of the shop (owner only)
+V -> FC : GET /api/shop/mine/{shopId}/custom-orders?status&page\nGET /api/shop/mine/{shopId}/custom-orders/{id}
+FC -> FS : shopRequests(shopId, userId, status, page) / shopRequest(shopId, userId, id)
+FS -> SR : findById(shopId)
+alt shop missing or the actor is not the owner
+  FS --> FC : 404 "Không tìm thấy dữ liệu thuộc quyền truy cập của bạn."
+  FC --> V : 404
+else owner
+  FS -> CR : findByShopId(shopId, page) or findByShopIdAndStatus(shopId, status, page)
+  CR --> FS : Page<CustomOrderRequest>
+  FS -> OR : findLinkedCustomOrder(request id, customer, shop)
+  FS --> FC : Results
+  FC --> V : 200 OK
+  V --> M : requests, decision form for REQUESTED and NEGOTIATING (no form for ACCEPTED, REJECTED)
+end
+M -> V : choose NEGOTIATING, ACCEPTED or REJECTED, fill the price, deposit percent and note
+V -> FC : PUT /api/shop/mine/{shopId}/custom-orders/{id}\n{ status, note, quotedPrice, depositPercent }
+alt @Valid fails: status null, quotedPrice under 1.00 or over 2 decimals, depositPercent not 10..100
+  FC --> V : 400 "Dữ liệu không hợp lệ" with field errors
+else valid
+  FC -> FS : decide(shopId, userId, id, body)
+  FS -> SR : findById(shopId) (owner check as above, 404)
+  alt shop or owner not ACTIVE
+    FS --> FC : 403 "Shop phải đang hoạt động để xử lý yêu cầu."
+  else active
+    FS -> CR : findLocked(id)
+    alt request not found in this shop
+      FS --> FC : 404 "Không tìm thấy dữ liệu thuộc quyền truy cập của bạn."
+    else found
+      alt status already ACCEPTED or REJECTED
+        FS --> FC : 409 "Yêu cầu đã kết thúc, không thể đổi trạng thái."
+      else open
+        alt requested status is REQUESTED
+          FS --> FC : 400 "Shop không thể chuyển về trạng thái mới gửi."
+        else ACCEPTED without quotedPrice
+          FS --> FC : 400 "Cần báo giá tổng khi chấp nhận."
+        else ACCEPTED without depositPercent
+          FS --> FC : 400 "Cần báo mức cọc (10-100%) khi chấp nhận."
+        else accepted decision
+          FS -> FS : design JSON gets shopNote, quotedPrice, depositPercent
+          FS -> CR : saveAndFlush(request with the new status)
+          CR --> FS : CustomOrderRequest
+          FS --> FC : Result
+          FC --> V : 200 OK
+          V --> M : "Đã cập nhật trạng thái yêu cầu của khách."
+        end
+      end
+    end
+  end
+end
+note over FS
+  This path creates no Order and sends no notification: the customer sees the new status and the quote
+  when the request is opened again or through chat. Shop staff cannot use it (SHOP role only).
+end note
+
+@enduml

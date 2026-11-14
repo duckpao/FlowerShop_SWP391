@@ -1,0 +1,104 @@
+@startuml
+!pragma layout smetana
+title 9.5 Customer Dashboard - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+  BackgroundColor<<DTO>> #ECECEC
+  BackgroundColor<<Scheduler>> #FFE8CC
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class CustomerOrderController <<Controller>> {
+  list(user, page = 0, status): Results
+}
+class CustomerOrderService <<Service>> {
+  list(customerId, page, status): Results
+}
+class OrderRepository <<Repository>> {
+  findByCustomerIdOrderByCreatedDateDesc(customerId, pageable): Page<Order>
+  findByCustomerIdAndStatus(customerId, status, pageable): Page<Order>
+}
+class AccountController <<Controller>> {
+  addresses(user): List<AddressResponse>
+}
+class AccountService <<Service>> {
+  list(userId): List<AddressResponse>
+  -owned(userId): List<Address>
+}
+class AddressRepository <<Repository>> {
+  findByUserIdAndShopIsNullOrderByCreatedDateAscIdAsc(userId): List<Address>
+}
+class "CustomerOrderService.Results" as Results <<DTO>> {
+  content: List<OrderSummary> (first 3 or 5 used)
+  page
+  totalPages
+  totalElements
+}
+class AddressResponse <<DTO>> {
+  id
+  addressLine, ward, district, city
+  isDefault
+  recipientName, recipientPhone
+  ghnDistrictId, ghnWardCode
+}
+class Order <<Entity>> {
+  id
+  status
+  shop.name
+  totalAmount
+  createdDate
+}
+class Address <<Entity>> {
+  addressLine, ward, district, city
+  isDefault
+  user (owner)
+}
+
+View --> CustomerOrderController : GET /api/customer/orders?page=0&status=DELIVERING\nGET /api/customer/orders?page=0
+View --> AccountController : GET /api/account/addresses
+CustomerOrderController --> CustomerOrderService : list(user.id(), page, status)
+CustomerOrderService --> OrderRepository
+CustomerOrderService ..> Results : returns
+AccountController --> AccountService : list(user.id())
+AccountService --> AddressRepository
+AccountService ..> AddressResponse : maps
+AddressRepository ..> Address
+OrderRepository ..> Order
+Results ..> Order : summary of each order (see 9.1)
+
+note bottom of View
+  Route /dashboard renders CustomerOverviewView: read-only, no write call.
+  Three independent blocks, each with its own loading text and error alert:
+  "Đơn đang giao" (status DELIVERING, first 3), "Đơn hàng gần đây" (first 5, any status),
+  "Địa chỉ giao hàng mặc định" (address with isDefault = true).
+  Not logged in: link to /login?next=%2Fdashboard. Role other than CUSTOMER: "Trang này dành cho khách hàng."
+  CustomerDashboardView.jsx is not imported by any route (unused file).
+end note
+
+note bottom of AccountController
+  addresses(): method-level @PreAuthorize("hasRole('CUSTOMER')").
+  Returns the customer's own addresses (shop addresses excluded).
+end note
+
+note bottom of CustomerOrderService
+  No dashboard-specific endpoint or service: the dashboard reuses list() from 9.1.
+end note
+
+@enduml

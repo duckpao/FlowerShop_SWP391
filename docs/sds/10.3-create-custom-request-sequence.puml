@@ -1,0 +1,151 @@
+@startuml
+title 10.3 Create Custom Request - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor Customer as U
+actor "Shop owner" as M
+participant "View" as V <<View>> #EADCFF
+participant CustomFlowerOrderController as FC <<Controller>> #D8F3DC
+participant CustomOrderWorkflowController as OC <<Controller>> #D8F3DC
+participant CustomFlowerOrderService as FS <<Service>> #DCECFF
+participant CustomOrderWorkflowService as WS <<Service>> #DCECFF
+participant CustomFlowerCatalogService as CS <<Service>> #DCECFF
+participant ProductCardAssembler as PA <<Service>> #DCECFF
+participant NotificationService as NS <<Service>> #DCECFF
+participant CustomFlowerOptionRepository as OPT <<Repository>> #FFF1C9
+participant ShopRepository as SR <<Repository>> #FFF1C9
+participant UserRepository as UR <<Repository>> #FFF1C9
+participant AddressRepository as AR <<Repository>> #FFF1C9
+participant ProductRepository as PR <<Repository>> #FFF1C9
+participant CustomOrderRequestRepository as CR <<Repository>> #FFF1C9
+participant OrderRepository as OR <<Repository>> #FFF1C9
+participant OrderDetailRepository as ODR <<Repository>> #FFF1C9
+
+== A. Catalog options and reference suggestions (public) ==
+U -> V : open the custom flower form
+V -> FC : GET /api/public/custom-orders/options
+FC -> CS : catalog()
+CS -> OPT : catalog() ordered by group, sortOrder, id
+OPT --> CS : List<CustomFlowerOption>
+CS --> FC : List<Option> (id, group, label, disabled)
+FC --> V : 200 OK
+V --> U : flowers, occasions, wrapping and accessory choices
+opt optional: pick a reference product
+  V -> FC : GET /api/public/custom-orders/suggestions?budget&quantity&shopId&q&page
+  alt quantity not 1..100, budget not 1..9.999.999.999,99 with max 2 decimals (400)
+    FC --> V : 400 IllegalArgumentException message
+  else valid
+    FC -> FS : suggestions(budget, quantity, shopId, q, page)
+    FS -> FS : page < 0 or > 100000: 400 "Trang không hợp lệ."\nq longer than 100: 400 "Từ khóa tối đa 100 ký tự."
+    FS -> SR : findByIdAndStatus(shopId, ACTIVE) when shopId is given (else 404)
+    FS -> PR : findAll(ACTIVE product, ACTIVE shop, price > 0, stock >= quantity,\nprice x quantity <= budget x 1.05, name LIKE q, quota), 12 per page
+    PR --> FS : Page<Product>
+    FS -> PA : cards(products)
+    PA --> FS : ProductCard list
+    FS --> FC : Suggestions (estimatedTotal, remainingBudget)
+    FC --> V : 200 OK
+  end
+end
+
+== B. Customer sends the design (request, REQUESTED) ==
+U -> V : choose shop, quantity, flowers, occasion, wrapping,\ndelivery date, description, optional reference product
+V -> FC : POST /api/customer/custom-orders\n{shopId, quantity, description, preferences{flowers, colors, occasion, wrapping, deliveryDate, referenceProductId}}
+alt @Valid fails: shopId blank, quantity not 1..100, description > 3000,\npreferences missing or a field too long
+  FC --> V : 400 "Dữ liệu không hợp lệ" with field errors
+else valid
+  FC -> FS : create(userId, input)
+  FS -> SR : findByIdAndStatus(shopId, ACTIVE)
+  alt shop missing or not ACTIVE
+    SR --> FS : empty
+    FS --> FC : 404 "Không tìm thấy dữ liệu thuộc quyền truy cập của bạn."
+  else found
+    FS -> UR : findByIdAndRoleAndStatus(userId, CUSTOMER, ACTIVE)
+    alt customer not found
+      UR --> FS : empty
+      FS --> FC : 404 "Không tìm thấy dữ liệu thuộc quyền truy cập của bạn."
+    else found
+      FS -> FS : design(input)
+      note right of FS
+        quantity 1..100 (400 "Số lượng từ 1 đến 100.")
+        flowers/occasion/wrapping validated against ACTIVE options (400)
+        deliveryDate: ISO, not before today in Asia/Ho_Chi_Minh (400)
+        reference product: visible, same shop, stock >= quantity (409)
+      end note
+      FS -> CS : validate(preferences)
+      CS -> OPT : catalog()
+      OPT --> CS : options
+      alt option missing, disabled, or duplicate wrapping
+        CS --> FS : 400 "Lựa chọn không tồn tại hoặc đã tạm ngưng: ..."
+        FS --> FC : 400
+      else valid
+        opt reference product given
+          FS -> PR : findById(referenceProductId)
+          alt not visible, other shop, or stock < quantity
+            PR --> FS : empty or short stock
+            FS --> FC : 404 or 409 "Mẫu hoa tham khảo không đủ số lượng."
+          end
+        end
+        FS -> CR : saveAndFlush(CustomOrderRequest, status REQUESTED,\ndesiredComponents = design JSON, description stripped)
+        CR --> FS : CustomOrderRequest
+        FS -> OR : findLinkedCustomOrder(request id, customer, shop)
+        OR --> FS : empty (no order yet)
+        FS --> FC : Result (status REQUESTED, orderId null)
+        FC --> V : 201 Created
+        V --> U : request listed as REQUESTED
+      end
+    end
+  end
+end
+note over FS
+  This path sends no notification and creates no Order.
+  The shop sees the request in its custom-order list (see 10.4).
+end note
+
+== C. Customer sends the design (order, AWAITING_QUOTE) ==
+note over V
+  Not used by the current client: customerOrderService.createCustom has no caller.
+  Available to API clients.
+end note
+V -> OC : POST /api/customer/orders/custom\n{addressId, design: {shopId, quantity, description, preferences}}
+alt @Valid fails: addressId blank, design or preferences invalid
+  OC --> V : 400 "Dữ liệu không hợp lệ"
+else valid
+  OC -> WS : create(userId, body)
+  WS -> SR : findByIdAndStatus(shopId, ACTIVE)
+  alt shop not ACTIVE
+    SR --> WS : empty
+    WS --> OC : 404 "Không tìm thấy đơn hàng thuộc quyền truy cập của bạn."
+  else found
+    WS -> UR : findByIdAndRoleAndStatus(userId, CUSTOMER, ACTIVE)
+    WS -> AR : findByIdAndUserId(addressId, userId)
+    alt customer or address not found or not owned
+      WS --> OC : 404 "Không tìm thấy đơn hàng thuộc quyền truy cập của bạn."
+    else found
+      WS -> FS : design(request)
+      FS --> WS : Design (same validation as B; depositPercent not set)
+      WS -> OR : save(Order CUSTOM, status AWAITING_QUOTE,\nsubTotal 0, totalAmount 0, deliveryAddress, recipient from address)
+      WS -> ODR : save(OrderDetail price 0, quantity 1,\ncustomMaterials = {budget null, description, preferences})
+      WS -> NS : notifyUser(shop owner, "Yêu cầu đặt hoa mới",\nlink /shop-admin/orders?open={orderId})
+      NS --> M : bell notification (in-app)
+      WS --> OC : Receipt(orderId, AWAITING_QUOTE)
+      OC --> V : 201 Created
+      V --> U : order shown as waiting for the shop quote
+    end
+  end
+end
+note over WS
+  The delivery address does not need GHN codes here: they are required at quote time (10.4).
+  No e-mail is sent: a new order has no status snapshot, so no status event fires.
+end note
+
+@enduml

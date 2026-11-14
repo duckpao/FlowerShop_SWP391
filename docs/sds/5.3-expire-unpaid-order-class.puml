@@ -1,0 +1,145 @@
+@startuml
+!pragma layout smetana
+title 5.3 Expire Unpaid Order - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+  BackgroundColor<<DTO>> #ECECEC
+  BackgroundColor<<Scheduler>> #FFE8CC
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class PaymentTimeoutScheduler <<Scheduler>> {
+  scanAndCancelExpiredOrders()
+}
+class SePayGatewayService <<Service>> {
+  +PAYMENT_WINDOW_MINUTES = 10
+  +DEPOSIT_DEADLINE_MINUTES = 1440
+  expireUnpaidOrder(orderId)
+  reconcileWithSePayGateway(invoice): boolean
+  -cancelAtSePay(invoice)
+  -isExpired(order): boolean
+}
+class OrderService <<Service>> {
+  cancelExpiredOrder(orderId, reason)
+  cancelPendingOrder(orderId, reason, actor): boolean
+  restoreCancelledOrderItems(order)
+  -releaseStockAndCoupon(order, actor): List<OrderDetail>
+}
+class CouponService <<Service>> {
+  release(order)
+}
+class CustomerOrderController <<Controller>> {
+  byIds(user, ids): List<OrderSummary>
+}
+class CustomerOrderService <<Service>> {
+  byIds(customerId, ids): List<OrderSummary>
+}
+class "CustomerOrderService.OrderSummary" as OrderSummary <<DTO>> {
+  id
+  status
+  paymentMethod
+  paymentStatus
+  paymentSecondsLeft
+  checkoutGroup
+}
+class OrderRepository <<Repository>> {
+  findByStatusAndPaymentWindowStartBefore(status, threshold): List<Order>
+  findById(id): Optional<Order>
+  save(order): Order
+}
+class PaymentRepository <<Repository>> {
+  findByOrderId(orderId): List<Payment>
+  failPendingByOrderId(orderId, actor): int
+}
+class OrderDetailRepository <<Repository>> {
+  findByOrderId(orderId): List<OrderDetail>
+}
+class ProductRepository <<Repository>> {
+  findByIdForUpdate(id): Optional<Product>
+  save(product): Product
+}
+interface CartItemRepository <<Repository>> {
+  findByUserIdAndProductIdForUpdate(userId, productId): Optional<CartItem>
+  save(item): CartItem
+}
+class "SePay REST API\n/v1/order/cancel, /v1/order/detail" as API <<External>>
+class Order <<Entity>> {
+  id
+  status: PENDING | AWAITING_DEPOSIT -> CANCELLED
+  createdDate
+  paymentStartedAt
+  paymentWindowStart (derived)
+  cancelReason
+}
+class Payment <<Entity>> {
+  paymentMethod: ONLINE | COD
+  status: PENDING -> FAILED
+  invoiceNumber
+  groupInvoice
+}
+class Product <<Entity>> {
+  stock
+  type
+}
+class CartItem <<Entity>> {
+  quantity
+}
+
+View --> CustomerOrderController : GET /api/customer/orders/by-ids?ids=\n(/payment/pending countdown)
+CustomerOrderController --> CustomerOrderService
+CustomerOrderService ..> OrderSummary : paymentSecondsLeft
+PaymentTimeoutScheduler --> OrderRepository
+PaymentTimeoutScheduler --> SePayGatewayService : expireUnpaidOrder
+SePayGatewayService --> OrderRepository
+SePayGatewayService --> PaymentRepository
+SePayGatewayService --> OrderService : cancelExpiredOrder
+SePayGatewayService ..> API
+OrderService --> OrderRepository
+OrderService --> PaymentRepository
+OrderService --> OrderDetailRepository
+OrderService --> ProductRepository
+OrderService --> CartItemRepository
+OrderService --> CouponService
+OrderRepository ..> Order
+PaymentRepository ..> Payment
+ProductRepository ..> Product
+CartItemRepository ..> CartItem
+Order "1" --> "*" Payment
+
+note bottom of PaymentTimeoutScheduler
+  Runs every 5 seconds (fixedDelay). Picks PENDING orders older than 10 minutes and
+  AWAITING_DEPOSIT orders older than 24 hours, measured from paymentStartedAt (else createdDate).
+  One order failing does not stop the others.
+end note
+
+note bottom of SePayGatewayService
+  Order of work for an expired order: skip orders with a COD payment, close each ONLINE invoice
+  at SePay, reconcile each invoice (money may have arrived at the last moment: then the order is paid
+  and not cancelled), only then cancel and release stock.
+end note
+
+note bottom of OrderService
+  cancelPending(): locks the order again, checks it is still PENDING or AWAITING_DEPOSIT,
+  sets CANCELLED, gives stock and the voucher use back, fails PENDING payments,
+  puts the items back into the customer's cart. The reason is only logged (Order.cancelReason stays empty).
+  No bell notification; the status change PENDING -> CANCELLED mails the customer (13.3).
+end note
+
+@enduml

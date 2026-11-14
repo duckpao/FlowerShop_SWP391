@@ -1,5 +1,5 @@
 @startuml
-title Update GHN Waybill - sequence diagram
+title 3.6 Update GHN Waybill - sequence diagram
 autonumber
 skinparam shadowing false
 skinparam defaultFontName Arial

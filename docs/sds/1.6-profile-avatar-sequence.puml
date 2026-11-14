@@ -1,5 +1,5 @@
 @startuml
-title Upload and Remove Avatar - sequence diagram
+title 1.6 Upload and Remove Avatar - sequence diagram
 autonumber
 skinparam shadowing false
 skinparam defaultFontName Arial

@@ -1,0 +1,158 @@
+@startuml
+!pragma layout smetana
+title 12.5 Staff Management - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+  BackgroundColor<<DTO>> #ECECEC
+  BackgroundColor<<Scheduler>> #FFE8CC
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class ManagerShopController <<Controller>> {
+  staff(id, u): List<StaffResponse>
+  active(id, userId, u, body): StaffResponse
+}
+class StaffShopController <<Controller>> {
+  shops(u): List<ShopResponse>
+}
+class ManagerProductController <<Controller>> {
+  hide(shopId, id, u)
+  remove(shopId, id, u)
+}
+class StaffRefundController <<Controller>> {
+  list(shopId, u)
+  updateStatus(shopId, id, u, body)
+}
+class ManagerShopService <<Service>> {
+  staff(id, actor): List<StaffResponse>
+  active(id, actor, userId, active): StaffResponse
+  assigned(actor): List<ShopResponse>
+  -owned(id, actor, write): Shop
+}
+class ManagerProductService <<Service>> {
+  hide(shopId, id, actor)
+  remove(shopId, id, actor)
+  -owned(shopId, actor, write): Shop
+  -activeStaff(shopId, actor): boolean
+}
+class StaffRefundService <<Service>> {
+  list(shopId, actor)
+  updateStatus(shopId, actor, refundId, status, note)
+}
+class ShopOperationGuard <<Service>> {
+  requireAccess(shopId, actorId): Shop
+  requireActive(shopId): Shop
+}
+class "ManagerShopService.ActiveInput" as ActiveInput <<DTO>> {
+  active @NotNull
+}
+class "ManagerShopService.StaffResponse" as StaffResponse <<DTO>> {
+  userId, email, fullName, active
+}
+class ShopResponse <<DTO>> {
+  id, name, status, owner
+}
+interface ShopStaffRepository <<Repository>> {
+  findByShopIdOrderByIdAsc(shopId): List<ShopStaff>
+  findByShopIdAndUserId(shopId, userId): Optional<ShopStaff>
+  findByUserIdAndActiveTrue(userId): List<ShopStaff>
+  findByShopIdAndActiveTrue(shopId): List<ShopStaff>
+}
+class ShopRepository <<Repository>> {
+  findById(id): Optional<Shop>
+  findForUpdate(id): Optional<Shop>
+}
+class UserRepository <<Repository>> {
+  findById(id): Optional<User>
+  findByIdForUpdate(id): Optional<User>
+}
+class ShopStaff <<Entity>> {
+  id
+  active: boolean
+  unique (shop_id, user_id)
+}
+class Shop <<Entity>> {
+  id
+  status: PENDING | ACTIVE | INACTIVE | BANNED
+  owner
+}
+class User <<Entity>> {
+  id
+  role: SHOP | SHOP_STAFF | CUSTOMER | ADMIN
+  status
+  isEmailVerified
+}
+
+View --> ManagerShopController : GET /api/shop/mine/{id}/staff\nPUT /api/shop/mine/{id}/staff/{userId}  body { active }
+View --> StaffShopController : GET /api/staff/shops
+View --> ManagerProductController : DELETE /api/shop/mine/{shopId}/products/{id} (hide)\nDELETE /api/shop/mine/{shopId}/products/{id}/remove
+View --> StaffRefundController : GET /api/shop/mine/{shopId}/refunds\nGET /api/staff/shops/{shopId}/refunds
+ManagerShopController --> ManagerShopService
+ManagerShopController ..> ActiveInput : reads
+ManagerShopController ..> StaffResponse : returns
+StaffShopController --> ManagerShopService
+StaffShopController ..> ShopResponse : returns
+ManagerProductController --> ManagerProductService
+StaffRefundController --> StaffRefundService
+ManagerShopService --> ShopRepository
+ManagerShopService --> ShopStaffRepository
+ManagerProductService --> ShopRepository
+ManagerProductService --> ShopStaffRepository
+StaffRefundService --> ShopOperationGuard : requireAccess
+ShopOperationGuard --> ShopRepository
+ShopOperationGuard --> ShopStaffRepository
+ShopOperationGuard --> UserRepository
+ManagerShopService ..> StaffResponse : builds
+ShopStaffRepository ..> ShopStaff
+ShopRepository ..> Shop
+UserRepository ..> User
+ShopStaff "*" --> "1" Shop : shop
+ShopStaff "*" --> "1" User : member
+
+note bottom of ManagerShopService
+  Owner only: owned() compares shop.owner with the logged-in user (non-owner: 404).
+  Staff cannot list, activate or deactivate staff, nor change the shop profile.
+  active(true) needs the member to be SHOP_STAFF, ACTIVE and verified (400);
+  the shop must be ACTIVE (403). Deactivating does not change the user role and does not revoke sessions.
+  Access of a deactivated staff member stops at the next request (ShopStaff.active is read every time).
+end note
+
+note bottom of ManagerProductService
+  Owner or active staff (activeStaff) may create, edit, hide (DELETE /{id}) and unhide.
+  Write needs the shop ACTIVE and owner role SHOP and ACTIVE (403).
+  remove (DELETE /{id}/remove): owner only, 403 "Chỉ chủ shop được xóa sản phẩm."
+end note
+
+note bottom of ShopOperationGuard
+  Javadoc asks business services to call it. In code only StaffRefundService uses it.
+  requireAccess: shop ACTIVE (requireActive), actor ACTIVE and verified,
+  and (role SHOP and owner) or (role SHOP_STAFF and active ShopStaff row).
+end note
+
+note bottom of View
+  Role gates before the service (SecurityConfig.java:78-85 and @PreAuthorize):
+  /api/shop/mine/*/orders, /chat, /products, /blogs, /reports and refunds: SHOP or SHOP_STAFF.
+  Other /api/shop/** (profile, address, logo, staff, invitations, applications): SHOP only.
+  /api/staff/** : SHOP_STAFF only.
+  Orders, chat and custom-order workflow follow the same owner-or-active-staff rule
+  (ManagerOrderService.java:118-124, ChatService.java:150, CustomOrderWorkflowService.java:66).
+end note
+
+@enduml

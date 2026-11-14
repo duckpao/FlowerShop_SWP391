@@ -1,0 +1,81 @@
+@startuml
+!pragma layout smetana
+title 7.7 Remove Voucher - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+  BackgroundColor<<DTO>> #ECECEC
+  BackgroundColor<<Scheduler>> #FFE8CC
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class OrderController <<Controller>> {
+  vouchers(userId, request, currentUser): Preview
+}
+class OrderService <<Service>> {
+  previewVouchers(userId, request, merchandiseOnly): Preview
+}
+class "CartVoucherPreviewRequest" as CartVoucherPreviewRequest <<DTO>> {
+  shopId
+  cartItemIds
+  couponId
+  shippingCouponCode
+}
+class CouponService <<Service>> {
+  preview(ctx, orderCode, shippingCode): Preview
+}
+class "CouponService.Preview" as Preview <<DTO>> {
+  discountAmount
+  shippingDiscountAmount
+  totalAmount
+}
+class CouponRepository <<Repository>> {
+  available(shopId): List<Coupon>
+}
+class Coupon <<Entity>> {
+  id
+  code
+  target
+  status: CouponStatus
+  deleted
+}
+
+View --> OrderController : POST /api/orders/{userId}/voucher-preview (no codes or the remaining codes)
+OrderController --> OrderService
+OrderController ..> CartVoucherPreviewRequest : reads
+OrderController ..> Preview : returns
+OrderService --> CouponService : preview
+CouponService ..> Preview : returns recomputed totals
+CouponService --> CouponRepository
+CouponRepository ..> Coupon
+
+note bottom of View
+  No backend call removes a voucher. "Không dùng mã" (money or shipping) and
+  "Bỏ mã đã chọn" (after an error) only change the browser state for this shop.
+  The same preview call then recomputes the totals. Nothing is saved until "Đặt hàng",
+  which sends couponId = null for that shop.
+  Shipping "Không dùng mã" also clears the money code (choose() in VoucherPicker.jsx).
+end note
+
+note bottom of CouponService
+  preview() is read-only. A code that is no longer valid (expired, disabled, deleted)
+  makes the preview fail with 400 "CODE: reason", so the page offers "Bỏ mã đã chọn".
+end note
+
+@enduml

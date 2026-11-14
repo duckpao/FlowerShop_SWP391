@@ -1,0 +1,84 @@
+@startuml
+!pragma layout smetana
+title 8.4 Deactivate Pro Plan - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+  BackgroundColor<<DTO>> #ECECEC
+  BackgroundColor<<Scheduler>> #FFE8CC
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class AdminShopPlanController <<Controller>> {
+  remove(admin, id): void
+}
+class ShopPlanService <<Service>> {
+  removePlan(actor, id): void
+  checkout(shopId, actor, planId): Checkout
+  adminGrant(shopId, actor, input): AdminStatus
+  -requireAdmin(actor)
+}
+class UserRepository <<Repository>> {
+  findByIdAndRoleAndStatus(id, role, status): Optional<User>
+}
+class ShopPlanRepository <<Repository>> {
+  findLocked(id): Optional<ShopPlan>
+  findById(id): Optional<ShopPlan>
+}
+class ShopPlan <<Entity>> {
+  id
+  name
+  durationMonths
+  price
+  productLimit
+  featuredLimit
+  enabled
+}
+class ShopSubscription <<Entity>> {
+  id
+  startedAt
+  endsAt
+  plan: ShopPlan
+}
+
+View --> AdminShopPlanController : DELETE /api/admin/shop-plans/{id}
+AdminShopPlanController --> ShopPlanService
+ShopPlanService --> UserRepository
+ShopPlanService --> ShopPlanRepository
+ShopPlanRepository ..> ShopPlan : locks and sets enabled = false
+ShopSubscription "0..*" --> "1" ShopPlan : plan (kept)
+
+note bottom of ShopPlanService
+  removePlan(actor, id): requireAdmin (403), id "FREE" gives 409,
+  findLocked(id) (404 if missing), then enabled = false.
+  Nothing is deleted: the row stays for payments, history and subscriptions.
+  checkout() and adminGrant() accept only enabled plans, so they reject this plan with 404.
+end note
+
+note bottom of ShopSubscription
+  Shops that already hold the plan keep their endsAt. Limits are still
+  read from ShopPlan (enabled is not checked), so they do not change.
+end note
+
+note bottom of AdminShopPlanController
+  The UI calls this "Xóa / ngừng bán". The method is named remove,
+  but it is a soft disable (enabled = false), not a hard delete.
+end note
+
+@enduml

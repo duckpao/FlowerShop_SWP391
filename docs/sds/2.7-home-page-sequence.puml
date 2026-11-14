@@ -1,0 +1,45 @@
+@startuml
+title 2.7 Home Page - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor User
+participant "View" as V <<View>> #EADCFF
+participant PublicCatalogController as C <<Controller>> #D8F3DC
+participant CatalogService as S <<Service>> #DCECFF
+participant ProductRepository as R <<Repository>> #FFF1C9
+participant PublicShopController as SC <<Controller>> #D8F3DC
+participant ShopRepository as SR <<Repository>> #FFF1C9
+participant NotificationController as NC <<Controller>> #D8F3DC
+participant NotificationService as N <<Service>> #DCECFF
+database MySQL
+
+User -> V : open "/" (home is shown after login)
+V -> C : GET /api/public/products?q&categoryId&shopId&sort&page
+C -> S : browse(q, categoryId, shopId, type, minPrice, maxPrice, sort, page, size)
+S -> R : findAll(visible spec, page)
+R -> MySQL : SELECT Products (ACTIVE, visible)
+MySQL --> R : rows
+S --> C : Results(ProductCard list)
+C --> V : JSON page of products
+V -> SC : shops tab: GET /api/public/shops?q=
+SC -> SR : search by name
+SR -> MySQL : SELECT Shops
+SC --> V : List<ShopCard>
+User -> V : click header bell
+V -> NC : GET /api/account/notifications/unread-count
+NC -> N : unreadCount(userId)
+N -> MySQL : count unread Notifications
+NC --> V : { count }
+V --> User : hero, products and shops tabs, bell badge
+
+@enduml

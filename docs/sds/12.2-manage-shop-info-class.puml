@@ -1,0 +1,142 @@
+@startuml
+!pragma layout smetana
+title 12.2 Manage Shop Info - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+  BackgroundColor<<DTO>> #ECECEC
+  BackgroundColor<<Scheduler>> #FFE8CC
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class ManagerShopController <<Controller>> {
+  mine(u): List<ShopResponse>
+  address(id, u): List<AddressResponse>
+  saveAddress(id, u, body): AddressResponse
+  update(id, u, body): ShopResponse
+  uploadLogo(id, u, file): ShopResponse
+  removeLogo(id, u): ShopResponse
+}
+class ManagerShopService <<Service>> {
+  mine(actor): List<ShopResponse>
+  address(id, actor): List<AddressResponse>
+  saveAddress(id, actor, input): AddressResponse
+  update(id, actor, profile): ShopResponse
+  uploadLogo(id, actor, file): ShopResponse
+  removeLogo(id, actor): ShopResponse
+  -owned(id, actor, write): Shop
+}
+class "ManagerShopService.Profile" as Profile <<DTO>> {
+  name @NotBlank <= 255
+  description @NotNull <= 5000
+}
+class ShopAddressRequest <<DTO>> {
+  addressLine, city, district, ward
+  ghnDistrictId @NotNull
+  ghnWardCode @NotBlank
+}
+class ShopResponse <<DTO>> {
+  id, name, description, logoUrl
+  status, owner, address
+}
+class AddressResponse <<DTO>> {
+  addressLine, city, district, ward
+  ghnDistrictId, ghnWardCode
+}
+class CloudinaryService <<Service>> {
+  uploadShopLogo(bytes, filename, contentType): String
+}
+class ShopRepository <<Repository>> {
+  findById(id): Optional<Shop>
+  findForUpdate(id): Optional<Shop>
+  findByOwnerIdOrderByNameAsc(ownerId): List<Shop>
+  flush()
+}
+class AddressRepository <<Repository>> {
+  findByShopIdAndUserIsNullOrderByCreatedDateAscIdAsc(shopId): List<Address>
+  save(address): Address
+}
+class Shop <<Entity>> {
+  id
+  name, description
+  logoUrl
+  status: PENDING | ACTIVE | INACTIVE | BANNED
+  lastModifyBy
+}
+class Address <<Entity>> {
+  addressLine, city, district, ward
+  ghnDistrictId, ghnWardCode
+  isDefault
+  user = null (pickup address of the shop)
+}
+class User <<Entity>> {
+  id
+  avatarUrl
+  role
+}
+class "Cloudinary API" as Cloudinary <<External>> {
+  POST /v1_1/{cloud}/image/upload
+  folder flowershop/shop-logos
+}
+
+View --> ManagerShopController : GET /api/shop/mine\nGET /api/shop/mine/{id}/address\nPUT /api/shop/mine/{id}/address\nPUT /api/shop/mine/{id}\nPOST /api/shop/mine/{id}/logo\nDELETE /api/shop/mine/{id}/logo
+ManagerShopController --> ManagerShopService
+ManagerShopController ..> Profile : reads
+ManagerShopController ..> ShopAddressRequest : reads
+ManagerShopController ..> ShopResponse : returns
+ManagerShopController ..> AddressResponse : returns
+ManagerShopService --> ShopRepository
+ManagerShopService --> AddressRepository
+ManagerShopService --> CloudinaryService
+ManagerShopService ..> ShopResponse : builds
+ManagerShopService ..> AddressResponse : builds
+CloudinaryService --> Cloudinary : HTTPS upload (signed)
+ShopRepository ..> Shop
+AddressRepository ..> Address
+Shop "*" --> "1" User : owner
+Address "*" --> "0..1" Shop : shop
+
+note bottom of ManagerShopService
+  owned(): shop missing, or owner differs from the logged-in user: 404
+  "Không tìm thấy cửa hàng hoặc nhân viên." (staff get the same 404).
+  Write (update, logo, address) also needs status ACTIVE or PENDING.
+  INACTIVE / BANNED: 403 "Shop bị khóa hoặc ngừng hoạt động, chỉ được xem."
+  Reads are allowed for the owner in any status.
+  ShopOperationGuard is not used here; the owner check is inline.
+end note
+
+note bottom of CloudinaryService
+  Logo rules (ManagerShopService.uploadLogo): JPEG, PNG or WebP only, max 5 MB.
+  Not configured: 503. Cloudinary error or no connection: 502.
+  The logo URL is also written to the owner's avatarUrl.
+  removeLogo sets Shop.logoUrl = "" and owner.avatarUrl = null (Cloudinary asset is not deleted).
+end note
+
+note bottom of Address
+  saveAddress updates the default pickup address in place (or creates it),
+  clears isDefault on the other pickup rows, and requires GHN district id and ward code.
+end note
+
+note bottom of View
+  Only SHOP role: class-level @PreAuthorize hasRole('SHOP') and SecurityConfig /api/shop/** (SecurityConfig.java:82).
+  Staff and customers get 403 before reaching the service.
+  GHN province / district / ward pickers call the public GET /api/public/ghn/** endpoints (client side).
+end note
+
+@enduml

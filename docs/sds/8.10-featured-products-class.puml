@@ -1,0 +1,160 @@
+@startuml
+!pragma layout smetana
+title 8.10 Featured Products - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+  BackgroundColor<<DTO>> #ECECEC
+  BackgroundColor<<Scheduler>> #FFE8CC
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class ShopPlanController <<Controller>> {
+  featured(shopId, productId, u, input): void
+}
+class AdminShopPlanController <<Controller>> {
+  products(admin, shopId): List<ManagedProduct>
+  feature(admin, shopId, productId, input): void
+}
+class ShopPlanService <<Service>> {
+  feature(shopId, actor, productId, enabled): void
+  adminFeature(shopId, actor, productId, enabled): void
+  adminProducts(shopId, actor): List<ManagedProduct>
+  -requireAdmin(actor)
+  -owned(shopId, actor, lock): Shop
+  -adminShop(shopId, lock): Shop
+  -active(subscription): boolean
+}
+class ProductQuotaService <<Service>> {
+  requireAllowed(product): void
+  allowed(product): boolean
+}
+class ShopPlanClock <<Service>> {
+  now(): LocalDateTime
+}
+class ShopRepository <<Repository>> {
+  findForUpdate(id): Optional<Shop>
+}
+class ProductRepository <<Repository>> {
+  findByIdAndShopId(id, shopId): Optional<Product>
+  findByShopId(shopId, pageable): Page<Product>
+}
+class FeaturedProductRepository <<Repository>> {
+  findById(productId): Optional<FeaturedProduct>
+  forShop(shopId): List<FeaturedProduct>
+  countForShop(shopId): long
+  save(featured): FeaturedProduct
+  delete(featured)
+}
+class ShopSubscriptionRepository <<Repository>> {
+  forShop(shopId): Optional<ShopSubscription>
+}
+class UserRepository <<Repository>> {
+  findByIdAndRoleAndStatus(id, role, status): Optional<User>
+}
+class "ShopPlanService.Feature" as Feature <<DTO>> {
+  featured: @NotNull Boolean
+}
+class "ShopPlanService.ManagedProduct" as ManagedProduct <<DTO>> {
+  id
+  name
+  featured
+  eligible
+}
+class FeaturedProduct <<Entity>> {
+  id (= productId)
+  featuredAt
+  shop: Shop
+  product: Product
+}
+class Product <<Entity>> {
+  id
+  name
+  stock
+  status
+  adminHidden
+  deleted
+  shop: Shop
+  category: Category
+}
+class ShopSubscription <<Entity>> {
+  id
+  endsAt
+  shop: Shop
+  plan: ShopPlan
+}
+class ShopPlan <<Entity>> {
+  id
+  featuredLimit
+}
+class Shop <<Entity>> {
+  id
+  status
+  owner: User
+}
+class User <<Entity>> {
+  id
+  role
+  status
+}
+
+View --> ShopPlanController : PUT /api/shop/mine/{shopId}/subscription/featured/{productId}
+View --> AdminShopPlanController : GET /api/admin/shops/{shopId}/subscription/products\nPUT /api/admin/shops/{shopId}/subscription/featured/{productId}
+ShopPlanController --> ShopPlanService
+AdminShopPlanController --> ShopPlanService
+ShopPlanController ..> Feature : reads
+AdminShopPlanController ..> Feature : reads
+ShopPlanService ..> ManagedProduct : returns
+ShopPlanService --> ShopRepository
+ShopPlanService --> ProductRepository
+ShopPlanService --> FeaturedProductRepository
+ShopPlanService --> ShopSubscriptionRepository
+ShopPlanService --> UserRepository
+ShopPlanService --> ProductQuotaService
+ShopPlanService --> ShopPlanClock
+ShopRepository ..> Shop
+ProductRepository ..> Product
+FeaturedProductRepository ..> FeaturedProduct
+ShopSubscriptionRepository ..> ShopSubscription
+UserRepository ..> User
+FeaturedProduct "*" --> "1" Product
+FeaturedProduct "*" --> "1" Shop
+ShopSubscription "*" --> "1" ShopPlan
+ProductQuotaService ..> Product : checks
+
+note bottom of ShopPlanService
+  feature() (shop): owned(lock), product in this shop (404), disable = delete the row.
+  Enable: active Pro (409 otherwise), requireAllowed (400 if locked by quota),
+  visible + stock >= 1 + category ACTIVE (409), already featured = no change,
+  countForShop >= plan.featuredLimit gives 409, otherwise save with featuredAt = now.
+  adminFeature() does the same after adminShop(lock) and requireAdmin.
+end note
+
+note bottom of ShopPlanService
+  Visibility rule ProductCardAssembler.visible(product) (static, not drawn):
+  not deleted, status ACTIVE, not adminHidden, shop ACTIVE.
+  The quota rule (ProductQuotaService) is described in 8.12.
+end note
+
+note bottom of FeaturedProductRepository
+  A hidden (INACTIVE) product keeps its featured row, so it still uses a slot
+  until the shop unpicks it. Deleting the product removes the row (ManagerProductService.remove).
+end note
+
+@enduml

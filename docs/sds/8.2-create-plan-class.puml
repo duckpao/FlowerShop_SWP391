@@ -1,0 +1,95 @@
+@startuml
+!pragma layout smetana
+title 8.2 Create Pro Plan - class diagram
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  BackgroundColor<<View>> #EADCFF
+  BackgroundColor<<Controller>> #D8F3DC
+  BackgroundColor<<Service>> #DCECFF
+  BackgroundColor<<Repository>> #FFF1C9
+  BackgroundColor<<Entity>> #E0F3E7
+  BackgroundColor<<External>> #FFE0E0
+  BackgroundColor<<DTO>> #ECECEC
+  BackgroundColor<<Scheduler>> #FFE8CC
+}
+hide empty members
+hide circle
+
+class View <<View>>
+
+class AdminShopPlanController <<Controller>> {
+  create(admin, input): Plan
+}
+class ShopPlanService <<Service>> {
+  savePlan(actor, id, input): Plan
+  -requireAdmin(actor)
+  -planView(plan): Plan
+}
+class UserRepository <<Repository>> {
+  findByIdAndRoleAndStatus(id, role, status): Optional<User>
+}
+class ShopPlanRepository <<Repository>> {
+  saveAndFlush(plan): ShopPlan
+}
+class "ShopPlanService.PlanInput" as PlanInput <<DTO>> {
+  name: @NotBlank, max 100
+  durationMonths: 1..120
+  price: >= 1, max 10 integer digits, 2 decimals
+  productLimit: >= 1 or null (null = unlimited)
+  featuredLimit: 0..10000
+  enabled
+}
+class "ShopPlanService.Plan" as Plan <<DTO>> {
+  id
+  name
+  durationMonths
+  price
+  productLimit
+  featuredLimit
+  enabled
+}
+class ShopPlan <<Entity>> {
+  id (PRO + 17 hex chars)
+  name
+  durationMonths
+  price
+  productLimit
+  featuredLimit
+  enabled
+}
+class User <<Entity>> {
+  id
+  role
+  status
+}
+
+View --> AdminShopPlanController : POST /api/admin/shop-plans
+AdminShopPlanController --> ShopPlanService
+AdminShopPlanController ..> PlanInput : reads (@Valid body)
+ShopPlanService ..> PlanInput : reads
+ShopPlanService --> UserRepository
+ShopPlanService --> ShopPlanRepository
+ShopPlanService ..> Plan : returns
+ShopPlanRepository ..> ShopPlan : saves
+UserRepository ..> User
+
+note bottom of AdminShopPlanController
+  Class-level @PreAuthorize hasRole('ADMIN'). Returns 200 (no @ResponseStatus).
+  Bean validation failure: 400 "Dữ liệu không hợp lệ".
+end note
+
+note bottom of ShopPlanService
+  savePlan(actor, null, input): requireAdmin first (403 if not an active ADMIN),
+  then featuredLimit > productLimit gives 409, then a new plan is saved.
+  The plan name is not unique in the schema.
+end note
+
+@enduml

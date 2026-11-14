@@ -1,0 +1,90 @@
+@startuml
+title 9.1 Customer Order List - sequence diagram
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam wrapWidth 240
+skinparam ArrowColor #444444
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  LifeLineBorderColor #888888
+  ParticipantBorderColor #444444
+  ParticipantBackgroundColor #FFFFFF
+}
+
+actor Customer as U
+participant "View" as V <<View>> #EADCFF
+participant CustomerOrderController as C <<Controller>> #D8F3DC
+participant CustomerOrderService as S <<Service>> #DCECFF
+participant OrderRepository as OR <<Repository>> #FFF1C9
+participant OrderDetailRepository as DR <<Repository>> #FFF1C9
+participant ProductImageRepository as IR <<Repository>> #FFF1C9
+participant PaymentRepository as PR <<Repository>> #FFF1C9
+
+== A. Open the order list ==
+U -> V : open /orders (tab "Tất cả", page 1)
+alt not logged in
+  V --> U : "Vui lòng đăng nhập." (no request)
+else customer
+  V -> C : GET /api/customer/orders?page=0
+  C -> S : list(userId, page, status = null)
+  S -> OR : findByCustomerIdOrderByCreatedDateDesc(customerId, page of 20)
+  OR --> S : Page<Order> (totalPages, totalElements)
+  loop each order on the page
+    S -> DR : findByOrderId(orderId)
+    DR --> S : OrderDetail list (snapshot name, price, quantity)
+    S -> IR : findByProductIdInOrderByDisplayOrderAscIdAsc(productIds)
+    IR --> S : first image per product
+    S -> PR : findByOrderId(orderId)
+    PR --> S : Payment list
+    S -> S : paymentMethod: COD if any COD payment, else ONLINE\n(PENDING order without payment rows = ONLINE)\npaymentStatus: SUCCESS if any, else latest payment status
+    S -> S : paymentSecondsLeft = 600 - elapsed, only PENDING ONLINE not paid
+  end
+  S --> C : Results(content, page, totalPages, totalElements)
+  C --> V : 200 OK
+  V -> V : group the orders by checkoutGroup, sum totals per group
+  V --> U : one card per group: shop, lines with image, status badge,\npayment label, Thành tiền, buttons
+end
+
+== B. Filter by status and change page ==
+U -> V : click a tab (e.g. "Đang giao") or "Trang sau"
+V -> V : a tab change goes back to page 1; buttons disabled while loading
+V -> C : GET /api/customer/orders?page=<n>&status=DELIVERING
+C -> S : list(userId, page, status)
+alt status is not an order status name
+  S --> C : 400 Trạng thái không hợp lệ: <status>
+  C --> V : 400 {message}
+  V --> U : red alert above the list
+else valid status
+  S -> OR : findByCustomerIdAndStatus(customerId, status, page of 20)
+  OR --> S : Page<Order>
+  note over S
+    the same per-order steps as A (details, images, payments)
+  end note
+  S --> C : Results
+  C --> V : 200 OK
+  V --> U : the filtered list, "Trang n / total"
+end
+note over V
+  Empty result: "Chưa có đơn hàng nào." An unexpected error shows the message in the alert.
+end note
+
+== C. Payment countdown on a pending online order ==
+V -> V : countdown from paymentSecondsLeft (one tick per second)
+alt time left
+  V --> U : "Còn mm:ss để thanh toán" and button "Thanh toán"
+  note right of V
+    One order: payment for that order (5.1). Several shops of one checkout: one SePay payment for the group.
+    AWAITING_DEPOSIT order: "Đặt cọc" button instead (5.1, deposit).
+  end note
+else time over
+  V --> U : "Đã hết hạn thanh toán, đơn sẽ tự hủy", button hidden
+  V -> V : reload the list after 35 seconds (the job cancels the order in the meantime, 5.3)
+end
+
+== D. Reload ==
+U -> V : click "Tải lại"
+V -> C : GET /api/customer/orders?page=<current>&status=<current>
+note right of V : same as A or B, the list is replaced
+
+@enduml
