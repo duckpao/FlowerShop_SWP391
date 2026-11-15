@@ -29,6 +29,7 @@ import java.util.*;
 @Service
 @Transactional(readOnly = true)
 public class CatalogService {
+    @org.springframework.beans.factory.annotation.Autowired private ProductQuotaService quota;
 
     public record Results(List<ProductCard> content, int page, int size,
                           long totalElements, int totalPages) {}
@@ -108,7 +109,7 @@ public class CatalogService {
             return cb.and(predicates.toArray(Predicate[]::new));
         };
 
-        Page<Product> result = products.findAll(spec, PageRequest.of(page, size, order));
+        Page<Product> result = products.findAll(spec.and(quota.allowedSpecification()), PageRequest.of(page, size, order));
         return new Results(assembler.cards(result.getContent()), page, size,
                 result.getTotalElements(), result.getTotalPages());
     }
@@ -116,6 +117,7 @@ public class CatalogService {
     public ProductDetail detail(String productId) {
         Product p = products.findById(productId).filter(ProductCardAssembler::visible)
                 .orElseThrow(CatalogService::missing);
+        if(!quota.allowed(p)) throw missing();
         // Ảnh chính đứng đầu gallery, phần còn lại giữ nguyên thứ tự displayOrder.
         List<String> urls = images.findByProductIdOrderByDisplayOrderAscIdAsc(productId).stream()
                 .sorted(Comparator.comparingInt(i -> Boolean.TRUE.equals(i.getIsPrimary()) ? 0 : 1))

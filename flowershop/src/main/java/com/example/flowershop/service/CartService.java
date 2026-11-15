@@ -29,6 +29,7 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class CartService {
+    @org.springframework.beans.factory.annotation.Autowired private ProductQuotaService quota;
 
     private final CartItemRepository cartItemRepository;
     private final ProductRepository productRepository;
@@ -58,6 +59,7 @@ public class CartService {
         Product product = productRepository.findById(request.getProductId())
                 .orElseThrow(() -> ApiException.notFound("Không tìm thấy sản phẩm với id: " + request.getProductId()));
 
+        quota.requireAllowed(product);
         if (product.getStatus() == ProductStatus.INACTIVE) {
             throw ApiException.badRequest("Sản phẩm này hiện không còn bán.");
         }
@@ -140,6 +142,7 @@ public class CartService {
     @Transactional
     public CartItemResponse updateCartItem(String userId, String cartItemId, UpdateCartItemRequest request) {
         CartItem cartItem = getCartItemOrThrow(cartItemId, userId);
+        quota.requireAllowed(cartItem.getProduct());
 
         // Kiểm tra stock (chỉ áp dụng với hoa có sẵn)
         Product product = cartItem.getProduct();
@@ -201,7 +204,7 @@ public class CartService {
                 .price(product.getPrice())
                 .images(imageUrls)
                 .image(imageUrls.isEmpty() ? null : imageUrls.get(0))
-                .stock(available)
+                .stock(quota.allowed(product) ? available : 0)
                 .shopId(product.getShop().getId())
                 .shopName(product.getShop().getName())
                 .build();

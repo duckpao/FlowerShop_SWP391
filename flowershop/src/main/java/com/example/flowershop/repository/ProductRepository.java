@@ -24,6 +24,10 @@ public interface ProductRepository extends JpaRepository<Product, String>, JpaSp
     Optional<Product> findByIdAndShopId(String id, String shopId);
     boolean existsByCategoryId(String categoryId);
 
+    /** Sản phẩm chưa bị xóa mềm của shop, dùng để áp hạn mức theo gói. */
+    @Query("select count(p) from Product p where p.shop.id = :shopId and p.deleted = false")
+    long countForShop(@Param("shopId") String shopId);
+
     /** Đếm sản phẩm đang hiển thị công khai theo từng danh mục. */
     @Query("select p.category.id, count(p) from Product p "
          + "where p.status = com.example.flowershop.entity.enums.ProductStatus.ACTIVE "

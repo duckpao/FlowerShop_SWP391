@@ -40,6 +40,9 @@ public interface OrderRepository extends JpaRepository<Order, String> {
      */
     boolean existsByDeliveryAddressId(String addressId);
 
+    /** Khách đã dùng một mã giảm giá cho đơn chưa hủy (đơn hủy đã trả lại lượt dùng nên không tính). */
+    boolean existsByCustomerIdAndCouponIdIsNotNullAndStatusNot(String customerId, OrderStatus status);
+
     boolean existsByCustomRequestIdAndStatusNot(String customRequestId, OrderStatus status);
 
     /**
