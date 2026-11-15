@@ -1,5 +1,7 @@
 import { Toaster } from 'react-hot-toast';
 import AccountView from './views/AccountView';
+import AdminPlansView from './views/AdminPlansView';
+import ShopSubscriptionView from './views/ShopSubscriptionView';
 import { Navigate, Route, BrowserRouter as Router, Routes, useLocation } from "react-router";
 import AppLayout from "./layout/AppLayout";
 import AuthView from "./views/AuthView";
@@ -98,6 +100,8 @@ function AppRouterContent() {
             <Route path="/payment/cancel" element={<PaymentCancelPage />} />
             <Route path="/payment/pending" element={<PaymentPendingPage />} />
             <Route path="/payment/cod-success" element={<CodSuccessPage />} />
+            <Route path="/shop-admin/subscription" element={<ShopSubscriptionView auth={controller} />} />
+            <Route path="/admin/shop-plans" element={<AdminPlansView />} />
             <Route path="/admin/profile" element={<Navigate to="/account" replace />} />
             <Route path="/shop-admin/profile" element={<Navigate to="/account" replace />} />
             <Route path="/admin/*" element={<AdminDashboardView user={controller.user} logout={controller.logout} busy={controller.busy} error={controller.error} path={location.pathname} />} />

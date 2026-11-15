@@ -34,6 +34,7 @@ import lombok.extern.slf4j.Slf4j;
 @Service
 @RequiredArgsConstructor
 public class OrderService {
+    @org.springframework.beans.factory.annotation.Autowired private ProductQuotaService quota;
 
     private final OrderRepository orderRepository;
     private final OrderDetailRepository orderDetailRepository;
@@ -245,6 +246,7 @@ public class OrderService {
             if (product.getStatus() != ProductStatus.ACTIVE || product.getShop().getStatus() != ShopStatus.ACTIVE) {
                 throw ApiException.badRequest("Sản phẩm hoặc cửa hàng không còn hoạt động.");
             }
+            quota.requireAllowed(product);
             if (product.getType() != ProductType.CUSTOM && product.getStock() < cartItem.getQuantity()) {
                 throw ApiException.badRequest(
                         "Sản phẩm '" + product.getName() + "' không đủ tồn kho. " +
@@ -262,6 +264,11 @@ public class OrderService {
         BigDecimal discountAmount = BigDecimal.ZERO;
         String couponId = null;
         if (request.getCouponId() != null && !request.getCouponId().isBlank()) {
+            // Khóa dòng khách để hai yêu cầu song song không cùng dùng được hai mã khác nhau.
+            userRepository.findByIdForUpdate(userId);
+            if (orderRepository.existsByCustomerIdAndCouponIdIsNotNullAndStatusNot(userId, OrderStatus.CANCELLED)) {
+                throw ApiException.badRequest("Bạn đã dùng mã giảm giá rồi, mỗi người chỉ được dùng 1 mã.");
+            }
             Coupon coupon = couponRepository.findByCodeForUpdate(request.getCouponId().trim())
                     .orElseThrow(() -> ApiException.badRequest("Mã giảm giá không hợp lệ."));
             LocalDateTime now = LocalDateTime.now();

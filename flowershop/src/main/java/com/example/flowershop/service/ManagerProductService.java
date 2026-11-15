@@ -65,7 +65,7 @@ public class ManagerProductService {
             ProductStatus status,
             ProductType type,
             boolean adminHidden,
-            List<String> images) {
+            List<String> images,boolean quotaBlocked) {
     }
 
     public record Results(List<Result> content, int page, int totalPages, long totalElements) {
@@ -92,10 +92,12 @@ public class ManagerProductService {
     private final ProductVideoRepository videos;
     private final CloudinaryService cloudinary;
     private final ShopProductNotificationService notifications;
+    private final ShopPlanService shopPlans;
+    @org.springframework.beans.factory.annotation.Autowired private ProductQuotaService quota;
 
     public ManagerProductService(ShopRepository s, ProductRepository p, CategoryRepository c,
             ProductImageRepository i, ProductVideoRepository v, CloudinaryService cloud,
-            ShopProductNotificationService notifications) {
+            ShopProductNotificationService notifications, ShopPlanService shopPlans) {
         shops = s;
         products = p;
         categories = c;
@@ -103,6 +105,7 @@ public class ManagerProductService {
         videos = v;
         cloudinary = cloud;
         this.notifications = notifications;
+        this.shopPlans = shopPlans;
     }
 
     private static ResponseStatusException missing() {
@@ -147,7 +150,7 @@ public class ManagerProductService {
                 product.getStatus(),
                 product.getType(),
                 product.isAdminHidden(),
-                imageUrls);
+                imageUrls,!quota.allowed(product));
     }
 
     private Results response(Page<Product> page) {
@@ -185,6 +188,7 @@ public class ManagerProductService {
     public Result save(String shopId, String id, String actor, SaveProductInput input, List<MultipartFile> images,
             List<MultipartFile> videos) {
         var imageFiles = images == null ? List.<MultipartFile>of() : images;
+        if (id == null) shopPlans.assertCanCreate(owned(shopId, actor, true));
         if (imageFiles.size() > 10) {
             throw new IllegalArgumentException("Không được chọn quá 10 ảnh.");
         }
@@ -227,8 +231,10 @@ public class ManagerProductService {
             BigDecimal price, Integer stock, ProductStatus status, ProductType type, List<String> uploadedImages,
             String primaryImageId, List<String> uploadedVideos) {
         var shop = owned(shopId, actor, true);
+        if (id == null) shopPlans.assertCanCreate(shop);
         var product = id == null ? new Product()
                 : products.findByIdAndShopId(id, shopId).orElseThrow(ManagerProductService::missing);
+        if(id!=null && status==ProductStatus.ACTIVE) quota.requireAllowed(product);
         var existingImages = id == null || (primaryImageId == null && uploadedImages.isEmpty())
                 ? List.<ProductImage>of()
                 : images.findByProductIdOrderByDisplayOrderAscIdAsc(product.getId());
@@ -259,6 +265,7 @@ public class ManagerProductService {
         product.setLastModifyBy(actor);
 
         var stored = products.saveAndFlush(product);
+        if (id == null) shopPlans.recordCreation(stored);
         for (int i = 0; i < uploadedImages.size(); i++) {
             images.save(ProductImage.builder()
                     .id(UUID.randomUUID().toString())
@@ -329,6 +336,7 @@ public class ManagerProductService {
     public void unhide(String shopId, String id, String actor) {
         owned(shopId, actor, true);
         var product = products.findByIdAndShopId(id, shopId).orElseThrow(ManagerProductService::missing);
+        quota.requireAllowed(product);
         product.setStatus(ProductStatus.ACTIVE);
         product.setLastModifyBy(actor);
         notifications.published(product);

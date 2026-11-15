@@ -16,6 +16,8 @@ public interface UserRepository extends JpaRepository<User, String>, JpaSpecific
 
     Optional<User> findByGoogleId(String googleId);
 
+    Optional<User> findByIdAndRoleAndStatus(String id, com.example.flowershop.entity.enums.UserRole role, com.example.flowershop.entity.enums.UserStatus status);
+
     @Query("select u.id from User u where u.email = :email")
     
     Optional<String> findUserIdByEmail(@Param("email") String email);

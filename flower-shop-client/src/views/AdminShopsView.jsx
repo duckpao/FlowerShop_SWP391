@@ -1,4 +1,5 @@
 import { useAdminShopsController } from "../controllers/useAdminShopsController";
+import AdminShopSubscriptionPanel from '../components/subscriptions/AdminShopSubscriptionPanel'
 import { shopStatusLabels as labels, shopActions } from "../models/shopModel";
 import PageBreadCrumb from "../components/common/PageBreadCrumb";
 import PageMeta from "../components/common/PageMeta";
@@ -199,6 +200,7 @@ export default function AdminShopsView() {
               </div>
             </div>
             
+            <AdminShopSubscriptionPanel key={c.selected.id} shop={c.selected} />
             <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 dark:border-white/10">
               {shopActions[c.selected.status] && (
                 <Button 
