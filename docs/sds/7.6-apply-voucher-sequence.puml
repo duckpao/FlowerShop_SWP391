@@ -27,14 +27,15 @@ U -> V : select money or shipping voucher
 V -> C : POST /api/orders/{userId}/voucher-preview
 C -> S : previewVouchers(userId, request, merchandiseOnly)
 S -> S : cart items belong to user and shop; product and shop ACTIVE (else 400)
-S -> S : quota.requireAllowed(product) for each item
 opt merchandiseOnly = false
   S -> GHN : quoteFee(shop, deliveryAddress)
   GHN --> S : shipping fee
 end
-S -> CS : preview(ctx, orderCode, shippingCode)
+S -> CS : preview(ctx, customerId, orderCode, shippingCode)
 CS -> CR : available(shopId)
 CR --> CS : List<Coupon>
+CS -> OR : couponIdsUsedBy(customerId)
+OR --> CS : coupon ids the customer holds on orders that were not cancelled (any entry makes every code ineligible)
 CS -> CS : evaluate(ctx, codes, coupons), no usedCount change
 CS --> S : Preview
 S --> C : Preview
@@ -45,7 +46,7 @@ V --> U : show discounted total
 U -> V : place order
 V -> C : POST /api/orders/{userId}/batch\n(shops[], deliveryAddressId, paymentMethod)
 note right of V
-  400 from the batch (price or voucher changed, or quota/stock error) is shown
+  400 from the batch (price or voucher changed, or stock error) is shown
   as a message; the totals are reloaded before the customer can retry.
 end note
 C -> C : requireOwner(userId, currentUser)
@@ -61,7 +62,7 @@ loop each shop part (shopId order)
   loop cart items sorted by productId
     S -> PR : findByIdForUpdate(productId)
     PR --> S : Product
-    S -> S : ACTIVE product and shop, quota.requireAllowed, stock >= quantity
+    S -> S : ACTIVE product and shop, stock >= quantity
   end
   S -> GHN : quoteFee(shop, deliveryAddress)
   GHN --> S : shippingFee
@@ -74,7 +75,9 @@ loop each shop part (shopId order)
   end
   CS -> CR : available(shopId)
   CR --> CS : List<Coupon>
-  CS -> CS : evaluate(ctx, codes, coupons) (invalid code or bad combination: 400)
+  CS -> OR : couponIdsUsedByForUpdate(customerId, orderId)
+  OR --> CS : coupon ids already used by this customer (read with a lock)
+  CS -> CS : evaluate(ctx, codes, coupons) (invalid code; order code + shipping code together: 400 "Mỗi người chỉ được dùng 1 mã giảm giá"; customer already holds a voucher: 400 "<CODE>: Bạn đã dùng mã giảm giá rồi, mỗi người chỉ được dùng 1 mã")
   CS -> CS : usedCount + 1 for each locked coupon
   CS -> CS : write coupon ids, codes, discount, totalAmount snapshot on Order
   CS --> S : Preview (confirmed amounts)

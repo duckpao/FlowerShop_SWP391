@@ -8,7 +8,6 @@ import com.example.flowershop.entity.User;
 import com.example.flowershop.entity.enums.BlogStatus;
 import com.example.flowershop.entity.enums.InteractionType;
 import com.example.flowershop.entity.enums.ShopStatus;
-import com.example.flowershop.entity.enums.UserRole;
 import com.example.flowershop.repository.BlogCommentRepository;
 import com.example.flowershop.repository.BlogInteractionRepository;
 import com.example.flowershop.repository.BlogRepository;
@@ -24,9 +23,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @Service
 @Transactional(readOnly = true)
@@ -41,7 +38,7 @@ public class BlogInteractionService {
     }
 
     public record CommentResult(String id, String authorId, String authorName, String authorAvatarUrl,
-            String content, LocalDateTime createdDate, String parentCommentId, List<CommentResult> replies) {
+            String content, LocalDateTime createdDate) {
     }
 
     public record CommentResults(List<CommentResult> content, int page, int totalPages, long totalElements) {
@@ -103,34 +100,12 @@ public class BlogInteractionService {
 
     public CommentResults comments(String blogId, int page) {
         visibleBlog(blogId);
-        return commentPage(blogId, page);
-    }
-
-    public CommentResults managedComments(String shopId, String blogId, String actor, int page) {
-        blogService.managedBlog(shopId, blogId, actor, false);
-        return commentPage(blogId, page);
-    }
-
-    public EngagementResult managedEngagement(String shopId, String blogId, String actor) {
-        blogService.managedBlog(shopId, blogId, actor, false);
-        return new EngagementResult(
-                interactions.countByIdBlogIdAndIdInteractionType(blogId, InteractionType.LIKE),
-                comments.countByBlogId(blogId));
-    }
-
-    private CommentResults commentPage(String blogId, int page) {
         if (page < 0 || page > 100000) {
             throw new IllegalArgumentException("Trang không hợp lệ.");
         }
-        var result = comments.findByBlogIdAndParentCommentIsNull(blogId, PageRequest.of(page, 10,
+        var result = comments.findByBlogId(blogId, PageRequest.of(page, 10,
                 Sort.by(Sort.Order.desc("createdDate"), Sort.Order.desc("id"))));
-        List<String> parentIds = result.getContent().stream().map(BlogComment::getId).toList();
-        Map<String, List<BlogComment>> replies = parentIds.isEmpty() ? Map.of()
-                : comments.findByBlogIdAndParentCommentIdInOrderByCreatedDateAscIdAsc(blogId, parentIds).stream()
-                        .collect(Collectors.groupingBy(reply -> reply.getParentComment().getId()));
-        return new CommentResults(result.getContent().stream()
-                .map(comment -> commentResult(comment, replies.getOrDefault(comment.getId(), List.of()).stream()
-                        .map(BlogInteractionService::commentResult).toList())).toList(),
+        return new CommentResults(result.getContent().stream().map(BlogInteractionService::commentResult).toList(),
                 result.getNumber(), result.getTotalPages(), result.getTotalElements());
     }
 
@@ -142,76 +117,21 @@ public class BlogInteractionService {
                 .id(UUID.randomUUID().toString())
                 .blog(blog)
                 .user(user)
-                .content(commentContent(input))
+                .content(input.content().strip())
                 .createdBy(actor)
                 .build();
         return commentResult(comments.saveAndFlush(comment));
     }
 
     @Transactional
-    public CommentResult updateComment(String blogId, String commentId, String actor, CommentInput input) {
-        visibleBlog(blogId);
-        BlogComment comment = ownComment(blogId, commentId, actor);
-        comment.setContent(commentContent(input));
-        comment.setLastModifyBy(actor);
-        return commentResult(comments.saveAndFlush(comment));
-    }
-
-    @Transactional
-    public CommentResult reply(String shopId, String blogId, String commentId, String actor, CommentInput input) {
-        Blog blog = blogService.managedBlog(shopId, blogId, actor, true);
-        BlogComment parent = comments.findByIdAndBlogId(commentId, blogId)
-                .orElseThrow(BlogInteractionService::missingComment);
-        if (parent.getParentComment() != null
-                || parent.getUser().getRole() != UserRole.CUSTOMER) {
-            throw new IllegalArgumentException("Chỉ có thể trả lời bình luận của khách hàng.");
-        }
-        User user = users.findById(actor).orElseThrow(BlogInteractionService::missingUser);
-        BlogComment reply = BlogComment.builder()
-                .id(UUID.randomUUID().toString()).blog(blog).user(user).parentComment(parent)
-                .content(commentContent(input)).createdBy(actor).build();
-        BlogComment saved = comments.save(reply);
-        parent.getReplies().add(saved);
-        comments.flush();
-        return commentResult(saved);
-    }
-
-    @Transactional
-    public void moderateComment(String shopId, String blogId, String commentId, String actor) {
-        blogService.managedBlog(shopId, blogId, actor, true);
-        BlogComment comment = comments.findByIdAndBlogId(commentId, blogId)
-                .orElseThrow(BlogInteractionService::missingComment);
-        removeComment(comment);
-    }
-
-    @Transactional
     public void deleteComment(String blogId, String commentId, String actor) {
         visibleBlog(blogId);
-        removeComment(ownComment(blogId, commentId, actor));
-    }
-
-    private void removeComment(BlogComment comment) {
-        if (comment.getParentComment() != null) {
-            comment.getParentComment().getReplies().removeIf(reply -> reply.getId().equals(comment.getId()));
-        }
-        comments.delete(comment);
-        comments.flush();
-    }
-
-    private BlogComment ownComment(String blogId, String commentId, String actor) {
         BlogComment comment = comments.findByIdAndBlogId(commentId, blogId)
                 .orElseThrow(BlogInteractionService::missingComment);
         if (!comment.getUser().getId().equals(actor)) {
             throw missingComment();
         }
-        return comment;
-    }
-
-    private static String commentContent(CommentInput input) {
-        if (input == null || input.content() == null || input.content().isBlank() || input.content().length() > 2000) {
-            throw new IllegalArgumentException("Bình luận phải có nội dung từ 1 đến 2000 ký tự.");
-        }
-        return input.content().strip();
+        comments.delete(comment);
     }
 
     private InteractionResult interactionResult(String blogId, String actor) {
@@ -226,16 +146,11 @@ public class BlogInteractionService {
     }
 
     private static CommentResult commentResult(BlogComment comment) {
-        return commentResult(comment, List.of());
-    }
-
-    private static CommentResult commentResult(BlogComment comment, List<CommentResult> replies) {
         User author = comment.getUser();
         String name = author.getFullName();
         return new CommentResult(comment.getId(), author.getId(),
                 name == null || name.isBlank() ? "Khách hàng" : name,
-                author.getAvatarUrl(), comment.getContent(), comment.getCreatedDate(),
-                comment.getParentComment() == null ? null : comment.getParentComment().getId(), replies);
+                author.getAvatarUrl(), comment.getContent(), comment.getCreatedDate());
     }
 
     private static ResponseStatusException missingBlog() {

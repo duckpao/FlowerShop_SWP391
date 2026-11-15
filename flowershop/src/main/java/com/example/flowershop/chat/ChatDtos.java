@@ -25,8 +25,7 @@ public final class ChatDtos {
     public record OpenForCustomer(@NotNull @Size(max = 36) String shopId) {
     }
 
-    /** Shop mở chat từ một yêu cầu custom hoặc một đơn hàng của khách (gửi một trong hai). */
-    public record OpenForShop(@Size(max = 36) String customOrderId, @Size(max = 36) String orderId) {
+    public record OpenForShop(@NotNull @Size(max = 36) String customOrderId) {
     }
 
     public record MessageDto(String id, String sessionId, SenderType senderType, String senderId, String senderName,

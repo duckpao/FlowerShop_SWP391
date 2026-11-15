@@ -18,7 +18,7 @@ Render lại: `java -Dfile.encoding=UTF-8 -jar plantuml.jar -charset UTF-8 -tpng
 | 1.6 Hồ sơ, avatar | image2, image3 | `1.6-profile-avatar-class`, `1.6-profile-avatar-sequence` | Bỏ `AvatarController`; `AccountService.uploadAvatar`; endpoint `/api/account/profile/avatar` |
 | 1.7 Địa chỉ | image33 | `1.7-address-sequence` | `GhnAddressPicker` qua `/api/public/ghn/*`; nhánh 409 khi địa chỉ đã dùng trong đơn |
 | 1.8 Khóa/mở khóa | image45 | `1.8-customer-lock-sequence` | Dùng `useConfirm()`; nhánh 409 khi mở khóa tài khoản `INACTIVE` |
-| 2.1 Danh sách sản phẩm | image20, image76 | `2.1-product-list-class`, `2.1-product-list-sequence` | Thêm lọc hạn mức gói Pro |
+| 2.1 Danh sách sản phẩm | image20, image76 | `2.1-product-list-class`, `2.1-product-list-sequence` | Sửa theo code |
 | 2.2 Chi tiết, đánh giá | image35, image27 | `2.2-product-details-class`, `2.2-product-details-sequence` | Bỏ nhánh 401 (đánh giá xem công khai) |
 | 2.3 Quản lý sản phẩm | image75, image25 | `2.3-product-crud-class`, `2.3-product-crud-sequence` | Thêm ảnh/video, xóa mềm, ẩn/hiện, Admin 404 |
 | 2.4 Lưu yêu thích | image17 | `2.4-save-favorite-class` | Sửa stereotype repository |
@@ -30,11 +30,6 @@ Render lại: `java -Dfile.encoding=UTF-8 -jar plantuml.jar -charset UTF-8 -tpng
 | 7.2 Tạo voucher | image57, image11 | `7.2-create-voucher-class`, `7.2-create-voucher-sequence` | 11 trường; nhánh `productId` |
 | 7.3 Sửa voucher | image10 | `7.3-update-voucher-sequence` | Nhánh `productId` |
 | 7.6 Áp voucher | image47, image68 | `7.6-apply-voucher-class`, `7.6-apply-voucher-sequence` | Endpoint `/batch`; `save` thay `saveAndFlush` |
-| 8.5 Xem gói của shop | image55 | `8.5-view-subscription-sequence` | Trả đủ sản phẩm nổi bật, không cắt theo hạn mức |
-| 8.6 Đăng ký Pro | image66, image56 | `8.6-register-pro-class`, `8.6-register-pro-sequence` | `reconcile()` kiểm tra trạng thái trước khi gọi SePay |
-| 8.7 Gia hạn Pro | image42 | `8.7-renew-pro-sequence` | Sửa thứ tự nhánh "đã SUCCESS" |
-| 8.11 Nhắc hết hạn Pro | image64, image24 | `8.11-pro-expiry-reminder-class`, `8.11-pro-expiry-reminder-sequence` | Thêm bước đối soát hóa đơn SePay, phụ thuộc `ShopPlanService` |
-| 8.12 Giới hạn gói | image80 | `8.12-enforce-limits-sequence` | Sửa nhãn nhánh; `assertCanCreate` nằm ở `ShopPlanService` |
 
 ## Sơ đồ mới (SDS chưa có)
 
@@ -61,7 +56,7 @@ Render lại: `java -Dfile.encoding=UTF-8 -jar plantuml.jar -charset UTF-8 -tpng
 
 - `7.6-apply-voucher-sequence`: bỏ bước "hủy đơn PENDING cũ cùng sản phẩm" (đã xóa khỏi `OrderService.makeOrder`); kiểm tra thêm shop ACTIVE khi xem trước voucher.
 - `10.1`, `10.2`, `10.3`: mới, vẽ theo code sau merge.
-- Các sơ đồ 7.2, 7.3, 8.6, 8.7, 3.1 đến 3.8: đã đối chiếu tên method và thông báo lỗi với code, không cần sửa.
+- Các sơ đồ 7.2, 7.3, 3.1 đến 3.8: đã đối chiếu tên method và thông báo lỗi với code, không cần sửa.
 
 Mọi nhánh lỗi GHN (HTTP khác 200, body không phải JSON, mã GHN khác 200, mất kết nối) đều trả 502 với thông báo nêu rõ lỗi của GHN và được hiện trên màn hình.
 
@@ -76,14 +71,14 @@ Mọi nhánh lỗi GHN (HTTP khác 200, body không phải JSON, mã GHN khác 2
 | 14 Relational Database | Chỉ MySQL 8 (`flower_shop_db`), bỏ PostgreSQL |
 | Package 09 `service` | Thêm GHN vào danh sách tích hợp (SePay, Cloudinary, SMTP, GHN) |
 | Package (thêm) | `chat` (REST và STOMP `/ws`), `event` (sự kiện sau commit, gửi mail), `security` (JWT, CSRF, rate limit, CAPTCHA) |
-| Package 13 `scheduler` | `PaymentTimeoutScheduler`, `MaintenanceJob`, `OccasionReminderJob`, `ShopProductMailJob`, `ShopSubscriptionJob` |
+| Package 13 `scheduler` | `PaymentTimeoutScheduler`, `MaintenanceJob`, `OccasionReminderJob`, `ShopProductMailJob` |
 | Mục 1 | Đánh số lại (hiện bắt đầu từ 1.3) |
 | Mục 6.2 | Dùng riêng sơ đồ Follow Shop (hiện dùng lại ảnh 6.1) |
 | Mục "4", "45", "10" | Tiêu đề bị gộp hoặc trống: Cart & Checkout, Payment & Refund, Order for requirement chưa có sơ đồ |
 
 ## Chưa làm
 
-- ERD (mục I.3) chưa vẽ lại; nguồn là [../database.mmd](../database.mmd), khớp 44 bảng trong entity (chỉ `Blog_Images` không thấy entity).
+- ERD (mục I.3) chưa vẽ lại; nguồn là [../database.mmd](../database.mmd), khớp 35 bảng trong ERD.
 - Chưa có sơ đồ cho segment 14 và một số mục của segment 1 đến 3 (xem [DETAILED_DESIGN_SEGMENTS.md](DETAILED_DESIGN_SEGMENTS.md)). Segment 4 đến 13 đã có đủ.
 - File `SDS (1).docx` chưa được sửa. Các ảnh ở bảng trên cần được thay trong Word bằng PNG mới.
 
@@ -172,29 +167,6 @@ Mọi nhánh lỗi GHN (HTTP khác 200, body không phải JSON, mã GHN khác 2
 | 7.7 | `7.7-remove-voucher-sequence` | sequence | 7.7 Remove Voucher - sequence diagram |
 | 7.8 | `7.8-best-voucher-class` | class | 7.8 Best Voucher - class diagram |
 | 7.8 | `7.8-best-voucher-sequence` | sequence | 7.8 Best Voucher - sequence diagram |
-| 8.1 | `8.1-view-plans-class` | class | 8.1 View Pro Plans - class diagram |
-| 8.1 | `8.1-view-plans-sequence` | sequence | 8.1 View Pro Plans - sequence diagram |
-| 8.2 | `8.2-create-plan-class` | class | 8.2 Create Pro Plan - class diagram |
-| 8.2 | `8.2-create-plan-sequence` | sequence | 8.2 Create Pro Plan - sequence diagram |
-| 8.3 | `8.3-update-plan-class` | class | 8.3 Update Pro Plan - class diagram |
-| 8.3 | `8.3-update-plan-sequence` | sequence | 8.3 Update Pro Plan - sequence diagram |
-| 8.4 | `8.4-deactivate-plan-class` | class | 8.4 Deactivate Pro Plan - class diagram |
-| 8.4 | `8.4-deactivate-plan-sequence` | sequence | 8.4 Deactivate Pro Plan - sequence diagram |
-| 8.5 | `8.5-view-subscription-class` | class | 8.5 View Shop Subscription - class diagram |
-| 8.5 | `8.5-view-subscription-sequence` | sequence | 8.5 View Shop Subscription - sequence diagram |
-| 8.6 | `8.6-register-pro-class` | class | 8.6 Register Pro - class diagram |
-| 8.6 | `8.6-register-pro-sequence` | sequence | 8.6 Register Pro - sequence diagram |
-| 8.7 | `8.7-renew-pro-sequence` | sequence | 8.7 Renew Pro - sequence diagram |
-| 8.8 | `8.8-admin-grant-pro-class` | class | 8.8 Admin Grants Pro - class diagram |
-| 8.8 | `8.8-admin-grant-pro-sequence` | sequence | 8.8 Admin Grants Pro - sequence diagram |
-| 8.9 | `8.9-admin-confirm-pro-payment-class` | class | 8.9 Admin Confirms Pro Payment - class diagram |
-| 8.9 | `8.9-admin-confirm-pro-payment-sequence` | sequence | 8.9 Admin Confirms Pro Payment - sequence diagram |
-| 8.10 | `8.10-featured-products-class` | class | 8.10 Featured Products - class diagram |
-| 8.10 | `8.10-featured-products-sequence` | sequence | 8.10 Featured Products - sequence diagram |
-| 8.11 | `8.11-pro-expiry-reminder-class` | class | 8.11 Pro Expiry Reminder - class diagram |
-| 8.11 | `8.11-pro-expiry-reminder-sequence` | sequence | 8.11 Pro Expiry Reminder - sequence diagram |
-| 8.12 | `8.12-enforce-limits-class` | class | 8.12 Enforce Subscription Limits - class diagram |
-| 8.12 | `8.12-enforce-limits-sequence` | sequence | 8.12 Enforce Subscription Limits - sequence diagram |
 | 9.1 | `9.1-customer-order-list-class` | class | 9.1 Customer Order List - class diagram |
 | 9.1 | `9.1-customer-order-list-sequence` | sequence | 9.1 Customer Order List - sequence diagram |
 | 9.2 | `9.2-customer-tracking-class` | class | 9.2 Customer Order Tracking - class diagram |
@@ -244,4 +216,4 @@ Mọi nhánh lỗi GHN (HTTP khác 200, body không phải JSON, mã GHN khác 2
 | 13.6 | `13.6-account-emails-class` | class | 13.6 Account Emails - class diagram |
 | 13.6 | `13.6-account-emails-sequence` | sequence | 13.6 Account Emails - sequence diagram |
 
-Tổng cộng 152 sơ đồ (69 class, 81 sequence, 2 sơ đồ kiến trúc và package).
+Tổng cộng 129 sơ đồ (58 class, 69 sequence, 2 sơ đồ kiến trúc và package).

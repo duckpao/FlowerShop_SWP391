@@ -1,5 +1,3 @@
-import VoucherManagementView from './views/VoucherManagementView'
-import AdminPlansView from './views/AdminPlansView'
 import { Toaster } from 'react-hot-toast';
 import AccountView from './views/AccountView';
 import { Navigate, Route, BrowserRouter as Router, Routes, useLocation } from "react-router";
@@ -23,8 +21,6 @@ import CodSuccessPage from "./views/CodSuccessPage";
 import OrderInvoiceView from "./views/OrderInvoiceView";
 import CustomerOrdersView from "./views/CustomerOrdersView";
 import CustomerOrderDetailView from "./views/CustomerOrderDetailView";
-import CustomerTransactionsView from "./views/CustomerTransactionsView";
-import CustomerOverviewView from "./views/CustomerOverviewView";
 import { useAuthController } from "./controllers/useAuthController";
 import { AuthProvider } from "./context/AuthContext";
 import { CartProvider, useCartContext } from "./context/CartContext";
@@ -32,8 +28,8 @@ import FavoriteShopsView from './views/FavoriteShopsView'
 import OccasionsView from './views/OccasionsView'
 import ChatView from './views/ChatView'
 import ShopDirectoryView from './views/ShopDirectoryView'
+import BudgetFlowersView from './views/BudgetFlowersView'
 import CustomFlowerOrderView from './views/CustomFlowerOrderView'
-import ShopSubscriptionView from './views/ShopSubscriptionView'
 import CustomerCustomOrdersView from './views/CustomerCustomOrdersView'
 import FloralCareView from './views/FloralCareView'
 import FloralCareDetailView from './views/FloralCareDetailView'
@@ -67,6 +63,7 @@ function AppRouterContent() {
             <Route path="/account" element={<AccountViewRoute auth={controller} />} />
             <Route path="/products" element={<ProductCatalogView auth={controller} />} />
             <Route path="/shops" element={<ShopDirectoryView auth={controller} />} />
+            <Route path="/budget-flowers" element={<BudgetFlowersView />} />
             <Route path="/custom-orders/new" element={<CustomFlowerOrderView auth={controller} />} />
             <Route path="/custom-orders" element={<CustomerCustomOrdersView auth={controller} />} />
             <Route path="/following-shops" element={<FavoriteShopsView auth={controller} />} />
@@ -93,15 +90,9 @@ function AppRouterContent() {
             />
 
             <Route path="/cart" element={<CartPageWrapper />} />
-            <Route path="/shop-admin/subscription" element={<ShopSubscriptionView auth={controller} />} />
-            <Route path="/admin/vouchers" element={<VoucherManagementView />} />
-            <Route path="/admin/shop-plans" element={<AdminPlansView />} />
-<Route path="/shop-admin/vouchers" element={<VoucherManagementView />} />
             <Route path="/checkout" element={controller.busy ? <p role="status">Đang kiểm tra đăng nhập…</p> : <CheckoutPage />} />
             <Route path="/orders" element={<CustomerOrdersView />} />
             <Route path="/orders/:id" element={<CustomerOrderDetailView />} />
-            <Route path="/transactions" element={<CustomerTransactionsView />} />
-            <Route path="/dashboard" element={<CustomerOverviewView />} />
             <Route path="/payment/success" element={<PaymentSuccessPage />} />
             <Route path="/payment/error" element={<PaymentErrorPage />} />
             <Route path="/payment/cancel" element={<PaymentCancelPage />} />

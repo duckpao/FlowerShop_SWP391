@@ -30,9 +30,6 @@ class PublicCatalogController <<Controller>> {
 class CatalogService <<Service>> {
   detail(productId): ProductDetail
 }
-class ProductQuotaService <<Service>> {
-  allowed(product): boolean
-}
 class ProductReviewService <<Service>> {
   list(productId, page): Results
   -visibleProduct(productId)
@@ -81,7 +78,6 @@ View --> PublicCatalogController : GET /api/public/products/{id}
 View --> PublicCatalogController : GET /api/public/products/{id}/reviews
 PublicCatalogController --> CatalogService
 PublicCatalogController --> ProductReviewService
-CatalogService --> ProductQuotaService
 CatalogService --> ProductRepository
 CatalogService --> ProductImageRepository
 CatalogService --> ProductCardAssembler

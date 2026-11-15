@@ -48,7 +48,7 @@ opt optional: pick a reference product
     FC -> FS : suggestions(budget, quantity, shopId, q, page)
     FS -> FS : page < 0 or > 100000: 400 "Trang không hợp lệ."\nq longer than 100: 400 "Từ khóa tối đa 100 ký tự."
     FS -> SR : findByIdAndStatus(shopId, ACTIVE) when shopId is given (else 404)
-    FS -> PR : findAll(ACTIVE product, ACTIVE shop, price > 0, stock >= quantity,\nprice x quantity <= budget x 1.05, name LIKE q, quota), 12 per page
+    FS -> PR : findAll(ACTIVE product, ACTIVE shop, price > 0, stock >= quantity,\nprice x quantity <= budget x 1.05, name LIKE q), 12 per page
     PR --> FS : Page<Product>
     FS -> PA : cards(products)
     PA --> FS : ProductCard list

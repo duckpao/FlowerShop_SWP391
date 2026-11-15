@@ -3,8 +3,6 @@ import { chatApi } from '../services/chatService'
 import { chatSocket } from '../services/chatSocket'
 import { catalogService } from '../services/catalogService'
 import { customFlowerService } from '../services/customFlowerService'
-import { customerOrderService } from '../services/customerOrderService'
-import { managerOrderService } from '../services/managerOrderService'
 
 const PAGE = 30
 
@@ -16,20 +14,13 @@ async function describeContext(scope, type, id) {
         const p = await catalogService.detail(id)
         return { type, id, name: p.name, price: p.price, imageUrl: p.imageUrl || p.images?.[0] || null }
     }
-    try {
-        const order = scope.kind === 'shop' ? await managerOrderService.detail(scope.shopId, id) : await customerOrderService.detail(id)
-        if (order.orderType !== 'CUSTOM') throw new Error('Đơn hàng này không phải đơn hoa riêng.')
-        return { type, id, orderId: order.id, name: `Đơn hoa riêng #${id.replace(/-/g, '').slice(0, 8).toUpperCase()}`, price: order.subTotal > 0 ? order.subTotal : null, status: order.status }
-    } catch (error) {
-        if (error.status !== 404) throw error
-        const r = scope.kind === 'shop' ? await customFlowerService.shopDetail(scope.shopId, id) : await customFlowerService.detail(id)
-        return { type, id, orderId: r.orderId, name: customOrderLabel(id), price: r.design?.quotedPrice ?? null, status: r.status }
-    }
+    const r = scope.kind === 'shop' ? await customFlowerService.shopDetail(scope.shopId, id) : await customFlowerService.detail(id)
+    return { type, id, name: customOrderLabel(id), price: r.budget, status: r.status }
 }
 
 /**
  * Controller trang chat. entry mô tả cách vào trang từ URL:
- * { sessionId?, shopId? (khách), customOrderId?, orderId? (shop), productId? }.
+ * { sessionId?, shopId? (khách), customOrderId?, productId? }.
  * Khách và chủ shop dùng chung controller; khác nhau ở scope và cách mở phiên.
  */
 export function useChatController({ scope, user, entry }) {
@@ -61,10 +52,9 @@ export function useChatController({ scope, user, entry }) {
             try {
                 let list = await reloadSessions()
                 if (!active) return
-                const wantsOpen = scope.kind === 'customer' ? entry.shopId : entry.customOrderId || entry.orderId
+                const wantsOpen = scope.kind === 'customer' ? entry.shopId : entry.customOrderId
                 if (wantsOpen) {
-                    const opened = await api.open(scope.kind === 'customer' ? { shopId: entry.shopId }
-                        : entry.orderId ? { orderId: entry.orderId } : { customOrderId: entry.customOrderId })
+                    const opened = await api.open(scope.kind === 'customer' ? { shopId: entry.shopId } : { customOrderId: entry.customOrderId })
                     if (!active) return
                     if (!list.some(s => s.id === opened.id)) list = await reloadSessions()
                     setActiveId(opened.id)
@@ -79,7 +69,7 @@ export function useChatController({ scope, user, entry }) {
             }
         })()
         return () => { active = false }
-    }, [api, scope.kind, entry.shopId, entry.customOrderId, entry.orderId, entry.productId, reloadSessions])
+    }, [api, scope.kind, entry.shopId, entry.customOrderId, entry.productId, reloadSessions])
 
     useEffect(() => chatSocket.onState(setOnline), [])
 

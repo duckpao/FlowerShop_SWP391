@@ -29,9 +29,6 @@ class PublicCatalogController <<Controller>> {
 class CatalogService <<Service>> {
   categories(): List<CategoryCard>
 }
-class ProductQuotaService <<Service>> {
-  allowedSpecification(): Specification<Product>
-}
 class CategoryCard <<DTO>> {
   id
   name
@@ -62,7 +59,6 @@ class Product <<Entity>> {
 View --> PublicCatalogController : GET /api/public/categories
 PublicCatalogController --> CatalogService
 CatalogService --> ProductRepository : visible products, unpaged
-CatalogService --> ProductQuotaService
 CatalogService --> CategoryRepository
 CatalogService ..> CategoryCard : builds
 CategoryRepository ..> Category

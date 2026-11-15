@@ -77,6 +77,6 @@ note bottom of BE_EVENT
 end note
 note bottom of BE_JOB
   PaymentTimeoutScheduler, MaintenanceJob, OccasionReminderJob,
-  ShopProductMailJob, ShopSubscriptionJob.
+  ShopProductMailJob.
 end note
 @enduml

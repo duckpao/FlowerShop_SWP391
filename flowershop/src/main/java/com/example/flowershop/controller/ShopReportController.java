@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/shop/mine/{shopId}/reports")
-@PreAuthorize("hasAnyRole('SHOP', 'SHOP_STAFF')")
+@PreAuthorize("hasRole('SHOP')")
 @SecurityRequirement(name = "bearerAuth")
 public class ShopReportController {
     private final ShopReportService reports;
@@ -23,10 +23,10 @@ public class ShopReportController {
     }
 
     @GetMapping
-    public ShopReportService.ReportResult report(@PathVariable(name = "shopId") String shopId,
+    public ShopReportService.ReportResult report(@PathVariable String shopId,
             @AuthenticationPrincipal CurrentUser user,
-            @RequestParam(name = "period", defaultValue = "MONTH") String period,
-            @RequestParam(name = "value", required = false) String value) {
+            @RequestParam(defaultValue = "MONTH") String period,
+            @RequestParam(required = false) String value) {
         return reports.report(shopId, user.id(), period, value);
     }
 }

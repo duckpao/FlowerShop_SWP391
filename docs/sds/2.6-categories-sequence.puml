@@ -16,7 +16,6 @@ actor Visitor as U
 participant "View" as V <<View>> #EADCFF
 participant PublicCatalogController as C <<Controller>> #D8F3DC
 participant CatalogService as S <<Service>> #DCECFF
-participant ProductQuotaService as Q <<Service>> #DCECFF
 participant CategoryRepository as CR <<Repository>> #FFF1C9
 participant ProductRepository as R <<Repository>> #FFF1C9
 participant GlobalExceptionHandler as G <<Controller>> #D8F3DC
@@ -26,7 +25,7 @@ database MySQL
 U -> V : open catalog
 V -> C : GET /api/public/categories
 C -> S : categories()
-S -> R : findAll(visible.and(quota.allowedSpecification()), unpaged)
+S -> R : findAll(visible, unpaged)
 R -> MySQL : select visible products
 MySQL --> R : product rows
 R --> S : List<Product>

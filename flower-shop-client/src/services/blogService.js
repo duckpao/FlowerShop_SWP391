@@ -25,10 +25,6 @@ export const blogService = {
     `${managedBase(shopId)}/${encodeURIComponent(id)}`,
     { method: 'DELETE' },
   ),
-  publish: (shopId, id) => authService.authenticatedRequest(
-    `${managedBase(shopId)}/${encodeURIComponent(id)}/publish`,
-    { method: 'PUT' },
-  ),
   publicList: ({ shopId = '', q = '', page = 0 } = {}) => {
     const params = new URLSearchParams({ page })
     if (shopId) params.set('shopId', shopId)
@@ -54,24 +50,6 @@ export const blogService = {
   ),
   deleteComment: (id, commentId) => authService.authenticatedRequest(
     `/api/customer/blogs/${encodeURIComponent(id)}/comments/${encodeURIComponent(commentId)}`,
-    { method: 'DELETE' },
-  ),
-  updateComment: (id, commentId, content) => authService.authenticatedRequest(
-    `/api/customer/blogs/${encodeURIComponent(id)}/comments/${encodeURIComponent(commentId)}`,
-    { method: 'PUT', body: { content } },
-  ),
-  managedComments: (shopId, id, page = 0) => authService.authenticatedRequest(
-    `${managedBase(shopId)}/${encodeURIComponent(id)}/comments?page=${page}`,
-  ),
-  managedEngagement: (shopId, id) => authService.authenticatedRequest(
-    `${managedBase(shopId)}/${encodeURIComponent(id)}/engagement`,
-  ),
-  replyComment: (shopId, id, commentId, content) => authService.authenticatedRequest(
-    `${managedBase(shopId)}/${encodeURIComponent(id)}/comments/${encodeURIComponent(commentId)}/replies`,
-    { method: 'POST', body: { content } },
-  ),
-  moderateComment: (shopId, id, commentId) => authService.authenticatedRequest(
-    `${managedBase(shopId)}/${encodeURIComponent(id)}/comments/${encodeURIComponent(commentId)}`,
     { method: 'DELETE' },
   ),
 }

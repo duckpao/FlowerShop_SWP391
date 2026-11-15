@@ -85,10 +85,9 @@ export default function CategoryMenu() {
     // Đặt hoa riêng chỉ dành cho khách hàng (khách vãng lai bấm vào sẽ được mời đăng nhập)
     const links = [
         ['/shops', 'Cửa hàng'],
-        ...(!user || user.role === 'CUSTOMER' ? [['/custom-orders/new', 'Đặt hoa theo yêu cầu']] : []),
+        ['/budget-flowers', 'Hoa theo ngân sách'],
+        ...(!user || user.role === 'CUSTOMER' ? [['/custom-orders', 'Đặt hoa theo yêu cầu']] : []),
         ['/floral-care', 'Cẩm nang chăm hoa'],
-        // Lịch sử đơn hàng + theo dõi giao hàng GHN: trước chỉ có trong menu tài khoản nên khách khó tìm
-        ...(user?.role === 'CUSTOMER' ? [['/orders', 'Đơn hàng của tôi']] : []),
     ]
 
     return <nav aria-label="Điều hướng cửa hàng" onMouseLeave={scheduleClose} onMouseEnter={cancelClose}

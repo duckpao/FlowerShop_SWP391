@@ -1,9 +1,6 @@
-import { OrderDesignPanel, ShopCustomOrderActions } from '../components/customFlowers/OrderDesignPanel'
 import { useEffect, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
 import { managerOrderService } from '../services/managerOrderService'
 import { formatPrice } from '../models/productModel'
-import OrderDiscountSummary from '../components/checkout/OrderDiscountSummary'
 import Badge from '../components/ui/badge/Badge'
 import Button from '../components/ui/button/Button'
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '../components/ui/table'
@@ -12,7 +9,7 @@ import { Modal } from '../components/ui/modal'
 import { EyeIcon } from '../icons'
 import GhnSimulator from '../components/ghn/GhnSimulator'
 import { useConfirm } from '../components/ui/confirm/ConfirmProvider'
-import { ghnStatusLabels, manualOrderStatuses, orderStatusColors as statusColors, orderStatusLabels as statusLabels, orderTabs } from '../models/orderStatus'
+import { ghnStatusLabels, orderStatusColors as statusColors, orderStatusLabels as statusLabels, orderTabs } from '../models/orderStatus'
 
 /**
  * Hàm định dạng thời gian tương đối (ví dụ: "5 phút trước", "2 giờ trước")
@@ -42,12 +39,10 @@ function timeAgo(dateString) {
  * 4. COMPLETED / REFUNDED: GHN báo giao thành công hoặc hoàn hàng thì đơn tự chuyển theo.
  */
 export default function OrderQueueView({ shop }) {
-    const [params] = useSearchParams()
-    const openId = params.get('open') || ''
     const { confirm, notify } = useConfirm()
     const [data, setData] = useState(null)
     const [page, setPage] = useState(0)
-    const [statusFilter, setStatusFilter] = useState('') // Mở màn hình ở các đơn cần Manager xác nhận
+    const [statusFilter, setStatusFilter] = useState('PENDING') // Mở màn hình ở các đơn cần Manager xác nhận
     const [busy, setBusy] = useState(false)
     const [error, setError] = useState('')
     const [notice, setNotice] = useState('')
@@ -58,13 +53,6 @@ export default function OrderQueueView({ shop }) {
     const [selectedOrder, setSelectedOrder] = useState(null)
     const [cancelReason, setCancelReason] = useState('')
     const [orderDetail, setOrderDetail] = useState(null)
-    useEffect(() => {
-        if (!shop?.id || !openId) return
-        let active = true
-        setOrderDetail(null); setDetailModalOpen(false)
-        managerOrderService.detail(shop.id, openId).then(detail => { if (active) { setSelectedOrder(detail); setOrderDetail(detail); setDetailModalOpen(true) } }).catch(e => { if (active) setError(e.message) })
-        return () => { active = false }
-    }, [shop?.id, openId])
     
     // State quản lý Modal Cập nhật vận đơn GHN
     const [updateGhnModalOpen, setUpdateGhnModalOpen] = useState(false)
@@ -95,8 +83,6 @@ export default function OrderQueueView({ shop }) {
      * Gọi: managerOrderService.confirm -> POST .../orders/{id}/confirm
      */
     const confirmOrder = async orderId => {
-        // SRS 8.4: mọi thay đổi trạng thái của shop đều cần hộp thoại xác nhận
-        if (!await confirm({ title: 'Xác nhận đơn hàng', message: `Xác nhận đơn ${orderId.substring(0, 8)} và bắt đầu chuẩn bị hoa?`, confirmLabel: 'Xác nhận đơn' })) return
         setBusy(true); setError(''); setNotice('')
         try {
             await managerOrderService.confirm(shop.id, orderId)
@@ -137,7 +123,6 @@ export default function OrderQueueView({ shop }) {
      * Gọi: managerOrderService.setStatus -> POST .../orders/{id}/set-status
      */
     const changeStatus = async (order, next) => {
-        if (next === 'CANCELLED') { openCancelModal(order); return }
         if (!next) return
         if (!await confirm({
             title: 'Đổi trạng thái đơn',
@@ -250,7 +235,6 @@ export default function OrderQueueView({ shop }) {
 
     return (
         <div className="space-y-6">
-
             <ComponentCard title={
                 <div className="flex items-center gap-3">
                     Quản lý đơn hàng
@@ -295,87 +279,78 @@ export default function OrderQueueView({ shop }) {
                 {data && data.content.length > 0 && (
                     <>
                         <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-white/5">
-                            <Table>
+                            <Table className="w-full min-w-[40rem] table-fixed">
                                 <TableHeader>
-                                    <TableRow>
-                                        <TableCell isHeader>Mã đơn</TableCell>
-                                        <TableCell isHeader>Khách hàng</TableCell>
-                                        <TableCell isHeader>Tổng tiền</TableCell>
-                                        <TableCell isHeader>Thời gian đặt</TableCell>
-                                        <TableCell isHeader>Trạng thái</TableCell>
-                                        <TableCell isHeader className="text-right">Hành động</TableCell>
+                                    <TableRow className="border-b border-gray-200 dark:border-white/5">
+                                        <TableCell isHeader className="w-24 px-4 py-3 text-start font-medium text-gray-500 dark:text-gray-400">Mã đơn</TableCell>
+                                        <TableCell isHeader className="px-4 py-3 text-start font-medium text-gray-500 dark:text-gray-400">Khách hàng</TableCell>
+                                        <TableCell isHeader className="w-32 px-4 py-3 text-start font-medium text-gray-500 dark:text-gray-400">Tổng tiền</TableCell>
+                                        <TableCell isHeader className="hidden w-44 px-4 py-3 text-start font-medium text-gray-500 dark:text-gray-400 lg:table-cell">Thời gian đặt</TableCell>
+                                        <TableCell isHeader className="w-36 px-4 py-3 text-start font-medium text-gray-500 dark:text-gray-400">Trạng thái</TableCell>
+                                        <TableCell isHeader className="w-56 px-4 py-3 text-start font-medium text-gray-500 dark:text-gray-400">Hành động</TableCell>
                                     </TableRow>
                                 </TableHeader>
-                                <TableBody>
+                                <TableBody className="divide-y divide-gray-200 dark:divide-white/5">
                                     {data.content.map(o => (
                                         <TableRow key={o.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                                            <TableCell className="font-mono text-xs">{o.id.substring(0,8)}</TableCell>
-                                            <TableCell>
+                                            <TableCell className="px-4 py-4 align-top">
+                                                <div className="font-mono text-xs">{o.id.substring(0,8)}</div>
+                                                <div className="mt-1 text-xs text-gray-500 lg:hidden">{timeAgo(o.createdDate)}</div>
+                                            </TableCell>
+                                            <TableCell className="break-words px-4 py-4 align-top">
                                                 <div className="font-medium text-gray-900 dark:text-white">{o.customerName || 'Khách ẩn danh'}</div>
                                                 <div className="text-xs text-gray-500">{o.customerPhone || ''}</div>
                                             </TableCell>
-                                            <TableCell className="font-medium">{o.status === 'AWAITING_QUOTE' ? 'Chờ báo giá' : formatPrice(o.totalAmount)}</TableCell>
-                                            <TableCell>
+                                            <TableCell className="px-4 py-4 align-top font-medium">{formatPrice(o.totalAmount)}</TableCell>
+                                            <TableCell className="hidden px-4 py-4 align-top lg:table-cell">
                                                 <div className="text-sm font-medium text-gray-900 dark:text-white">{timeAgo(o.createdDate)}</div>
                                                 <div className="text-xs text-gray-500">{new Date(o.createdDate).toLocaleString('vi-VN')}</div>
                                             </TableCell>
-                                            <TableCell>
+                                            <TableCell className="px-4 py-4 align-top">
                                                 <Badge color={statusColors[o.status] || 'primary'}>
                                                     {statusLabels[o.status] || o.status}
                                                 </Badge>
                                             </TableCell>
-                                            <TableCell className="text-right">
-                                                <div className="flex items-center justify-end gap-2">
-                                                    <Button 
-                                                        size="sm" 
-                                                        variant="outline"
-                                                        onClick={() => viewDetail(o)} 
-                                                        disabled={busy}
-                                                    >
-                                                        <EyeIcon className="w-4 h-4 mr-1 inline" />
-                                                       Xem chi tiết
-                                                    </Button>
-                                                    <Link to={`/shop-admin/chat?orderId=${encodeURIComponent(o.id)}`} className="inline-flex items-center justify-center gap-2 rounded-lg font-medium transition px-4 py-3 text-sm bg-white text-gray-700 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-400 dark:ring-gray-700 dark:hover:bg-white/3">
-                                                        Chat
-                                                    </Link>
-                                                    
-                                                    {o.status === 'PENDING' && o.orderType !== 'CUSTOM' && (
-                                                        <Button size="sm" onClick={() => confirmOrder(o.id)} disabled={busy}>
-                                                            Xác nhận đơn hàng
+                                            <TableCell className="px-4 py-4 align-top">
+                                                <div className="flex flex-col gap-2">
+                                                    {o.status === 'PENDING' && (
+                                                        <Button size="xs" className="w-full" onClick={() => confirmOrder(o.id)} disabled={busy}>
+                                                            Xác nhận đơn
                                                         </Button>
-                                                    )}
-                                                    
-                                                    {(o.status === 'PROCESSING' || o.status === 'DEPOSIT_PAID') && (
-                                                        <Button size="sm" className="bg-brand-600 hover:bg-brand-700 text-white" onClick={() => ship(o.id)} disabled={busy}>
-                                                            Tạo mã vận đơn GHN & Giao
-                                                        </Button>
-                                                    )}
-                                                    
-                                                    {o.status === 'DELIVERING' && (
-                                                        <>
-                                                            <Button size="sm" className="bg-brand-600 hover:bg-brand-700 text-white" onClick={() => viewDetail(o)} disabled={busy}>
-                                                                Trạng thái GHN
-                                                            </Button>
-                                                            <Button size="sm" variant="outline" onClick={() => refresh(o.id)} disabled={busy}>
-                                                                Kiểm tra GHN
-                                                            </Button>
-                                                        </>
                                                     )}
 
-                                                    {['PENDING', 'AWAITING_DEPOSIT', 'DEPOSIT_PAID', 'PROCESSING'].includes(o.status) && (
-                                                        <Button size="sm" variant="outline" className="text-error-500 hover:bg-error-50 hover:border-error-200" onClick={() => openCancelModal(o)} disabled={busy}>
-                                                            Hủy đơn
+                                                    {(o.status === 'PROCESSING' || o.status === 'DEPOSIT_PAID') && (
+                                                        <Button size="xs" className="w-full" onClick={() => ship(o.id)} disabled={busy}>
+                                                            Tạo vận đơn GHN
                                                         </Button>
                                                     )}
+
+                                                    {o.status === 'DELIVERING' && (
+                                                        <Button size="xs" className="w-full" onClick={() => refresh(o.id)} disabled={busy}>
+                                                            Kiểm tra GHN
+                                                        </Button>
+                                                    )}
+
+                                                    <div className="flex gap-2">
+                                                        <Button size="xs" variant="outline" className="flex-1" onClick={() => viewDetail(o)} disabled={busy}>
+                                                            <EyeIcon className="h-4 w-4" />
+                                                            Chi tiết
+                                                        </Button>
+                                                        {['PENDING', 'AWAITING_DEPOSIT', 'DEPOSIT_PAID', 'PROCESSING'].includes(o.status) && (
+                                                            <Button size="xs" variant="outline" className="flex-1 text-error-500 hover:bg-error-50" onClick={() => openCancelModal(o)} disabled={busy}>
+                                                                Hủy đơn
+                                                            </Button>
+                                                        )}
+                                                    </div>
 
                                                     <select
                                                         aria-label={`Chuyển trạng thái đơn ${o.id.substring(0, 8)}`}
-                                                        className="h-9 rounded-lg border border-gray-300 px-2 text-sm dark:border-gray-700 dark:bg-gray-900"
+                                                        className="h-9 w-full rounded-lg border border-gray-300 px-2 text-sm dark:border-gray-700 dark:bg-gray-900"
                                                         value="" disabled={busy}
                                                         onChange={e => changeStatus(o, e.target.value)}
                                                     >
-                                                        <option value="">Chuyển trạng thái</option>
-                                                        {manualOrderStatuses(o).map(status => <option key={status} value={status}>{statusLabels[status]}</option>)}
+                                                        <option value="">Đổi trạng thái</option>
+                                                        {Object.entries(statusLabels).filter(([k]) => k !== o.status).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                                                     </select>
                                                 </div>
                                             </TableCell>
@@ -402,7 +377,6 @@ export default function OrderQueueView({ shop }) {
                     <p className="text-gray-500">Đang tải chi tiết...</p>
                 ) : (
                     <div className="space-y-6">
-                        <OrderDesignPanel order={orderDetail} /><ShopCustomOrderActions key={orderDetail.id} order={orderDetail} shopId={shop.id} onChanged={async () => { setDetailModalOpen(false); await load(page, true) }} />
                         <div className="grid grid-cols-2 gap-4 text-sm bg-gray-50 dark:bg-gray-800/50 p-4 rounded-lg">
                             <div>
                                 <p className="text-gray-500 font-medium mb-1">Địa chỉ người gửi (Shop)</p>
@@ -451,7 +425,6 @@ export default function OrderQueueView({ shop }) {
                             </div>
                         </div>
                         
-                        <OrderDiscountSummary order={orderDetail} />
                         <div className="flex justify-between items-center pt-4 border-t border-gray-200 dark:border-gray-800">
                             <div>
                                 <p className="text-gray-500 text-sm">Tổng cộng</p>
@@ -459,7 +432,7 @@ export default function OrderQueueView({ shop }) {
                             </div>
                             <div className="space-x-3">
                                 <Button variant="outline" onClick={() => setDetailModalOpen(false)}>Đóng</Button>
-                                {orderDetail.status === 'PENDING' && orderDetail.orderType !== 'CUSTOM' && (
+                                {orderDetail.status === 'PENDING' && (
                                     <Button onClick={() => { setDetailModalOpen(false); confirmOrder(orderDetail.id); }}>
                                         Xác nhận đơn hàng
                                     </Button>

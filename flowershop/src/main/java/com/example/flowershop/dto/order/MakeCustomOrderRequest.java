@@ -8,9 +8,6 @@ import lombok.Data;
 @Data
 public class MakeCustomOrderRequest {
 
-    /** DEPOSIT followed by COD, or FULL online. Null keeps the existing deposit default. */
-    private com.example.flowershop.entity.enums.PaymentType paymentType;
-
     @NotBlank(message = "deliveryAddressId không được để trống")
     private String deliveryAddressId;
 
@@ -19,15 +16,4 @@ public class MakeCustomOrderRequest {
 
     @Size(max = 20)
     private String phone;
-
-    @Size(max = 50)
-    private String couponCode;
-
-    @Size(max = 50)
-    private String shippingCouponCode;
-
-    @jakarta.validation.constraints.DecimalMin("1")
-    private java.math.BigDecimal expectedTotal;
-    @jakarta.validation.constraints.DecimalMin("1")
-    private java.math.BigDecimal expectedDeposit;
 }

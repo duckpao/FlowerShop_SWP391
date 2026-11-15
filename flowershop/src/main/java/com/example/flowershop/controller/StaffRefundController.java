@@ -12,13 +12,12 @@ import java.util.List;
 
 /** Staff xem đơn hủy cần hoàn tiền của shop mình và cập nhật tiến độ xử lý. */
 @RestController
-// Hai đường dẫn: staff (/api/staff) và chủ shop (/api/shop/mine); SecurityConfig chặn role theo đường dẫn, guard kiểm tra quyền với shop
-@RequestMapping({"/api/staff/shops/{shopId}/refunds", "/api/shop/mine/{shopId}/refunds"})
-@PreAuthorize("hasAnyRole('SHOP', 'SHOP_STAFF')")
+@RequestMapping("/api/staff/shops/{shopId}/refunds")
+@PreAuthorize("hasRole('SHOP_STAFF')")
 @SecurityRequirement(name = "bearerAuth")
 public class StaffRefundController {
 
-    public record StatusRequest(String status, String note) {}
+    public record StatusRequest(String status) {}
 
     private final StaffRefundService service;
 
@@ -27,13 +26,13 @@ public class StaffRefundController {
     }
 
     @GetMapping
-    public List<RefundResponse> list(@PathVariable(name = "shopId") String shopId, @AuthenticationPrincipal CurrentUser u) {
+    public List<RefundResponse> list(@PathVariable String shopId, @AuthenticationPrincipal CurrentUser u) {
         return service.list(shopId, u.id());
     }
 
     @PostMapping("/{id}/status")
-    public RefundResponse updateStatus(@PathVariable(name = "shopId") String shopId, @PathVariable(name = "id") String id,
+    public RefundResponse updateStatus(@PathVariable String shopId, @PathVariable String id,
                                        @RequestBody StatusRequest body, @AuthenticationPrincipal CurrentUser u) {
-        return service.updateStatus(shopId, u.id(), id, body.status(), body.note());
+        return service.updateStatus(shopId, u.id(), id, body.status());
     }
 }

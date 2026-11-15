@@ -2,7 +2,7 @@
 
 Mục II được chia thành **14 segment**, mỗi segment là một nhóm chức năng của hệ thống tương ứng với một nhóm controller và service ở backend. Mỗi segment gồm các mục con. Mỗi mục con là một chức năng cụ thể và có hai sơ đồ: class diagram và sequence diagram (PlantUML, quy ước vẽ trong [README.md](README.md)).
 
-Giữ nguyên các số đang dùng trong SDS hiện tại (1 Authentication, 2 Product, 3 Order, 4 Cart, 5 Payment, 6 Favourite shop, 7 Voucher, 8 Pro, 10 Custom order) và lấp chỗ trống: số 9 được dùng, thêm 11 đến 14. Tiêu đề hiện bị gộp trong SDS ("4. Cart && Checkout 4.1 Add product to cart", "45. Payment && Refund", "10.Order for requirement") được tách lại.
+Giữ nguyên các số đang dùng trong SDS hiện tại (1 Authentication, 2 Product, 3 Order, 4 Cart, 5 Payment, 6 Favourite shop, 7 Voucher, 10 Custom order) và lấp chỗ trống: số 9 được dùng, thêm 11 đến 14. Segment 8 (gói Pro) đã bỏ. Tiêu đề hiện bị gộp trong SDS ("4. Cart && Checkout 4.1 Add product to cart", "45. Payment && Refund", "10.Order for requirement") được tách lại.
 
 Ký hiệu trạng thái:
 - ✔ đã có PlantUML đúng với code (tên file trong [docs/sds](.))
@@ -27,7 +27,7 @@ Backend: `AuthController`, `SessionController`, `AccountController`; `AuthServic
 | 1.9 | Đăng nhập bằng Google | ✗ | ✗ |
 
 ## Segment 2. Product & Catalog (UC08 đến UC14)
-Backend: `PublicCatalogController`, `PublicProductController`, `PublicShopController`, `ManagerProductController`, `FavoriteController`, `AdminCatalogController`; `CatalogService`, `ProductCardAssembler`, `ManagerProductService`, `FavoriteService`, `AdminCatalogService`, `ProductQuotaService`.
+Backend: `PublicCatalogController`, `PublicProductController`, `PublicShopController`, `ManagerProductController`, `FavoriteController`, `AdminCatalogController`; `CatalogService`, `ProductCardAssembler`, `ManagerProductService`, `FavoriteService` và `AdminCatalogService`.
 
 | Mục | Chức năng | Class | Sequence |
 |---|---|---|---|
@@ -100,23 +100,9 @@ Backend: `CouponController`; `CouponService`, `CouponRepository`, `OrderService`
 | 7.7 | Bỏ voucher đã áp | ✔ `7.7-remove-voucher-class` | ✔ `7.7-remove-voucher-sequence` |
 | 7.8 | Gợi ý voucher tốt nhất | ✔ `7.8-best-voucher-class` | ✔ `7.8-best-voucher-sequence` |
 
-## Segment 8. Pro Subscription (UC40)
-Backend: `ShopPlanController`, `AdminShopPlanController`; `ShopPlanService`, `SubscriptionReminderService`, `ProductQuotaService`, `ShopPlanClock`; `ShopSubscriptionJob`.
+## Segment 8. Pro Subscription (UC40), đã bỏ
 
-| Mục | Chức năng | Class | Sequence |
-|---|---|---|---|
-| 8.1 | Xem các gói Pro | ✔ `8.1-view-plans-class` | ✔ `8.1-view-plans-sequence` |
-| 8.2 | Tạo gói Pro | ✔ `8.2-create-plan-class` | ✔ `8.2-create-plan-sequence` |
-| 8.3 | Sửa gói Pro | ✔ `8.3-update-plan-class` | ✔ `8.3-update-plan-sequence` |
-| 8.4 | Vô hiệu hóa gói Pro | ✔ `8.4-deactivate-plan-class` | ✔ `8.4-deactivate-plan-sequence` |
-| 8.5 | Xem gói của shop | ✔ `8.5-view-subscription-class` | ✔ `8.5-view-subscription-sequence` |
-| 8.6 | Đăng ký Pro | ✔ `8.6-register-pro-class` | ✔ `8.6-register-pro-sequence` |
-| 8.7 | Gia hạn Pro | dùng chung 8.6 | ✔ `8.7-renew-pro-sequence` |
-| 8.8 | Admin cấp Pro | ✔ `8.8-admin-grant-pro-class` | ✔ `8.8-admin-grant-pro-sequence` |
-| 8.9 | Admin xác nhận thanh toán Pro | ✔ `8.9-admin-confirm-pro-payment-class` | ✔ `8.9-admin-confirm-pro-payment-sequence` |
-| 8.10 | Quản lý sản phẩm nổi bật | ✔ `8.10-featured-products-class` | ✔ `8.10-featured-products-sequence` |
-| 8.11 | Nhắc gói Pro sắp hết hạn | ✔ `8.11-pro-expiry-reminder-class` | ✔ `8.11-pro-expiry-reminder-sequence` |
-| 8.12 | Áp dụng giới hạn theo gói | ✔ `8.12-enforce-limits-class` | ✔ `8.12-enforce-limits-sequence` |
+Gói Free/Pro của shop đã bị gỡ khỏi hệ thống (bảng gói, thanh toán Pro, hạn mức sản phẩm, sản phẩm nổi bật, nhắc hết hạn). Các sơ đồ 8.1 đến 8.12 đã xóa; số thứ tự segment 9 trở đi giữ nguyên.
 
 ## Segment 9. Customer Orders & Tracking (UC35, UC22) (segment mới)
 Backend: `CustomerOrderController`, `OrderController`; `CustomerOrderService`, `OrderService`, `DeliverySync`, `GhnService`.
@@ -189,10 +175,10 @@ Mỗi sơ đồ đặt tên `<số mục>-<tên>-class` hoặc `<số mục>-<t�
 Đã đổi tên: `9.2-customer-tracking` → `9.2-...`; `5.2-sepay-payment-return` → `5.2-...`; `3.7-manual-status-change` → `3.7-...`; `3.8-ghn-master-data` → `3.8-...`; `01` đến `10` trong `docs/diagrams` chuyển sang số mục tương ứng (2.7, 3.9, 3.2-alt, 3.7, 3.1-alt, 3.3-alt, 13.3, 5.4, 13.2, 13.4).
 
 ## Thống kê
-- 88 mục con trong 14 segment, mỗi mục cần class và sequence (tổng 176 sơ đồ, một số dùng chung).
-- ✔ đã có PlantUML đúng với code: 143 sơ đồ.
+- 76 mục con trong 14 segment, mỗi mục cần class và sequence (tổng 152 sơ đồ, một số dùng chung).
+- ✔ đã có PlantUML đúng với code: 120 sơ đồ.
 - ◐ chỉ có ảnh cũ trong Word (đã đối chiếu, đúng): 7 sơ đồ.
-- Dùng chung với mục khác: 8 sơ đồ. Có một phần trong sơ đồ khác: 0 sơ đồ.
+- Dùng chung với mục khác: 7 sơ đồ. Có một phần trong sơ đồ khác: 0 sơ đồ.
 - ✗ chưa có: 18 sơ đồ.
 
-Còn thiếu: segment 14 và một số sơ đồ cũ của segment 1 đến 3 (xem các dòng ◐ và ✗ ở trên). Segment 4 đến 13 đã có đủ class và sequence.
+Thứ tự ưu tiên vẽ tiếp (chức năng cốt lõi chưa có sơ đồ): segment 4 (giỏ hàng, đặt hàng), 5.1 và 5.3 (thanh toán SePay, hết hạn), 9.1, 9.3 và 9.4 (đơn của khách), 10.3 và 10.4 (yêu cầu hoa riêng, báo giá), segment 12 (shop và nhân viên), sau đó segment 11, 13.1, 13.5 và 14.

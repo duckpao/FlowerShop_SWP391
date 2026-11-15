@@ -2,7 +2,7 @@
 
 ER diagram for the MySQL schema. The diagram follows the JPA entities in
 [`flowershop/src/main/java/com/example/flowershop/entity`](../flowershop/src/main/java/com/example/flowershop/entity)
-(42 mapped tables, 62 relationship lines), checked against [`database.sql`](../database.sql) and the migrations in
+(35 mapped tables, 50 relationship lines), checked against [`database.sql`](../database.sql) and the migrations in
 [`flowershop/sql`](../flowershop/sql) (read in numeric order, later migrations win).
 Source file: [database.mmd](database.mmd). Open this file in VS Code with a Mermaid
 preview extension, or paste `database.mmd` into https://mermaid.live.
@@ -12,7 +12,7 @@ Notes:
 - Audit columns (`created_date`, `created_by`, `last_modify_date`, `last_modify_by`) exist on most tables and are omitted to keep the diagram readable.
 - Cardinality follows Mermaid syntax. On the parent side, `||` means the child FK is `NOT NULL`, and `|o` means it is nullable. On the child side, `o{` means zero or more rows, and `o|` means at most one row, so the FK is unique (one-to-one).
 - Enum columns list their values in the comment. The values come from `entity/enums` and from the status strings written by services.
-- Tables and columns that are not mapped by any entity are left out: `Blog_Images`, `Blogs.thumbnail_url`, and `Email_Verification_Tokens` (created only by migration `001`). `database.sql` still creates the first two, but no code reads or writes them.
+- Tables and columns that are not mapped by any entity are left out: `Blogs.thumbnail_url` and `Email_Verification_Tokens` (created only by migration `001`). `database.sql` still creates the `thumbnail_url` column, but no code reads or writes it. The unused `Blog_Images` table was removed (migration `038`).
 - The shop-level GHN fields are not in the `Shops` table. GHN codes are stored on `Addresses` (`ghn_district_id`, `ghn_ward_code`) and, for shop registration, on `Pending_Registrations` (`shop_ghn_*`).
 
 Known differences between the entities and the SQL scripts:
@@ -423,74 +423,12 @@ erDiagram
         datetime sent_at
     }
 
-    Shop_Plans {
-        varchar id PK "FREE,PRO1,PRO3,PRO6,PRO12"
-        varchar name
-        int duration_months
-        decimal price
-        int product_limit
-        int featured_limit
-        boolean enabled
-    }
 
-    Shop_Subscriptions {
-        varchar id PK
-        varchar shop_id FK,UK
-        varchar plan_id FK
-        datetime started_at
-        datetime ends_at
-    }
 
-    Shop_Plan_Payments {
-        varchar id PK
-        varchar shop_id FK
-        varchar plan_id FK
-        int duration_months
-        decimal amount
-        varchar invoice_number UK
-        enum status "PENDING,REVIEW,SUCCESS"
-        datetime created_at
-        datetime confirmed_at
-        datetime last_checked_at
-        varchar transaction_no
-    }
 
-    Shop_Product_Postings {
-        varchar id PK
-        varchar shop_id FK
-        datetime posted_at
-    }
 
-    Featured_Products {
-        varchar product_id PK,FK
-        varchar shop_id FK
-        datetime featured_at
-    }
 
-    Subscription_Reminders {
-        varchar id PK
-        varchar subscription_id FK
-        datetime expected_end
-        date reminder_date
-        int hour_slot
-        enum mail_status "PENDING,SENT,CANCELLED"
-        int attempts
-        datetime next_attempt_at
-    }
 
-    Shop_Pro_Activations {
-        varchar id PK
-        varchar shop_id FK
-        varchar plan_id FK
-        int duration_months
-        enum source "ADMIN_GRANT,ADMIN_CONFIRM"
-        varchar payment_id FK,UK
-        varchar actor_id FK
-        varchar note
-        datetime starts_at
-        datetime ends_at
-        datetime created_at
-    }
 
     Users ||--o| Shops : "owner_id"
     Users |o--o{ Addresses : "user_id"
@@ -542,16 +480,4 @@ erDiagram
     Blog_Comments |o--o{ Blog_Comments : "parent_comment_id"
     Users ||--o{ Customer_Occasions : "customer_id"
     Users ||--o{ Notifications : "user_id"
-    Shops ||--o| Shop_Subscriptions : "shop_id"
-    Shop_Plans ||--o{ Shop_Subscriptions : "plan_id"
-    Shops ||--o{ Shop_Plan_Payments : "shop_id"
-    Shop_Plans ||--o{ Shop_Plan_Payments : "plan_id"
-    Shops ||--o{ Shop_Product_Postings : "shop_id"
-    Products ||--o| Featured_Products : "product_id"
-    Shops ||--o{ Featured_Products : "shop_id"
-    Shop_Subscriptions ||--o{ Subscription_Reminders : "subscription_id"
-    Shops ||--o{ Shop_Pro_Activations : "shop_id"
-    Shop_Plans ||--o{ Shop_Pro_Activations : "plan_id"
-    Shop_Plan_Payments |o--o| Shop_Pro_Activations : "payment_id"
-    Users |o--o{ Shop_Pro_Activations : "actor_id"
 ```

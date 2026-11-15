@@ -43,9 +43,6 @@ class "CartVoucherPreviewRequest" as CartVoucherPreviewRequest <<DTO>> {
 interface CartItemRepository <<Repository>> {
   findById(id): Optional<CartItem>
 }
-class ProductQuotaService <<Service>> {
-  requireAllowed(product)
-}
 class GhnService <<Service>> {
   calculateFee(fromDistrictId, fromWardCode, toDistrictId, toWardCode, weightGram): BigDecimal
 }
@@ -118,7 +115,6 @@ OrderController ..> CartVoucherPreviewRequest : reads
 OrderController ..> Preview : returns
 OrderService ..> CartVoucherPreviewRequest : reads
 OrderService --> CartItemRepository
-OrderService --> ProductQuotaService
 OrderService --> GhnService : quoteFee (not when merchandiseOnly)
 OrderService --> CouponService : preview
 GhnService ..> GHN : fee request
@@ -133,12 +129,14 @@ CartItem "*" --> "1" Product
 
 note bottom of OrderService
   Each cart item must belong to the user and to the shop, product and shop ACTIVE,
-  otherwise 400. quota.requireAllowed(product) for each item.
+  otherwise 400.
   merchandiseOnly = true (fee not known yet): shipping is 0 and shipping codes are refused.
 end note
 
 note bottom of CouponService
-  preview() is read-only: usedCount does not change.
+  preview() is read-only: usedCount does not change. Each customer may use only one
+  voucher: once a non-cancelled order holds a code, every code is listed as not eligible
+  ("Bạn đã dùng mã giảm giá rồi, mỗi người chỉ được dùng 1 mã").
   available(shopId) returns platform and this shop's vouchers that are not deleted;
   each one gets eligible + reason (ACTIVE, dates, usage, shop, minimum order, saving > 0).
   Unknown code: 400. Ineligible code: 400 "CODE: reason".

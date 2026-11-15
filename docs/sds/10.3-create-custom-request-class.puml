@@ -47,9 +47,6 @@ class CustomFlowerOrderService <<Service>> {
 class CustomOrderWorkflowService <<Service>> {
   create(actor, input: CreateInput): Receipt
 }
-class ProductQuotaService <<Service>> {
-  allowedSpecification(): Specification<Product>
-}
 class ProductCardAssembler <<Service>> {
   cards(products): List<ProductCard>
 }
@@ -202,7 +199,6 @@ CustomFlowerOrderService --> CustomOrderRequestRepository
 CustomFlowerOrderService --> ShopRepository
 CustomFlowerOrderService --> UserRepository
 CustomFlowerOrderService --> ProductRepository : reference product, suggestions
-CustomFlowerOrderService --> ProductQuotaService
 CustomFlowerOrderService --> ProductCardAssembler
 CustomFlowerOrderService ..> Design : builds
 CustomFlowerOrderService ..> CustomRequestResult : builds
@@ -261,10 +257,5 @@ note bottom of CustomFlowerOrderService
   The client service customerOrderService.createCustom has no caller.
 end note
 
-note bottom of ProductQuotaService
-  Quota: products locked by the shop plan are excluded from suggestions.
-  Suggestions: ACTIVE product, ACTIVE shop, price > 0, stock >= quantity,
-  price x quantity <= budget x 1.05, 12 per page sorted by price desc.
-end note
 
 @enduml

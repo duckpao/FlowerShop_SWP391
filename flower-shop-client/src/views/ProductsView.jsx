@@ -64,7 +64,7 @@ function FieldError({ id, message }) {
   return <p id={id} role="alert" className="mt-1 text-xs text-error-500">{message}</p>
 }
 
-export default function ProductsView({ shop, manage = false, canDelete = true }) {
+export default function ProductsView({ shop, manage = false }) {
   const c = useProductsController(shop.id, manage)
   const disabled = c.busy || shop.status !== 'ACTIVE'
   const [isFormOpen, setIsFormOpen] = useState(false)
@@ -207,7 +207,7 @@ export default function ProductsView({ shop, manage = false, canDelete = true })
                       )}
                     </div>
                     {!manage && <span>{ratingLabel(p)}</span>}
-                    {manage && <span className={p.quotaBlocked ? 'font-semibold text-error-500' : 'font-medium text-gray-700 dark:text-gray-300'}>{p.quotaBlocked ? 'Bị khóa: vượt giới hạn gói — cần nâng cấp hoặc xóa bớt sản phẩm' : productStatusLabels[p.status] || p.status}</span>}
+                    {manage && <span className="font-medium text-gray-700 dark:text-gray-300">{productStatusLabels[p.status] || p.status}</span>}
                   </div>
                   
                   {manage && (
@@ -220,7 +220,7 @@ export default function ProductsView({ shop, manage = false, canDelete = true })
                           size="sm"
                           variant="outline"
                           className="flex-1 text-emerald-600 hover:bg-emerald-50 hover:border-emerald-200 dark:text-emerald-400 dark:hover:bg-emerald-500/10"
-                          disabled={disabled || p.quotaBlocked}
+                          disabled={disabled}
                           onClick={() => c.unhide(p.id)}
                         >
                           Bỏ ẩn
@@ -236,7 +236,6 @@ export default function ProductsView({ shop, manage = false, canDelete = true })
                           Ẩn
                         </Button>
                       )}
-                      {canDelete && <Button size="sm" variant="outline" disabled={disabled} onClick={() => c.remove(p.id)} className="text-error-500">Xóa</Button>}
                     </div>
                   )}
                 </div>
@@ -283,7 +282,7 @@ export default function ProductsView({ shop, manage = false, canDelete = true })
             <div className="grid min-w-0 grid-cols-1 gap-6 md:grid-cols-2">
               <div className="min-w-0 space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tên sản phẩm</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tên sản phẩm *</label>
                   <input name="name" required maxLength={255} value={c.form.name} onChange={e => updateFormField('name', e.target.value)} onBlur={() => validateField('name')}
                     aria-invalid={Boolean(fieldErrors.name)} aria-describedby={fieldErrors.name ? 'product-name-error' : undefined}
                     className={fieldClass(Boolean(fieldErrors.name))}
@@ -292,7 +291,7 @@ export default function ProductsView({ shop, manage = false, canDelete = true })
                 </div>
                 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Danh mục</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Danh mục *</label>
                   <select name="categoryId" required value={c.form.categoryId} onChange={e => updateFormField('categoryId', e.target.value)} onBlur={() => validateField('categoryId')}
                     aria-invalid={Boolean(fieldErrors.categoryId)} aria-describedby={fieldErrors.categoryId ? 'product-category-error' : undefined}
                     className={fieldClass(Boolean(fieldErrors.categoryId))}>
@@ -305,7 +304,7 @@ export default function ProductsView({ shop, manage = false, canDelete = true })
                 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Giá (VND)</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Giá (VND) *</label>
                     <input name="price" required type="number" min="0.01" max="9999999999.99" step="0.01" value={c.form.price} onChange={e => updateFormField('price', e.target.value)} onBlur={() => validateField('price')}
                       aria-invalid={Boolean(fieldErrors.price)} aria-describedby={fieldErrors.price ? 'product-price-error' : 'product-price-help'}
                       className={fieldClass(Boolean(fieldErrors.price))}
@@ -315,7 +314,7 @@ export default function ProductsView({ shop, manage = false, canDelete = true })
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      {c.form.type === 'CUSTOM' ? 'Tồn kho (Hàng đặt trước)' : 'Tồn kho'}
+                      {c.form.type === 'CUSTOM' ? 'Tồn kho (Hàng đặt trước)' : 'Tồn kho *'}
                     </label>
                     <input
                       name="stock"
@@ -347,15 +346,10 @@ export default function ProductsView({ shop, manage = false, canDelete = true })
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Loại</label>
-                    {c.editing && c.form.type === 'CUSTOM' ? (
-                      <input readOnly value={productTypeLabels.CUSTOM}
-                        className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm dark:border-gray-700 dark:bg-gray-900" />
-                    ) : (
-                      <select value={c.form.type} onChange={e => updateFormField('type', e.target.value)}
-                        className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900">
-                        <option value="READY_MADE">{productTypeLabels.READY_MADE}</option>
-                      </select>
-                    )}
+                    <select value={c.form.type} onChange={e => updateFormField('type', e.target.value)}
+                      className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900">
+                      {Object.entries(productTypeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                    </select>
                   </div>
                 </div>
               </div>

@@ -29,9 +29,6 @@ class PublicCatalogController <<Controller>> {
 class CatalogService <<Service>> {
   browse(q, categoryId, shopId, type, minPrice, maxPrice, sort, page, size): Results
 }
-class ProductQuotaService <<Service>> {
-  allowedSpecification(): Specification<Product>
-}
 class ProductCardAssembler <<Service>> {
   cards(products): List<ProductCard>
   primaryImages(productIds)
@@ -76,7 +73,6 @@ class Shop <<Entity>> {
 
 View --> PublicCatalogController : GET /api/public/products
 PublicCatalogController --> CatalogService
-CatalogService --> ProductQuotaService
 CatalogService --> ProductRepository
 CatalogService --> ProductCardAssembler
 ProductCardAssembler ..> ProductCard : builds

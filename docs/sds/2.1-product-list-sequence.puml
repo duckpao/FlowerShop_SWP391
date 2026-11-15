@@ -16,7 +16,6 @@ actor Visitor as U
 participant "View" as V <<View>> #EADCFF
 participant PublicCatalogController as C <<Controller>> #D8F3DC
 participant CatalogService as S <<Service>> #DCECFF
-participant ProductQuotaService as Q <<Service>> #DCECFF
 participant ProductRepository as R <<Repository>> #FFF1C9
 participant ProductCardAssembler as A <<Service>> #DCECFF
 participant ProductImageRepository as IR <<Repository>> #FFF1C9
@@ -33,9 +32,7 @@ alt invalid input
   C --> V : 400 Bad Request
 else valid input
   S -> S : build spec (ACTIVE, not adminHidden, shop ACTIVE, filters)
-  S -> Q : allowedSpecification()
-  Q --> S : quota spec (not deleted, within shop product limit)
-  S -> R : findAll(spec.and(quota.allowedSpecification()), pageable)
+  S -> R : findAll(spec, pageable)
   R -> MySQL : select products with count
   MySQL --> R : rows and total
   R --> S : Page<Product>

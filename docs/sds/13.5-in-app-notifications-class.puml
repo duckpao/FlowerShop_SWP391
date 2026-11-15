@@ -103,7 +103,7 @@ note bottom of NotificationService
   Creation: one row per recipient, saved in the caller's transaction (no after-commit step).
   Callers: OrderService, SePayGatewayService (notifyPaymentSuccess), ChatService, OccasionReminderService,
   CustomerRefundService / ManagerOrderService / StaffRefundService (refund requests and results),
-  CustomOrderWorkflowService, ShopPlanService, SubscriptionReminderService.
+  CustomOrderWorkflowService.
   Titles, messages and links are free text chosen by the caller; links point to the app page of the recipient.
   The list has no paging and no unread filter; newest first.
 end note

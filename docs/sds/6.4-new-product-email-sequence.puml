@@ -17,7 +17,6 @@ actor Follower as F
 participant "View" as V <<View>> #EADCFF
 participant ManagerProductController as C <<Controller>> #D8F3DC
 participant ManagerProductService as S <<Service>> #DCECFF
-participant ProductQuotaService as Q <<Service>> #DCECFF
 participant ShopProductNotificationService as N <<Service>> #DCECFF
 participant ShopProductPublicationRepository as PUB <<Repository>> #FFF1C9
 participant FavoriteShopRepository as FR <<Repository>> #FFF1C9
@@ -33,8 +32,6 @@ U -> V : save product (create, edit, or unhide)
 V -> C : POST /api/shop/mine/{shopId}/products (create)\nPUT /api/shop/mine/{shopId}/products/{id} (edit)\nPUT /api/shop/mine/{shopId}/products/{id}/unhide (unhide)
 alt unhide
   C -> S : unhide(shopId, id, actor)
-  S -> Q : requireAllowed(product)
-  Q --> S : ok (else 400 product locked by the shop plan limit)
   S -> S : status = ACTIVE
 else create or edit
   C -> S : save(shopId, id, actor, input, images, videos)

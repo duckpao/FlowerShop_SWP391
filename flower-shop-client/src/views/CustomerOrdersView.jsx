@@ -8,17 +8,16 @@ import Badge from '../components/ui/badge/Badge'
 import Button from '../components/ui/button/Button'
 import PageMeta from '../components/common/PageMeta'
 import PageBreadCrumb from '../components/common/PageBreadCrumb'
-import { orderStatusLabels } from '../models/orderStatus'
 
 const statusColors = {
-    AWAITING_QUOTE: 'warning', QUOTED: 'info',
     PENDING: 'warning', AWAITING_DEPOSIT: 'warning', DEPOSIT_PAID: 'info', PROCESSING: 'info', DELIVERING: 'info',
     COMPLETED: 'success', CANCELLED: 'error', REFUNDED: 'error',
 }
-// SRS 8.0: nhãn trạng thái của đơn dùng chung một bảng (orderStatusLabels) cho mọi màn hình
-const statusLabels = orderStatusLabels
+const statusLabels = {
+    PENDING: 'Chờ xác nhận', AWAITING_DEPOSIT: 'Chờ đặt cọc', DEPOSIT_PAID: 'Đã đặt cọc', PROCESSING: 'Đang chuẩn bị',
+    DELIVERING: 'Đang giao', COMPLETED: 'Hoàn thành', CANCELLED: 'Đã hủy', REFUNDED: 'Hoàn hàng',
+}
 const tabs = [
-    ['AWAITING_QUOTE', 'Chờ báo giá'], ['QUOTED', 'Chờ đồng ý báo giá'],
     ['', 'Tất cả'], ['PENDING', 'Chờ thanh toán'], ['PROCESSING', 'Đang chuẩn bị'],
     ['DELIVERING', 'Đang giao'], ['COMPLETED', 'Hoàn thành'], ['CANCELLED', 'Đã hủy'],
 ]
@@ -90,13 +89,11 @@ export default function CustomerOrdersView() {
         }
     }
     // Đơn hoa theo yêu cầu: trả cọc online (AWAITING_DEPOSIT); phần còn lại GHN thu hộ khi giao. Số tiền do server tính.
-    const payStep = async order => {
+    const payStep = async (order, type) => {
         setPayingId(order.id)
         setError('')
         try {
-            const progress = await paymentService.checkPaymentStatus(order.id)
-            if (!['DEPOSIT', 'FULL'].includes(progress.nextPaymentType)) throw new Error('Đơn không còn chờ thanh toán trực tuyến. Phần còn lại của đơn đặt cọc trả COD khi nhận hoa.')
-            await paymentService.startSePayCheckout(order.id, progress.nextPaymentType)
+            await paymentService.startSePayCheckout(order.id, type)
         } catch (e) {
             setError(e.message || 'Không thể tạo thanh toán. Vui lòng thử lại.')
             setPayingId('')
@@ -136,7 +133,7 @@ export default function CustomerOrdersView() {
 
             {groups.map(g => {
                 const multi = g.orders.length > 1
-                const payable = g.orders.filter(o => o.orderType !== 'CUSTOM' && o.paymentSecondsLeft > 0)
+                const payable = g.orders.filter(o => o.paymentSecondsLeft > 0)
                 const secondsLeft = payable.length ? Math.min(...payable.map(o => o.paymentSecondsLeft)) : null
                 const first = g.orders[0]
                 return <article key={g.key} className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-white/5 dark:bg-white/3">
@@ -185,8 +182,8 @@ export default function CustomerOrdersView() {
                                     <PayAction order={{ id: g.key, paymentSecondsLeft: secondsLeft, ids: payable.map(o => o.id) }}
                                         paying={payingId === g.key} onPay={payGroup} onExpire={refreshSoon} />
                                 )}
-                                {!multi && (first.status === 'AWAITING_DEPOSIT' || (first.orderType === 'CUSTOM' && first.status === 'PENDING' && first.paymentMethod !== 'COD')) && (
-                                    <Button size="sm" disabled={payingId === first.id} onClick={() => payStep(first)}>{payingId === first.id ? 'Đang chuyển…' : first.status === 'AWAITING_DEPOSIT' ? 'Đặt cọc' : 'Tiếp tục thanh toán'}</Button>
+                                {!multi && first.status === 'AWAITING_DEPOSIT' && (
+                                    <Button size="sm" disabled={payingId === first.id} onClick={() => payStep(first, 'DEPOSIT')}>{payingId === first.id ? 'Đang chuyển…' : 'Đặt cọc'}</Button>
                                 )}
                             </span>
                         </div>

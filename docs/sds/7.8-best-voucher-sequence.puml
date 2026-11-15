@@ -26,17 +26,7 @@ C -> S : previewVouchers(userId, request, merchandiseOnly)
 S -> CS : preview(context, couponCode, shippingCouponCode)
 CS -> CR : available(shopId)
 CR --> CS : List<Coupon>
-CS -> CS : evaluate: eligible money vouchers sorted by saving,\nbestMoney = highest saving, lowest = lowest saving
-alt an eligible shipping voucher exists
-  CS -> CS : combined = best shipping saving + lowest money saving
-  alt combined > saving of bestMoney
-    CS -> CS : recommend shipping voucher + lowest money voucher, bestSaving = combined
-  else
-    CS -> CS : recommend bestMoney only
-  end
-else no eligible shipping voucher
-  CS -> CS : recommend bestMoney only (bestSaving = 0 when none)
-end
+CS -> CS : evaluate: keep the eligible vouchers (money or shipping) and recommend the one with the highest saving\n(bestSaving = 0 and no suggestion when none, or when the customer already holds a voucher)
 CS --> S : Preview (recommendedOrderCode, recommendedShippingCode, bestSaving)
 S --> C : Preview
 C --> V : 200 OK

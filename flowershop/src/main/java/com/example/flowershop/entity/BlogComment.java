@@ -6,8 +6,6 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
 
 @Entity
 @Table(name = "Blog_Comments")
@@ -33,10 +31,6 @@ public class BlogComment {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "parent_comment_id")
     private BlogComment parentComment;
-
-    @OneToMany(mappedBy = "parentComment", cascade = CascadeType.REMOVE)
-    @Builder.Default
-    private List<BlogComment> replies = new ArrayList<>();
 
     @Column(name = "content", nullable = false, columnDefinition = "TEXT")
     private String content;

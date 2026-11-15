@@ -12,6 +12,7 @@ import com.example.flowershop.entity.enums.ProductStatus;
 import com.example.flowershop.entity.enums.ProductType;
 import com.example.flowershop.exception.ApiException;
 import com.example.flowershop.repository.CartItemRepository;
+import com.example.flowershop.repository.OrderDetailRepository;
 import com.example.flowershop.repository.ProductImageRepository;
 import com.example.flowershop.repository.ProductRepository;
 import com.example.flowershop.repository.UserRepository;
@@ -33,11 +34,11 @@ public class CartService {
     private final ProductRepository productRepository;
     private final ProductImageRepository productImageRepository;
     private final UserRepository userRepository;
-    @org.springframework.beans.factory.annotation.Autowired private ProductQuotaService quota;
+    private final OrderDetailRepository orderDetailRepository;
 
-    /** Kho khách này có thể đặt: kho còn lại (đơn PENDING cũ vẫn giữ hàng cho tới khi hết hạn 10 phút). */
+    /** Kho khách này có thể đặt: kho còn lại cộng phần chính họ đang giữ trong đơn PENDING chưa thanh toán. */
     private int availableStock(String userId, Product product) {
-        return product.getStock();
+        return product.getStock() + orderDetailRepository.sumPendingQuantity(userId, product.getId());
     }
 
     /**
@@ -57,7 +58,6 @@ public class CartService {
         Product product = productRepository.findById(request.getProductId())
                 .orElseThrow(() -> ApiException.notFound("Không tìm thấy sản phẩm với id: " + request.getProductId()));
 
-        quota.requireAllowed(product);
         if (product.getStatus() == ProductStatus.INACTIVE) {
             throw ApiException.badRequest("Sản phẩm này hiện không còn bán.");
         }
@@ -140,7 +140,6 @@ public class CartService {
     @Transactional
     public CartItemResponse updateCartItem(String userId, String cartItemId, UpdateCartItemRequest request) {
         CartItem cartItem = getCartItemOrThrow(cartItemId, userId);
-        quota.requireAllowed(cartItem.getProduct());
 
         // Kiểm tra stock (chỉ áp dụng với hoa có sẵn)
         Product product = cartItem.getProduct();
@@ -202,7 +201,7 @@ public class CartService {
                 .price(product.getPrice())
                 .images(imageUrls)
                 .image(imageUrls.isEmpty() ? null : imageUrls.get(0))
-                .stock(quota.allowed(product) ? available : 0)
+                .stock(available)
                 .shopId(product.getShop().getId())
                 .shopName(product.getShop().getName())
                 .build();

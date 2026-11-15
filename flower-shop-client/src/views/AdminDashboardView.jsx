@@ -5,7 +5,6 @@ import AdminCustomersView from "./AdminCustomersView";
 import AdminProfileView from "./AdminProfileView";
 import AdminOverviewView from "./AdminOverviewView";
 import AdminCategoriesView from "./AdminCategoriesView";
-import { AdminRefundsView, AdminOrdersView, AdminReviewsView } from "./AdminOversightViews";
 import ComponentCard from "../components/common/ComponentCard";
 import PageMeta from "../components/common/PageMeta";
 import PageBreadCrumb from "../components/common/PageBreadCrumb";
@@ -105,9 +104,6 @@ export default function AdminDashboardView({ user, logout, busy, error, path }) 
       {path === "/admin/shops" && <AdminShopsView />}
       {path === "/admin/users" && <AdminCustomersView />}
       {path === "/admin/categories" && <AdminCategoriesView />}
-      {path === "/admin/orders" && <AdminOrdersView />}
-      {path === "/admin/refunds" && <AdminRefundsView />}
-      {path === "/admin/reviews" && <AdminReviewsView />}
       {profile && <AdminProfileView user={user} />}
       {path === "/admin/approvals" && (
         <>

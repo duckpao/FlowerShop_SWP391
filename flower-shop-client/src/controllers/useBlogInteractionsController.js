@@ -2,13 +2,12 @@ import { useEffect, useState } from 'react'
 import { blogService } from '../services/blogService'
 import { useConfirm } from '../components/ui/confirm/ConfirmProvider'
 
-export function useBlogInteractionsController(blogId, user, shopId) {
+export function useBlogInteractionsController(blogId, user) {
   const { confirm } = useConfirm()
   const [engagement, setEngagement] = useState({ likeCount: 0, commentCount: 0 })
   const [interactions, setInteractions] = useState({ liked: false, saved: false })
   const [comments, setComments] = useState(null)
   const [commentDraft, setCommentDraft] = useState('')
-  const [editor, setEditor] = useState(null)
   const [page, setPage] = useState(0)
   const [revision, setRevision] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -16,22 +15,11 @@ export function useBlogInteractionsController(blogId, user, shopId) {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const isCustomer = user?.role === 'CUSTOMER'
-  const isManager = Boolean(shopId)
-
-  useEffect(() => {
-    setPage(0)
-    setEditor(null)
-    setCommentDraft('')
-    setError('')
-    setNotice('')
-  }, [blogId, shopId, user?.id])
 
   useEffect(() => {
     let active = true
     setLoading(true)
-    Promise.all(isManager
-      ? [blogService.managedEngagement(shopId, blogId), blogService.managedComments(shopId, blogId, page)]
-      : [blogService.engagement(blogId), blogService.comments(blogId, page)])
+    Promise.all([blogService.engagement(blogId), blogService.comments(blogId, page)])
       .then(([engagementResult, commentResult]) => {
         if (!active) return
         setEngagement(engagementResult)
@@ -41,7 +29,7 @@ export function useBlogInteractionsController(blogId, user, shopId) {
       .catch(requestError => { if (active) setError(requestError.message) })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [blogId, shopId, isManager, page, revision])
+  }, [blogId, page, revision])
 
   useEffect(() => {
     if (!isCustomer) {
@@ -53,7 +41,7 @@ export function useBlogInteractionsController(blogId, user, shopId) {
       .then(result => { if (active) setInteractions(result) })
       .catch(requestError => { if (active) setError(requestError.message) })
     return () => { active = false }
-  }, [blogId, isCustomer, user?.id])
+  }, [blogId, isCustomer])
 
   async function run(action, successMessage) {
     setBusy(true)
@@ -100,52 +88,22 @@ export function useBlogInteractionsController(blogId, user, shopId) {
   }
 
   const deleteComment = async commentId => {
-    const isThread = comments?.content.some(comment => comment.id === commentId)
     const accepted = await confirm({
       title: 'Xóa bình luận',
-      message: isThread ? 'Xóa bình luận này và các phản hồi bên dưới?' : 'Bạn có chắc muốn xóa phản hồi này?',
+      message: 'Bạn có chắc muốn xóa bình luận này?',
       confirmLabel: 'Xóa',
       tone: 'danger',
     })
     if (!accepted) return
     return run(async () => {
-      if (isManager) await blogService.moderateComment(shopId, blogId, commentId)
-      else await blogService.deleteComment(blogId, commentId)
-      setEditor(null)
-      if (isThread && comments.content.length === 1 && page > 0) setPage(value => value - 1)
+      await blogService.deleteComment(blogId, commentId)
       setRevision(value => value + 1)
     }, 'Đã xóa bình luận.')
   }
 
-  const startEdit = comment => {
-    setError(''); setNotice('')
-    setEditor({ id: comment.id, mode: 'edit', draft: comment.content })
-  }
-  const startReply = comment => {
-    setError(''); setNotice('')
-    setEditor({ id: comment.id, mode: 'reply', draft: '' })
-  }
-  const submitEditor = event => {
-    event.preventDefault()
-    const content = editor?.draft.trim()
-    if (!content || content.length > 2000) {
-      setError('Vui lòng nhập nội dung từ 1 đến 2000 ký tự.')
-      return
-    }
-    return run(async () => {
-      if (editor.mode === 'reply') await blogService.replyComment(shopId, blogId, editor.id, content)
-      else await blogService.updateComment(blogId, editor.id, content)
-      setEditor(null)
-      setRevision(value => value + 1)
-    }, editor.mode === 'reply' ? 'Đã trả lời bình luận.' : 'Đã cập nhật bình luận.')
-  }
-
   return {
     engagement, interactions, comments, commentDraft, setCommentDraft,
-    page, setPage, loading, busy, error, notice, isCustomer, isManager,
-    editor, startEdit, startReply, submitEditor,
-    setEditorDraft: draft => setEditor(current => current ? { ...current, draft } : null),
-    cancelEditor: () => setEditor(null),
+    page, setPage, loading, busy, error, notice, isCustomer,
     toggleLike, toggleSaved, submitComment, deleteComment,
   }
 }
