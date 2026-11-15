@@ -212,6 +212,7 @@ CREATE TABLE Products (
     product_type ENUM('READY_MADE', 'CUSTOM') NOT NULL DEFAULT 'READY_MADE',
     status ENUM('ACTIVE', 'INACTIVE', 'OUT_OF_STOCK') DEFAULT 'ACTIVE',
     admin_hidden BOOLEAN NOT NULL DEFAULT FALSE,
+    deleted BOOLEAN NOT NULL DEFAULT FALSE, -- xóa mềm: giữ lại để đơn và đánh giá cũ còn tham chiếu
     created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_by VARCHAR(36),
     last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -910,3 +911,518 @@ CREATE TABLE IF NOT EXISTS Shop_Pro_Activations (
     CONSTRAINT fk_pro_activation_actor FOREIGN KEY (actor_id) REFERENCES Users(id),
     INDEX ix_pro_activation_shop (shop_id,created_at)
 );
+
+-- =====================================================================
+-- DỮ LIỆU MẪU MỞ RỘNG (chạy sau toàn bộ schema)
+-- Phủ mọi bảng và mọi trạng thái chính. Mật khẩu mọi tài khoản mẫu dùng chung hash với user-admin-01.
+-- Mốc thời gian tính từ @now để dữ liệu luôn 'mới' khi import (gói Pro còn hạn, đơn gần đây).
+-- =====================================================================
+SET @now = NOW();
+
+-- E1. USERS
+INSERT INTO Users (id, email, password_hash, google_id, full_name, phone, role, is_email_verified, status, created_date, created_by) VALUES
+('user-shop-02', 'shop2@gmail.com', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', NULL, 'Lê Minh Châu', '0903111222', 'SHOP', TRUE, 'ACTIVE', DATE_SUB(@now, INTERVAL 172800 MINUTE), 'user-admin-01'),
+('user-shop-03', 'shop3@gmail.com', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', NULL, 'Võ Thanh Hằng', '0904222333', 'SHOP', TRUE, 'ACTIVE', DATE_SUB(@now, INTERVAL 144000 MINUTE), 'user-admin-01'),
+('user-shop-04', 'shop4@gmail.com', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', NULL, 'Đặng Quốc Huy', '0905333444', 'SHOP', TRUE, 'ACTIVE', DATE_SUB(@now, INTERVAL 7200 MINUTE), 'user-admin-01'),
+('user-shop-05', 'shop5@gmail.com', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', NULL, 'Bùi Thị Lan', '0906444555', 'SHOP', TRUE, 'ACTIVE', DATE_SUB(@now, INTERVAL 288000 MINUTE), 'user-admin-01'),
+('user-shop-06', 'shop6@gmail.com', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', NULL, 'Trịnh Văn Tuấn', '0907555666', 'SHOP', TRUE, 'ACTIVE', DATE_SUB(@now, INTERVAL 216000 MINUTE), 'user-admin-01'),
+('user-staff-02', 'staff.hoa2@gmail.com', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', NULL, 'Ngô Thị Mai', '0908666777', 'SHOP_STAFF', TRUE, 'ACTIVE', DATE_SUB(@now, INTERVAL 64800 MINUTE), 'user-shop-02'),
+('user-staff-03', 'staff.hoa3@gmail.com', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', NULL, 'Lý Văn Khoa', '0909777888', 'SHOP_STAFF', TRUE, 'INACTIVE', DATE_SUB(@now, INTERVAL 28800 MINUTE), 'user-shop-01'),
+('user-customer-02', 'khachhang2@gmail.com', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', NULL, 'Nguyễn Hoàng Nam', '0911000002', 'CUSTOMER', TRUE, 'ACTIVE', DATE_SUB(@now, INTERVAL 129600 MINUTE), 'user-admin-01'),
+('user-customer-03', 'khachhang3@gmail.com', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', NULL, 'Phạm Thu Trang', '0911000003', 'CUSTOMER', TRUE, 'ACTIVE', DATE_SUB(@now, INTERVAL 108000 MINUTE), 'user-admin-01'),
+('user-customer-04', 'khachhang4@gmail.com', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', NULL, 'Lê Quốc Anh', '0911000004', 'CUSTOMER', TRUE, 'ACTIVE', DATE_SUB(@now, INTERVAL 86400 MINUTE), 'user-admin-01'),
+('user-customer-05', 'khachhang5@gmail.com', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', NULL, 'Hoàng Mai Linh', '0911000005', 'CUSTOMER', TRUE, 'ACTIVE', DATE_SUB(@now, INTERVAL 43200 MINUTE), 'user-admin-01'),
+('user-customer-06', 'khachhang6@gmail.com', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', NULL, 'Đinh Gia Huy', '0911000006', 'CUSTOMER', TRUE, 'ACTIVE', DATE_SUB(@now, INTERVAL 20160 MINUTE), 'user-admin-01'),
+('user-customer-07', 'khachhang7@gmail.com', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', NULL, 'Vũ Tuấn Kiệt', '0911000007', 'CUSTOMER', TRUE, 'BANNED', DATE_SUB(@now, INTERVAL 72000 MINUTE), 'user-admin-01'),
+('user-customer-08', 'khachhang8@gmail.com', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', NULL, 'Trương Bảo Ngọc', '0911000008', 'CUSTOMER', FALSE, 'ACTIVE', DATE_SUB(@now, INTERVAL 2880 MINUTE), 'user-admin-01'),
+('user-customer-09', 'nguyen.google@gmail.com', NULL, 'google-oauth-demo-0001', 'Nguyễn Google User', '0911000009', 'CUSTOMER', TRUE, 'ACTIVE', DATE_SUB(@now, INTERVAL 14400 MINUTE), 'user-admin-01'),
+('user-customer-10', 'khachhang10@gmail.com', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', NULL, 'Cao Thị Hạnh', '0911000010', 'CUSTOMER', TRUE, 'INACTIVE', DATE_SUB(@now, INTERVAL 57600 MINUTE), 'user-admin-01');
+
+-- E2. SHOPS (ACTIVE, PENDING, INACTIVE, BANNED)
+INSERT INTO Shops (id, owner_id, name, description, logo_url, status, created_by) VALUES
+('shop-02', 'user-shop-02', 'Sài Gòn Floral Boutique', 'Boutique hoa cưới, kệ hoa khai trương và hoa sự kiện tại TP.HCM. Giao nhanh nội thành trong 2 giờ.', '/images/product/product-02.jpg', 'ACTIVE', 'user-admin-01'),
+('shop-03', 'user-shop-03', 'Đà Lạt Garden', 'Hoa tươi từ vườn Đà Lạt: cát tường, hướng dương, hoa dại. Nhập sáng, giao trong ngày.', '/images/product/product-03.jpg', 'ACTIVE', 'user-admin-01'),
+('shop-04', 'user-shop-04', 'Blossom Studio', 'Studio hoa mới mở, đang chờ admin duyệt.', NULL, 'PENDING', 'user-shop-04'),
+('shop-05', 'user-shop-05', 'Hoa Xưa', 'Tiệm hoa đã bị khóa do vi phạm chính sách đăng bán.', NULL, 'BANNED', 'user-admin-01'),
+('shop-06', 'user-shop-06', 'Tiệm Hoa Cũ', 'Shop tạm ngưng hoạt động theo yêu cầu của chủ shop.', NULL, 'INACTIVE', 'user-shop-06');
+
+UPDATE Shops SET logo_url = '/images/product/product-01.jpg' WHERE id = 'shop-01';
+
+-- E3. ADDRESSES (địa chỉ lấy hàng của shop và địa chỉ nhận của khách; mã GHN để NULL như dữ liệu gốc)
+INSERT INTO Addresses (id, user_id, shop_id, address_line, ward, district, city, recipient_name, recipient_phone, address_type, is_pickup, is_default, created_by) VALUES
+('addr-shop-02', NULL, 'shop-02', '123 Nguyễn Huệ', 'Bến Nghé', 'Quận 1', 'TP. Hồ Chí Minh', 'Lê Minh Châu', '0903111222', 'OFFICE', TRUE, TRUE, 'user-shop-02'),
+('addr-shop-03', NULL, 'shop-03', '45 Hoàng Văn Thụ', 'Phường 9', 'Đà Lạt', 'Lâm Đồng', 'Võ Thanh Hằng', '0904222333', 'OFFICE', TRUE, TRUE, 'user-shop-03'),
+('addr-shop-04', NULL, 'shop-04', '8 Lê Lợi', 'Hải Châu 1', 'Hải Châu', 'Đà Nẵng', 'Đặng Quốc Huy', '0905333444', 'OFFICE', TRUE, TRUE, 'user-shop-04'),
+('addr-shop-05', NULL, 'shop-05', '77 Trần Phú', 'Lộc Thọ', 'Nha Trang', 'Khánh Hòa', 'Bùi Thị Lan', '0906444555', 'OFFICE', TRUE, TRUE, 'user-shop-05'),
+('addr-customer-01b', 'user-customer-01', NULL, 'Tòa nhà FPT, Khu Công Nghệ Cao Hòa Lạc', 'Thạch Hòa', 'Thạch Thất', 'Hà Nội', 'Trần Thị B', '0987654321', 'OFFICE', FALSE, FALSE, 'user-customer-01'),
+('addr-customer-02a', 'user-customer-02', NULL, '25 Lê Duẩn', 'Bến Nghé', 'Quận 1', 'TP. Hồ Chí Minh', 'Nguyễn Hoàng Nam', '0911000002', 'HOME', FALSE, TRUE, 'user-customer-02'),
+('addr-customer-02b', 'user-customer-02', NULL, 'Tầng 8, Bitexco, 2 Hải Triều', 'Bến Nghé', 'Quận 1', 'TP. Hồ Chí Minh', 'Nguyễn Hoàng Nam', '0911000002', 'OFFICE', FALSE, FALSE, 'user-customer-02'),
+('addr-customer-03', 'user-customer-03', NULL, '56 Trần Hưng Đạo', 'Phường 5', 'Quận 5', 'TP. Hồ Chí Minh', 'Phạm Thu Trang', '0911000003', 'HOME', FALSE, TRUE, 'user-customer-03'),
+('addr-customer-04', 'user-customer-04', NULL, '12 Bạch Đằng', 'Hải Châu 1', 'Hải Châu', 'Đà Nẵng', 'Lê Quốc Anh', '0911000004', 'HOME', FALSE, TRUE, 'user-customer-04'),
+('addr-customer-05', 'user-customer-05', NULL, '88 Láng Hạ', 'Láng Hạ', 'Đống Đa', 'Hà Nội', 'Hoàng Mai Linh', '0911000005', 'HOME', FALSE, TRUE, 'user-customer-05'),
+('addr-customer-06', 'user-customer-06', NULL, '5 Nguyễn Trãi', 'Thanh Xuân Trung', 'Thanh Xuân', 'Hà Nội', 'Đinh Gia Huy', '0911000006', 'HOME', FALSE, TRUE, 'user-customer-06');
+
+-- E4. PRODUCTS
+INSERT INTO Products (id, shop_id, category_id, name, description, components, shelf_life_days, price, stock, product_type, status, admin_hidden, deleted, created_date, created_by) VALUES
+('prod-03', 'shop-01', 'cat-16', 'Bó Hồng Pastel Ngọt Ngào', 'Hồng pastel kết hợp eucalyptus, gói giấy mờ nhẹ nhàng.', '{"pastel_roses": 12, "eucalyptus": 4}', 4, 420000, 30, 'READY_MADE', 'ACTIVE', FALSE, FALSE, DATE_SUB(@now, INTERVAL 86400 MINUTE), 'user-shop-01'),
+('prod-04', 'shop-01', 'cat-13', 'Hộp Hoa Valentine Đỏ Thắm', 'Hộp tròn hồng đỏ Ecuador kèm thiệp viết tay.', '{"red_roses": 15, "baby_breath": 3, "card": 1}', 5, 580000, 25, 'READY_MADE', 'ACTIVE', FALSE, FALSE, DATE_SUB(@now, INTERVAL 83520 MINUTE), 'user-shop-01'),
+('prod-05', 'shop-01', 'cat-03', 'Bó Hoa Sinh Nhật Rực Rỡ', 'Hướng dương, đồng tiền và cúc mix tông vàng cam.', '{"sunflowers": 3, "gerbera": 6, "daisy": 5}', 5, 390000, 40, 'READY_MADE', 'ACTIVE', FALSE, FALSE, DATE_SUB(@now, INTERVAL 79200 MINUTE), 'user-shop-01'),
+('prod-06', 'shop-01', 'cat-08', 'Bó Hướng Dương Tốt Nghiệp', 'Bó hướng dương kèm gấu bông mini chúc mừng tốt nghiệp.', '{"sunflowers": 5, "mini_bear": 1}', 5, 320000, 35, 'READY_MADE', 'ACTIVE', FALSE, FALSE, DATE_SUB(@now, INTERVAL 72000 MINUTE), 'user-shop-01'),
+('prod-07', 'shop-01', 'cat-12', 'Giỏ Hoa Tri Ân Thầy Cô', 'Giỏ mây cắm hoa tông trắng xanh, dành cho ngày 20/11.', '{"lily": 3, "carnation": 8, "greens": 1}', 6, 450000, 20, 'READY_MADE', 'ACTIVE', FALSE, FALSE, DATE_SUB(@now, INTERVAL 69120 MINUTE), 'user-shop-01'),
+('prod-08', 'shop-01', 'cat-19', 'Bình Hoa Ly Thơm', 'Ly thơm cắm sẵn trong bình thủy tinh, tỏa hương dịu.', '{"oriental_lily": 5, "vase": 1}', 7, 520000, 15, 'READY_MADE', 'ACTIVE', FALSE, FALSE, DATE_SUB(@now, INTERVAL 64800 MINUTE), 'user-shop-01'),
+('prod-09', 'shop-01', 'cat-23', 'Bó Baby Trắng Tinh Khôi', 'Baby trắng gói giấy kraft, hợp làm quà nhỏ.', '{"baby_breath": 20}', 5, 250000, 45, 'READY_MADE', 'ACTIVE', FALSE, FALSE, DATE_SUB(@now, INTERVAL 63360 MINUTE), 'user-shop-01'),
+('prod-10', 'shop-01', 'cat-24', 'Lan Hồ Điệp Trắng 1 Cành', 'Chậu lan hồ điệp trắng để bàn, bền 3 tuần.', '{"phalaenopsis": 1, "pot": 1}', 21, 890000, 8, 'READY_MADE', 'ACTIVE', FALSE, FALSE, DATE_SUB(@now, INTERVAL 57600 MINUTE), 'user-shop-01'),
+('prod-11', 'shop-01', 'cat-20', 'Bó Cúc Họa Mi Mùa Thu', 'Cúc họa mi trắng tinh khôi, giá mềm.', '{"chamomile_daisy": 25}', 5, 210000, 60, 'READY_MADE', 'ACTIVE', FALSE, FALSE, DATE_SUB(@now, INTERVAL 50400 MINUTE), 'user-shop-01'),
+('prod-12', 'shop-01', 'cat-10', 'Bó Hoa 20/10 Rạng Rỡ', 'Hồng, ly và hoa đồng tiền tông hồng tặng ngày Phụ nữ Việt Nam.', '{"pink_roses": 8, "lily": 2, "gerbera": 4}', 5, 480000, 22, 'READY_MADE', 'ACTIVE', FALSE, FALSE, DATE_SUB(@now, INTERVAL 43200 MINUTE), 'user-shop-01'),
+('prod-33', 'shop-01', 'cat-25', 'Hoa Thiết Kế Theo Yêu Cầu', 'Sản phẩm tham chiếu cho đơn đặt hoa riêng. Giá thực tế do shop báo.', '{"custom": true}', 5, 500000, 999, 'CUSTOM', 'ACTIVE', FALSE, FALSE, DATE_SUB(@now, INTERVAL 100800 MINUTE), 'user-shop-01'),
+('prod-34', 'shop-01', 'cat-16', 'Bó Hồng Vàng Ecuador', 'Hồng vàng nhập khẩu, đang hết hàng.', '{"yellow_roses": 10}', 5, 460000, 0, 'READY_MADE', 'OUT_OF_STOCK', FALSE, FALSE, DATE_SUB(@now, INTERVAL 36000 MINUTE), 'user-shop-01'),
+('prod-35', 'shop-01', 'cat-15', 'Giỏ Hoa Giáng Sinh Cũ', 'Mẫu mùa Noel năm ngoái, shop đã ẩn.', '{"pine": 5, "red_roses": 6}', 7, 430000, 5, 'READY_MADE', 'INACTIVE', FALSE, FALSE, DATE_SUB(@now, INTERVAL 432000 MINUTE), 'user-shop-01'),
+('prod-31', 'shop-01', 'cat-25', 'Bó Hoa Bị Admin Ẩn', 'Bài đăng bị admin ẩn do mô tả sai sự thật.', '{"mixed": 10}', 4, 150000, 10, 'READY_MADE', 'ACTIVE', TRUE, FALSE, DATE_SUB(@now, INTERVAL 28800 MINUTE), 'user-shop-01'),
+('prod-32', 'shop-01', 'cat-25', 'Mẫu Hoa Đã Xóa', 'Sản phẩm đã bị xóa mềm, chỉ giữ để đơn cũ tham chiếu.', '{"mixed": 5}', 3, 180000, 0, 'READY_MADE', 'INACTIVE', FALSE, TRUE, DATE_SUB(@now, INTERVAL 129600 MINUTE), 'user-shop-01'),
+('prod-13', 'shop-02', 'cat-09', 'Hoa Cầm Tay Cô Dâu Trắng', 'Hồng trắng, lan tuyết và baby trắng tinh khôi.', '{"white_roses": 9, "snow_orchid": 3, "baby_breath": 5}', 3, 750000, 10, 'READY_MADE', 'ACTIVE', FALSE, FALSE, DATE_SUB(@now, INTERVAL 158400 MINUTE), 'user-shop-02'),
+('prod-14', 'shop-02', 'cat-30', 'Kệ Hoa Khai Trương Hồng Phát', 'Kệ hai tầng cao 1,6 m, hoa tươi mix rực rỡ.', '{"gerbera": 20, "roses": 15, "lily": 5}', 5, 1200000, 6, 'READY_MADE', 'ACTIVE', FALSE, FALSE, DATE_SUB(@now, INTERVAL 151200 MINUTE), 'user-shop-02'),
+('prod-15', 'shop-02', 'cat-29', 'Lẵng Hoa Chúc Mừng Thăng Chức', 'Lẵng hoa cỡ lớn tông vàng đỏ, kèm băng rôn.', '{"sunflowers": 6, "red_roses": 10, "lily": 4}', 5, 680000, 12, 'READY_MADE', 'ACTIVE', FALSE, FALSE, DATE_SUB(@now, INTERVAL 144000 MINUTE), 'user-shop-02'),
+('prod-16', 'shop-02', 'cat-05', 'Vòng Hoa Chia Buồn Trắng', 'Vòng hoa cúc trắng, kèm băng chia buồn.', '{"white_chrysanthemum": 40}', 4, 950000, 5, 'READY_MADE', 'ACTIVE', FALSE, FALSE, DATE_SUB(@now, INTERVAL 136800 MINUTE), 'user-shop-02'),
+('prod-17', 'shop-02', 'cat-14', 'Chậu Hoa Tết Hoàng Mai', 'Chậu hoàng mai bonsai, sai nụ, giao trước Tết.', '{"apricot_blossom": 1}', 20, 1450000, 9, 'READY_MADE', 'ACTIVE', FALSE, FALSE, DATE_SUB(@now, INTERVAL 129600 MINUTE), 'user-shop-02'),
+('prod-18', 'shop-02', 'cat-11', 'Bó Hoa 8/3 Tulip Mix', 'Tulip nhập khẩu mix hồng và baby.', '{"tulip": 12, "baby_breath": 4}', 4, 540000, 30, 'READY_MADE', 'ACTIVE', FALSE, FALSE, DATE_SUB(@now, INTERVAL 122400 MINUTE), 'user-shop-02'),
+('prod-19', 'shop-02', 'cat-16', 'Hộp Hồng Nhung Sang Trọng', 'Hộp vuông hồng nhung đỏ thẫm, phủ rêu.', '{"velvet_roses": 20}', 5, 690000, 18, 'READY_MADE', 'ACTIVE', FALSE, FALSE, DATE_SUB(@now, INTERVAL 115200 MINUTE), 'user-shop-02'),
+('prod-20', 'shop-02', 'cat-18', 'Bó Đồng Tiền Rực Rỡ', 'Đồng tiền nhiều màu, bền hoa.', '{"gerbera": 15}', 7, 300000, 50, 'READY_MADE', 'ACTIVE', FALSE, FALSE, DATE_SUB(@now, INTERVAL 108000 MINUTE), 'user-shop-02'),
+('prod-21', 'shop-02', 'cat-21', 'Cẩm Chướng Mẹ Yêu', 'Cẩm chướng đỏ và hồng tặng mẹ.', '{"carnation": 20}', 8, 260000, 40, 'READY_MADE', 'ACTIVE', FALSE, FALSE, DATE_SUB(@now, INTERVAL 100800 MINUTE), 'user-shop-02'),
+('prod-22', 'shop-02', 'cat-22', 'Cát Tường Tím Dịu Dàng', 'Cát tường tím gói giấy trắng.', '{"lisianthus": 15}', 6, 360000, 28, 'READY_MADE', 'ACTIVE', FALSE, FALSE, DATE_SUB(@now, INTERVAL 93600 MINUTE), 'user-shop-02'),
+('prod-23', 'shop-03', 'cat-22', 'Bó Cát Tường Đà Lạt', 'Cát tường trắng hồng nhập từ vườn Đà Lạt.', '{"lisianthus": 18}', 6, 340000, 25, 'READY_MADE', 'ACTIVE', FALSE, FALSE, DATE_SUB(@now, INTERVAL 129600 MINUTE), 'user-shop-03'),
+('prod-24', 'shop-03', 'cat-17', 'Giỏ Hướng Dương Đà Lạt', 'Giỏ gỗ hướng dương và lá bạc.', '{"sunflowers": 8, "silver_leaf": 3}', 5, 480000, 20, 'READY_MADE', 'ACTIVE', FALSE, FALSE, DATE_SUB(@now, INTERVAL 122400 MINUTE), 'user-shop-03'),
+('prod-25', 'shop-03', 'cat-15', 'Vòng Hoa Giáng Sinh Thông', 'Vòng thông tươi trang trí cửa, kèm nơ đỏ.', '{"pine": 1, "ribbon": 1}', 14, 410000, 14, 'READY_MADE', 'ACTIVE', FALSE, FALSE, DATE_SUB(@now, INTERVAL 115200 MINUTE), 'user-shop-03'),
+('prod-26', 'shop-03', 'cat-25', 'Bó Hoa Dại Đồng Nội', 'Hoa dại mix tự nhiên, phong cách rustic.', '{"wildflowers": 30}', 4, 230000, 50, 'READY_MADE', 'ACTIVE', FALSE, FALSE, DATE_SUB(@now, INTERVAL 108000 MINUTE), 'user-shop-03'),
+('prod-27', 'shop-03', 'cat-28', 'Bình Hoa Cúc Pingpong', 'Cúc pingpong cắm sẵn bình gốm.', '{"pingpong": 15, "ceramic_vase": 1}', 7, 380000, 24, 'READY_MADE', 'ACTIVE', FALSE, FALSE, DATE_SUB(@now, INTERVAL 100800 MINUTE), 'user-shop-03'),
+('prod-28', 'shop-03', 'cat-27', 'Hộp Hoa Mini Quà Tặng', 'Hộp nhỏ cắm hoa mini, hợp quà cảm ơn.', '{"mini_roses": 6, "carnation": 4}', 5, 270000, 35, 'READY_MADE', 'ACTIVE', FALSE, FALSE, DATE_SUB(@now, INTERVAL 93600 MINUTE), 'user-shop-03'),
+('prod-29', 'shop-03', 'cat-06', 'Giỏ Hoa Thăm Bệnh Nhẹ Nhàng', 'Giỏ hoa tông xanh trắng, không mùi nồng.', '{"daisy": 10, "lisianthus": 6}', 5, 560000, 11, 'READY_MADE', 'ACTIVE', FALSE, FALSE, DATE_SUB(@now, INTERVAL 86400 MINUTE), 'user-shop-03'),
+('prod-30', 'shop-03', 'cat-07', 'Bó Hoa Cảm Ơn Pastel', 'Bó pastel kèm thiệp cảm ơn.', '{"pastel_mix": 15}', 5, 310000, 33, 'READY_MADE', 'ACTIVE', FALSE, FALSE, DATE_SUB(@now, INTERVAL 79200 MINUTE), 'user-shop-03'),
+('prod-36', 'shop-04', 'cat-25', 'Bó Hoa Thử Nghiệm', 'Sản phẩm của shop đang chờ duyệt, chưa hiển thị công khai.', '{"mixed": 10}', 4, 199000, 10, 'READY_MADE', 'ACTIVE', FALSE, FALSE, DATE_SUB(@now, INTERVAL 4320 MINUTE), 'user-shop-04'),
+('prod-37', 'shop-05', 'cat-25', 'Bó Hoa Shop Bị Khóa', 'Sản phẩm của shop đã bị khóa.', '{"mixed": 10}', 4, 175000, 10, 'READY_MADE', 'ACTIVE', FALSE, FALSE, DATE_SUB(@now, INTERVAL 216000 MINUTE), 'user-shop-05'),
+('prod-38', 'shop-06', 'cat-25', 'Bó Hoa Shop Tạm Nghỉ', 'Sản phẩm của shop đang tạm nghỉ.', '{"mixed": 12}', 4, 205000, 7, 'READY_MADE', 'ACTIVE', FALSE, FALSE, DATE_SUB(@now, INTERVAL 201600 MINUTE), 'user-shop-06');
+
+-- Sản phẩm đang bán (ACTIVE, không bị ẩn) của shop hoạt động được ghi nhận là đã công bố
+INSERT IGNORE INTO Shop_Product_Publications (product_id, published_at)
+SELECT id, COALESCE(created_date, @now) FROM Products WHERE status = 'ACTIVE' AND deleted = FALSE;
+INSERT IGNORE INTO Shop_Product_Postings (id, shop_id, posted_at)
+SELECT id, shop_id, COALESCE(created_date, @now) FROM Products;
+
+-- E4.1 PRODUCT IMAGES (ảnh chính + ảnh phụ)
+INSERT INTO Product_Images (id, product_id, image_url, is_primary, display_order) VALUES
+('img-prod-03-1', 'prod-03', '/images/product/product-01.jpg', TRUE, 0),
+('img-prod-03-2', 'prod-03', '/images/product/product-02.jpg', FALSE, 1),
+('img-prod-03-3', 'prod-03', '/images/product/product-03.jpg', FALSE, 2),
+('img-prod-04-1', 'prod-04', '/images/product/product-02.jpg', TRUE, 0),
+('img-prod-04-2', 'prod-04', '/images/product/product-03.jpg', FALSE, 1),
+('img-prod-05-1', 'prod-05', '/images/product/product-03.jpg', TRUE, 0),
+('img-prod-05-2', 'prod-05', '/images/product/product-04.jpg', FALSE, 1),
+('img-prod-06-1', 'prod-06', '/images/product/product-04.jpg', TRUE, 0),
+('img-prod-06-2', 'prod-06', '/images/product/product-05.jpg', FALSE, 1),
+('img-prod-07-1', 'prod-07', '/images/product/product-05.jpg', TRUE, 0),
+('img-prod-07-2', 'prod-07', '/images/product/product-01.jpg', FALSE, 1),
+('img-prod-07-3', 'prod-07', '/images/product/product-02.jpg', FALSE, 2),
+('img-prod-08-1', 'prod-08', '/images/product/product-01.jpg', TRUE, 0),
+('img-prod-08-2', 'prod-08', '/images/product/product-02.jpg', FALSE, 1),
+('img-prod-09-1', 'prod-09', '/images/product/product-02.jpg', TRUE, 0),
+('img-prod-09-2', 'prod-09', '/images/product/product-03.jpg', FALSE, 1),
+('img-prod-10-1', 'prod-10', '/images/product/product-03.jpg', TRUE, 0),
+('img-prod-10-2', 'prod-10', '/images/product/product-04.jpg', FALSE, 1),
+('img-prod-11-1', 'prod-11', '/images/product/product-04.jpg', TRUE, 0),
+('img-prod-11-2', 'prod-11', '/images/product/product-05.jpg', FALSE, 1),
+('img-prod-11-3', 'prod-11', '/images/product/product-01.jpg', FALSE, 2),
+('img-prod-12-1', 'prod-12', '/images/product/product-05.jpg', TRUE, 0),
+('img-prod-12-2', 'prod-12', '/images/product/product-01.jpg', FALSE, 1),
+('img-prod-33-1', 'prod-33', '/images/product/product-01.jpg', TRUE, 0),
+('img-prod-33-2', 'prod-33', '/images/product/product-02.jpg', FALSE, 1),
+('img-prod-34-1', 'prod-34', '/images/product/product-02.jpg', TRUE, 0),
+('img-prod-35-1', 'prod-35', '/images/product/product-03.jpg', TRUE, 0),
+('img-prod-35-2', 'prod-35', '/images/product/product-04.jpg', FALSE, 1),
+('img-prod-35-3', 'prod-35', '/images/product/product-05.jpg', FALSE, 2),
+('img-prod-31-1', 'prod-31', '/images/product/product-04.jpg', TRUE, 0),
+('img-prod-31-2', 'prod-31', '/images/product/product-05.jpg', FALSE, 1),
+('img-prod-32-1', 'prod-32', '/images/product/product-05.jpg', TRUE, 0),
+('img-prod-13-1', 'prod-13', '/images/product/product-01.jpg', TRUE, 0),
+('img-prod-13-2', 'prod-13', '/images/product/product-02.jpg', FALSE, 1),
+('img-prod-14-1', 'prod-14', '/images/product/product-02.jpg', TRUE, 0),
+('img-prod-14-2', 'prod-14', '/images/product/product-03.jpg', FALSE, 1),
+('img-prod-14-3', 'prod-14', '/images/product/product-04.jpg', FALSE, 2),
+('img-prod-15-1', 'prod-15', '/images/product/product-03.jpg', TRUE, 0),
+('img-prod-15-2', 'prod-15', '/images/product/product-04.jpg', FALSE, 1),
+('img-prod-16-1', 'prod-16', '/images/product/product-04.jpg', TRUE, 0),
+('img-prod-16-2', 'prod-16', '/images/product/product-05.jpg', FALSE, 1),
+('img-prod-17-1', 'prod-17', '/images/product/product-05.jpg', TRUE, 0),
+('img-prod-17-2', 'prod-17', '/images/product/product-01.jpg', FALSE, 1),
+('img-prod-18-1', 'prod-18', '/images/product/product-01.jpg', TRUE, 0),
+('img-prod-18-2', 'prod-18', '/images/product/product-02.jpg', FALSE, 1),
+('img-prod-18-3', 'prod-18', '/images/product/product-03.jpg', FALSE, 2),
+('img-prod-19-1', 'prod-19', '/images/product/product-02.jpg', TRUE, 0),
+('img-prod-19-2', 'prod-19', '/images/product/product-03.jpg', FALSE, 1),
+('img-prod-20-1', 'prod-20', '/images/product/product-03.jpg', TRUE, 0),
+('img-prod-20-2', 'prod-20', '/images/product/product-04.jpg', FALSE, 1),
+('img-prod-21-1', 'prod-21', '/images/product/product-04.jpg', TRUE, 0),
+('img-prod-21-2', 'prod-21', '/images/product/product-05.jpg', FALSE, 1),
+('img-prod-22-1', 'prod-22', '/images/product/product-05.jpg', TRUE, 0),
+('img-prod-22-2', 'prod-22', '/images/product/product-01.jpg', FALSE, 1),
+('img-prod-22-3', 'prod-22', '/images/product/product-02.jpg', FALSE, 2),
+('img-prod-23-1', 'prod-23', '/images/product/product-01.jpg', TRUE, 0),
+('img-prod-23-2', 'prod-23', '/images/product/product-02.jpg', FALSE, 1),
+('img-prod-24-1', 'prod-24', '/images/product/product-02.jpg', TRUE, 0),
+('img-prod-24-2', 'prod-24', '/images/product/product-03.jpg', FALSE, 1),
+('img-prod-25-1', 'prod-25', '/images/product/product-03.jpg', TRUE, 0),
+('img-prod-25-2', 'prod-25', '/images/product/product-04.jpg', FALSE, 1),
+('img-prod-26-1', 'prod-26', '/images/product/product-04.jpg', TRUE, 0),
+('img-prod-26-2', 'prod-26', '/images/product/product-05.jpg', FALSE, 1),
+('img-prod-26-3', 'prod-26', '/images/product/product-01.jpg', FALSE, 2),
+('img-prod-27-1', 'prod-27', '/images/product/product-05.jpg', TRUE, 0),
+('img-prod-27-2', 'prod-27', '/images/product/product-01.jpg', FALSE, 1),
+('img-prod-28-1', 'prod-28', '/images/product/product-01.jpg', TRUE, 0),
+('img-prod-28-2', 'prod-28', '/images/product/product-02.jpg', FALSE, 1),
+('img-prod-29-1', 'prod-29', '/images/product/product-02.jpg', TRUE, 0),
+('img-prod-29-2', 'prod-29', '/images/product/product-03.jpg', FALSE, 1),
+('img-prod-30-1', 'prod-30', '/images/product/product-03.jpg', TRUE, 0),
+('img-prod-30-2', 'prod-30', '/images/product/product-04.jpg', FALSE, 1),
+('img-prod-30-3', 'prod-30', '/images/product/product-05.jpg', FALSE, 2),
+('img-prod-36-1', 'prod-36', '/images/product/product-04.jpg', TRUE, 0),
+('img-prod-36-2', 'prod-36', '/images/product/product-05.jpg', FALSE, 1),
+('img-prod-37-1', 'prod-37', '/images/product/product-05.jpg', TRUE, 0),
+('img-prod-37-2', 'prod-37', '/images/product/product-01.jpg', FALSE, 1),
+('img-prod-38-1', 'prod-38', '/images/product/product-01.jpg', TRUE, 0),
+('img-prod-38-2', 'prod-38', '/images/product/product-02.jpg', FALSE, 1),
+('img-prod-01-1', 'prod-01', '/images/product/product-01.jpg', TRUE, 0),
+('img-prod-02-1', 'prod-02', '/images/product/product-02.jpg', TRUE, 0);
+
+-- E4.2 PRODUCT VIDEOS
+INSERT INTO Product_Videos (id, product_id, video_url, title, description, display_order) VALUES
+('vid-prod-03', 'prod-03', 'https://res.cloudinary.com/demo/video/upload/dog.mp4', 'Cách gói bó hồng pastel', 'Video ngắn thợ hoa gói bó hồng pastel.', 0),
+('vid-prod-13', 'prod-13', 'https://res.cloudinary.com/demo/video/upload/elephants.mp4', 'Hoa cầm tay cô dâu', 'Quay cận cảnh bó hoa cầm tay.', 0),
+('vid-prod-14', 'prod-14', 'https://res.cloudinary.com/demo/video/upload/dog.mp4', 'Lắp đặt kệ khai trương', 'Đội shop lắp đặt kệ hoa tại cửa hàng khách.', 0),
+('vid-prod-24', 'prod-24', 'https://res.cloudinary.com/demo/video/upload/elephants.mp4', 'Giỏ hướng dương Đà Lạt', 'Hoa nhập sáng từ vườn Đà Lạt.', 0);
+
+-- E5. COUPONS (platform và shop; còn hạn, hết hạn, tắt, hết lượt)
+INSERT INTO Coupons (id, shop_id, code, discount_type, discount_value, min_order_value, max_discount_value, start_date, end_date, usage_limit, used_count, status, created_by) VALUES
+('coupon-02', NULL, 'FLOWER50K', 'FIXED_AMOUNT', 50000, 300000, 50000, DATE_SUB(@now, INTERVAL 43200 MINUTE), DATE_ADD(@now, INTERVAL 86400 MINUTE), 200, 14, 'ACTIVE', 'user-admin-01'),
+('coupon-03', NULL, 'FREESHIP30', 'FIXED_AMOUNT', 30000, 150000, 30000, DATE_SUB(@now, INTERVAL 28800 MINUTE), DATE_ADD(@now, INTERVAL 57600 MINUTE), 500, 62, 'ACTIVE', 'user-admin-01'),
+('coupon-04', 'shop-02', 'SGON15', 'PERCENTAGE', 15, 500000, 100000, DATE_SUB(@now, INTERVAL 21600 MINUTE), DATE_ADD(@now, INTERVAL 43200 MINUTE), 50, 8, 'ACTIVE', 'user-shop-02'),
+('coupon-05', 'shop-03', 'DALAT20', 'PERCENTAGE', 20, 250000, 80000, DATE_SUB(@now, INTERVAL 14400 MINUTE), DATE_ADD(@now, INTERVAL 28800 MINUTE), 30, 5, 'ACTIVE', 'user-shop-03'),
+('coupon-06', 'shop-01', 'EXPIRED10', 'PERCENTAGE', 10, 100000, 40000, DATE_SUB(@now, INTERVAL 129600 MINUTE), DATE_SUB(@now, INTERVAL 43200 MINUTE), 100, 37, 'EXPIRED', 'user-shop-01'),
+('coupon-07', 'shop-01', 'TETSALE', 'PERCENTAGE', 12, 300000, 70000, DATE_SUB(@now, INTERVAL 7200 MINUTE), DATE_ADD(@now, INTERVAL 86400 MINUTE), 100, 0, 'DISABLED', 'user-shop-01'),
+('coupon-08', NULL, 'HETLUOT', 'FIXED_AMOUNT', 20000, 100000, 20000, DATE_SUB(@now, INTERVAL 14400 MINUTE), DATE_ADD(@now, INTERVAL 14400 MINUTE), 10, 10, 'ACTIVE', 'user-admin-01'),
+('coupon-09', NULL, 'NEWBIE25', 'PERCENTAGE', 25, 100000, 60000, DATE_SUB(@now, INTERVAL 43200 MINUTE), DATE_ADD(@now, INTERVAL 129600 MINUTE), 1000, 121, 'ACTIVE', 'user-admin-01');
+
+-- E6. CART ITEMS
+INSERT INTO Cart_Items (id, user_id, product_id, quantity, created_by) VALUES
+('cart-02', 'user-customer-02', 'prod-05', 1, 'user-customer-02'),
+('cart-03', 'user-customer-02', 'prod-18', 2, 'user-customer-02'),
+('cart-04', 'user-customer-03', 'prod-27', 1, 'user-customer-03'),
+('cart-05', 'user-customer-04', 'prod-12', 1, 'user-customer-04'),
+('cart-06', 'user-customer-05', 'prod-20', 3, 'user-customer-05'),
+('cart-07', 'user-customer-05', 'prod-23', 1, 'user-customer-05'),
+('cart-08', 'user-customer-01', 'prod-03', 1, 'user-customer-01');
+
+-- E7. CUSTOM ORDER REQUESTS (đủ 4 trạng thái)
+INSERT INTO Custom_Order_Requests (id, customer_id, shop_id, budget, desired_components, description, status, created_date, created_by) VALUES
+('req-02', 'user-customer-01', 'shop-01', 1200000, '{"main_flowers": ["Hồng Ecuador", "Cát tường"], "wrapper": "Giấy mờ", "color_tone": "Hồng phấn", "occasion": "Sinh nhật mẹ"}', 'Lẵng hoa tông hồng phấn tặng mẹ nhân dịp 60 tuổi.', 'ACCEPTED', DATE_SUB(@now, INTERVAL 12960 MINUTE), 'user-customer-01'),
+('req-03', 'user-customer-03', 'shop-01', 900000, '{"main_flowers": ["Hướng dương"], "wrapper": "Kraft", "occasion": "Khai trương"}', 'Hộp hoa hướng dương mừng khai trương tiệm nail.', 'ACCEPTED', DATE_SUB(@now, INTERVAL 8640 MINUTE), 'user-customer-03'),
+('req-04', 'user-customer-02', 'shop-02', 1500000, '{"main_flowers": ["Tulip", "Hồng trắng"], "wrapper": "Hộp mica", "occasion": "Kỷ niệm"}', 'Hộp hoa tulip kỷ niệm 5 năm ngày cưới.', 'ACCEPTED', DATE_SUB(@now, INTERVAL 37440 MINUTE), 'user-customer-02'),
+('req-05', 'user-customer-04', 'shop-03', 700000, '{"main_flowers": ["Cát tường"], "color_tone": "Tím"}', 'Bó cát tường tím tặng bạn gái.', 'REQUESTED', DATE_SUB(@now, INTERVAL 180 MINUTE), 'user-customer-04'),
+('req-06', 'user-customer-05', 'shop-01', 300000, '{"main_flowers": ["Lan Hồ Điệp"]}', 'Chậu lan hồ điệp ngân sách thấp.', 'REJECTED', DATE_SUB(@now, INTERVAL 20160 MINUTE), 'user-customer-05'),
+('req-07', 'user-customer-06', 'shop-02', 2000000, '{"main_flowers": ["Hồng", "Ly"], "wrapper": "Giỏ mây", "occasion": "Tân gia"}', 'Giỏ hoa lớn trang trí tiệc tân gia.', 'NEGOTIATING', DATE_SUB(@now, INTERVAL 2880 MINUTE), 'user-customer-06');
+
+-- E8. ORDERS (đủ trạng thái, kèm chi tiết, thanh toán, vận đơn, hoàn tiền)
+INSERT INTO Orders (id, customer_id, shop_id, delivery_address_id, recipient_name, recipient_phone, coupon_id, order_type, sub_total, discount_amount, shipping_fee, total_amount, deposit_amount, customer_note, cancel_reason, shop_note, checkout_group, custom_request_id, status, created_date, created_by) VALUES
+('order-02', 'user-customer-02', 'shop-01', 'addr-customer-02a', 'Nguyễn Hoàng Nam', '0911000002', 'coupon-02', 'STANDARD', 670000, 50000, 30000, 650000, 0, 'Giao giờ hành chính giúp mình nhé.', NULL, NULL, NULL, NULL, 'COMPLETED', DATE_SUB(@now, INTERVAL 57600 MINUTE), 'user-customer-02'),
+('order-03', 'user-customer-03', 'shop-02', 'addr-customer-03', 'Phạm Thu Trang', '0911000003', 'coupon-04', 'STANDARD', 1230000, 100000, 35000, 1165000, 0, NULL, NULL, NULL, NULL, NULL, 'COMPLETED', DATE_SUB(@now, INTERVAL 43200 MINUTE), 'user-customer-03'),
+('order-04', 'user-customer-04', 'shop-03', 'addr-customer-04', 'Lê Quốc Anh', '0911000004', NULL, 'STANDARD', 940000, 0, 30000, 970000, 0, 'Gọi trước khi giao.', NULL, NULL, NULL, NULL, 'COMPLETED', DATE_SUB(@now, INTERVAL 36000 MINUTE), 'user-customer-04'),
+('order-05', 'user-customer-05', 'shop-01', 'addr-customer-05', 'Hoàng Mai Linh', '0911000005', NULL, 'STANDARD', 580000, 0, 25000, 605000, 0, NULL, NULL, NULL, NULL, NULL, 'DELIVERING', DATE_SUB(@now, INTERVAL 1440 MINUTE), 'user-customer-05'),
+('order-06', 'user-customer-01', 'shop-02', 'addr-customer-01', 'Trần Thị B', '0987654321', NULL, 'STANDARD', 750000, 0, 40000, 790000, 0, NULL, NULL, NULL, NULL, NULL, 'DELIVERING', DATE_SUB(@now, INTERVAL 2880 MINUTE), 'user-customer-01'),
+('order-07', 'user-customer-02', 'shop-01', 'addr-customer-02a', 'Nguyễn Hoàng Nam', '0911000002', 'coupon-01', 'STANDARD', 780000, 50000, 30000, 760000, 0, NULL, NULL, 'Shop đang gói hoa.', NULL, NULL, 'PROCESSING', DATE_SUB(@now, INTERVAL 180 MINUTE), 'user-customer-02'),
+('order-08', 'user-customer-03', 'shop-03', 'addr-customer-03', 'Phạm Thu Trang', '0911000003', 'coupon-05', 'STANDARD', 650000, 80000, 30000, 600000, 0, NULL, NULL, NULL, NULL, NULL, 'PROCESSING', DATE_SUB(@now, INTERVAL 300 MINUTE), 'user-customer-03'),
+('order-09', 'user-customer-04', 'shop-01', 'addr-customer-04', 'Lê Quốc Anh', '0911000004', NULL, 'STANDARD', 420000, 0, 25000, 445000, 10, NULL, NULL, NULL, NULL, NULL, 'PENDING', DATE_SUB(@now, INTERVAL 0 MINUTE), 'user-customer-04'),
+('order-10', 'user-customer-05', 'shop-02', 'addr-customer-05', 'Hoàng Mai Linh', '0911000005', NULL, 'STANDARD', 560000, 0, 35000, 595000, 8, NULL, NULL, NULL, 'group-01', NULL, 'PENDING', DATE_SUB(@now, INTERVAL 0 MINUTE), 'user-customer-05'),
+('order-11', 'user-customer-05', 'shop-03', 'addr-customer-05', 'Hoàng Mai Linh', '0911000005', NULL, 'STANDARD', 540000, 0, 30000, 570000, 8, NULL, NULL, NULL, 'group-01', NULL, 'PENDING', DATE_SUB(@now, INTERVAL 0 MINUTE), 'user-customer-05'),
+('order-12', 'user-customer-06', 'shop-01', 'addr-customer-06', 'Đinh Gia Huy', '0911000006', NULL, 'STANDARD', 320000, 0, 25000, 345000, 0, NULL, 'Khách đổi ý, không cần nữa.', NULL, NULL, NULL, 'CANCELLED', DATE_SUB(@now, INTERVAL 21600 MINUTE), 'user-customer-06'),
+('order-13', 'user-customer-02', 'shop-02', 'addr-customer-02b', 'Nguyễn Hoàng Nam', '0911000002', NULL, 'STANDARD', 680000, 0, 35000, 715000, 0, NULL, 'Quá hạn 10 phút không quét mã thanh toán', NULL, NULL, NULL, 'CANCELLED', DATE_SUB(@now, INTERVAL 17280 MINUTE), 'user-customer-02'),
+('order-14', 'user-customer-03', 'shop-01', 'addr-customer-03', 'Phạm Thu Trang', '0911000003', NULL, 'STANDARD', 450000, 0, 25000, 475000, 0, NULL, 'Hoa không đúng mô tả, shop đồng ý hoàn tiền.', NULL, NULL, NULL, 'REFUNDED', DATE_SUB(@now, INTERVAL 28800 MINUTE), 'user-customer-03'),
+('order-15', 'user-customer-04', 'shop-02', 'addr-customer-04', 'Lê Quốc Anh', '0911000004', NULL, 'STANDARD', 720000, 0, 35000, 755000, 0, NULL, NULL, NULL, NULL, NULL, 'COMPLETED', DATE_SUB(@now, INTERVAL 25920 MINUTE), 'user-customer-04'),
+('order-16', 'user-customer-01', 'shop-03', 'addr-customer-01', 'Trần Thị B', '0987654321', NULL, 'STANDARD', 560000, 0, 30000, 590000, 0, NULL, NULL, NULL, NULL, NULL, 'COMPLETED', DATE_SUB(@now, INTERVAL 47520 MINUTE), 'user-customer-01'),
+('order-17', 'user-customer-05', 'shop-01', 'addr-customer-05', 'Hoàng Mai Linh', '0911000005', 'coupon-09', 'STANDARD', 1000000, 60000, 30000, 970000, 0, NULL, NULL, NULL, NULL, NULL, 'COMPLETED', DATE_SUB(@now, INTERVAL 11520 MINUTE), 'user-customer-05'),
+('order-21', 'user-customer-04', 'shop-01', 'addr-customer-04', 'Lê Quốc Anh', '0911000004', NULL, 'STANDARD', 890000, 0, 25000, 915000, 0, NULL, NULL, 'Giao lần 1 thất bại, đang liên hệ khách.', NULL, NULL, 'DELIVERING', DATE_SUB(@now, INTERVAL 1680 MINUTE), 'user-customer-04'),
+('order-18', 'user-customer-01', 'shop-01', 'addr-customer-01b', 'Trần Thị B', '0987654321', NULL, 'CUSTOM', 1200000, 0, 40000, 1240000, 372000, NULL, NULL, NULL, NULL, 'req-02', 'AWAITING_DEPOSIT', DATE_SUB(@now, INTERVAL 1560 MINUTE), 'user-customer-01'),
+('order-19', 'user-customer-03', 'shop-01', 'addr-customer-03', 'Phạm Thu Trang', '0911000003', NULL, 'CUSTOM', 900000, 0, 30000, 930000, 279000, NULL, NULL, NULL, NULL, 'req-03', 'DEPOSIT_PAID', DATE_SUB(@now, INTERVAL 4320 MINUTE), 'user-customer-03'),
+('order-20', 'user-customer-02', 'shop-02', 'addr-customer-02a', 'Nguyễn Hoàng Nam', '0911000002', NULL, 'CUSTOM', 1500000, 0, 40000, 1540000, 462000, NULL, NULL, NULL, NULL, 'req-04', 'COMPLETED', DATE_SUB(@now, INTERVAL 31680 MINUTE), 'user-customer-02');
+
+INSERT INTO Order_Details (id, order_id, product_id, custom_materials, price, quantity, created_by) VALUES
+('dtl-order-02-1', 'order-02', 'prod-03', NULL, 420000, 1, 'user-customer-02'),
+('dtl-order-02-2', 'order-02', 'prod-09', NULL, 250000, 1, 'user-customer-02'),
+('dtl-order-03-1', 'order-03', 'prod-19', NULL, 690000, 1, 'user-customer-03'),
+('dtl-order-03-2', 'order-03', 'prod-18', NULL, 540000, 1, 'user-customer-03'),
+('dtl-order-04-1', 'order-04', 'prod-24', NULL, 480000, 1, 'user-customer-04'),
+('dtl-order-04-2', 'order-04', 'prod-26', NULL, 230000, 2, 'user-customer-04'),
+('dtl-order-05-1', 'order-05', 'prod-04', NULL, 580000, 1, 'user-customer-05'),
+('dtl-order-06-1', 'order-06', 'prod-13', NULL, 750000, 1, 'user-customer-01'),
+('dtl-order-07-1', 'order-07', 'prod-05', NULL, 390000, 2, 'user-customer-02'),
+('dtl-order-08-1', 'order-08', 'prod-23', NULL, 340000, 1, 'user-customer-03'),
+('dtl-order-08-2', 'order-08', 'prod-30', NULL, 310000, 1, 'user-customer-03'),
+('dtl-order-09-1', 'order-09', 'prod-11', NULL, 210000, 2, 'user-customer-04'),
+('dtl-order-10-1', 'order-10', 'prod-20', NULL, 300000, 1, 'user-customer-05'),
+('dtl-order-10-2', 'order-10', 'prod-21', NULL, 260000, 1, 'user-customer-05'),
+('dtl-order-11-1', 'order-11', 'prod-28', NULL, 270000, 2, 'user-customer-05'),
+('dtl-order-12-1', 'order-12', 'prod-06', NULL, 320000, 1, 'user-customer-06'),
+('dtl-order-13-1', 'order-13', 'prod-15', NULL, 680000, 1, 'user-customer-02'),
+('dtl-order-14-1', 'order-14', 'prod-07', NULL, 450000, 1, 'user-customer-03'),
+('dtl-order-15-1', 'order-15', 'prod-22', NULL, 360000, 2, 'user-customer-04'),
+('dtl-order-16-1', 'order-16', 'prod-29', NULL, 560000, 1, 'user-customer-01'),
+('dtl-order-17-1', 'order-17', 'prod-08', NULL, 520000, 1, 'user-customer-05'),
+('dtl-order-17-2', 'order-17', 'prod-12', NULL, 480000, 1, 'user-customer-05'),
+('dtl-order-21-1', 'order-21', 'prod-10', NULL, 890000, 1, 'user-customer-04'),
+('dtl-order-18-1', 'order-18', 'prod-33', '{"main_flower": "Hồng Ecuador hồng phấn", "secondary": "Cát tường", "wrapper": "Giấy mờ", "ribbon": "Hồng nhạt"}', 1200000, 1, 'user-customer-01'),
+('dtl-order-19-1', 'order-19', 'prod-33', '{"main_flower": "Hướng dương", "wrapper": "Kraft", "accessory": "Thiệp chúc mừng"}', 900000, 1, 'user-customer-03'),
+('dtl-order-20-1', 'order-20', 'prod-33', '{"main_flower": "Tulip", "secondary": "Hồng trắng", "wrapper": "Hộp mica"}', 1500000, 1, 'user-customer-02');
+
+INSERT INTO Payments (id, order_id, payment_type, payment_method, amount, gateway_transaction_no, invoice_number, group_invoice, gateway_response, status, created_by) VALUES
+('pay-02', 'order-02', 'FULL', 'ONLINE', 650000, 'SEPAY-TX-0002', 'INV-0002', NULL, '{"order_status":"CAPTURED","payment_method":"BANK_TRANSFER"}', 'SUCCESS', 'user-customer-02'),
+('pay-03', 'order-03', 'FULL', 'ONLINE', 1165000, 'SEPAY-TX-0003', 'INV-0003', NULL, '{"order_status":"CAPTURED","payment_method":"CARD"}', 'SUCCESS', 'user-customer-03'),
+('pay-04', 'order-04', 'FULL', 'COD', 970000, NULL, 'COD-DEMO0004', NULL, NULL, 'SUCCESS', 'user-customer-04'),
+('pay-05', 'order-05', 'FULL', 'ONLINE', 605000, 'SEPAY-TX-0005', 'INV-0005', NULL, '{"order_status":"CAPTURED"}', 'SUCCESS', 'user-customer-05'),
+('pay-06', 'order-06', 'FULL', 'COD', 790000, NULL, 'COD-DEMO0006', NULL, NULL, 'PENDING', 'user-customer-01'),
+('pay-07', 'order-07', 'FULL', 'ONLINE', 760000, 'SEPAY-TX-0007', 'INV-0007', NULL, '{"order_status":"CAPTURED"}', 'SUCCESS', 'user-customer-02'),
+('pay-08', 'order-08', 'FULL', 'ONLINE', 600000, 'SEPAY-TX-0008', 'INV-0008', NULL, '{"order_status":"CAPTURED"}', 'SUCCESS', 'user-customer-03'),
+('pay-09', 'order-09', 'FULL', 'ONLINE', 445000, NULL, 'INV-0009', NULL, NULL, 'PENDING', 'user-customer-04'),
+('pay-10', 'order-10', 'FULL', 'ONLINE', 595000, NULL, 'INV-0010', 'GRP-DEMO0001', NULL, 'PENDING', 'user-customer-05'),
+('pay-11', 'order-11', 'FULL', 'ONLINE', 570000, NULL, 'INV-0011', 'GRP-DEMO0001', NULL, 'PENDING', 'user-customer-05'),
+('pay-12', 'order-12', 'FULL', 'ONLINE', 345000, NULL, 'INV-0012', NULL, '{"order_status":"CANCELLED"}', 'FAILED', 'user-customer-06'),
+('pay-13', 'order-13', 'FULL', 'ONLINE', 715000, NULL, 'INV-0013', NULL, '{"order_status":"EXPIRED"}', 'FAILED', 'user-customer-02'),
+('pay-14', 'order-14', 'FULL', 'ONLINE', 475000, 'SEPAY-TX-0014', 'INV-0014', NULL, '{"order_status":"CAPTURED"}', 'SUCCESS', 'user-customer-03'),
+('pay-15', 'order-15', 'FULL', 'ONLINE', 755000, 'SEPAY-TX-0015', 'INV-0015', NULL, '{"order_status":"CAPTURED"}', 'SUCCESS', 'user-customer-04'),
+('pay-16', 'order-16', 'FULL', 'ONLINE', 590000, 'SEPAY-TX-0016', 'INV-0016', NULL, '{"order_status":"CAPTURED"}', 'SUCCESS', 'user-customer-01'),
+('pay-17', 'order-17', 'FULL', 'ONLINE', 970000, 'SEPAY-TX-0017', 'INV-0017', NULL, '{"order_status":"CAPTURED"}', 'SUCCESS', 'user-customer-05'),
+('pay-21', 'order-21', 'FULL', 'ONLINE', 915000, 'SEPAY-TX-0021', 'INV-0021', NULL, '{"order_status":"CAPTURED"}', 'SUCCESS', 'user-customer-04'),
+('pay-18', 'order-18', 'DEPOSIT', 'ONLINE', 372000, NULL, 'INV-0018-DEP', NULL, NULL, 'PENDING', 'user-customer-01'),
+('pay-19', 'order-19', 'DEPOSIT', 'ONLINE', 279000, 'SEPAY-TX-0019', 'INV-0019-DEP', NULL, '{"order_status":"CAPTURED"}', 'SUCCESS', 'user-customer-03'),
+('pay-20a', 'order-20', 'DEPOSIT', 'ONLINE', 462000, 'SEPAY-TX-0020', 'INV-0020-DEP', NULL, '{"order_status":"CAPTURED"}', 'SUCCESS', 'user-customer-02'),
+('pay-20b', 'order-20', 'FINAL', 'COD', 1078000, NULL, 'COD-DEMO0020', NULL, NULL, 'SUCCESS', 'user-customer-02');
+
+INSERT INTO Deliveries (id, order_id, delivery_partner_id, tracking_code, status, ghn_status, tracking_notes, created_by) VALUES
+('del-02', 'order-02', 'GHN', 'GHN-DEMO-0002', 'DELIVERED', 'delivered', 'Giao thành công, người nhận ký nhận', 'user-shop-01'),
+('del-03', 'order-03', 'GHN', 'GHN-DEMO-0003', 'DELIVERED', 'delivered', 'Đã giao đến người nhận', 'user-shop-02'),
+('del-04', 'order-04', 'GHN', 'GHN-DEMO-0004', 'DELIVERED', 'delivered', 'Thu hộ COD thành công', 'user-shop-03'),
+('del-05', 'order-05', 'GHN', 'GHN-DEMO-0005', 'ON_THE_WAY', 'delivering', 'Shipper đang giao', 'user-shop-01'),
+('del-06', 'order-06', 'GHN', 'GHN-DEMO-0006', 'PICKED_UP', 'picked', 'Đã lấy hàng tại shop', 'user-shop-02'),
+('del-14', 'order-14', 'GHN', 'GHN-DEMO-0014', 'RETURNED', 'returned', 'Hàng đã hoàn về shop', 'user-shop-01'),
+('del-15', 'order-15', 'GHN', 'GHN-DEMO-0015', 'DELIVERED', 'delivered', 'Giao thành công', 'user-shop-02'),
+('del-16', 'order-16', 'GHN', 'GHN-DEMO-0016', 'DELIVERED', 'delivered', 'Giao thành công', 'user-shop-03'),
+('del-17', 'order-17', 'GHN', 'GHN-DEMO-0017', 'DELIVERED', 'delivered', 'Giao thành công', 'user-shop-01'),
+('del-21', 'order-21', 'GHN', 'GHN-DEMO-0021', 'FAILED', 'delivery_fail', 'Người nhận không nghe máy', 'user-shop-01'),
+('del-20', 'order-20', 'GHN', 'GHN-DEMO-0020', 'DELIVERED', 'delivered', 'Thu nốt phần còn lại khi giao', 'user-shop-02');
+
+INSERT INTO Refunds (id, order_id, amount, reason, gateway_response, gateway_refund_id, status, created_by) VALUES
+('ref-01', 'order-14', 475000, 'Hoa không đúng mô tả, héo ngay khi nhận.', '{"refund_status":"DONE"}', 'SEPAY-RF-0014', 'PROCESSED', 'user-customer-03'),
+('ref-02', 'order-15', 150000, 'Một vài cành cát tường bị dập khi nhận hàng.', NULL, NULL, 'REQUESTED', 'user-customer-04'),
+('ref-03', 'order-16', 100000, 'Muốn hoàn một phần vì giao trễ nửa ngày.', NULL, NULL, 'REJECTED', 'user-customer-01'),
+('ref-04', 'order-17', 120000, 'Thiếu 2 cành ly so với mô tả.', NULL, NULL, 'APPROVED', 'user-customer-05');
+
+-- E9. PRODUCT REVIEWS (user + sản phẩm là duy nhất)
+INSERT INTO Product_Reviews (id, product_id, user_id, order_id, rating, comment, media, shop_reply, created_by) VALUES
+('rev-02', 'prod-03', 'user-customer-02', 'order-02', 5, 'Hồng pastel rất đẹp, đúng ảnh. Giao đúng hẹn.', NULL, 'Cảm ơn bạn đã ủng hộ FPTU Smart Floral!', 'user-customer-02'),
+('rev-03', 'prod-09', 'user-customer-02', 'order-02', 4, 'Baby trắng tươi, hơi ít so với mong đợi.', NULL, NULL, 'user-customer-02'),
+('rev-04', 'prod-19', 'user-customer-03', 'order-03', 5, 'Hộp hồng nhung sang trọng, người nhận rất thích.', '["/images/product/product-01.jpg"]', 'Sài Gòn Floral rất vui vì bạn hài lòng!', 'user-customer-03'),
+('rev-05', 'prod-18', 'user-customer-03', 'order-03', 4, 'Tulip tươi, gói đẹp.', NULL, NULL, 'user-customer-03'),
+('rev-06', 'prod-24', 'user-customer-04', 'order-04', 5, 'Hướng dương to, tươi cả tuần.', NULL, 'Đà Lạt Garden cảm ơn bạn nhiều ạ.', 'user-customer-04'),
+('rev-07', 'prod-26', 'user-customer-04', 'order-04', 3, 'Hoa dại ổn nhưng hơi rối, mong shop gói gọn hơn.', NULL, 'Shop xin ghi nhận và cải thiện cách gói ạ.', 'user-customer-04'),
+('rev-08', 'prod-08', 'user-customer-05', 'order-17', 5, 'Ly thơm nở đẹp, thơm cả phòng.', '["/images/product/product-01.jpg"]', NULL, 'user-customer-05'),
+('rev-09', 'prod-12', 'user-customer-05', 'order-17', 4, 'Màu hồng dịu, hợp tặng mẹ.', NULL, NULL, 'user-customer-05'),
+('rev-10', 'prod-22', 'user-customer-04', 'order-15', 2, 'Cát tường bị dập vài cành khi giao.', NULL, 'Shop xin lỗi bạn, đã tiếp nhận yêu cầu hoàn tiền một phần.', 'user-customer-04'),
+('rev-11', 'prod-29', 'user-customer-01', 'order-16', 5, 'Giỏ hoa nhẹ nhàng, ba mình rất thích.', '["/images/product/product-01.jpg"]', 'Cảm ơn bạn, chúc bác mau khỏe!', 'user-customer-01'),
+('rev-12', 'prod-33', 'user-customer-02', 'order-20', 5, 'Shop thiết kế đúng ý, tulip rất tươi.', '["/images/product/product-01.jpg"]', 'Cảm ơn anh Nam đã tin tưởng ạ.', 'user-customer-02');
+
+-- E10. FAVORITE PRODUCTS và FAVORITE SHOPS (theo dõi shop)
+INSERT INTO Favorite_Products (user_id, product_id, created_by) VALUES
+('user-customer-01', 'prod-13', 'user-customer-01'),
+('user-customer-01', 'prod-24', 'user-customer-01'),
+('user-customer-02', 'prod-03', 'user-customer-02'),
+('user-customer-02', 'prod-19', 'user-customer-02'),
+('user-customer-03', 'prod-10', 'user-customer-03'),
+('user-customer-03', 'prod-23', 'user-customer-03'),
+('user-customer-04', 'prod-12', 'user-customer-04'),
+('user-customer-05', 'prod-17', 'user-customer-05'),
+('user-customer-05', 'prod-20', 'user-customer-05'),
+('user-customer-06', 'prod-04', 'user-customer-06');
+
+INSERT INTO Favorite_Shops (user_id, shop_id, created_by) VALUES
+('user-customer-01', 'shop-01', 'user-customer-01'),
+('user-customer-01', 'shop-02', 'user-customer-01'),
+('user-customer-02', 'shop-01', 'user-customer-02'),
+('user-customer-02', 'shop-02', 'user-customer-02'),
+('user-customer-03', 'shop-01', 'user-customer-03'),
+('user-customer-03', 'shop-03', 'user-customer-03'),
+('user-customer-04', 'shop-03', 'user-customer-04'),
+('user-customer-05', 'shop-01', 'user-customer-05'),
+('user-customer-05', 'shop-02', 'user-customer-05'),
+('user-customer-05', 'shop-03', 'user-customer-05'),
+('user-customer-06', 'shop-01', 'user-customer-06');
+
+-- E11. BLOGS, LIKE/SAVE và BÌNH LUẬN
+INSERT INTO Blogs (id, shop_id, title, content, thumbnail_url, images, status, created_date, created_by) VALUES
+('blog-02', 'shop-01', 'Ý Nghĩa Các Loại Hoa Hồng', '<p>Hồng đỏ là tình yêu nồng nàn, hồng phấn là sự trân trọng, hồng vàng là tình bạn...</p>', '/images/product/product-01.jpg', '["/images/product/product-01.jpg", "/images/product/product-02.jpg"]', 'PUBLISHED', DATE_SUB(@now, INTERVAL 57600 MINUTE), 'user-shop-01'),
+('blog-03', 'shop-01', 'Chọn Hoa Theo Từng Dịp Trong Năm', '<p>Sinh nhật nên chọn hoa tươi sáng, tốt nghiệp hợp hướng dương, chia buồn dùng cúc trắng...</p>', '/images/product/product-03.jpg', '["/images/product/product-03.jpg"]', 'PUBLISHED', DATE_SUB(@now, INTERVAL 40320 MINUTE), 'user-shop-01'),
+('blog-04', 'shop-01', 'Bản Nháp: Xu Hướng Gói Hoa 2027', '<p>Đang soạn nội dung về giấy gói tối giản...</p>', NULL, '[]', 'DRAFT', DATE_SUB(@now, INTERVAL 2880 MINUTE), 'user-shop-01'),
+('blog-05', 'shop-01', 'Bài Viết Đã Ẩn', '<p>Bài viết cũ bị shop ẩn.</p>', NULL, '[]', 'HIDDEN', DATE_SUB(@now, INTERVAL 172800 MINUTE), 'user-shop-01'),
+('blog-06', 'shop-02', 'Bí Quyết Chọn Hoa Cưới Hợp Dáng Cô Dâu', '<p>Cô dâu nhỏ nhắn hợp bó tròn gọn, cô dâu cao hợp bó thác nước...</p>', '/images/product/product-04.jpg', '["/images/product/product-04.jpg", "/images/product/product-05.jpg"]', 'PUBLISHED', DATE_SUB(@now, INTERVAL 50400 MINUTE), 'user-shop-02'),
+('blog-07', 'shop-02', 'Cách Bày Kệ Hoa Khai Trương Đón Tài Lộc', '<p>Đặt kệ hoa hai bên cửa, hướng về phía có nhiều người qua lại...</p>', '/images/product/product-02.jpg', '["/images/product/product-02.jpg"]', 'PUBLISHED', DATE_SUB(@now, INTERVAL 25920 MINUTE), 'user-shop-02'),
+('blog-08', 'shop-03', 'Hành Trình Hoa Từ Vườn Đà Lạt Đến Tay Bạn', '<p>Hoa được cắt lúc 4 giờ sáng, đóng thùng lạnh và bay ngay trong ngày...</p>', '/images/product/product-03.jpg', '["/images/product/product-03.jpg", "/images/product/product-04.jpg"]', 'PUBLISHED', DATE_SUB(@now, INTERVAL 31680 MINUTE), 'user-shop-03'),
+('blog-09', 'shop-03', '5 Cách Giữ Hoa Cát Tường Tươi Lâu', '<p>Cắt chéo cuống, thay nước mỗi ngày, tránh ánh nắng trực tiếp...</p>', '/images/product/product-01.jpg', '["/images/product/product-01.jpg"]', 'PUBLISHED', DATE_SUB(@now, INTERVAL 12960 MINUTE), 'user-shop-03');
+
+INSERT INTO Blog_Interactions (user_id, blog_id, interaction_type, created_by) VALUES
+('user-customer-01', 'blog-01', 'LIKE', 'user-customer-01'),
+('user-customer-02', 'blog-01', 'LIKE', 'user-customer-02'),
+('user-customer-02', 'blog-02', 'LIKE', 'user-customer-02'),
+('user-customer-02', 'blog-02', 'SAVE', 'user-customer-02'),
+('user-customer-03', 'blog-03', 'LIKE', 'user-customer-03'),
+('user-customer-03', 'blog-06', 'SAVE', 'user-customer-03'),
+('user-customer-04', 'blog-08', 'LIKE', 'user-customer-04'),
+('user-customer-04', 'blog-09', 'LIKE', 'user-customer-04'),
+('user-customer-04', 'blog-09', 'SAVE', 'user-customer-04'),
+('user-customer-05', 'blog-07', 'LIKE', 'user-customer-05'),
+('user-customer-05', 'blog-06', 'LIKE', 'user-customer-05'),
+('user-customer-06', 'blog-02', 'SAVE', 'user-customer-06');
+
+INSERT INTO Blog_Comments (id, blog_id, user_id, parent_comment_id, content, created_by) VALUES
+('cmt-03', 'blog-02', 'user-customer-02', NULL, 'Mình mới biết hồng phấn mang nghĩa trân trọng, cảm ơn shop.', 'user-customer-02'),
+('cmt-04', 'blog-02', 'user-shop-01', 'cmt-03', 'Dạ shop cảm ơn bạn đã đọc bài ạ.', 'user-shop-01'),
+('cmt-05', 'blog-06', 'user-customer-03', NULL, 'Bài rất hay, mình sắp cưới nên đang tìm hiểu.', 'user-customer-03'),
+('cmt-06', 'blog-06', 'user-shop-02', 'cmt-05', 'Chúc bạn có một đám cưới thật đẹp! Cần tư vấn cứ nhắn shop nhé.', 'user-shop-02'),
+('cmt-07', 'blog-08', 'user-customer-04', NULL, 'Hoa Đà Lạt tươi thật sự, mình đã đặt thử.', 'user-customer-04'),
+('cmt-08', 'blog-09', 'user-customer-05', NULL, 'Mẹo cắt chéo cuống hiệu quả lắm, hoa bền thêm mấy ngày.', 'user-customer-05'),
+('cmt-09', 'blog-07', 'user-customer-01', NULL, 'Mình đang định mở cửa hàng, bài này rất đúng lúc.', 'user-customer-01');
+
+-- E12. CUSTOMER OCCASIONS (dịp lặp hằng năm, dịp một lần, đã nhắc)
+INSERT INTO Customer_Occasions (id, customer_id, title, occasion_date, reminder_sent, recurring_yearly, notify_days_before, notify_time, last_reminded_for, created_by) VALUES
+('occ-02', 'user-customer-01', 'Sinh nhật mẹ', DATE_ADD(CURDATE(), INTERVAL 5 DAY), FALSE, TRUE, 7, '08:00:00', NULL, 'user-customer-01'),
+('occ-03', 'user-customer-02', 'Kỷ niệm 5 năm ngày cưới', DATE_ADD(CURDATE(), INTERVAL 20 DAY), FALSE, TRUE, 10, '09:00:00', NULL, 'user-customer-02'),
+('occ-04', 'user-customer-03', 'Sinh nhật bạn thân', DATE_SUB(CURDATE(), INTERVAL 3 DAY), TRUE, FALSE, 3, '07:30:00', DATE_SUB(CURDATE(), INTERVAL 3 DAY), 'user-customer-03'),
+('occ-05', 'user-customer-04', 'Ngày của mẹ', DATE_ADD(CURDATE(), INTERVAL 60 DAY), FALSE, TRUE, 14, '08:00:00', NULL, 'user-customer-04'),
+('occ-06', 'user-customer-05', 'Sinh nhật sếp', DATE_ADD(CURDATE(), INTERVAL 2 DAY), FALSE, FALSE, 2, '18:00:00', NULL, 'user-customer-05'),
+('occ-07', 'user-customer-06', 'Lễ tốt nghiệp', DATE_ADD(CURDATE(), INTERVAL 45 DAY), FALSE, FALSE, 7, '08:00:00', NULL, 'user-customer-06');
+
+-- E13. CHAT (phiên, tin nhắn, thẻ đính kèm sản phẩm và đơn đặt hoa riêng)
+INSERT INTO Chat_Sessions (id, customer_id, shop_id, last_message_at, last_message_preview, customer_unread_count, shop_unread_count, created_by) VALUES
+('session-02', 'user-customer-02', 'shop-01', DATE_SUB(@now, INTERVAL 60 MINUTE), 'Dạ shop gói xong sẽ báo bạn ngay ạ.', 1, 0, 'user-customer-02'),
+('session-03', 'user-customer-03', 'shop-02', DATE_SUB(@now, INTERVAL 1440 MINUTE), 'Mình muốn hỏi thêm về bó hoa cầm tay.', 0, 2, 'user-customer-03'),
+('session-04', 'user-customer-04', 'shop-03', DATE_SUB(@now, INTERVAL 4320 MINUTE), 'Cảm ơn shop nhé!', 0, 0, 'user-customer-04'),
+('session-05', 'user-customer-01', 'shop-02', DATE_SUB(@now, INTERVAL 2880 MINUTE), 'Shop ơi đơn của mình đã lấy hàng chưa ạ?', 0, 1, 'user-customer-01');
+
+INSERT INTO Chat_Messages (id, session_id, sender_id, sender_type, message, media, context_type, context_id, context_snapshot, is_read, created_by) VALUES
+('msg-03', 'session-02', 'user-customer-02', 'CUSTOMER', 'Shop ơi bó hồng pastel này còn không ạ?', NULL, 'PRODUCT', 'prod-03', '{"name": "Bó Hồng Pastel Ngọt Ngào", "price": 420000, "image": "/images/product/product-01.jpg", "status": "ACTIVE"}', TRUE, 'user-customer-02'),
+('msg-04', 'session-02', 'user-shop-01', 'SHOP', 'Dạ còn ạ, bạn cần giao khi nào?', NULL, 'NONE', NULL, NULL, TRUE, 'user-shop-01'),
+('msg-05', 'session-02', 'user-customer-02', 'CUSTOMER', 'Chiều nay giao giúp mình nhé.', NULL, 'NONE', NULL, NULL, TRUE, 'user-customer-02'),
+('msg-06', 'session-02', 'user-shop-01', 'SHOP', 'Dạ shop gói xong sẽ báo bạn ngay ạ.', NULL, 'NONE', NULL, NULL, FALSE, 'user-shop-01'),
+('msg-07', 'session-03', 'user-customer-03', 'CUSTOMER', 'Mình muốn hỏi thêm về bó hoa cầm tay.', NULL, 'PRODUCT', 'prod-13', '{"name": "Hoa Cầm Tay Cô Dâu Trắng", "price": 750000, "image": "/images/product/product-02.jpg", "status": "ACTIVE"}', FALSE, 'user-customer-03'),
+('msg-08', 'session-03', 'user-customer-03', 'CUSTOMER', 'Có thể đổi sang tông hồng phấn được không ạ?', '["/images/product/product-04.jpg"]', 'NONE', NULL, NULL, FALSE, 'user-customer-03'),
+('msg-09', 'session-04', 'user-customer-04', 'CUSTOMER', 'Hoa giao tới rồi, đẹp lắm shop ơi.', NULL, 'NONE', NULL, NULL, TRUE, 'user-customer-04'),
+('msg-10', 'session-04', 'user-shop-03', 'SHOP', 'Cảm ơn bạn nhiều, chúc bạn một ngày vui!', NULL, 'NONE', NULL, NULL, TRUE, 'user-shop-03'),
+('msg-11', 'session-01', 'user-customer-01', 'CUSTOMER', 'Mình đã gửi yêu cầu đặt hoa riêng cho shop.', NULL, 'CUSTOM_ORDER', 'req-02', '{"name": "Yêu cầu hoa riêng req-02", "price": 1200000, "status": "ACCEPTED"}', FALSE, 'user-customer-01'),
+('msg-12', 'session-05', 'user-customer-01', 'CUSTOMER', 'Shop ơi đơn của mình đã lấy hàng chưa ạ?', NULL, 'NONE', NULL, NULL, FALSE, 'user-customer-01');
+
+-- E14. STAFF, ỨNG TUYỂN, LỜI MỜI, ĐƠN MỞ SHOP, OTP, PHIÊN ĐĂNG NHẬP
+INSERT INTO Shop_Staff (id, shop_id, user_id, active, created_by) VALUES
+('staff-02', 'shop-02', 'user-staff-02', TRUE, 'user-shop-02'),
+('staff-03', 'shop-01', 'user-staff-03', FALSE, 'user-shop-01');
+
+INSERT INTO Staff_Applications (id, shop_id, user_id, full_name, phone, introduction, status, submitted_at) VALUES
+('staff-app-02', 'shop-01', 'user-customer-04', 'Lê Quốc Anh', '0911000004', 'Mình thích cắm hoa, có thể làm ca tối và cuối tuần.', 'PENDING', DATE_SUB(@now, INTERVAL 1440 MINUTE)),
+('staff-app-03', 'shop-02', 'user-customer-05', 'Hoàng Mai Linh', '0911000005', 'Đã từng làm thu ngân tại cửa hàng hoa 6 tháng.', 'REJECTED', DATE_SUB(@now, INTERVAL 17280 MINUTE)),
+('staff-app-04', 'shop-02', 'user-staff-02', 'Ngô Thị Mai', '0908666777', 'Em có kinh nghiệm cắm hoa sự kiện.', 'APPROVED', DATE_SUB(@now, INTERVAL 72000 MINUTE)),
+('staff-app-05', 'shop-03', 'user-customer-06', 'Đinh Gia Huy', '0911000006', 'Sinh viên muốn làm thêm giao hoa.', 'PENDING', DATE_SUB(@now, INTERVAL 300 MINUTE));
+
+INSERT INTO Staff_Invitations (id, shop_id, email, token_hash, issued_at, expires_at, window_start, send_count, status) VALUES
+('staff-inv-02', 'shop-02', 'staff.hoa2@gmail.com', 'a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90', DATE_SUB(@now, INTERVAL 66240 MINUTE), DATE_SUB(@now, INTERVAL 56160 MINUTE), DATE_SUB(@now, INTERVAL 66240 MINUTE), 1, 'ACCEPTED'),
+('staff-inv-03', 'shop-01', 'staff.old@gmail.com', 'b1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90', DATE_SUB(@now, INTERVAL 43200 MINUTE), DATE_SUB(@now, INTERVAL 33120 MINUTE), DATE_SUB(@now, INTERVAL 43200 MINUTE), 2, 'EXPIRED'),
+('staff-inv-04', 'shop-03', 'staff.cancel@gmail.com', 'c1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90', DATE_SUB(@now, INTERVAL 7200 MINUTE), DATE_ADD(@now, INTERVAL 2880 MINUTE), DATE_SUB(@now, INTERVAL 7200 MINUTE), 1, 'CANCELLED'),
+('staff-inv-05', 'shop-03', 'staff.new@gmail.com', 'd1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90', DATE_SUB(@now, INTERVAL 1440 MINUTE), DATE_ADD(@now, INTERVAL 8640 MINUTE), DATE_SUB(@now, INTERVAL 1440 MINUTE), 1, 'PENDING');
+
+INSERT INTO Manager_Applications (id, user_id, full_name, phone, shop_name, description, address_line, city, district, ward, status, review_note, submitted_at, reviewed_at, reviewed_by, shop_id) VALUES
+('mgr-app-02', 'user-shop-02', 'Lê Minh Châu', '0903111222', 'Sài Gòn Floral Boutique', 'Boutique hoa cưới và sự kiện tại Quận 1.', '123 Nguyễn Huệ', 'TP. Hồ Chí Minh', 'Quận 1', 'Bến Nghé', 'APPROVED', 'Hồ sơ đầy đủ, đã duyệt.', DATE_SUB(@now, INTERVAL 180000 MINUTE), DATE_SUB(@now, INTERVAL 174240 MINUTE), 'user-admin-01', 'shop-02'),
+('mgr-app-03', 'user-shop-03', 'Võ Thanh Hằng', '0904222333', 'Đà Lạt Garden', 'Hoa tươi từ vườn Đà Lạt.', '45 Hoàng Văn Thụ', 'Lâm Đồng', 'Đà Lạt', 'Phường 9', 'APPROVED', 'Đã duyệt.', DATE_SUB(@now, INTERVAL 151200 MINUTE), DATE_SUB(@now, INTERVAL 145440 MINUTE), 'user-admin-01', 'shop-03'),
+('mgr-app-04', 'user-shop-04', 'Đặng Quốc Huy', '0905333444', 'Blossom Studio', 'Studio hoa mới mở tại Đà Nẵng.', '8 Lê Lợi', 'Đà Nẵng', 'Hải Châu', 'Hải Châu 1', 'PENDING', NULL, DATE_SUB(@now, INTERVAL 7200 MINUTE), NULL, NULL, NULL),
+('mgr-app-05', 'user-customer-06', 'Đinh Gia Huy', '0911000006', 'Hoa Test', 'Đăng ký thử nghiệm.', '5 Nguyễn Trãi', 'Hà Nội', 'Thanh Xuân', 'Thanh Xuân Trung', 'REJECTED', 'Thiếu giấy phép kinh doanh, vui lòng bổ sung.', DATE_SUB(@now, INTERVAL 14400 MINUTE), DATE_SUB(@now, INTERVAL 11520 MINUTE), 'user-admin-01', NULL);
+
+INSERT INTO Otp_Challenges (id, user_id, purpose, code_hash, issued_at, expires_at, used_at, window_start, failed_attempts, send_count) VALUES
+('otp-02', 'user-customer-02', 'RESET_PASSWORD', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', DATE_SUB(@now, INTERVAL 3 MINUTE), DATE_ADD(@now, INTERVAL 0 MINUTE), NULL, DATE_SUB(@now, INTERVAL 3 MINUTE), 0, 1),
+('otp-03', 'user-customer-08', 'REGISTER', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', DATE_SUB(@now, INTERVAL 8 MINUTE), DATE_SUB(@now, INTERVAL -2 MINUTE), NULL, DATE_SUB(@now, INTERVAL 8 MINUTE), 2, 3),
+('otp-04', 'user-customer-03', 'RESET_PASSWORD', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', DATE_SUB(@now, INTERVAL 5760 MINUTE), DATE_SUB(@now, INTERVAL 5755 MINUTE), DATE_SUB(@now, INTERVAL 5759 MINUTE), DATE_SUB(@now, INTERVAL 5760 MINUTE), 0, 1);
+
+INSERT INTO Pending_Registrations (email, full_name, password_hash, otp_hash, shop_name, shop_description, issued_at, expires_at, window_start, failed_attempts, send_count) VALUES
+('khach.moi@gmail.com', 'Khách Mới Đăng Ký', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', NULL, NULL, DATE_SUB(@now, INTERVAL 4 MINUTE), DATE_ADD(@now, INTERVAL 0 MINUTE), DATE_SUB(@now, INTERVAL 4 MINUTE), 0, 1),
+('chushop.moi@gmail.com', 'Chủ Shop Mới', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', 'Hoa Mới Mở', 'Tiệm hoa nhỏ chuyên hoa sinh nhật.', DATE_SUB(@now, INTERVAL 9 MINUTE), DATE_SUB(@now, INTERVAL 4 MINUTE), DATE_SUB(@now, INTERVAL 9 MINUTE), 1, 2);
+
+INSERT INTO Auth_Sessions (id, user_id, refresh_hash, expires_at, revoked) VALUES
+('sess-02', 'user-admin-01', '1111111111111111111111111111111111111111111111111111111111111111', DATE_ADD(@now, INTERVAL 20160 MINUTE), FALSE),
+('sess-03', 'user-shop-01', '2222222222222222222222222222222222222222222222222222222222222222', DATE_ADD(@now, INTERVAL 14400 MINUTE), FALSE),
+('sess-04', 'user-shop-02', '3333333333333333333333333333333333333333333333333333333333333333', DATE_ADD(@now, INTERVAL 10080 MINUTE), FALSE),
+('sess-05', 'user-customer-02', '4444444444444444444444444444444444444444444444444444444444444444', DATE_ADD(@now, INTERVAL 4320 MINUTE), FALSE),
+('sess-06', 'user-customer-03', '5555555555555555555555555555555555555555555555555555555555555555', DATE_SUB(@now, INTERVAL 2880 MINUTE), FALSE),
+('sess-07', 'user-customer-04', '6666666666666666666666666666666666666666666666666666666666666666', DATE_ADD(@now, INTERVAL 7200 MINUTE), TRUE);
+
+-- E15. NOTIFICATIONS và HÀNG ĐỢI EMAIL SẢN PHẨM MỚI
+INSERT INTO Notifications (id, user_id, title, message, link, is_read, created_date) VALUES
+('noti-01', 'user-customer-02', 'Đơn hàng đang được chuẩn bị', 'Shop đã nhận đơn order-07 và đang gói hoa cho bạn.', '/orders/order-07', FALSE, DATE_SUB(@now, INTERVAL 180 MINUTE)),
+('noti-02', 'user-customer-05', 'Đơn hàng đang trên đường giao', 'Đơn order-05 đã được bàn giao cho GHN.', '/orders/order-05', FALSE, DATE_SUB(@now, INTERVAL 1440 MINUTE)),
+('noti-03', 'user-customer-02', 'Giao hàng thành công', 'Đơn order-02 đã giao thành công. Hãy để lại đánh giá nhé.', '/orders/order-02', TRUE, DATE_SUB(@now, INTERVAL 57600 MINUTE)),
+('noti-04', 'user-customer-03', 'Hoàn tiền thành công', 'Shop đã hoàn 475.000đ cho đơn order-14.', '/orders/order-14', TRUE, DATE_SUB(@now, INTERVAL 27360 MINUTE)),
+('noti-05', 'user-customer-04', 'Yêu cầu hoàn tiền đã được gửi', 'Shop sẽ phản hồi yêu cầu hoàn tiền của đơn order-15 sớm.', '/orders/order-15', FALSE, DATE_SUB(@now, INTERVAL 24480 MINUTE)),
+('noti-06', 'user-customer-01', 'Báo giá hoa riêng', 'Shop đã báo giá yêu cầu req-02, vui lòng xác nhận.', '/custom-orders', FALSE, DATE_SUB(@now, INTERVAL 11520 MINUTE)),
+('noti-07', 'user-customer-01', 'Nhắc dịp đặc biệt', 'Sinh nhật mẹ còn 5 ngày nữa, đặt hoa ngay?', '/occasions', FALSE, DATE_SUB(@now, INTERVAL 60 MINUTE)),
+('noti-08', 'user-customer-03', 'Dịp đặc biệt đã qua', 'Sinh nhật bạn thân vừa diễn ra 3 ngày trước.', '/occasions', TRUE, DATE_SUB(@now, INTERVAL 4320 MINUTE)),
+('noti-09', 'user-shop-01', 'Có đơn hàng mới', 'Khách Lê Quốc Anh vừa đặt đơn order-09.', '/shop-admin/orders', FALSE, DATE_SUB(@now, INTERVAL 0 MINUTE)),
+('noti-10', 'user-shop-01', 'Yêu cầu hoàn tiền mới', 'Đơn order-17 có yêu cầu hoàn tiền một phần.', '/shop-admin/orders', TRUE, DATE_SUB(@now, INTERVAL 7200 MINUTE)),
+('noti-11', 'user-shop-02', 'Có đơn hàng mới', 'Khách Hoàng Mai Linh vừa đặt đơn order-10.', '/shop-admin/orders', FALSE, DATE_SUB(@now, INTERVAL 0 MINUTE)),
+('noti-12', 'user-shop-02', 'Ứng tuyển nhân viên', 'Hoàng Mai Linh ứng tuyển làm nhân viên.', '/shop-admin/staff', TRUE, DATE_SUB(@now, INTERVAL 17280 MINUTE)),
+('noti-13', 'user-shop-03', 'Gói Pro sắp hết hạn', 'Gói Pro của Đà Lạt Garden hết hạn sau 2 ngày.', '/shop-admin/subscription', FALSE, DATE_SUB(@now, INTERVAL 120 MINUTE)),
+('noti-14', 'user-admin-01', 'Đơn mở shop mới', 'Blossom Studio vừa gửi đơn mở shop, cần duyệt.', '/admin/shops', FALSE, DATE_SUB(@now, INTERVAL 7200 MINUTE)),
+('noti-15', 'user-admin-01', 'Sản phẩm bị báo cáo', 'Một sản phẩm của Hoa Xưa bị khách báo cáo.', '/admin/categories', TRUE, DATE_SUB(@now, INTERVAL 28800 MINUTE)),
+('noti-16', 'user-shop-04', 'Đơn mở shop đang chờ duyệt', 'Admin sẽ xem xét đơn của bạn trong 1 đến 2 ngày.', '/shop-admin', TRUE, DATE_SUB(@now, INTERVAL 7200 MINUTE));
+
+INSERT INTO Shop_Product_Mails (id, product_id, shop_id, user_id, status, attempts, next_attempt_at, created_at, sent_at) VALUES
+('mail-01', 'prod-12', 'shop-01', 'user-customer-02', 'SENT', 1, DATE_SUB(@now, INTERVAL 43200 MINUTE), DATE_SUB(@now, INTERVAL 43200 MINUTE), DATE_SUB(@now, INTERVAL 43200 MINUTE)),
+('mail-02', 'prod-12', 'shop-01', 'user-customer-03', 'SENT', 1, DATE_SUB(@now, INTERVAL 43200 MINUTE), DATE_SUB(@now, INTERVAL 43200 MINUTE), DATE_SUB(@now, INTERVAL 43200 MINUTE)),
+('mail-03', 'prod-12', 'shop-01', 'user-customer-05', 'FAILED', 5, DATE_SUB(@now, INTERVAL 41760 MINUTE), DATE_SUB(@now, INTERVAL 43200 MINUTE), NULL),
+('mail-04', 'prod-30', 'shop-03', 'user-customer-04', 'SENT', 1, DATE_SUB(@now, INTERVAL 79200 MINUTE), DATE_SUB(@now, INTERVAL 79200 MINUTE), DATE_SUB(@now, INTERVAL 79200 MINUTE)),
+('mail-05', 'prod-30', 'shop-03', 'user-customer-05', 'PENDING', 2, DATE_ADD(@now, INTERVAL 60 MINUTE), DATE_SUB(@now, INTERVAL 120 MINUTE), NULL),
+('mail-06', 'prod-20', 'shop-02', 'user-customer-01', 'PENDING', 0, DATE_ADD(@now, INTERVAL 0 MINUTE), DATE_SUB(@now, INTERVAL 5 MINUTE), NULL),
+('mail-07', 'prod-20', 'shop-02', 'user-customer-02', 'CANCELLED', 0, DATE_SUB(@now, INTERVAL 100800 MINUTE), DATE_SUB(@now, INTERVAL 108000 MINUTE), NULL);
+
+-- E16. GÓI PRO: đăng ký, thanh toán, lịch sử kích hoạt, sản phẩm nổi bật, nhắc hạn
+INSERT INTO Shop_Subscriptions (id, shop_id, plan_id, started_at, ends_at) VALUES
+('sub-01', 'shop-01', 'PRO12', DATE_SUB(@now, INTERVAL 86400 MINUTE), DATE_ADD(@now, INTERVAL 439200 MINUTE)),
+('sub-02', 'shop-02', 'PRO6', DATE_SUB(@now, INTERVAL 43200 MINUTE), DATE_ADD(@now, INTERVAL 216000 MINUTE)),
+('sub-03', 'shop-03', 'PRO1', DATE_SUB(@now, INTERVAL 40320 MINUTE), DATE_ADD(@now, INTERVAL 2880 MINUTE));
+
+INSERT INTO Shop_Plan_Payments (id, shop_id, plan_id, duration_months, amount, invoice_number, status, created_at, confirmed_at, last_checked_at, transaction_no) VALUES
+('planpay-01', 'shop-01', 'PRO12', 12, 596000, 'SUB-DEMO-0001', 'SUCCESS', DATE_SUB(@now, INTERVAL 86400 MINUTE), DATE_SUB(@now, INTERVAL 86400 MINUTE), DATE_SUB(@now, INTERVAL 86400 MINUTE), 'SEPAY-SUB-0001'),
+('planpay-02', 'shop-02', 'PRO6', 6, 298000, 'SUB-DEMO-0002', 'SUCCESS', DATE_SUB(@now, INTERVAL 43200 MINUTE), DATE_SUB(@now, INTERVAL 43200 MINUTE), DATE_SUB(@now, INTERVAL 43200 MINUTE), 'SEPAY-SUB-0002'),
+('planpay-03', 'shop-03', 'PRO1', 1, 59000, 'SUB-DEMO-0003', 'SUCCESS', DATE_SUB(@now, INTERVAL 40320 MINUTE), DATE_SUB(@now, INTERVAL 40320 MINUTE), DATE_SUB(@now, INTERVAL 40320 MINUTE), 'SEPAY-SUB-0003'),
+('planpay-04', 'shop-03', 'PRO3', 3, 149000, 'SUB-DEMO-0004', 'PENDING', DATE_SUB(@now, INTERVAL 60 MINUTE), NULL, DATE_SUB(@now, INTERVAL 1 MINUTE), NULL),
+('planpay-05', 'shop-02', 'PRO1', 1, 59000, 'SUB-DEMO-0005', 'FAILED', DATE_SUB(@now, INTERVAL 64800 MINUTE), NULL, DATE_SUB(@now, INTERVAL 64800 MINUTE), NULL),
+('planpay-06', 'shop-01', 'PRO3', 3, 149000, 'SUB-DEMO-0006', 'REVIEW', DATE_SUB(@now, INTERVAL 2880 MINUTE), NULL, DATE_SUB(@now, INTERVAL 1440 MINUTE), NULL);
+
+INSERT INTO Shop_Pro_Activations (id, shop_id, plan_id, duration_months, source, payment_id, actor_id, note, starts_at, ends_at, created_at) VALUES
+('act-01', 'shop-01', 'PRO12', 12, 'SEPAY', 'planpay-01', NULL, 'Thanh toán SePay thành công', DATE_SUB(@now, INTERVAL 86400 MINUTE), DATE_ADD(@now, INTERVAL 439200 MINUTE), DATE_SUB(@now, INTERVAL 86400 MINUTE)),
+('act-02', 'shop-02', 'PRO6', 6, 'SEPAY', 'planpay-02', NULL, 'Thanh toán SePay thành công', DATE_SUB(@now, INTERVAL 43200 MINUTE), DATE_ADD(@now, INTERVAL 216000 MINUTE), DATE_SUB(@now, INTERVAL 43200 MINUTE)),
+('act-03', 'shop-03', 'PRO1', 1, 'SEPAY', 'planpay-03', NULL, 'Thanh toán SePay thành công', DATE_SUB(@now, INTERVAL 40320 MINUTE), DATE_ADD(@now, INTERVAL 2880 MINUTE), DATE_SUB(@now, INTERVAL 40320 MINUTE)),
+('act-04', 'shop-02', 'PRO1', 1, 'ADMIN_GRANT', NULL, 'user-admin-01', 'Tặng 1 tháng nhân dịp khai trương', DATE_SUB(@now, INTERVAL 108000 MINUTE), DATE_SUB(@now, INTERVAL 64800 MINUTE), DATE_SUB(@now, INTERVAL 108000 MINUTE));
+
+INSERT INTO Featured_Products (product_id, shop_id, featured_at) VALUES
+('prod-03', 'shop-01', DATE_SUB(@now, INTERVAL 43200 MINUTE)),
+('prod-04', 'shop-01', DATE_SUB(@now, INTERVAL 43200 MINUTE)),
+('prod-10', 'shop-01', DATE_SUB(@now, INTERVAL 40320 MINUTE)),
+('prod-12', 'shop-01', DATE_SUB(@now, INTERVAL 28800 MINUTE)),
+('prod-13', 'shop-02', DATE_SUB(@now, INTERVAL 36000 MINUTE)),
+('prod-14', 'shop-02', DATE_SUB(@now, INTERVAL 36000 MINUTE)),
+('prod-15', 'shop-02', DATE_SUB(@now, INTERVAL 28800 MINUTE)),
+('prod-23', 'shop-03', DATE_SUB(@now, INTERVAL 21600 MINUTE));
+
+INSERT INTO Subscription_Reminders (id, subscription_id, expected_end, reminder_date, hour_slot, mail_status, attempts, next_attempt_at)
+SELECT 'reminder-01', id, ends_at, CURDATE(), 9, 'SENT', 1, @now FROM Shop_Subscriptions WHERE id = 'sub-03';
+INSERT INTO Subscription_Reminders (id, subscription_id, expected_end, reminder_date, hour_slot, mail_status, attempts, next_attempt_at)
+SELECT 'reminder-02', id, ends_at, CURDATE(), 19, 'PENDING', 0, @now FROM Shop_Subscriptions WHERE id = 'sub-03';
+
