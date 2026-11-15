@@ -35,8 +35,9 @@ public class CouponService {
     private final CouponRepository coupons;
     private final ShopRepository shops;
     private final ProductRepository products;
-    public CouponService(CouponRepository coupons, ShopRepository shops, ProductRepository products) {
-        this.coupons=coupons; this.shops=shops; this.products=products;
+    private final OrderRepository orders;
+    public CouponService(CouponRepository coupons, ShopRepository shops, ProductRepository products, OrderRepository orders) {
+        this.coupons=coupons; this.shops=shops; this.products=products; this.orders=orders;
     }
     private LocalDateTime now() { return LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")); }
     private Shop owned(String shopId, String actor) {
@@ -90,12 +91,13 @@ public class CouponService {
     public void delete(String actor,String shopId,String id) {
         Coupon c=managed(actor,shopId,id); c.setDeleted(true); c.setStatus(CouponStatus.DISABLED); c.setLastModifyBy(actor);
     }
-    private String reason(Coupon c, Context ctx) {
+    private String reason(Coupon c, Context ctx, Set<String> usedByCustomer) {
         if(c.isDeleted() || c.getStatus()!=CouponStatus.ACTIVE) return "Mã đã ngừng áp dụng";
         var time=now();
         if(time.isBefore(c.getStartDate())) return "Mã chưa đến ngày bắt đầu";
         if(!time.isBefore(c.getEndDate())) return "Mã đã hết hạn";
         if(c.getUsedCount()>=c.getUsageLimit()) return "Mã đã hết lượt sử dụng";
+        if(!usedByCustomer.isEmpty()) return "Bạn đã dùng mã giảm giá rồi, mỗi người chỉ được dùng 1 mã";
         if(c.getShop()!=null && (!c.getShop().getId().equals(ctx.shopId()) || c.getTarget()!=CouponTarget.ORDER)) return "Mã không áp dụng cho shop này";
         if(c.getDiscountValue()==null || c.getDiscountValue().signum()<=0 || c.getMaxDiscountValue()==null
                 || c.getMaxDiscountValue().signum()<=0 || c.getMaxDiscountValue().compareTo(new BigDecimal("100000"))>0
@@ -117,45 +119,47 @@ public class CouponService {
         return amount.min(c.getMaxDiscountValue()).min(limit).max(BigDecimal.ZERO).setScale(0,RoundingMode.DOWN);
     }
     private Comparator<Coupon> bySaving(Context ctx) { return Comparator.comparing((Coupon c) -> saving(c,ctx)).thenComparing(Coupon::getCode); }
-    private Coupon selected(List<Coupon> all,String code,boolean shipping,Context ctx) {
+    private Coupon selected(List<Coupon> all,String code,boolean shipping,Context ctx,Set<String> used) {
         if(code==null || code.isBlank()) return null;
         var c=all.stream().filter(v -> v.getCode().equalsIgnoreCase(code.strip())).findFirst()
                 .orElseThrow(() -> ApiException.badRequest("Mã giảm giá không tồn tại hoặc không áp dụng cho shop này."));
-        String error=reason(c,ctx);
+        String error=reason(c,ctx,used);
         if(error!=null) throw ApiException.badRequest(c.getCode()+": "+error);
         if((c.getTarget()==CouponTarget.SHIPPING)!=shipping) throw ApiException.badRequest("Mã không đúng loại giảm giá đã chọn.");
         return c;
     }
+    /** Không biết khách là ai: bỏ qua luật mỗi người chỉ dùng 1 mã giảm giá. */
     public Preview preview(Context ctx,String orderCode,String shippingCode) {
-        return evaluate(ctx,orderCode,shippingCode,coupons.available(ctx.shopId()));
+        return evaluate(ctx,orderCode,shippingCode,coupons.available(ctx.shopId()),Set.of());
     }
-    private Preview evaluate(Context ctx,String orderCode,String shippingCode,List<Coupon> all) {
-        var money=all.stream().filter(c -> c.getTarget()!=CouponTarget.SHIPPING && reason(c,ctx)==null).sorted(bySaving(ctx)).toList();
-        var ship=all.stream().filter(c -> c.getTarget()==CouponTarget.SHIPPING && reason(c,ctx)==null).sorted(bySaving(ctx)).toList();
-        Coupon selectedMoney=selected(all,orderCode,false,ctx), selectedShip=selected(all,shippingCode,true,ctx);
-        BigDecimal lowest=money.isEmpty()?BigDecimal.ZERO:saving(money.get(0),ctx);
-        if(selectedShip!=null && selectedMoney!=null && saving(selectedMoney,ctx).compareTo(lowest)!=0)
-            throw ApiException.badRequest("mã voucher không phù hợp");
-        Coupon bestMoney=money.isEmpty()?null:money.get(money.size()-1), bestShip=null;
-        BigDecimal best=bestMoney==null?BigDecimal.ZERO:saving(bestMoney,ctx);
-        if(!ship.isEmpty()) {
-            Coupon maxShip=ship.get(ship.size()-1);
-            BigDecimal combined=saving(maxShip,ctx).add(lowest);
-            if(combined.compareTo(best)>0) { best=combined; bestShip=maxShip; bestMoney=money.isEmpty()?null:money.get(0); }
-        }
+    /** Xem trước cho một khách: nếu khách đã dùng một mã cho đơn chưa hủy thì mọi mã đều bị đánh dấu không dùng được. */
+    public Preview preview(Context ctx,String customerId,String orderCode,String shippingCode) {
+        return preview(ctx,customerId,null,orderCode,shippingCode);
+    }
+    /** Như trên, bỏ qua mã đang gắn trên chính đơn excludeOrderId (đơn báo giá đang xem). */
+    public Preview preview(Context ctx,String customerId,String excludeOrderId,String orderCode,String shippingCode) {
+        return evaluate(ctx,orderCode,shippingCode,coupons.available(ctx.shopId()),orders.couponIdsUsedBy(customerId,excludeOrderId));
+    }
+    private static final String ONE_VOUCHER_ONLY = "Mỗi người chỉ được dùng 1 mã giảm giá";
+    private Preview evaluate(Context ctx,String orderCode,String shippingCode,List<Coupon> all,Set<String> used) {
+        boolean hasOrder=orderCode!=null && !orderCode.isBlank(), hasShipping=shippingCode!=null && !shippingCode.isBlank();
+        if(hasOrder && hasShipping) throw ApiException.badRequest(ONE_VOUCHER_ONLY+": chỉ chọn mã giảm đơn hàng hoặc mã giảm phí vận chuyển.");
+        Coupon selectedMoney=selected(all,orderCode,false,ctx,used), selectedShip=selected(all,shippingCode,true,ctx,used);
+        Coupon best=all.stream().filter(c -> reason(c,ctx,used)==null).max(bySaving(ctx)).orElse(null);
         List<Choice> moneyChoices=new ArrayList<>(),shipChoices=new ArrayList<>();
         for(Coupon c:all.stream().sorted(Comparator.comparing(Coupon::getCode)).toList()) {
-            String error=reason(c,ctx);
+            String error=reason(c,ctx,used);
             BigDecimal amount=error==null?saving(c,ctx):BigDecimal.ZERO;
-            if(error==null && selectedShip!=null && c.getTarget()!=CouponTarget.SHIPPING && amount.compareTo(lowest)!=0) error="mã voucher không phù hợp";
             Choice choice=new Choice(c.getId(),c.getCode(),c.getShop()==null?"PLATFORM":"SHOP",c.getTarget(),c.getDiscountType(),
                     c.getDiscountValue(),c.getMaxDiscountValue(),c.getMinOrderValue(),amount,error==null,error,c.getEndDate());
             (c.getTarget()==CouponTarget.SHIPPING?shipChoices:moneyChoices).add(choice);
         }
         BigDecimal discount=selectedMoney==null?BigDecimal.ZERO:saving(selectedMoney,ctx);
         BigDecimal shippingDiscount=selectedShip==null?BigDecimal.ZERO:saving(selectedShip,ctx);
-        return new Preview(moneyChoices,shipChoices,bestMoney==null?null:bestMoney.getCode(),bestShip==null?null:bestShip.getCode(),best,
-                discount,shippingDiscount,ctx.subTotal().add(ctx.shippingFee()).subtract(discount).subtract(shippingDiscount));
+        boolean bestIsShipping=best!=null && best.getTarget()==CouponTarget.SHIPPING;
+        return new Preview(moneyChoices,shipChoices,best==null||bestIsShipping?null:best.getCode(),bestIsShipping?best.getCode():null,
+                best==null?BigDecimal.ZERO:saving(best,ctx),discount,shippingDiscount,
+                ctx.subTotal().add(ctx.shippingFee()).subtract(discount).subtract(shippingDiscount));
     }
     /** Call only within the order's write transaction. Both slots lock in deterministic code order. */
     @Transactional
@@ -166,7 +170,7 @@ public class CouponService {
         Map<String,Coupon> locked=new HashMap<>();
         for(String code:codes) locked.put(code,coupons.findByCodeForUpdate(code).orElseThrow(() -> ApiException.badRequest("Mã giảm giá không tồn tại.")));
         var all=coupons.available(ctx.shopId());
-        Preview result=evaluate(ctx,orderCode,shippingCode,all);
+        Preview result=evaluate(ctx,orderCode,shippingCode,all,order.getCustomer()==null?Set.of():orders.couponIdsUsedByForUpdate(order.getCustomer().getId(),order.getId()));
         for(Coupon c:locked.values()) c.setUsedCount(c.getUsedCount()+1);
         Coupon money=orderCode==null?null:locked.get(orderCode.strip().toUpperCase(Locale.ROOT));
         Coupon ship=shippingCode==null?null:locked.get(shippingCode.strip().toUpperCase(Locale.ROOT));

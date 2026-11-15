@@ -212,7 +212,7 @@ single.setShippingCouponCode(part.getShippingCouponCode()); single.setExpectedTo
         var price=customPrice(custom);
         var fee=quoteFee(custom.getShop(),resolveDestination(userId,request.getDeliveryAddressId()));
         var preview=vouchers.preview(new CouponService.Context(custom.getShop().getId(),price.amount(),fee,java.util.Map.of()),
-                request.getCouponCode(),request.getShippingCouponCode());
+                userId,request.getCouponCode(),request.getShippingCouponCode());
         return com.example.flowershop.dto.order.CustomPaymentPreview.from(preview,price.amount(),fee,price.depositPercent());
     }
 
@@ -610,7 +610,7 @@ single.setShippingCouponCode(part.getShippingCouponCode()); single.setExpectedTo
                 .orElseThrow(() -> ApiException.badRequest("Sản phẩm không thuộc giỏ hàng/shop đang chọn hoặc đã ngừng bán."))).toList();
         if(items.isEmpty()) throw ApiException.badRequest("Chọn sản phẩm để áp voucher.");
         var shippingFee=merchandiseOnly ? BigDecimal.ZERO : quoteFee(items.get(0).getProduct().getShop(),resolveDestination(userId,request.getDeliveryAddressId()));
-        return vouchers.preview(voucherContext(request.getShopId(),items,shippingFee), request.getCouponId(),request.getShippingCouponCode());
+        return vouchers.preview(voucherContext(request.getShopId(),items,shippingFee), userId, request.getCouponId(),request.getShippingCouponCode());
     }
     @Transactional(readOnly=true)
     public BigDecimal quoteShippingFee(String userId, ShippingFeeRequest request) {

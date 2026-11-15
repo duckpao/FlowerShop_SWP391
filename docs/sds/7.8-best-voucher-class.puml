@@ -86,12 +86,9 @@ CouponRepository ..> Coupon
 
 note bottom of CouponService
   Suggestion rule (evaluate):
-  1. Money vouchers that are eligible and give a saving are sorted by saving.
-     bestMoney = the one with the highest saving.
-  2. If an eligible shipping voucher exists: combined = best shipping saving + lowest money saving.
-     If combined > bestMoney saving, the suggestion is the shipping voucher plus the LOWEST money voucher,
-     and bestSaving = combined.
-  3. Otherwise the suggestion is bestMoney alone. No eligible voucher: no suggestion, bestSaving = 0.
+  Only one voucher can be used per customer, so the suggestion is the single eligible voucher
+  (money or shipping) with the highest saving; ties are broken by code.
+  No eligible voucher (or the customer already holds one): no suggestion, bestSaving = 0.
   The suggestion is not reserved: usedCount changes only when the order is placed (7.6).
 end note
 

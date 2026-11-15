@@ -75,6 +75,8 @@ class "MakeOrdersRequest.ShopOrder" as ShopOrder <<DTO>> {
 class OrderRepository <<Repository>> {
   save(order): Order
   findById(id): Optional<Order>
+  couponIdsUsedBy(customerId, excludeOrderId): Set<String>
+  couponIdsUsedByForUpdate(customerId, excludeOrderId): Set<String>
 }
 class CouponRepository <<Repository>> {
   available(shopId): List<Coupon>
@@ -126,6 +128,7 @@ OrderService --> GhnService
 CouponService ..> Context : builds from order
 CouponService ..> Preview : returns
 CouponService --> CouponRepository
+CouponService --> OrderRepository : coupons the customer already used
 CouponService ..> Order : writes snapshot
 CouponRepository ..> Coupon
 OrderRepository ..> Order
@@ -135,7 +138,10 @@ note bottom of CouponService
   preview() is read-only: no usedCount change.
   apply() runs inside OrderService's write transaction:
   codes locked in sorted order (TreeSet), revalidated, usedCount + 1,
-  Order snapshot filled. Max 1 ORDER/PRODUCT + 1 SHIPPING voucher.
+  Order snapshot filled. Only ONE voucher per customer: an order code together
+  with a shipping code is refused (400 "Mỗi người chỉ được dùng 1 mã giảm giá"), and any code is refused
+  ("Bạn đã dùng mã giảm giá rồi, mỗi người chỉ được dùng 1 mã") while a non-cancelled order of the customer
+  holds a voucher. Cancelling that order releases the right again.
 end note
 
 note bottom of OrderService

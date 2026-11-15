@@ -134,7 +134,9 @@ note bottom of OrderService
 end note
 
 note bottom of CouponService
-  preview() is read-only: usedCount does not change.
+  preview() is read-only: usedCount does not change. Each customer may use only one
+  voucher: once a non-cancelled order holds a code, every code is listed as not eligible
+  ("Bạn đã dùng mã giảm giá rồi, mỗi người chỉ được dùng 1 mã").
   available(shopId) returns platform and this shop's vouchers that are not deleted;
   each one gets eligible + reason (ACTIVE, dates, usage, shop, minimum order, saving > 0).
   Unknown code: 400. Ineligible code: 400 "CODE: reason".

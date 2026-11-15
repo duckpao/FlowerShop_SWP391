@@ -191,7 +191,7 @@ public class CustomOrderWorkflowService {
         requireCustom(order);
         if(order.getStatus()!=OrderStatus.QUOTED) throw invalid("Đơn chưa được báo giá hoặc đã được xử lý.");
         return com.example.flowershop.dto.order.CustomPaymentPreview.from(
-                vouchers.preview(context(order),input.couponCode(),input.shippingCouponCode()),
+                vouchers.preview(context(order),order.getCustomer().getId(),order.getId(),input.couponCode(),input.shippingCouponCode()),
                 order.getSubTotal(),order.getShippingFee(),depositPercent(order));
     }
 }

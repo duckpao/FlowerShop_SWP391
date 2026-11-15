@@ -24,8 +24,8 @@ export default function VoucherPicker({ context, value, onChange, onPreview, dis
   }, [request, retry, onPreview])
 
   const choose = (key, code) => onChange(key === 'shippingCouponCode'
-    ? { couponCode: '', shippingCouponCode: code } // Money eligibility changes when the shipping slot changes.
-    : { ...value, couponCode: code })
+    ? { couponCode: '', shippingCouponCode: code } // Mỗi người chỉ được dùng 1 mã giảm giá: chọn mã vận chuyển thì bỏ mã giảm tiền.
+    : { couponCode: code, shippingCouponCode: '' }) // Mỗi người chỉ được dùng 1 mã giảm giá
   const renderChoices = (items, key, title) => <fieldset disabled={disabled || busy} className="space-y-2">
     <legend className="mb-2 text-sm font-semibold">{title}</legend>
     <label className="flex items-center gap-2 text-sm"><input type="radio" name={`${namespace}-voucher-${key}`} checked={!value[key]} onChange={() => choose(key, '')} />Không dùng mã</label>

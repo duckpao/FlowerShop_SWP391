@@ -22,6 +22,29 @@ public class OrderRepository extends HibernateRepository<Order> {
     }
     public OrderRepository() { super(Order.class); }
 
+    /** Id các mã (đơn và vận chuyển) khách đã dùng cho đơn chưa hủy; đơn bị hủy đã nhả mã nên không tính. */
+    public Set<String> couponIdsUsedBy(String customerId, String excludeOrderId) {
+        var ids = new HashSet<String>();
+        String where = " from Order e where e.customer.id = :customerId and e.couponsReleased = false and e.id <> :exclude";
+        for (String field : List.of("couponId", "shippingCouponId")) {
+            ids.addAll(session().createSelectionQuery("select e." + field + where + " and e." + field + " is not null", String.class)
+                    .setParameter("customerId", customerId).setParameter("exclude", excludeOrderId == null ? "" : excludeOrderId)
+                    .getResultList());
+        }
+        return ids;
+    }
+
+    /** Như couponIdsUsedBy nhưng đọc khóa (FOR UPDATE) để thấy đơn vừa commit của một yêu cầu song song; chỉ dùng khi đặt đơn. */
+    public Set<String> couponIdsUsedByForUpdate(String customerId, String excludeOrderId) {
+        var ids = new HashSet<String>();
+        session().createSelectionQuery("from Order e where e.customer.id = :customerId and e.couponsReleased = false and e.id <> :exclude"
+                        + " and (e.couponId is not null or e.shippingCouponId is not null)", Order.class)
+                .setParameter("customerId", customerId).setParameter("exclude", excludeOrderId == null ? "" : excludeOrderId)
+                .setLockMode(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE).getResultList()
+                .forEach(o -> { if (o.getCouponId() != null) ids.add(o.getCouponId()); if (o.getShippingCouponId() != null) ids.add(o.getShippingCouponId()); });
+        return ids;
+    }
+
     @Transactional
     public Optional<Order> findByIdForUpdate(String id) {
         return locked("e.id = :id", Map.of("id", id));

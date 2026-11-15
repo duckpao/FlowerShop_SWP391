@@ -63,9 +63,10 @@ V --> U : "Ưu đãi cho đơn hàng": radio lists "Giảm phí giao hàng" and\
 
 == B. Rules shown in the list ==
 note over CS
-  At most one money voucher and one shipping voucher.
-  With a shipping voucher selected, only the money voucher with the lowest eligible saving is allowed.
-  Money choices that break this rule are marked "mã voucher không phù hợp".
+  Each customer may use only ONE voucher (a money voucher or a shipping voucher, not both).
+  The View clears the other kind when one is chosen; both codes in one request: 400 "Mỗi người chỉ được dùng 1 mã giảm giá".
+  Once a non-cancelled order of the customer holds a voucher, every voucher is marked not eligible:
+  "Bạn đã dùng mã giảm giá rồi, mỗi người chỉ được dùng 1 mã". Cancelling that order releases the right again.
 end note
 note over V
   Changing the shipping choice also clears the money choice (the eligible list changes).

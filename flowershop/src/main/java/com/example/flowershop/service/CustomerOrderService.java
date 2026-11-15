@@ -340,6 +340,6 @@ order.getShippingDiscountAmount(),order.getCouponCode(),order.getShippingCouponC
     public CouponService.Preview previewVouchers(String customerId,CheckoutRequest req) {
         var product=products.findById(req.productId()).filter(p -> p.getStatus()==ProductStatus.ACTIVE && p.getShop().getStatus()==ShopStatus.ACTIVE)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,"Sản phẩm không còn được bán."));
-        return vouchers.preview(context(product,req.quantity(),quote(product.getShop(),destination(customerId,req.addressId()))),req.couponCode(),req.shippingCouponCode());
+        return vouchers.preview(context(product,req.quantity(),quote(product.getShop(),destination(customerId,req.addressId()))),customerId,req.couponCode(),req.shippingCouponCode());
     }
 }

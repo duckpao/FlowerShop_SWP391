@@ -31,9 +31,11 @@ opt merchandiseOnly = false
   S -> GHN : quoteFee(shop, deliveryAddress)
   GHN --> S : shipping fee
 end
-S -> CS : preview(ctx, orderCode, shippingCode)
+S -> CS : preview(ctx, customerId, orderCode, shippingCode)
 CS -> CR : available(shopId)
 CR --> CS : List<Coupon>
+CS -> OR : couponIdsUsedBy(customerId)
+OR --> CS : coupon ids the customer holds on orders that were not cancelled (any entry makes every code ineligible)
 CS -> CS : evaluate(ctx, codes, coupons), no usedCount change
 CS --> S : Preview
 S --> C : Preview
@@ -73,7 +75,9 @@ loop each shop part (shopId order)
   end
   CS -> CR : available(shopId)
   CR --> CS : List<Coupon>
-  CS -> CS : evaluate(ctx, codes, coupons) (invalid code or bad combination: 400)
+  CS -> OR : couponIdsUsedByForUpdate(customerId, orderId)
+  OR --> CS : coupon ids already used by this customer (read with a lock)
+  CS -> CS : evaluate(ctx, codes, coupons) (invalid code; order code + shipping code together: 400 "Mỗi người chỉ được dùng 1 mã giảm giá"; customer already holds a voucher: 400 "<CODE>: Bạn đã dùng mã giảm giá rồi, mỗi người chỉ được dùng 1 mã")
   CS -> CS : usedCount + 1 for each locked coupon
   CS -> CS : write coupon ids, codes, discount, totalAmount snapshot on Order
   CS --> S : Preview (confirmed amounts)

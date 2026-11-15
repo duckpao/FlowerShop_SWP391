@@ -114,23 +114,22 @@ class CouponTests {
         var low=coupon("CUSTOMLOW",CouponTarget.ORDER,"5","20000");low.setShop(shop);
         var high=coupon("CUSTOMHIGH",CouponTarget.ORDER,"20","70000");high.setShop(shop);
         var ship=coupon("CUSTOMSHIP",CouponTarget.SHIPPING,"100","30000");coupons.flush();
-        var input=depositInput();input.setCouponCode(low.getCode());input.setShippingCouponCode(ship.getCode());
+        var input=depositInput();input.setCouponCode(low.getCode());
         var preview=cartOrders.previewCustomVouchers(customer.getId(),design.getId(),input);
-        assertThat(preview.totalAmount()).isEqualByComparingTo("480000");
+        assertThat(preview.totalAmount()).isEqualByComparingTo("510000");
         assertThat(preview.depositAmount()).isEqualByComparingTo("144000");
-        assertThat(preview.remainingAmount()).isEqualByComparingTo("336000");
-        assertThat(preview.orderVouchers()).filteredOn(v->v.code().equals(high.getCode())).allSatisfy(v->assertThat(v.eligible()).isFalse());
+        assertThat(preview.remainingAmount()).isEqualByComparingTo("366000");
         input.setExpectedTotal(preview.totalAmount());
         input.setExpectedDeposit(preview.depositAmount());
         var created=cartOrders.makeCustomOrder(customer.getId(),design.getId(),input);
         var saved=orders.findById(created.getId()).orElseThrow();
         assertThat(saved.getStatus()).isEqualTo(OrderStatus.AWAITING_DEPOSIT);
-        assertThat(saved.getTotalAmount()).isEqualByComparingTo("480000");
+        assertThat(saved.getTotalAmount()).isEqualByComparingTo("510000");
         assertThat(saved.getDepositAmount()).isEqualByComparingTo("144000");
         assertThat(created.getCouponCode()).isEqualTo(low.getCode());
-        assertThat(created.getShippingCouponCode()).isEqualTo(ship.getCode());
+        assertThat(created.getShippingCouponCode()).isNull();
         assertThat(coupons.findById(low.getId()).orElseThrow().getUsedCount()).isEqualTo(1);
-        assertThat(coupons.findById(ship.getId()).orElseThrow().getUsedCount()).isEqualTo(1);
+        assertThat(coupons.findById(ship.getId()).orElseThrow().getUsedCount()).isZero();
         assertThat(payments.findByOrderId(saved.getId())).isEmpty();
         var gateway=PaymentBusinessTests.newGateway(orders,payments,refunds,cartOrders);
         org.springframework.test.util.ReflectionTestUtils.setField(gateway,"merchantId","merchant-test");
@@ -188,17 +187,15 @@ class CouponTests {
         coupon("FREE",CouponTarget.SHIPPING,"100","70000");
         assertThat(service.preview(ctx(),null,"FREE").shippingDiscountAmount()).isEqualByComparingTo("30000");
     }
-    @Test void shippingAllowsOnlyLowestActualSavingAndDisablesOthers() {
-        coupon("CAP20",CouponTarget.ORDER,"100","20000");
+    @Test void orderAndShippingCodesCannotBeCombinedBecauseOnlyOneVoucherIsAllowed() {
         coupon("ONEPERCENT",CouponTarget.ORDER,"1","70000");
         coupon("SHIP",CouponTarget.SHIPPING,"100","30000");
-        var result=service.preview(ctx(),"ONEPERCENT","SHIP");
-        assertThat(result.totalAmount()).isEqualByComparingTo("495000");
-        assertThat(result.orderVouchers()).filteredOn(v -> v.code().equals("CAP20"))
-                .allSatisfy(v -> { assertThat(v.eligible()).isFalse(); assertThat(v.reason()).isEqualTo("mã voucher không phù hợp"); });
-        assertThatThrownBy(() -> service.preview(ctx(),"CAP20","SHIP")).isInstanceOf(ApiException.class).hasMessage("mã voucher không phù hợp");
+        assertThatThrownBy(() -> service.preview(ctx(),"ONEPERCENT","SHIP")).isInstanceOf(ApiException.class)
+                .hasMessageContaining("Mỗi người chỉ được dùng 1 mã giảm giá");
+        assertThat(service.preview(ctx(),"ONEPERCENT",null).totalAmount()).isEqualByComparingTo("525000");
+        assertThat(service.preview(ctx(),null,"SHIP").totalAmount()).isEqualByComparingTo("500000");
     }
-    @Test void recommendsBestCombinationRatherThanAlwaysStacking() {
+    @Test void recommendsTheSingleBestVoucher() {
         coupon("LOW",CouponTarget.ORDER,"10","20000");
         var high=coupon("HIGH",CouponTarget.ORDER,"20","70000");
         coupon("SHIP",CouponTarget.SHIPPING,"100","30000");
@@ -208,9 +205,9 @@ class CouponTests {
         assertThat(result.bestSaving()).isEqualByComparingTo("70000");
         high.setDiscountValue(money("5")); coupons.saveAndFlush(high);
         result=service.preview(ctx(),null,null);
-        assertThat(result.recommendedOrderCode()).isEqualTo("LOW");
+        assertThat(result.recommendedOrderCode()).isNull();
         assertThat(result.recommendedShippingCode()).isEqualTo("SHIP");
-        assertThat(result.bestSaving()).isEqualByComparingTo("50000");
+        assertThat(result.bestSaving()).isEqualByComparingTo("30000");
     }
     @Test void minimumExcludesExpiredUnavailableAndWrongShopVouchersAndAcceptsTies() {
         var expired=coupon("EXPIRED",CouponTarget.ORDER,"1","20000"); expired.setEndDate(LocalDateTime.now().minusHours(1));
@@ -220,7 +217,7 @@ class CouponTests {
         var min=coupon("MINIMUM",CouponTarget.ORDER,"1","20000"); min.setMinOrderValue(money("600000"));
         coupon("LOW1",CouponTarget.ORDER,"10","20000"); coupon("LOW2",CouponTarget.ORDER,"10","20000"); coupon("SHIP",CouponTarget.SHIPPING,"100","30000");
         coupons.flush();
-        var result=service.preview(ctx(),"LOW2","SHIP");
+        var result=service.preview(ctx(),"LOW2",null);
         assertThat(result.orderVouchers()).filteredOn(CouponService.Choice::eligible).extracting(CouponService.Choice::code).containsExactlyInAnyOrder("LOW1","LOW2");
         assertThat(result.orderVouchers()).extracting(CouponService.Choice::code).doesNotContain("OTHER");
     }
@@ -233,13 +230,13 @@ class CouponTests {
     }
     @Test void directCheckoutPersistsBothDiscountsAndPaymentTotalAndReleasesOnce() {
         var low=coupon("LOW",CouponTarget.ORDER,"10","20000"); var ship=coupon("SHIP",CouponTarget.SHIPPING,"100","30000");
-        var result=customerOrders.checkout(customer.getId(),new CustomerOrderService.CheckoutRequest(destination.getId(),product.getId(),1,"","LOW","SHIP"));
-        assertThat(result.totalAmount()).isEqualByComparingTo("480000");
+        var result=customerOrders.checkout(customer.getId(),new CustomerOrderService.CheckoutRequest(destination.getId(),product.getId(),1,"","LOW",null));
+        assertThat(result.totalAmount()).isEqualByComparingTo("510000");
         var saved=customerOrders.detail(customer.getId(),result.orderId());
-        assertThat(saved.couponCode()).isEqualTo("LOW"); assertThat(saved.shippingCouponCode()).isEqualTo("SHIP");
-        assertThat(saved.discountAmount()).isEqualByComparingTo("20000"); assertThat(saved.shippingDiscountAmount()).isEqualByComparingTo("30000");
-        assertThat(payments.findByOrderId(result.orderId())).allSatisfy(p -> assertThat(p.getAmount()).isEqualByComparingTo("480000"));
-        assertThat(low.getUsedCount()).isEqualTo(1); assertThat(ship.getUsedCount()).isEqualTo(1);
+        assertThat(saved.couponCode()).isEqualTo("LOW"); assertThat(saved.shippingCouponCode()).isNull();
+        assertThat(saved.discountAmount()).isEqualByComparingTo("20000"); assertThat(saved.shippingDiscountAmount()).isEqualByComparingTo("0");
+        assertThat(payments.findByOrderId(result.orderId())).allSatisfy(p -> assertThat(p.getAmount()).isEqualByComparingTo("510000"));
+        assertThat(low.getUsedCount()).isEqualTo(1); assertThat(ship.getUsedCount()).isZero();
         manager.cancel(shop.getId(),owner.getId(),result.orderId(),"Cancel");
         service.release(orders.findById(result.orderId()).orElseThrow());
         assertThat(low.getUsedCount()).isZero(); assertThat(ship.getUsedCount()).isZero();
@@ -248,10 +245,10 @@ class CouponTests {
         var low=coupon("LOW",CouponTarget.ORDER,"10","20000"); var ship=coupon("SHIP",CouponTarget.SHIPPING,"100","30000");
         var item=cart.saveAndFlush(CartItem.builder().id(id()).user(customer).product(product).quantity(1).build());
         var req=new MakeOrderRequest(); req.setShopId(shop.getId()); req.setCartItemIds(List.of(item.getId())); req.setDeliveryAddressId(destination.getId());
-        req.setCouponId("LOW"); req.setShippingCouponCode("SHIP"); req.setPaymentMethod("ONLINE");
-        assertThat(cartOrders.previewVouchers(customer.getId(),req).totalAmount()).isEqualByComparingTo("480000");
+        req.setCouponId("LOW"); req.setPaymentMethod("ONLINE");
+        assertThat(cartOrders.previewVouchers(customer.getId(),req).totalAmount()).isEqualByComparingTo("510000");
         var result=cartOrders.makeOrder(customer.getId(),req);
-        assertThat(result.getTotalAmount()).isEqualByComparingTo("480000");
+        assertThat(result.getTotalAmount()).isEqualByComparingTo("510000");
         var order=orders.findById(result.getId()).orElseThrow(); order.setPaymentStartedAt(LocalDateTime.now().minusMinutes(11));
         cartOrders.cancelExpiredOrder(order.getId(),"Expired"); cartOrders.cancelExpiredOrder(order.getId(),"Expired again");
         assertThat(low.getUsedCount()).isZero(); assertThat(ship.getUsedCount()).isZero();
@@ -262,10 +259,10 @@ class CouponTests {
         var design=new CustomFlowerOrderService.RequestInput(shop.getId(),1,"",new CustomFlowerOrderService.Preferences(null,null,null,null,null,null));
         var receipt=workflow.create(customer.getId(),new CustomOrderWorkflowService.CreateInput(destination.getId(),design));
         workflow.quote(shop.getId(),owner.getId(),receipt.orderId(),new CustomOrderWorkflowService.Quote(money("400000"),"Quote"));
-        var preview=workflow.previewVouchers(customer.getId(),receipt.orderId(),new CustomOrderWorkflowService.VoucherInput("LOW","SHIP"));
+        var preview=workflow.previewVouchers(customer.getId(),receipt.orderId(),new CustomOrderWorkflowService.VoucherInput("LOW",null));
         assertThat(low.getUsedCount()).isZero();
-        workflow.accept(customer.getId(),receipt.orderId(),new CustomOrderWorkflowService.Accept(PaymentMethod.COD,preview.totalAmount(),"LOW","SHIP"));
-        assertThat(customerOrders.detail(customer.getId(),receipt.orderId()).totalAmount()).isEqualByComparingTo("380000");
+        workflow.accept(customer.getId(),receipt.orderId(),new CustomOrderWorkflowService.Accept(PaymentMethod.COD,preview.totalAmount(),"LOW",null));
+        assertThat(customerOrders.detail(customer.getId(),receipt.orderId()).totalAmount()).isEqualByComparingTo("410000");
         assertThat(low.getUsedCount()).isEqualTo(1);
     }
     @Test void quotedCustomWithVouchersCanPayDepositInsteadOfBeingForcedToFullOrCod() {
@@ -276,11 +273,11 @@ class CouponTests {
                 new CustomFlowerOrderService.Preferences(null,null,null,null,null,null));
         var receipt=workflow.create(customer.getId(),new CustomOrderWorkflowService.CreateInput(destination.getId(),design));
         workflow.quote(shop.getId(),owner.getId(),receipt.orderId(),new CustomOrderWorkflowService.Quote(money("400000"),"Quote"));
-        var preview=workflow.previewVouchers(customer.getId(),receipt.orderId(),new CustomOrderWorkflowService.VoucherInput("DEPOSITLOW","DEPOSITSHIP"));
-        assertThat(preview.totalAmount()).isEqualByComparingTo("380000");
-        assertThat(preview.depositAmount()).isEqualByComparingTo("190000");
+        var preview=workflow.previewVouchers(customer.getId(),receipt.orderId(),new CustomOrderWorkflowService.VoucherInput("DEPOSITLOW",null));
+        assertThat(preview.totalAmount()).isEqualByComparingTo("410000");
+        assertThat(preview.depositAmount()).isEqualByComparingTo("205000");
         var result=workflow.accept(customer.getId(),receipt.orderId(),new CustomOrderWorkflowService.Accept(
-                PaymentMethod.ONLINE,preview.totalAmount(),"DEPOSITLOW","DEPOSITSHIP",PaymentType.DEPOSIT,preview.depositAmount()));
+                PaymentMethod.ONLINE,preview.totalAmount(),"DEPOSITLOW",null,PaymentType.DEPOSIT,preview.depositAmount()));
         assertThat(result.status()).isEqualTo("AWAITING_DEPOSIT");
         var order=orders.findById(receipt.orderId()).orElseThrow();
         assertThat(order.getPaymentStartedAt()).isNotNull();
@@ -289,8 +286,8 @@ class CouponTests {
         org.springframework.test.util.ReflectionTestUtils.setField(gateway,"secretKey","secret-test");
         var payment=gateway.createPayment(com.example.flowershop.dto.payment.CreatePaymentRequest.builder()
                 .orderId(order.getId()).paymentType(PaymentType.DEPOSIT).build(),customer.getId());
-        assertThat(payment.getAmount()).isEqualByComparingTo("190000");
-        assertThat(payment.getFields().get("order_amount")).isEqualTo("190000");
+        assertThat(payment.getAmount()).isEqualByComparingTo("205000");
+        assertThat(payment.getFields().get("order_amount")).isEqualTo("205000");
     }
     @Test void multiShopCheckoutKeepsEachShopsVoucherAndDiscountedTotal() {
         var first=coupon("FIRST",CouponTarget.ORDER,"5","20000"); first.setShop(shop); coupons.saveAndFlush(first);
@@ -300,12 +297,12 @@ class CouponTests {
         var item1=cart.saveAndFlush(CartItem.builder().id(id()).user(customer).product(product).quantity(1).build());
         var item2=cart.saveAndFlush(CartItem.builder().id(id()).user(customer).product(otherProduct).quantity(1).build());
         var a=new com.example.flowershop.dto.order.MakeOrdersRequest.ShopOrder(); a.setShopId(shop.getId()); a.setCartItemIds(List.of(item1.getId())); a.setCouponId("FIRST"); a.setExpectedTotal(money("510000"));
-        var b=new com.example.flowershop.dto.order.MakeOrdersRequest.ShopOrder(); b.setShopId(otherShop.getId()); b.setCartItemIds(List.of(item2.getId())); b.setCouponId("SECOND"); b.setExpectedTotal(money("480000"));
+        var b=new com.example.flowershop.dto.order.MakeOrdersRequest.ShopOrder(); b.setShopId(otherShop.getId()); b.setCartItemIds(List.of(item2.getId())); b.setExpectedTotal(money("530000"));
         var request=new com.example.flowershop.dto.order.MakeOrdersRequest(); request.setDeliveryAddressId(destination.getId()); request.setPaymentMethod("ONLINE"); request.setRecipientName("Customer"); request.setPhone("0901234567"); request.setShops(List.of(a,b));
         var result=cartOrders.makeOrders(customer.getId(),request);
         assertThat(result).hasSize(2);
-        assertThat(result).extracting(com.example.flowershop.dto.order.OrderResponse::getCouponCode).containsExactlyInAnyOrder("FIRST","SECOND");
-        assertThat(result.stream().map(com.example.flowershop.dto.order.OrderResponse::getTotalAmount).reduce(BigDecimal.ZERO,BigDecimal::add)).isEqualByComparingTo("990000");
+        assertThat(result).extracting(com.example.flowershop.dto.order.OrderResponse::getCouponCode).containsExactlyInAnyOrder("FIRST",null);
+        assertThat(result.stream().map(com.example.flowershop.dto.order.OrderResponse::getTotalAmount).reduce(BigDecimal.ZERO,BigDecimal::add)).isEqualByComparingTo("1040000");
         assertThat(result.stream().map(r -> orders.findById(r.getId()).orElseThrow().getCheckoutGroup()).distinct().toList()).hasSize(1).doesNotContainNull();
     }
     MockHttpServletRequestBuilder csrf(MockHttpServletRequestBuilder request,String role) throws Exception {
@@ -367,11 +364,11 @@ class CouponTests {
         body.put("merchandiseOnly",false);
         mvc.perform(csrf(post(path),"customer").content(json.writeValueAsString(body))).andExpect(status().isBadRequest());
     }
-    @Test void checkoutApiRejectsForgedHighVoucherWithShipping() throws Exception {
+    @Test void checkoutApiRejectsAnOrderCodeTogetherWithAShippingCode() throws Exception {
         coupon("LOW",CouponTarget.ORDER,"10","20000"); coupon("HIGH",CouponTarget.ORDER,"20","70000"); coupon("SHIP",CouponTarget.SHIPPING,"100","30000");
         String request="{\"addressId\":\""+destination.getId()+"\",\"productId\":\""+product.getId()+"\",\"quantity\":1,\"couponCode\":\"HIGH\",\"shippingCouponCode\":\"SHIP\"}";
         mvc.perform(csrf(post("/api/customer/orders/checkout"),"customer").content(request)).andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("mã voucher không phù hợp"));
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("Mỗi người chỉ được dùng 1 mã giảm giá")));
     }
     @Test
     @Transactional(propagation=org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
@@ -395,5 +392,24 @@ class CouponTests {
                     .containsExactlyInAnyOrder(true,false);
             assertThat(coupons.findById(c.getId()).orElseThrow().getUsedCount()).isEqualTo(1);
         } finally { pool.shutdownNow(); coupons.deleteById(c.getId()); }
+    }
+    @Test void eachCustomerUsesOnlyOneVoucherUntilThatOrderIsCancelled() {
+        var voucher=coupon("ONEONLY",CouponTarget.ORDER,"10","20000");
+        var other=coupon("SECONDCODE",CouponTarget.ORDER,"10","20000");
+        String refused="Bạn đã dùng mã giảm giá rồi, mỗi người chỉ được dùng 1 mã";
+        Order first=orders.saveAndFlush(Order.builder().id(id()).customer(customer).shop(shop).orderType(OrderType.STANDARD)
+                .status(OrderStatus.PENDING).subTotal(money("500000")).totalAmount(money("500000")).build());
+        service.apply(first,ctx(),voucher.getCode(),null);orders.flush();
+        var preview=service.preview(ctx(),customer.getId(),null,null);
+        assertThat(preview.orderVouchers()).allSatisfy(v->{assertThat(v.eligible()).isFalse();assertThat(v.reason()).isEqualTo(refused);});
+        assertThatThrownBy(()->service.preview(ctx(),customer.getId(),other.getCode(),null)).isInstanceOf(ApiException.class).hasMessageContaining(refused);
+        Order second=orders.saveAndFlush(Order.builder().id(id()).customer(customer).shop(shop).orderType(OrderType.STANDARD)
+                .status(OrderStatus.PENDING).subTotal(money("500000")).totalAmount(money("500000")).build());
+        assertThatThrownBy(()->service.apply(second,ctx(),other.getCode(),null)).isInstanceOf(ApiException.class).hasMessageContaining(refused);
+        assertThatThrownBy(()->service.apply(second,ctx(),voucher.getCode(),null)).isInstanceOf(ApiException.class).hasMessageContaining(refused);
+        var otherCustomer=user(UserRole.CUSTOMER);
+        assertThat(service.preview(ctx(),otherCustomer.getId(),voucher.getCode(),null).discountAmount()).isPositive();
+        service.release(first);orders.flush();
+        assertThat(service.preview(ctx(),customer.getId(),other.getCode(),null).discountAmount()).isPositive();
     }
 }
