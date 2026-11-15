@@ -15,5 +15,8 @@ export const customFlowerService = {
   detail: id => authService.authenticatedRequest(`/api/customer/custom-orders/${encodeURIComponent(id)}`),
   shopRequests: (shopId, page, status = '') => authService.authenticatedRequest(`/api/shop/mine/${encodeURIComponent(shopId)}/custom-orders?${new URLSearchParams({ page: String(page), ...(status ? { status } : {}) })}`),
   shopDetail: (shopId, id) => authService.authenticatedRequest(`/api/shop/mine/${encodeURIComponent(shopId)}/custom-orders/${encodeURIComponent(id)}`),
+  quote: (shopId, id, body) => authService.authenticatedRequest(`/api/shop/mine/${encodeURIComponent(shopId)}/custom-orders/${encodeURIComponent(id)}/quote`, { method: 'POST', body }),
+  shopReject: (shopId, id, reason) => authService.authenticatedRequest(`/api/shop/mine/${encodeURIComponent(shopId)}/custom-orders/${encodeURIComponent(id)}/reject`, { method: 'POST', body: { reason } }),
+  customerReject: (id, reason) => authService.authenticatedRequest(`/api/customer/custom-orders/${encodeURIComponent(id)}/reject`, { method: 'POST', body: { reason } }),
   decide: (shopId, id, body) => authService.authenticatedRequest(`/api/shop/mine/${encodeURIComponent(shopId)}/custom-orders/${encodeURIComponent(id)}`, { method: 'PUT', body }),
 }

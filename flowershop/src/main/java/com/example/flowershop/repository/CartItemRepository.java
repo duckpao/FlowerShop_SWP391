@@ -18,4 +18,9 @@ public interface CartItemRepository extends JpaRepository<CartItem, String> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT item FROM CartItem item WHERE item.user.id = :userId AND item.product.id = :productId")
     Optional<CartItem> findByUserIdAndProductIdForUpdate(@Param("userId") String userId, @Param("productId") String productId);
+
+    /** Xóa dòng giỏ không đổi từ trước mốc cutoff, trả về số dòng đã xóa. */
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("DELETE FROM CartItem item WHERE item.lastModifyDate < :cutoff")
+    int deleteNotModifiedSince(@Param("cutoff") java.time.LocalDateTime cutoff);
 }

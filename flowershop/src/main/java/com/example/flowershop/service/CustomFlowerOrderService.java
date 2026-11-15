@@ -22,6 +22,9 @@ import java.util.*;
 @Transactional(readOnly=true)
 public class CustomFlowerOrderService {
     @org.springframework.beans.factory.annotation.Autowired private ProductQuotaService quota;
+    @org.springframework.beans.factory.annotation.Autowired private ShopOperationGuard guard;
+    @org.springframework.beans.factory.annotation.Autowired private NotificationService notifications;
+    public static final int DEFAULT_DEPOSIT_PERCENT=30,MIN_DEPOSIT_PERCENT=10,MAX_DEPOSIT_PERCENT=100;
     public record Preferences(@Size(max=200) String flowers, @Size(max=100) String colors,
             @Size(max=100) String occasion, @Size(max=200) String wrapping,
             @Size(max=10) String deliveryDate, @Size(max=36) String referenceProductId) {}
@@ -33,12 +36,19 @@ public class CustomFlowerOrderService {
     public record Decision(@NotNull CustomOrderStatus status,
             @Size(max=2000) String note,
             @DecimalMin("1.00") @Digits(integer=10,fraction=2) BigDecimal quotedPrice) {}
+    public record Quote(@NotNull @DecimalMin("1.00") @Digits(integer=10,fraction=2) BigDecimal price,
+            @Min(10) @Max(100) Integer depositPercent,
+            @Size(max=2000) String note,
+            LocalDateTime validUntil) {}
+    public record Reason(@Size(max=2000) String reason) {}
     public record Design(int quantity, String flowers, String colors, String occasion,
             String wrapping, String deliveryDate, String referenceProductId,
             String referenceProductName, BigDecimal estimatedTotal, String shopNote, BigDecimal quotedPrice) {}
     public record Result(String id,String shopId,String shopName,String customerName,
             BigDecimal budget,String description,CustomOrderStatus status,Design design,
-            LocalDateTime createdAt,LocalDateTime updatedAt) {}
+            LocalDateTime createdAt,LocalDateTime updatedAt,
+            BigDecimal quotedPrice,Integer depositPercent,BigDecimal depositAmount,BigDecimal remainingAmount,
+            LocalDateTime quoteValidUntil,String rejectReason,String rejectedBy) {}
     public record Results(List<Result> content,int page,int totalPages,long totalElements) {}
     public record Suggestion(ProductCardAssembler.ProductCard product, BigDecimal estimatedTotal,BigDecimal remainingBudget) {}
     public record Suggestions(List<Suggestion> content,int page,int totalPages,long totalElements,BigDecimal budget,int quantity) {}
@@ -82,7 +92,14 @@ public class CustomFlowerOrderService {
         }
         catch(JsonProcessingException e){throw new IllegalStateException("Dữ liệu thiết kế không hợp lệ.",e);}
     }
-    private Result result(CustomOrderRequest r){return new Result(r.getId(),r.getShop().getId(),r.getShop().getName(),r.getCustomer().getFullName(),r.getBudget(),r.getDescription(),r.getStatus(),decode(r.getDesiredComponents()),r.getCreatedDate(),r.getLastModifyDate());}
+    /** Tiền cọc = giá hoa x %, làm tròn đồng. Dùng chung với việc tạo đơn đặt cọc. */
+    public static BigDecimal depositOf(BigDecimal base,int percent){return base.multiply(BigDecimal.valueOf(percent)).divide(BigDecimal.valueOf(100),0,java.math.RoundingMode.HALF_UP);}
+    public static LocalDateTime now(){return LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh"));}
+    private Result result(CustomOrderRequest r){
+        BigDecimal deposit=r.getQuotedPrice()!=null&&r.getDepositPercent()!=null?depositOf(r.getQuotedPrice(),r.getDepositPercent()):null;
+        return new Result(r.getId(),r.getShop().getId(),r.getShop().getName(),r.getCustomer().getFullName(),r.getBudget(),r.getDescription(),r.getStatus(),decode(r.getDesiredComponents()),r.getCreatedDate(),r.getLastModifyDate(),
+                r.getQuotedPrice(),r.getDepositPercent(),deposit,deposit==null?null:r.getQuotedPrice().subtract(deposit),r.getQuoteValidUntil(),r.getRejectReason(),r.getRejectedBy());
+    }
     private Results results(Page<CustomOrderRequest> p){return new Results(p.getContent().stream().map(this::result).toList(),p.getNumber(),p.getTotalPages(),p.getTotalElements());}
     private Design design(RequestInput input){
         validateMoney(input.budget(),input.quantity());var p=input.preferences();
@@ -113,25 +130,70 @@ public class CustomFlowerOrderService {
     public Results mine(String actor,int page){return results(requests.findByCustomerId(actor,page(page)));}
     public Result detail(String actor,String id){return result(requests.findByIdAndCustomerId(id,actor).orElseThrow(CustomFlowerOrderService::missing));}
     public Results shopRequests(String shopId,String actor,CustomOrderStatus status,int page){
-        ownedShop(shopId,actor);return results(status==null?requests.findByShopId(shopId,page(page)):requests.findByShopIdAndStatus(shopId,status,page(page)));
+        guard.requireAccess(shopId,actor);return results(status==null?requests.findByShopId(shopId,page(page)):requests.findByShopIdAndStatus(shopId,status,page(page)));
     }
     public Result shopRequest(String shopId,String actor,String id){
-        ownedShop(shopId,actor);return result(requests.findById(id).filter(r->r.getShop().getId().equals(shopId)).orElseThrow(CustomFlowerOrderService::missing));
+        guard.requireAccess(shopId,actor);return result(requests.findById(id).filter(r->r.getShop().getId().equals(shopId)).orElseThrow(CustomFlowerOrderService::missing));
     }
+    private CustomOrderRequest lockedOfShop(String shopId,String id){return requests.findLocked(id).filter(r->r.getShop().getId().equals(shopId)).orElseThrow(CustomFlowerOrderService::missing);}
+    private void putDesign(CustomOrderRequest request,String note,BigDecimal quotedPrice){
+        var d=decode(request.getDesiredComponents());
+        request.setDesiredComponents(encode(new Design(Math.max(1,d.quantity()),d.flowers(),d.colors(),d.occasion(),d.wrapping(),d.deliveryDate(),d.referenceProductId(),d.referenceProductName(),d.estimatedTotal(),note,quotedPrice)));
+    }
+    /** Phản hồi hoặc từ chối. Báo giá dùng quote(); khách chấp nhận bằng cách đặt cọc (OrderService.makeCustomOrder). */
     @Transactional
     public Result decide(String shopId,String actor,String id,Decision input){
-        var shop=ownedShop(shopId,actor);
-        if(shop.getStatus()!=ShopStatus.ACTIVE||shop.getOwner().getStatus()!=UserStatus.ACTIVE)throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Shop phải đang hoạt động để xử lý yêu cầu.");
-        var request=requests.findLocked(id).filter(r->r.getShop().getId().equals(shopId)).orElseThrow(CustomFlowerOrderService::missing);
+        guard.requireAccess(shopId,actor);
+        var request=lockedOfShop(shopId,id);
         if(request.getStatus()==CustomOrderStatus.ACCEPTED||request.getStatus()==CustomOrderStatus.REJECTED)throw conflict("Yêu cầu đã kết thúc, không thể đổi trạng thái.");
         if(input.status()==CustomOrderStatus.REQUESTED)throw new IllegalArgumentException("Shop không thể chuyển về trạng thái mới gửi.");
+        if(input.status()==CustomOrderStatus.ACCEPTED||input.status()==CustomOrderStatus.QUOTED)throw new IllegalArgumentException("Hãy dùng chức năng báo giá; khách hàng sẽ là người chấp nhận.");
         if(input.note()==null||input.note().isBlank())throw new IllegalArgumentException("Vui lòng nhập nội dung phản hồi cho khách.");
-        if(input.status()==CustomOrderStatus.ACCEPTED&&input.quotedPrice()==null)throw new IllegalArgumentException("Cần báo giá tổng khi chấp nhận.");
-        if(input.quotedPrice()!=null){validateMoney(input.quotedPrice(),1);if(input.quotedPrice().compareTo(request.getBudget())>0)throw new IllegalArgumentException("Báo giá tổng không được vượt ngân sách của khách.");}
         var d=decode(request.getDesiredComponents());
-        request.setDesiredComponents(encode(new Design(Math.max(1,d.quantity()),d.flowers(),d.colors(),d.occasion(),d.wrapping(),d.deliveryDate(),d.referenceProductId(),d.referenceProductName(),d.estimatedTotal(),clean(input.note()),input.quotedPrice())));
-        request.setStatus(input.status());request.setLastModifyBy(actor);
-        return result(requests.saveAndFlush(request));
+        putDesign(request,clean(input.note()),d.quotedPrice());
+        if(input.status()==CustomOrderStatus.REJECTED){
+            request.setStatus(CustomOrderStatus.REJECTED);request.setRejectedBy("SHOP");request.setRejectReason(clean(input.note()));
+        }else if(request.getStatus()!=CustomOrderStatus.QUOTED)request.setStatus(CustomOrderStatus.NEGOTIATING);
+        request.setLastModifyBy(actor);
+        var saved=requests.saveAndFlush(request);
+        if(input.status()==CustomOrderStatus.REJECTED)notifications.notifyUser(request.getCustomer(),"Shop từ chối yêu cầu hoa riêng","Shop "+request.getShop().getName()+" đã từ chối yêu cầu của bạn. Lý do: "+clean(input.note()),"/custom-orders?open="+request.getId());
+        return result(saved);
+    }
+    @Transactional
+    public Result reject(String shopId,String actor,String id,Reason input){
+        return decide(shopId,actor,id,new Decision(CustomOrderStatus.REJECTED,input==null?null:input.reason(),null));
+    }
+    /** Shop báo giá (chủ shop hoặc staff): giá hoa, % cọc, ghi chú, hạn. Báo lại được khi chưa có khách chấp nhận. */
+    @Transactional
+    public Result quote(String shopId,String actor,String id,Quote input){
+        guard.requireAccess(shopId,actor);
+        var request=lockedOfShop(shopId,id);
+        if(request.getStatus()==CustomOrderStatus.ACCEPTED)throw conflict("Khách đã chấp nhận báo giá, không thể báo giá lại.");
+        if(request.getStatus()==CustomOrderStatus.REJECTED)throw conflict("Yêu cầu đã kết thúc, không thể báo giá.");
+        validateMoney(input.price(),1);
+        if(input.price().compareTo(request.getBudget())>0)throw new IllegalArgumentException("Báo giá không được vượt ngân sách của khách.");
+        int percent=input.depositPercent()==null?DEFAULT_DEPOSIT_PERCENT:input.depositPercent();
+        if(percent<MIN_DEPOSIT_PERCENT||percent>MAX_DEPOSIT_PERCENT)throw new IllegalArgumentException("Tiền cọc phải từ 10% đến 100%.");
+        if(input.validUntil()!=null&&!input.validUntil().isAfter(now()))throw new IllegalArgumentException("Hạn báo giá phải ở tương lai.");
+        String note=clean(input.note());if(note!=null&&note.isEmpty())note=null;
+        request.setQuotedPrice(input.price());request.setDepositPercent(percent);request.setQuoteValidUntil(input.validUntil());
+        request.setQuotedDate(now());request.setRejectReason(null);request.setRejectedBy(null);
+        putDesign(request,note,input.price());
+        request.setStatus(CustomOrderStatus.QUOTED);request.setLastModifyBy(actor);
+        var saved=requests.saveAndFlush(request);
+        notifications.notifyCustomQuoted(saved,depositOf(input.price(),percent));
+        return result(saved);
+    }
+    /** Khách từ chối báo giá. */
+    @Transactional
+    public Result customerReject(String actor,String id,Reason input){
+        var request=requests.findLocked(id).filter(r->r.getCustomer().getId().equals(actor)).orElseThrow(CustomFlowerOrderService::missing);
+        if(request.getStatus()!=CustomOrderStatus.QUOTED)throw conflict("Chỉ từ chối được yêu cầu đang có báo giá của shop.");
+        String reason=input==null?null:clean(input.reason());if(reason!=null&&reason.isEmpty())reason=null;
+        request.setStatus(CustomOrderStatus.REJECTED);request.setRejectedBy("CUSTOMER");request.setRejectReason(reason);request.setLastModifyBy(actor);
+        var saved=requests.saveAndFlush(request);
+        notifications.notifyCustomQuoteAnswered(saved,false,reason);
+        return result(saved);
     }
     public Suggestions suggestions(BigDecimal budget,int quantity,String shopId,String q,int page){
         validateMoney(budget,quantity);page(page);

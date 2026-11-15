@@ -1,6 +1,11 @@
 import { Toaster } from 'react-hot-toast';
 import AccountView from './views/AccountView';
 import AdminPlansView from './views/AdminPlansView';
+import AdminOrdersView from './views/AdminOrdersView'
+import AdminReviewsView from './views/AdminReviewsView'
+import AdminRefundsView from './views/AdminRefundsView';
+import AdminVouchersView from './views/AdminVouchersView';
+import ShopVouchersView from './views/ShopVouchersView';
 import ShopSubscriptionView from './views/ShopSubscriptionView';
 import { Navigate, Route, BrowserRouter as Router, Routes, useLocation } from "react-router";
 import AppLayout from "./layout/AppLayout";
@@ -22,6 +27,7 @@ import PaymentPendingPage from "./views/PaymentPendingPage";
 import CodSuccessPage from "./views/CodSuccessPage";
 import OrderInvoiceView from "./views/OrderInvoiceView";
 import CustomerOrdersView from "./views/CustomerOrdersView";
+import CustomerTransactionsView from "./views/CustomerTransactionsView";
 import CustomerOrderDetailView from "./views/CustomerOrderDetailView";
 import { useAuthController } from "./controllers/useAuthController";
 import { AuthProvider } from "./context/AuthContext";
@@ -95,6 +101,7 @@ function AppRouterContent() {
             <Route path="/checkout" element={controller.busy ? <p role="status">Đang kiểm tra đăng nhập…</p> : <CheckoutPage />} />
             <Route path="/orders" element={<CustomerOrdersView />} />
             <Route path="/orders/:id" element={<CustomerOrderDetailView />} />
+            <Route path="/transactions" element={<CustomerTransactionsView />} />
             <Route path="/payment/success" element={<PaymentSuccessPage />} />
             <Route path="/payment/error" element={<PaymentErrorPage />} />
             <Route path="/payment/cancel" element={<PaymentCancelPage />} />
@@ -102,6 +109,11 @@ function AppRouterContent() {
             <Route path="/payment/cod-success" element={<CodSuccessPage />} />
             <Route path="/shop-admin/subscription" element={<ShopSubscriptionView auth={controller} />} />
             <Route path="/admin/shop-plans" element={<AdminPlansView />} />
+            <Route path="/admin/refunds" element={<AdminRefundsView />} />
+            <Route path="/admin/orders" element={<AdminOrdersView />} />
+            <Route path="/admin/reviews" element={<AdminReviewsView />} />
+            <Route path="/admin/vouchers" element={<AdminVouchersView />} />
+            <Route path="/shop-admin/vouchers" element={<ShopVouchersView />} />
             <Route path="/admin/profile" element={<Navigate to="/account" replace />} />
             <Route path="/shop-admin/profile" element={<Navigate to="/account" replace />} />
             <Route path="/admin/*" element={<AdminDashboardView user={controller.user} logout={controller.logout} busy={controller.busy} error={controller.error} path={location.pathname} />} />

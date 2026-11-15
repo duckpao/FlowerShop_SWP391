@@ -98,16 +98,17 @@ public class NotificationService {
         create(user, title, message, link);
     }
 
-    /** Đơn đã trả tiền bị hủy, cần hoàn tiền: báo mọi staff đang làm ở shop để gọi khách. */
+    /** Có yêu cầu hoàn tiền mới (đơn bị hủy hoặc khách gửi): báo chủ shop và mọi staff đang làm ở shop. */
     @Transactional
     public void notifyRefundRequested(Refund refund) {
         Order order = refund.getOrder();
         String phone = order.getCustomer().getPhone() != null && !order.getCustomer().getPhone().isBlank()
                 ? order.getCustomer().getPhone() : order.getRecipientPhone();
-        String message = "Đơn hàng #" + shortId(order) + " đã hủy, cần hoàn " + String.format("%,.0f", refund.getAmount())
-                + "đ. Liên hệ khách qua SĐT: " + phone + ".";
+        String message = "Đơn hàng #" + shortId(order) + " cần hoàn " + String.format("%,.0f", refund.getAmount())
+                + "đ (" + refund.getReason() + "). Liên hệ khách qua SĐT: " + phone + ".";
+        create(order.getShop().getOwner(), "Yêu cầu hoàn tiền", message, "/shop-admin/refunds");
         staff.findByShopIdAndActiveTrue(order.getShop().getId())
-                .forEach(s -> create(s.getUser(), "Đơn hủy cần hoàn tiền", message, "/shop-admin/refunds"));
+                .forEach(s -> create(s.getUser(), "Yêu cầu hoàn tiền", message, "/shop-admin/refunds"));
     }
 
     /** Staff đã hoàn tiền hoặc từ chối hoàn: báo khách, link tới chi tiết đơn để xem khoản hoàn. */
@@ -125,6 +126,28 @@ public class NotificationService {
                 "/orders/" + order.getId());
     }
 
+    /** Shop vừa báo giá hoa theo yêu cầu: báo khách kèm giá và tiền cọc. */
+    @Transactional
+    public void notifyCustomQuoted(com.example.flowershop.entity.CustomOrderRequest request, java.math.BigDecimal deposit) {
+        create(request.getCustomer(), "Shop đã báo giá hoa theo yêu cầu",
+                "Shop " + request.getShop().getName() + " báo giá " + String.format("%,.0f", request.getQuotedPrice())
+                        + "đ, đặt cọc " + request.getDepositPercent() + "% (" + String.format("%,.0f", deposit) + "đ). Vui lòng xem và phản hồi.",
+                "/custom-orders?open=" + request.getId());
+    }
+
+    /** Khách chấp nhận (đặt cọc) hoặc từ chối báo giá: báo chủ shop và staff đang làm ở shop. */
+    @Transactional
+    public void notifyCustomQuoteAnswered(com.example.flowershop.entity.CustomOrderRequest request, boolean accepted, String reason) {
+        String name = request.getCustomer().getFullName() == null ? "Khách hàng" : request.getCustomer().getFullName();
+        String title = accepted ? "Khách đã chấp nhận báo giá" : "Khách từ chối báo giá";
+        String message = accepted
+                ? name + " đã chấp nhận báo giá và đang đặt cọc cho yêu cầu hoa riêng."
+                : name + " đã từ chối báo giá." + (reason == null || reason.isBlank() ? "" : " Lý do: " + reason);
+        String link = "/shop-admin/custom-orders?open=" + request.getId();
+        create(request.getShop().getOwner(), title, message, link);
+        staff.findByShopIdAndActiveTrue(request.getShop().getId()).forEach(s -> create(s.getUser(), title, message, link));
+    }
+
     private void create(User user, String title, String message, String link) {
         notifications.save(Notification.builder()
                 .id(UUID.randomUUID().toString())
@@ -136,7 +159,7 @@ public class NotificationService {
     }
 
     private static String shortId(Order order) {
-        return order.getId().replace("-", "").substring(0, 8).toUpperCase();
+        return com.example.flowershop.util.ShortCode.of(order.getId());
     }
 
     public List<NotificationResponse> mine(String userId) {

@@ -43,6 +43,17 @@ public class CustomerOrderController {
         return new CustomerOrderService.ShippingFeeResponse(service.calculateShippingFeeForOrder(user.id(), id));
     }
 
+    public record ChangeAddressRequest(@jakarta.validation.constraints.NotBlank String addressId) {}
+
+    @PutMapping("/{id}/address")
+    @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
+    public CustomerOrderService.OrderDetailResponse changeAddress(@AuthenticationPrincipal CurrentUser user,
+                                                                  @PathVariable String id,
+                                                                  @jakarta.validation.Valid @RequestBody ChangeAddressRequest request) {
+        service.changeDeliveryAddress(user.id(), id, request.addressId());
+        return service.detail(user.id(), id);
+    }
+
     @PostMapping("/{id}/refresh-tracking")
     @Parameter(name = "X-CSRF-TOKEN", in = ParameterIn.HEADER, required = true)
     public CustomerOrderService.DeliveryInfo refreshTracking(@AuthenticationPrincipal CurrentUser user,

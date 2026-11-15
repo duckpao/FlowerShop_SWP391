@@ -88,6 +88,7 @@ export default function CategoryMenu() {
         ['/budget-flowers', 'Hoa theo ngân sách'],
         ...(!user || user.role === 'CUSTOMER' ? [['/custom-orders', 'Đặt hoa theo yêu cầu']] : []),
         ['/floral-care', 'Cẩm nang chăm hoa'],
+        ...(user?.role === 'CUSTOMER' ? [['/orders', 'Đơn hàng của tôi']] : []),
     ]
 
     return <nav aria-label="Điều hướng cửa hàng" onMouseLeave={scheduleClose} onMouseEnter={cancelClose}

@@ -1,18 +1,42 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import { formatPrice } from '../models/productModel'
 import { customFlowerService } from '../services/customFlowerService'
 import { CustomRequestCard, customButton, customStatus } from '../components/customFlowers/CustomFlowerParts'
 import '../styles/custom-flowers.css'
 
+const toLocalInput = d => d ? new Date(d).toISOString().slice(0, 16) : ''
+
+// Báo giá: giá hoa, % cọc (tiền cọc tự tính), ghi chú, hạn tùy chọn. Báo lại được khi khách chưa chấp nhận.
+function QuoteForm({ request, busy, submit }) {
+  const [price, setPrice] = useState(request.quotedPrice ?? ''), [percent, setPercent] = useState(request.depositPercent ?? 30)
+  const [note, setNote] = useState(request.design?.shopNote || ''), [validUntil, setValidUntil] = useState(toLocalInput(request.quoteValidUntil))
+  const amount = Number(price), pct = Number(percent)
+  const valid = amount >= 1 && pct >= 10 && pct <= 100
+  const deposit = valid ? Math.round(amount * pct / 100) : null
+  return <form className="mt-4 space-y-3 border-t border-gray-200 pt-4 dark:border-gray-700" onSubmit={e => { e.preventDefault(); submit(request.id, { price: amount, depositPercent: pct, note, validUntil: validUntil || null }) }}>
+    <h4 className="font-semibold">{request.status === 'QUOTED' ? 'Cập nhật báo giá' : 'Báo giá cho khách'}</h4>
+    <fieldset disabled={busy} className="grid gap-3 md:grid-cols-2">
+      <label>Giá hoa (VND)<input type="number" min="1" max={request.budget} step="1" required value={price} onChange={e => setPrice(e.target.value)} /></label>
+      <label>Tiền cọc (%)<input type="number" min="10" max="100" step="1" required value={percent} onChange={e => setPercent(e.target.value)} /></label>
+      <p className="text-sm md:col-span-2">Tiền cọc khách cần trả: <strong>{deposit == null ? 'Chưa tính được' : formatPrice(deposit)}</strong>{deposit != null && <> · Còn lại: <strong>{formatPrice(amount - deposit)}</strong></>}. Giá chưa gồm phí giao hàng.</p>
+      <label>Hạn báo giá (tùy chọn)<input type="datetime-local" value={validUntil} onChange={e => setValidUntil(e.target.value)} /></label>
+      <label className="md:col-span-2">Ghi chú cho khách<textarea maxLength={2000} rows={2} value={note} onChange={e => setNote(e.target.value)} placeholder="Thiết kế, thời gian làm, điều kiện…" /></label>
+      <button className={customButton} disabled={!valid}>{request.status === 'QUOTED' ? 'Gửi báo giá mới' : 'Gửi báo giá'}</button></fieldset>
+  </form>
+}
+
+// Phản hồi trao đổi hoặc từ chối (kèm lý do). Chấp nhận do khách thực hiện sau khi nhận báo giá.
 function DecisionForm({ request, busy, submit }) {
-  const [status, setStatus] = useState('NEGOTIATING'), [note, setNote] = useState(''), [price, setPrice] = useState('')
-  return <form className="mt-4 space-y-3 border-t border-gray-200 pt-4 dark:border-gray-700" onSubmit={e => { e.preventDefault(); submit(request.id, { status, note, quotedPrice: price === '' ? null : Number(price) }) }}>
-    <fieldset disabled={busy} className="grid gap-3 md:grid-cols-2"><label>Hướng xử lý<select value={status} onChange={e => setStatus(e.target.value)}>{['NEGOTIATING', 'ACCEPTED', 'REJECTED'].map(s => <option value={s} key={s}>{customStatus[s]}</option>)}</select></label>
-      <label>Báo giá tổng (VND)<input type="number" min="1" max={request.budget} step="0.01" required={status === 'ACCEPTED'} value={price} onChange={e => setPrice(e.target.value)} /></label>
-      <label className="md:col-span-2">Phản hồi cho khách<textarea required maxLength={2000} rows={3} value={note} onChange={e => setNote(e.target.value)} placeholder="Thiết kế đề xuất, khả năng đáp ứng, thời gian hoặc lý do từ chối…" /></label>
+  const [status, setStatus] = useState('NEGOTIATING'), [note, setNote] = useState('')
+  return <form className="mt-4 space-y-3 border-t border-gray-200 pt-4 dark:border-gray-700" onSubmit={e => { e.preventDefault(); submit(request.id, { status, note }) }}>
+    <fieldset disabled={busy} className="grid gap-3 md:grid-cols-2"><label>Phản hồi khác<select value={status} onChange={e => setStatus(e.target.value)}>{['NEGOTIATING', 'REJECTED'].map(s => <option value={s} key={s}>{s === 'NEGOTIATING' ? 'Trao đổi thêm với khách' : 'Từ chối yêu cầu'}</option>)}</select></label>
+      <label className="md:col-span-2">{status === 'REJECTED' ? 'Lý do từ chối' : 'Phản hồi cho khách'}<textarea required maxLength={2000} rows={3} value={note} onChange={e => setNote(e.target.value)} placeholder="Thiết kế đề xuất, khả năng đáp ứng, thời gian hoặc lý do từ chối…" /></label>
       <button className={customButton}>Gửi phản hồi</button></fieldset>
   </form>
 }
+const OpenForms = ({ request, busy, quote, decide }) => ['REQUESTED', 'NEGOTIATING', 'QUOTED'].includes(request.status)
+  && <><QuoteForm request={request} busy={busy} submit={quote} /><DecisionForm request={request} busy={busy} submit={decide} /></>
 // Yêu cầu bị từ chối đã đóng nên không còn lối vào trao đổi
 const ChatLink = ({ request }) => request.status === 'REJECTED' ? null
   : <Link className={`${customButton} mt-4 inline-flex`} to={`/shop-admin/chat?customOrderId=${encodeURIComponent(request.id)}`}>Trao đổi với khách</Link>
@@ -43,6 +67,12 @@ export default function ManagerCustomOrdersView({ user, shop }) {
     try { await customFlowerService.decide(shopId, id, body); setNotice('Đã cập nhật và gửi phản hồi đến trang yêu cầu của khách.'); setRevision(v => v + 1) }
     catch (e) { setError(e.message) } finally { setSaving(false) }
   }
+  async function quote(id, body) {
+    if (saving) return
+    setSaving(true); setError(''); setNotice('')
+    try { await customFlowerService.quote(shopId, id, body); setNotice('Đã gửi báo giá cho khách.'); setRevision(v => v + 1) }
+    catch (e) { setError(e.message) } finally { setSaving(false) }
+  }
   if (user?.role !== 'SHOP') return <p>Chỉ chủ shop được xử lý yêu cầu thiết kế hoa.</p>
   return <main className="catalog-page custom-flower-page"><header className="catalog-page-header"><h1>Yêu cầu đặt hoa riêng</h1></header><section className="catalog-panel space-y-5">
     <div className="grid gap-4 md:grid-cols-3"><label>Cửa hàng<input readOnly value={shop?.name || ''} /></label>
@@ -51,8 +81,8 @@ export default function ManagerCustomOrdersView({ user, shop }) {
     {error && <p role="alert" className="message error">{error}</p>}{notice && <p role="status" className="message success">{notice}</p>}{busy && <p role="status">Đang tải yêu cầu…</p>}
     {!shop && !error && <p>Chưa có cửa hàng để xử lý yêu cầu.</p>}{data?.totalElements === 0 && <p>Chưa có yêu cầu ở trạng thái này.</p>}
     {openError && <p role="alert" className="message error">{openError}</p>}
-    {opened && <div aria-label="Yêu cầu đang xem" className="rounded-2xl ring-2 ring-brand-500"><CustomRequestCard request={opened}><ChatLink request={opened} />{['REQUESTED', 'NEGOTIATING'].includes(opened.status) && <DecisionForm request={opened} busy={saving} submit={decide} />}</CustomRequestCard></div>}
-    {data?.content.filter(r => r.id !== openId).map(r => <CustomRequestCard key={r.id} request={r}><ChatLink request={r} />{['REQUESTED', 'NEGOTIATING'].includes(r.status) && <DecisionForm request={r} busy={saving} submit={decide} />}</CustomRequestCard>)}
+    {opened && <div aria-label="Yêu cầu đang xem" className="rounded-2xl ring-2 ring-brand-500"><CustomRequestCard request={opened}><ChatLink request={opened} /><OpenForms request={opened} busy={saving} quote={quote} decide={decide} /></CustomRequestCard></div>}
+    {data?.content.filter(r => r.id !== openId).map(r => <CustomRequestCard key={r.id} request={r}><ChatLink request={r} /><OpenForms request={r} busy={saving} quote={quote} decide={decide} /></CustomRequestCard>)}
     {data && data.totalPages > 1 && <div className="catalog-actions"><button disabled={busy || saving || page === 0} onClick={() => setPage(v => v - 1)}>Trang trước</button><span>{page + 1}/{data.totalPages}</span><button disabled={busy || saving || page + 1 >= data.totalPages} onClick={() => setPage(v => v + 1)}>Trang sau</button></div>}
   </section></main>
 }

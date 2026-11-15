@@ -10,14 +10,15 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-/** Staff xem đơn hủy cần hoàn tiền của shop mình và cập nhật tiến độ xử lý. */
+/** Chủ shop và staff xem yêu cầu hoàn tiền cần hoàn tiền của shop mình và cập nhật tiến độ xử lý. */
 @RestController
-@RequestMapping("/api/staff/shops/{shopId}/refunds")
-@PreAuthorize("hasRole('SHOP_STAFF')")
+// SecurityConfig tách role theo đường dẫn (/api/staff cho staff, /api/shop cho chủ shop); guard kiểm tra đúng shop
+@RequestMapping({"/api/staff/shops/{shopId}/refunds", "/api/shop/mine/{shopId}/refunds"})
+@PreAuthorize("hasAnyRole('SHOP', 'SHOP_STAFF')")
 @SecurityRequirement(name = "bearerAuth")
 public class StaffRefundController {
 
-    public record StatusRequest(String status) {}
+    public record StatusRequest(String status, String note) {}
 
     private final StaffRefundService service;
 
@@ -26,13 +27,13 @@ public class StaffRefundController {
     }
 
     @GetMapping
-    public List<RefundResponse> list(@PathVariable String shopId, @AuthenticationPrincipal CurrentUser u) {
+    public List<RefundResponse> list(@PathVariable(name = "shopId") String shopId, @AuthenticationPrincipal CurrentUser u) {
         return service.list(shopId, u.id());
     }
 
     @PostMapping("/{id}/status")
-    public RefundResponse updateStatus(@PathVariable String shopId, @PathVariable String id,
+    public RefundResponse updateStatus(@PathVariable(name = "shopId") String shopId, @PathVariable(name = "id") String id,
                                        @RequestBody StatusRequest body, @AuthenticationPrincipal CurrentUser u) {
-        return service.updateStatus(shopId, u.id(), id, body.status());
+        return service.updateStatus(shopId, u.id(), id, body.status(), body.note());
     }
 }

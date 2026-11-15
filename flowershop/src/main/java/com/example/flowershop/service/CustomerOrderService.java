@@ -40,7 +40,8 @@ public class CustomerOrderService {
 
     /** Khoản hoàn tiền của đơn để khách theo dõi: REQUESTED → APPROVED → PROCESSED, hoặc REJECTED. */
     public record RefundLine(BigDecimal amount, String reason, String status,
-                             java.time.LocalDateTime createdDate, java.time.LocalDateTime updatedDate) {}
+                             java.time.LocalDateTime createdDate, java.time.LocalDateTime updatedDate,
+                             String id, String description, List<String> images, String shopResponse) {}
 
         public record ShippingFeeResponse(BigDecimal shippingFee) {}
 
@@ -178,7 +179,8 @@ private static ResponseStatusException notFound() {
                         p.getStatus() == PaymentStatus.SUCCESS ? p.getLastModifyDate() : null))
                 .toList();
         var refundLines = refunds.findByOrderIdOrderByCreatedDateAsc(orderId).stream()
-                .map(r -> new RefundLine(r.getAmount(), r.getReason(), r.getStatus().name(), r.getCreatedDate(), r.getLastModifyDate()))
+                .map(r -> new RefundLine(r.getAmount(), r.getReason(), r.getStatus().name(), r.getCreatedDate(), r.getLastModifyDate(),
+                        r.getId(), r.getDescription(), CustomerRefundService.images(r), r.getShopResponse()))
                 .toList();
         return new OrderDetailResponse(order.getId(), order.getShop().getId(), order.getShop().getName(),
                 order.getStatus().name(), order.getSubTotal(), order.getShippingFee(), order.getTotalAmount(),
@@ -197,6 +199,30 @@ private static ResponseStatusException notFound() {
                 }
                 return quote(order.getShop(), destination);
         }
+
+    private static final java.util.Set<OrderStatus> ADDRESS_EDITABLE =
+            java.util.EnumSet.of(OrderStatus.PENDING, OrderStatus.AWAITING_DEPOSIT, OrderStatus.DEPOSIT_PAID, OrderStatus.PROCESSING);
+
+    /** Đổi địa chỉ nhận sang một địa chỉ đã lưu của khách, chỉ khi đơn chưa chuyển sang giao hàng. Phí ship đã chốt giữ nguyên. */
+    @Transactional
+    public void changeDeliveryAddress(String customerId, String orderId, String addressId) {
+        Order order = orders.findById(orderId)
+                .filter(o -> o.getCustomer().getId().equals(customerId))
+                .orElseThrow(CustomerOrderService::notFound);
+        if (!ADDRESS_EDITABLE.contains(order.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Đơn hàng đã chuyển sang giao hàng hoặc đã kết thúc, không thể đổi địa chỉ.");
+        }
+        Address address = addresses.findById(addressId)
+                .filter(a -> a.getUser() != null && a.getUser().getId().equals(customerId) && a.getShop() == null)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Địa chỉ không hợp lệ."));
+        if (address.getGhnDistrictId() == null || address.getGhnWardCode() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Địa chỉ chưa có thông tin quận và phường, hãy cập nhật trong hồ sơ.");
+        }
+        order.setDeliveryAddress(address);
+        if (address.getRecipientName() != null && !address.getRecipientName().isBlank()) order.setRecipientName(address.getRecipientName());
+        if (address.getRecipientPhone() != null && !address.getRecipientPhone().isBlank()) order.setRecipientPhone(address.getRecipientPhone());
+        orders.save(order);
+    }
 
         @Transactional
         public DeliveryInfo refreshTracking(String customerId, String orderId) {

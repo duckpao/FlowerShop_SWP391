@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { useManagerShopController } from "../controllers/useManagerShopController";
 import { shopStatusLabels } from "../models/shopModel";
-import StaffApplicationsView from "./StaffApplicationsView";
 import ShopInvitationsView from "./ShopInvitationsView";
 import ProductsView from "./ProductsView";
 import OrderQueueView from "./OrderQueueView";
@@ -212,7 +211,6 @@ export default function ManagerShopsView({ role, section = "all" }) {
           {role === "SHOP" && ["all", "staff"].includes(section) && (
             <div className="space-y-6">
               <ShopInvitationsView key={`invitations-${c.selected.id}`} shop={c.selected} />
-              <StaffApplicationsView key={c.selected.id} shop={c.selected} />
               
               <ComponentCard title="Nhân viên cửa hàng">
                 <p className="mb-4 text-gray-500 dark:text-gray-400">

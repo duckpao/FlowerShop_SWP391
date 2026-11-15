@@ -95,9 +95,10 @@ class CustomFlowerOrderTests {
     @Test void lifecycleAllowsNegotiationThenAcceptance(){
         var r=service.create(customer.getId(),input(null));
         service.decide(shop.getId(),owner.getId(),r.id(),new Decision(CustomOrderStatus.NEGOTIATING,"Can make pink roses",new BigDecimal("250000")));
-        var accepted=service.decide(shop.getId(),owner.getId(),r.id(),new Decision(CustomOrderStatus.ACCEPTED,"Design confirmed",new BigDecimal("260000")));
-        assertThat(accepted.design().quotedPrice()).isEqualByComparingTo("260000");
-        assertThat(service.detail(customer.getId(),r.id()).status()).isEqualTo(CustomOrderStatus.ACCEPTED);
+        var quoted=service.quote(shop.getId(),owner.getId(),r.id(),new Quote(new BigDecimal("260000"),30,"Design confirmed",null));
+        assertThat(quoted.design().quotedPrice()).isEqualByComparingTo("260000");
+        assertThat(service.detail(customer.getId(),r.id()).status()).isEqualTo(CustomOrderStatus.QUOTED);
+        var entity=requests.findById(r.id()).orElseThrow();entity.setStatus(CustomOrderStatus.ACCEPTED);requests.saveAndFlush(entity);
         assertThatThrownBy(()->service.decide(shop.getId(),owner.getId(),r.id(),new Decision(CustomOrderStatus.REJECTED,"Changed mind",null))).isInstanceOf(ResponseStatusException.class);
     }
     @Test void rejectsOverBudgetQuoteAndUnauthorizedShop(){
