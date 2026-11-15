@@ -40,9 +40,6 @@ class OrderService <<Service>> {
 class CouponService <<Service>> {
   apply(order, ctx, orderCode, shippingCode): Preview
 }
-class ProductQuotaService <<Service>> {
-  requireAllowed(product)
-}
 class GhnService <<Service>> {
   calculateFee(...): BigDecimal
 }
@@ -142,7 +139,6 @@ OrderService --> OrderRepository
 OrderService --> OrderDetailRepository
 OrderService --> GhnService
 OrderService --> CouponService
-OrderService --> ProductQuotaService
 OrderService --> NotificationService
 OrderService ..> OrderPlacedEvent : publishes after the last order
 OrderPlacedEvent ..> OrderMailSender : handled after commit

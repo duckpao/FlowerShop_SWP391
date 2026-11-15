@@ -17,7 +17,6 @@ participant "View" as V <<View>> #EADCFF
 participant OrderController as C <<Controller>> #D8F3DC
 participant OrderService as S <<Service>> #DCECFF
 participant CartItemRepository as CIR <<Repository>> #FFF1C9
-participant ProductQuotaService as Q <<Service>> #DCECFF
 participant GhnService as GHN <<Service>> #DCECFF
 participant "GHN API" as GAPI <<External>> #FFE0E0
 participant CouponService as CS <<Service>> #DCECFF
@@ -42,8 +41,6 @@ loop each shop group (250 ms after each change)
         CIR --> S : CartItem
         S -> S : belongs to user and shop, product and shop ACTIVE\n(else 400 "Sản phẩm không thuộc giỏ hàng/shop đang chọn hoặc đã ngừng bán.")
       end
-      S -> Q : requireAllowed(product) for each item
-      Q --> S : ok (else 400 product locked by the shop plan limit)
       opt not merchandiseOnly
         S -> GHN : calculateFee (shop origin, delivery address)
         GHN -> GAPI : fee request

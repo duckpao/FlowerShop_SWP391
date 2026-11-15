@@ -20,7 +20,6 @@ participant UserRepository as UR <<Repository>> #FFF1C9
 participant AddressRepository as AR <<Repository>> #FFF1C9
 participant CartItemRepository as CR <<Repository>> #FFF1C9
 participant ProductRepository as PR <<Repository>> #FFF1C9
-participant ProductQuotaService as Q <<Service>> #DCECFF
 participant GhnService as GHN <<Service>> #DCECFF
 participant CouponService as CS <<Service>> #DCECFF
 participant OrderRepository as OR <<Repository>> #FFF1C9
@@ -74,7 +73,6 @@ loop each shop (shopId order)
     S -> PR : findByIdForUpdate(productId)
     PR --> S : Product (row locked)
     S -> S : product and shop ACTIVE, else 400
-    S -> Q : requireAllowed(product)
     S -> S : not CUSTOM and stock < quantity: 400 not enough stock
   end
   S -> S : subTotal = sum(price x quantity)

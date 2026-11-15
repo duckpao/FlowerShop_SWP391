@@ -550,18 +550,6 @@ CREATE TABLE Blogs (
     INDEX idx_blogs_shop_feed (shop_id, created_date)
 );
 
-CREATE TABLE Blog_Images (
-    id VARCHAR(36) PRIMARY KEY,
-    blog_id VARCHAR(36) NOT NULL,
-    image_url VARCHAR(500) NOT NULL,
-    display_order INT DEFAULT 0,
-    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    created_by VARCHAR(36),
-    last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    last_modify_by VARCHAR(36),
-    FOREIGN KEY (blog_id) REFERENCES Blogs(id) ON DELETE CASCADE
-);
-
 CREATE TABLE Blog_Interactions (
     user_id VARCHAR(36) NOT NULL,
     blog_id VARCHAR(36) NOT NULL,
@@ -874,37 +862,8 @@ INSERT INTO Manager_Applications (id, user_id, full_name, phone, shop_name, desc
 ('mgr-app-01', 'user-customer-01', 'Trần Thị B', '0987654321', 'B Flower House', 'Xin mở shop hoa online phục vụ khu vực Cầu Giấy.', 'Số 10, Ngõ 20, Đường Cầu Giấy', 'Hà Nội', 'Cầu Giấy', 'Dịch Vọng', 'PENDING', '2026-09-25 14:00:00');
 
 -- ===================================
--- NOTIFICATIONS & SHOP FOLLOW MAIL (migration 020, 024)
+-- BACKFILL SHOP PRODUCT PUBLICATIONS (migration 024)
 -- ==========================================
-CREATE TABLE IF NOT EXISTS Notifications (
-    id VARCHAR(36) PRIMARY KEY,
-    user_id VARCHAR(36) NOT NULL,
-    title VARCHAR(255) NOT NULL,
-    message TEXT,
-    link VARCHAR(255),
-    is_read BOOLEAN NOT NULL DEFAULT FALSE,
-    created_date DATETIME(6) NOT NULL,
-    CONSTRAINT fk_notification_user FOREIGN KEY (user_id) REFERENCES Users(id),
-    INDEX ix_notification_user (user_id, created_date)
-);
-
-CREATE TABLE IF NOT EXISTS Shop_Product_Publications (
-    product_id VARCHAR(36) PRIMARY KEY,
-    published_at DATETIME(6) NOT NULL
-);
-CREATE TABLE IF NOT EXISTS Shop_Product_Mails (
-    id VARCHAR(36) PRIMARY KEY,
-    product_id VARCHAR(36) NOT NULL,
-    shop_id VARCHAR(36) NOT NULL,
-    user_id VARCHAR(36) NOT NULL,
-    status VARCHAR(16) NOT NULL DEFAULT 'PENDING',
-    attempts INT NOT NULL DEFAULT 0,
-    next_attempt_at DATETIME(6) NOT NULL,
-    created_at DATETIME(6) NOT NULL,
-    sent_at DATETIME(6),
-    CONSTRAINT uk_shop_product_mail UNIQUE (product_id, user_id),
-    INDEX ix_shop_product_mail_due (status, next_attempt_at, created_at)
-);
 INSERT IGNORE INTO Shop_Product_Publications(product_id, published_at)
 SELECT id, COALESCE(created_date, NOW()) FROM Products WHERE status = 'ACTIVE';
 -- 18. DEMO SHOPS ĐỂ KIỂM THỬ THEO DÕI SHOP (chỉ dùng local; chủ shop dùng email example.test và chưa có mật khẩu nên không đăng nhập được)
@@ -917,106 +876,3 @@ INSERT IGNORE INTO Shops (id, owner_id, name, description, status, created_by) V
 ('follow-demo-shop-01', 'follow-demo-owner-01', 'Lotus Flower Studio', 'Hoa tươi và bó hoa theo mùa. Shop mẫu để kiểm thử theo dõi.', 'ACTIVE', 'follow-demo'),
 ('follow-demo-shop-02', 'follow-demo-owner-02', 'Rose Garden', 'Hoa hồng, hoa sinh nhật và hoa chúc mừng. Shop mẫu để kiểm thử theo dõi.', 'ACTIVE', 'follow-demo'),
 ('follow-demo-shop-03', 'follow-demo-owner-03', 'Sunflower House', 'Hoa hướng dương và giỏ hoa trang trí. Shop mẫu để kiểm thử theo dõi.', 'ACTIVE', 'follow-demo');
-
--- SHOP SUBSCRIPTIONS (sql/030_shop_subscriptions.sql)
--- Shop Free/Pro plans. Additive migration; no existing products or orders are removed.
-USE flower_shop_db;
-SET NAMES utf8mb4;
-SET time_zone = '+07:00'; -- Backfill TIMESTAMP creation dates into the Vietnam calendar-month ledger.
-CREATE TABLE IF NOT EXISTS Shop_Plans (
-    id VARCHAR(20) PRIMARY KEY,
-    name VARCHAR(100) NOT NULL,
-    duration_months INT NOT NULL,
-    price DECIMAL(12,2) NOT NULL,
-    product_limit INT NULL,
-    featured_limit INT NOT NULL,
-    enabled BOOLEAN NOT NULL DEFAULT TRUE
-);
-CREATE TABLE IF NOT EXISTS Shop_Subscriptions (
-    id VARCHAR(36) PRIMARY KEY,
-    shop_id VARCHAR(36) NOT NULL UNIQUE,
-    plan_id VARCHAR(20) NOT NULL,
-    started_at DATETIME(6) NOT NULL,
-    ends_at DATETIME(6) NOT NULL,
-    CONSTRAINT fk_subscription_shop FOREIGN KEY (shop_id) REFERENCES Shops(id),
-    CONSTRAINT fk_subscription_plan FOREIGN KEY (plan_id) REFERENCES Shop_Plans(id),
-    INDEX ix_subscription_end (ends_at)
-);
-CREATE TABLE IF NOT EXISTS Shop_Plan_Payments (
-    id VARCHAR(36) PRIMARY KEY,
-    shop_id VARCHAR(36) NOT NULL,
-    plan_id VARCHAR(20) NOT NULL,
-    duration_months INT NOT NULL,
-    amount DECIMAL(12,2) NOT NULL,
-    invoice_number VARCHAR(100) NOT NULL UNIQUE,
-    status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
-    created_at DATETIME(6) NOT NULL,
-    confirmed_at DATETIME(6),
-    last_checked_at DATETIME(6),
-    transaction_no VARCHAR(100),
-    CONSTRAINT fk_plan_payment_shop FOREIGN KEY (shop_id) REFERENCES Shops(id),
-    CONSTRAINT fk_plan_payment_plan FOREIGN KEY (plan_id) REFERENCES Shop_Plans(id),
-    INDEX ix_plan_payment_pending (status, last_checked_at, created_at)
-);
--- No product FK: deleting a product does not refund this month's quota.
-CREATE TABLE IF NOT EXISTS Shop_Product_Postings (
-    id VARCHAR(36) PRIMARY KEY,
-    shop_id VARCHAR(36) NOT NULL,
-    posted_at DATETIME(6) NOT NULL,
-    INDEX ix_product_posting_month (shop_id, posted_at),
-    CONSTRAINT fk_product_posting_shop FOREIGN KEY (shop_id) REFERENCES Shops(id)
-);
-CREATE TABLE IF NOT EXISTS Featured_Products (
-    product_id VARCHAR(36) PRIMARY KEY,
-    shop_id VARCHAR(36) NOT NULL,
-    featured_at DATETIME(6) NOT NULL,
-    CONSTRAINT fk_featured_product FOREIGN KEY (product_id) REFERENCES Products(id) ON DELETE CASCADE,
-    CONSTRAINT fk_featured_shop FOREIGN KEY (shop_id) REFERENCES Shops(id)
-);
-CREATE TABLE IF NOT EXISTS Subscription_Reminders (
-    id VARCHAR(36) PRIMARY KEY,
-    subscription_id VARCHAR(36) NOT NULL,
-    expected_end DATETIME(6) NOT NULL,
-    reminder_date DATE NOT NULL,
-    hour_slot INT NOT NULL,
-    mail_status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
-    attempts INT NOT NULL DEFAULT 0,
-    next_attempt_at DATETIME(6) NOT NULL,
-    CONSTRAINT fk_reminder_subscription FOREIGN KEY (subscription_id) REFERENCES Shop_Subscriptions(id),
-    CONSTRAINT uq_subscription_reminder UNIQUE (subscription_id,expected_end,reminder_date,hour_slot),
-    INDEX ix_subscription_reminder_mail (mail_status,next_attempt_at)
-);
--- 3-month discount = 1 - 149000/(59000*3) = 15.8192%.
--- Same discount for 6/12 months: 298000 / 596000 VND.
-INSERT INTO Shop_Plans(id,name,duration_months,price,product_limit,featured_limit,enabled) VALUES
-('FREE','Free',0,0,5,0,TRUE),
-('PRO1','Pro 1 tháng',1,59000,15,3,TRUE),
-('PRO3','Pro 3 tháng',3,149000,25,5,TRUE),
-('PRO6','Pro 6 tháng',6,298000,40,8,TRUE),
-('PRO12','Pro 1 năm',12,596000,NULL,15,TRUE)
-ON DUPLICATE KEY UPDATE id=Shop_Plans.id;
-INSERT IGNORE INTO Shop_Product_Postings(id,shop_id,posted_at)
-SELECT id,shop_id,COALESCE(created_date,NOW()) FROM Products;
-
--- ADMIN PRO ACTIVATION (sql/031_admin_pro_activation.sql)
--- Apply after 030_shop_subscriptions.sql. Entitlement audit is separate from payment accounting.
-USE flower_shop_db;
-SET NAMES utf8mb4;
-CREATE TABLE IF NOT EXISTS Shop_Pro_Activations (
-    id VARCHAR(36) PRIMARY KEY,
-    shop_id VARCHAR(36) NOT NULL,
-    plan_id VARCHAR(20) NOT NULL,
-    duration_months INT NOT NULL,
-    source VARCHAR(20) NOT NULL,
-    payment_id VARCHAR(36) NULL UNIQUE,
-    actor_id VARCHAR(36) NULL,
-    note VARCHAR(1000) NOT NULL,
-    starts_at DATETIME(6) NOT NULL,
-    ends_at DATETIME(6) NOT NULL,
-    created_at DATETIME(6) NOT NULL,
-    CONSTRAINT fk_pro_activation_shop FOREIGN KEY (shop_id) REFERENCES Shops(id),
-    CONSTRAINT fk_pro_activation_plan FOREIGN KEY (plan_id) REFERENCES Shop_Plans(id),
-    CONSTRAINT fk_pro_activation_payment FOREIGN KEY (payment_id) REFERENCES Shop_Plan_Payments(id),
-    CONSTRAINT fk_pro_activation_actor FOREIGN KEY (actor_id) REFERENCES Users(id),
-    INDEX ix_pro_activation_shop (shop_id,created_at)
-);

@@ -19,7 +19,6 @@ participant ManagerProductController as C <<Controller>> #D8F3DC
 participant AdminCatalogController as AC <<Controller>> #D8F3DC
 participant ManagerProductService as S <<Service>> #DCECFF
 participant AdminCatalogService as AS <<Service>> #DCECFF
-participant ProductQuotaService as Q <<Service>> #DCECFF
 participant ProductRepository as R <<Repository>> #FFF1C9
 database MySQL
 
@@ -42,14 +41,6 @@ else files valid
     S --> C : 404 Không tìm thấy shop hoặc sản phẩm.
     C --> V : 404 Not Found
   else product found or create
-    opt status ACTIVE on update
-      S -> Q : requireAllowed(product)
-      alt over shop product limit
-        Q --> S : 400 product locked by plan
-        S --> C : 400
-        C --> V : 400 Bad Request
-      end
-    end
     S -> S : set primary image, validate category ACTIVE
     S -> R : saveAndFlush(product)
     R -> MySQL : insert or update product
@@ -88,7 +79,7 @@ else actor is owner
   S -> R : findByIdAndShopId(id, shopId)
   R --> S : Product
   S -> S : deleted = true, status = INACTIVE
-  S -> MySQL : delete FeaturedProduct row, update product
+  S -> MySQL : update product
   S --> C : void
   C --> V : 204 No Content
 end
@@ -99,16 +90,10 @@ V -> C : PUT /api/shop/mine/{shopId}/products/{id}/unhide
 C -> S : unhide(shopId, id, actor)
 S -> S : owned(shopId, actor, write)
 S -> R : findByIdAndShopId(id, shopId)
-S -> Q : requireAllowed(product)
-alt over shop product limit
-  S --> C : 400 product locked by plan
-  C --> V : 400 Bad Request
-else allowed
-  S -> S : status = ACTIVE, notify published
-  S -> MySQL : update product
-  S --> C : void
-  C --> V : 204 No Content
-end
+S -> S : status = ACTIVE, notify published
+S -> MySQL : update product
+S --> C : void
+C --> V : 204 No Content
 
 == Admin hides or unhides product ==
 A -> V : toggle admin hidden

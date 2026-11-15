@@ -34,9 +34,6 @@ class ManagerProductService <<Service>> {
   save(shopId, id, actor, input, images, videos): Result
   unhide(shopId, id, actor)
 }
-class ProductQuotaService <<Service>> {
-  requireAllowed(product)
-}
 class ShopProductNotificationService <<Service>> {
   published(product)
 }
@@ -109,7 +106,6 @@ class User <<Entity>> {
 
 View --> ManagerProductController : POST /api/shop/mine/{shopId}/products\nPUT /api/shop/mine/{shopId}/products/{id}\nPUT /api/shop/mine/{shopId}/products/{id}/unhide
 ManagerProductController --> ManagerProductService
-ManagerProductService --> ProductQuotaService : unhide only
 ManagerProductService --> ShopProductNotificationService : published(product)
 ShopProductNotificationService --> ShopProductPublicationRepository
 ShopProductNotificationService --> FavoriteShopRepository : followers of the shop

@@ -7,11 +7,9 @@ Cột `Custom_Order_Requests.budget` được phép NULL và chỉ giữ dữ li
 Yêu cầu mới chỉ chứa lựa chọn thiết kế/số lượng; giá được shop gửi trong `quotedPrice`.
 Không còn giới hạn báo giá theo ngân sách khách. `database.sql` đã cập nhật cho database tạo mới.
 
-## Gói đăng ký shop
+## Gói đăng ký shop (đã bỏ)
 
-Sau schema đã gộp, áp dụng thêm `030_shop_subscriptions.sql` để có Free/Pro, giao dịch mua gói, lượt tạo sản phẩm, sản phẩm nổi bật và lịch sử nhắc hạn.
-File này đã được đồng bộ vào `database.sql`. Chi tiết tại `../SHOP_SUBSCRIPTIONS.md`.
-Áp dụng tiếp `031_admin_pro_activation.sql` để lưu lịch sử admin kích hoạt Pro và đối chiếu giao dịch; cũng đã có trong `database.sql`.
+Gói Free/Pro đã bị gỡ khỏi hệ thống. Database đang có dữ liệu chạy `038_drop_shop_plans.sql` để xóa các bảng gói; `database.sql` không còn các bảng này. Các file `030`, `031`, `033` chỉ còn giá trị lịch sử (riêng `033` có thêm `Products.deleted`, bảng này vẫn được dùng).
 
 Sau khi merge master: chạy `032_pending_shop_address_sync.sql` để thêm sáu cột địa chỉ đăng ký shop còn thiếu. File chạy lại được, thay cho việc chạy trực tiếp `016_pending_shop_address.sql` trên database đang dùng. `database.sql` đã khai báo sáu cột này cho database mới.
 
@@ -43,11 +41,10 @@ Số điện thoại không trùng và tên sản phẩm lúc mua: database đan
 
 Yêu cầu hoàn tiền của khách: database đang có dữ liệu chạy thêm `037_customer_refund_requests.sql` (thêm trạng thái `CANCELLED`, cột `description`, `evidence_images`, `shop_response` cho `Refunds`). `database.sql` đã gộp sẵn.
 
-Gói Pro cấu hình: database đang có dữ liệu chạy thêm `033_configurable_shop_plans.sql` (đổi cột giới hạn thành `product_limit`, thêm `Products.deleted`, cập nhật quyền lợi gói seed). Database local đã được sao lưu và áp dụng migration này. Xem `../CONFIGURABLE_PRO_PLANS.md`.
 
 Dùng `database.sql` đã gộp: gồm schema master, danh mục đặt riêng, voucher, dữ liệu mẫu, trạng thái báo giá và thời điểm bắt đầu thanh toán. Không cần chạy lại chuỗi ALTER lịch sử sau khi import file này. Chỉ dùng `022_custom_order_workflow.sql` nếu chủ động muốn chuyển các yêu cầu cũ chưa chuyển; không cần cho yêu cầu mới tạo trực tiếp ở Orders.
 
-Lưu ý: `database.sql` chưa khớp hoàn toàn với migration và entity ở ba điểm. `Auth_Sessions.refresh_hash` là `VARCHAR(255)` trong `database.sql`, trong khi migration `004` và entity dùng `VARCHAR(64)`. `Otp_Challenges.purpose` là `VARCHAR(30)` trong `database.sql`, trong khi migration `002` và entity dùng `VARCHAR(20)`. `database.sql` còn tạo bảng `Blog_Images` mà không có entity nào dùng, và không có bảng `Email_Verification_Tokens` từ migration `001`. Chi tiết và ảnh hưởng xem tại `docs/DATABASE.md`.
+Lưu ý: `database.sql` chưa khớp hoàn toàn với migration và entity ở ba điểm. `Auth_Sessions.refresh_hash` là `VARCHAR(255)` trong `database.sql`, trong khi migration `004` và entity dùng `VARCHAR(64)`. `Otp_Challenges.purpose` là `VARCHAR(30)` trong `database.sql`, trong khi migration `002` và entity dùng `VARCHAR(20)`. Bảng `Blog_Images` không có entity nào dùng đã bị xóa khỏi `database.sql` (migration `038` xóa trên database cũ). `database.sql` không có bảng `Email_Verification_Tokens` từ migration `001`. Chi tiết và ảnh hưởng xem tại `docs/DATABASE.md`.
 
 ## Nhóm số trùng cũ
 

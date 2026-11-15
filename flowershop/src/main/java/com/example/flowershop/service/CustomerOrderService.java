@@ -90,7 +90,6 @@ BigDecimal shippingDiscountAmount,String couponCode,String shippingCouponCode) {
     private final ProductImageRepository productImages;
     private final DeliverySync deliverySync;
     private final RefundRepository refunds;
-    @org.springframework.beans.factory.annotation.Autowired private ProductQuotaService quota;
 
     public CustomerOrderService(AddressRepository addresses,
                                 OrderRepository orders, OrderDetailRepository orderDetails,
@@ -266,7 +265,6 @@ order.getShippingDiscountAmount(),order.getCouponCode(),order.getShippingCouponC
         Product product = products.findById(req.productId())
                 .filter(p -> p.getStatus() == ProductStatus.ACTIVE)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Sản phẩm không bán nữa."));
-        quota.requireAllowed(product);
         return quote(product.getShop(), destination(customerId, req.addressId()));
     }
     private Address destination(String customerId, String addressId) {
@@ -283,7 +281,6 @@ order.getShippingDiscountAmount(),order.getCouponCode(),order.getShippingCouponC
                 .filter(p -> p.getStatus() == ProductStatus.ACTIVE)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Sản phẩm không còn được bán."));
         Shop shop = product.getShop();
-        quota.requireAllowed(product);
         if (shop.getStatus() != ShopStatus.ACTIVE)
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cửa hàng hiện không hoạt động.");
         if (product.getType() != ProductType.CUSTOM && product.getStock() < req.quantity())
@@ -343,7 +340,6 @@ order.getShippingDiscountAmount(),order.getCouponCode(),order.getShippingCouponC
     public CouponService.Preview previewVouchers(String customerId,CheckoutRequest req) {
         var product=products.findById(req.productId()).filter(p -> p.getStatus()==ProductStatus.ACTIVE && p.getShop().getStatus()==ShopStatus.ACTIVE)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,"Sản phẩm không còn được bán."));
-        quota.requireAllowed(product);
         return vouchers.preview(context(product,req.quantity(),quote(product.getShop(),destination(customerId,req.addressId()))),req.couponCode(),req.shippingCouponCode());
     }
 }

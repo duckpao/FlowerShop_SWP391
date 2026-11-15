@@ -41,10 +41,6 @@ class CartService <<Service>> {
   -availableStock(userId, product): int
   ~toCartItemResponse(cartItem): CartItemResponse
 }
-class ProductQuotaService <<Service>> {
-  allowed(product): boolean
-  requireAllowed(product)
-}
 interface CartItemRepository <<Repository>> {
   findByUserId(userId): List<CartItem>
   findByUserIdAndProductId(userId, productId): Optional<CartItem>
@@ -108,7 +104,6 @@ CartService --> CartItemRepository
 CartService --> ProductRepository
 CartService --> ProductImageRepository
 CartService --> UserRepository
-CartService --> ProductQuotaService
 CartService ..> CartItemResponse : builds
 CartResponse *-- CartItemResponse
 MaintenanceJob --> CartItemRepository : deleteNotModifiedSince(now - 30 days)

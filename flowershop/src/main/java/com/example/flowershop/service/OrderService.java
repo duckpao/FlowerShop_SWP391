@@ -51,7 +51,6 @@ public class OrderService {
     private final org.springframework.context.ApplicationEventPublisher events;
     private final RefundRepository refundRepository;
     @jakarta.persistence.PersistenceContext private jakarta.persistence.EntityManager entityManager;
-    @org.springframework.beans.factory.annotation.Autowired private ProductQuotaService quota;
 
     /** Ước tính phí giao hàng cho trang checkout: tìm shop, kiểm tra địa chỉ nhận của khách rồi hỏi GHN. */
     @Transactional(readOnly = true)
@@ -280,7 +279,6 @@ single.setShippingCouponCode(part.getShippingCouponCode()); single.setExpectedTo
             if (product.getStatus() != ProductStatus.ACTIVE || product.getShop().getStatus() != ShopStatus.ACTIVE) {
                 throw ApiException.badRequest("Sản phẩm hoặc cửa hàng không còn hoạt động.");
             }
-            quota.requireAllowed(product);
             if (product.getType() != ProductType.CUSTOM && product.getStock() < cartItem.getQuantity()) {
                 throw ApiException.badRequest(
                         "Sản phẩm '" + product.getName() + "' không đủ tồn kho. " +
@@ -611,7 +609,6 @@ single.setShippingCouponCode(part.getShippingCouponCode()); single.setExpectedTo
                 .filter(c -> c.getProduct().getStatus()==ProductStatus.ACTIVE && c.getProduct().getShop().getStatus()==ShopStatus.ACTIVE)
                 .orElseThrow(() -> ApiException.badRequest("Sản phẩm không thuộc giỏ hàng/shop đang chọn hoặc đã ngừng bán."))).toList();
         if(items.isEmpty()) throw ApiException.badRequest("Chọn sản phẩm để áp voucher.");
-        items.forEach(item->quota.requireAllowed(item.getProduct()));
         var shippingFee=merchandiseOnly ? BigDecimal.ZERO : quoteFee(items.get(0).getProduct().getShop(),resolveDestination(userId,request.getDeliveryAddressId()));
         return vouchers.preview(voucherContext(request.getShopId(),items,shippingFee), request.getCouponId(),request.getShippingCouponCode());
     }

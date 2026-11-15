@@ -38,7 +38,6 @@ type NavItem = {
 };
 
 const adminNavItems: NavItem[] = [
-  { name: 'Quản lý gói Pro', path: '/admin/shop-plans', icon: <ListIcon fontSize={24} /> },
 { name: 'Mã giảm giá của sàn', path: '/admin/vouchers', icon: <ListIcon fontSize={24} /> },
   { name: 'Tổng quan', path: '/admin', icon: <GridIcon fontSize={24} /> },
   { name: 'Quản lý người dùng', path: '/admin/users', icon: <UserCircleIcon fontSize={24} /> },
@@ -49,11 +48,10 @@ const adminNavItems: NavItem[] = [
   { name: 'Đánh giá sản phẩm', path: '/admin/reviews', icon: <ListIcon fontSize={24} /> }
 ];
 
-// SRS 4.4: staff chỉ dùng các chức năng vận hành, không vào shop, nhân sự, gói Pro, voucher.
+// SRS 4.4: staff chỉ dùng các chức năng vận hành, không vào shop, nhân sự, voucher.
 const staffNavPaths = ['/shop-admin', '/shop-admin/products', '/shop-admin/blogs', '/shop-admin/orders', '/shop-admin/reports', '/shop-admin/chat'];
 
 const managerNavItems: NavItem[] = [
-  { name: 'Gói đăng ký Pro', path: '/shop-admin/subscription', icon: <ListIcon fontSize={24} /> },
   { name: 'Mã giảm giá của shop', path: '/shop-admin/vouchers', icon: <ListIcon fontSize={24} /> },
   { name: 'Bài chăm sóc hoa', path: '/shop-admin/blogs', icon: <NotebookPen size={24} /> },
   { name: 'Yêu cầu đặt hoa riêng', path: '/shop-admin/custom-orders', icon: <Flower2 size={24} /> },

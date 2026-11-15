@@ -47,7 +47,6 @@ public class CatalogService {
     private final ProductImageRepository images;
     private final ProductVideoRepository videos;
     private final ShopRepository shops;
-    @org.springframework.beans.factory.annotation.Autowired private ProductQuotaService quota;
 
     public CatalogService(ProductRepository products, ProductCardAssembler assembler,
                           CategoryRepository categories, ProductImageRepository images,
@@ -109,7 +108,7 @@ public class CatalogService {
             return cb.and(predicates.toArray(Predicate[]::new));
         };
 
-        Page<Product> result = products.findAll(spec.and(quota.allowedSpecification()), PageRequest.of(page, size, order));
+        Page<Product> result = products.findAll(spec, PageRequest.of(page, size, order));
         return new Results(assembler.cards(result.getContent()), page, size,
                 result.getTotalElements(), result.getTotalPages());
     }
@@ -117,7 +116,6 @@ public class CatalogService {
     public ProductDetail detail(String productId) {
         Product p = products.findById(productId).filter(ProductCardAssembler::visible)
                 .orElseThrow(CatalogService::missing);
-        if(!quota.allowed(p)) throw missing();
         // Ảnh chính đứng đầu gallery, phần còn lại giữ nguyên thứ tự displayOrder.
         List<String> urls = images.findByProductIdOrderByDisplayOrderAscIdAsc(productId).stream()
                 .sorted(Comparator.comparingInt(i -> Boolean.TRUE.equals(i.getIsPrimary()) ? 0 : 1))
@@ -134,7 +132,7 @@ public class CatalogService {
     public List<CategoryCard> categories() {
         Map<String, Long> counts = new HashMap<>();
         Specification<Product> visible=(root,query,cb)->cb.and(cb.equal(root.get("status"),ProductStatus.ACTIVE),cb.isFalse(root.get("adminHidden")),cb.equal(root.get("shop").get("status"),ShopStatus.ACTIVE));
-        for (var p : products.findAll(visible.and(quota.allowedSpecification()),org.springframework.data.domain.Pageable.unpaged()))
+        for (var p : products.findAll(visible,org.springframework.data.domain.Pageable.unpaged()))
             counts.merge(p.getCategory().getId(),1L,Long::sum);
         return categories.findByStatusOrderByNameAsc(CategoryStatus.ACTIVE).stream()
                 .map(c -> new CategoryCard(c.getId(), c.getName(), c.getDescription(), c.getGroupName(),

@@ -45,12 +45,6 @@ class AdminCatalogService <<Service>> {
   products(q, shopId, status, page)
   setHidden(productId, hidden, actor): ProductCard
 }
-class ProductQuotaService <<Service>> {
-  requireAllowed(product)
-}
-class ShopPlanService <<Service>> {
-  assertCanCreate(shop)
-}
 class ProductRepository <<Repository>> {
   findByIdAndShopId(id, shopId): Optional<Product>
   findById(id): Optional<Product>
@@ -101,8 +95,6 @@ View --> AdminCatalogController : GET /api/admin/products
 View --> AdminCatalogController : PUT /api/admin/products/{id}/hidden
 ManagerProductController --> ManagerProductService
 AdminCatalogController --> AdminCatalogService
-ManagerProductService --> ProductQuotaService
-ManagerProductService --> ShopPlanService
 ManagerProductService --> ProductRepository
 ManagerProductService --> ProductImageRepository
 ManagerProductService --> CategoryRepository

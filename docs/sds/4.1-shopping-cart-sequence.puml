@@ -16,7 +16,6 @@ actor Customer as U
 participant "View" as V <<View>> #EADCFF
 participant CartController as C <<Controller>> #D8F3DC
 participant CartService as S <<Service>> #DCECFF
-participant ProductQuotaService as Q <<Service>> #DCECFF
 participant UserRepository as UR <<Repository>> #FFF1C9
 participant ProductRepository as PR <<Repository>> #FFF1C9
 participant CartItemRepository as CR <<Repository>> #FFF1C9
@@ -41,8 +40,6 @@ else customer
   UR --> S : User (else 404)
   S -> PR : findById(productId)
   PR --> S : Product (else 404)
-  S -> Q : requireAllowed(product)
-  Q --> S : ok (else 400 product locked by the shop plan limit)
   S -> S : product INACTIVE: 400 no longer sold
   S -> S : not CUSTOM and stock < quantity: 400 exceeds stock
   S -> CR : findByUserIdAndProductId(userId, productId)
@@ -73,8 +70,6 @@ else customer
   CR --> S : List<CartItem>
   loop each cart item
     S -> IR : findByProductIdOrderByDisplayOrderAsc(productId)
-    S -> Q : allowed(product)
-    note right of Q : stock shown as 0 when the product is locked by the plan limit
     S -> S : itemTotal = current price x quantity
   end
   S --> C : CartResponse (items, totalItems, totalQuantity, grandTotal)
@@ -92,14 +87,13 @@ else customer
   C -> S : updateCartItem(userId, itemId, request)
   S -> CR : findById(itemId)
   CR --> S : CartItem (else 404; item of another user: 403)
-  S -> Q : requireAllowed(product)
   S -> S : not CUSTOM and stock < quantity: 400 exceeds stock
   S -> CR : save(cartItem with new quantity)
   S --> C : CartItemResponse
   C --> V : 200 OK
 end
 note over V
-  An error (stock, locked product) is shown as a message and the cart is kept as it was.
+  An error (stock) is shown as a message and the cart is kept as it was.
 end note
 
 == D. Remove an item ==

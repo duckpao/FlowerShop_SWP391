@@ -27,7 +27,6 @@ U -> V : select money or shipping voucher
 V -> C : POST /api/orders/{userId}/voucher-preview
 C -> S : previewVouchers(userId, request, merchandiseOnly)
 S -> S : cart items belong to user and shop; product and shop ACTIVE (else 400)
-S -> S : quota.requireAllowed(product) for each item
 opt merchandiseOnly = false
   S -> GHN : quoteFee(shop, deliveryAddress)
   GHN --> S : shipping fee
@@ -45,7 +44,7 @@ V --> U : show discounted total
 U -> V : place order
 V -> C : POST /api/orders/{userId}/batch\n(shops[], deliveryAddressId, paymentMethod)
 note right of V
-  400 from the batch (price or voucher changed, or quota/stock error) is shown
+  400 from the batch (price or voucher changed, or stock error) is shown
   as a message; the totals are reloaded before the customer can retry.
 end note
 C -> C : requireOwner(userId, currentUser)
@@ -61,7 +60,7 @@ loop each shop part (shopId order)
   loop cart items sorted by productId
     S -> PR : findByIdForUpdate(productId)
     PR --> S : Product
-    S -> S : ACTIVE product and shop, quota.requireAllowed, stock >= quantity
+    S -> S : ACTIVE product and shop, stock >= quantity
   end
   S -> GHN : quoteFee(shop, deliveryAddress)
   GHN --> S : shippingFee

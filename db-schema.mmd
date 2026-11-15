@@ -489,74 +489,12 @@ erDiagram
         datetime sent_at
     }
 
-    Shop_Plans {
-        nvarchar id PK "20: FREE, PRO1, PRO3, PRO6, PRO12"
-        nvarchar name "100"
-        int duration_months
-        decimal price "12,2"
-        int product_limit "NULL = unlimited"
-        int featured_limit
-        boolean enabled
-    }
 
-    Shop_Subscriptions {
-        nvarchar id PK "36"
-        nvarchar shop_id FK,UK "36"
-        nvarchar plan_id FK "20"
-        datetime started_at
-        datetime ends_at
-    }
 
-    Shop_Plan_Payments {
-        nvarchar id PK "36"
-        nvarchar shop_id FK "36"
-        nvarchar plan_id FK "20"
-        int duration_months
-        decimal amount "12,2"
-        nvarchar invoice_number UK "100"
-        nvarchar status "20: PENDING, REVIEW, SUCCESS"
-        datetime created_at
-        datetime confirmed_at
-        datetime last_checked_at
-        nvarchar transaction_no "100"
-    }
 
-    Shop_Product_Postings {
-        nvarchar id PK "36"
-        nvarchar shop_id FK "36"
-        datetime posted_at
-    }
 
-    Featured_Products {
-        nvarchar product_id PK,FK "36"
-        nvarchar shop_id FK "36"
-        datetime featured_at
-    }
 
-    Subscription_Reminders {
-        nvarchar id PK "36"
-        nvarchar subscription_id FK "36"
-        datetime expected_end
-        date reminder_date
-        int hour_slot
-        nvarchar mail_status "20: PENDING, SENT, CANCELLED"
-        int attempts
-        datetime next_attempt_at
-    }
 
-    Shop_Pro_Activations {
-        nvarchar id PK "36"
-        nvarchar shop_id FK "36"
-        nvarchar plan_id FK "20"
-        int duration_months
-        nvarchar source "20: ADMIN_GRANT, ADMIN_CONFIRM"
-        nvarchar payment_id FK,UK "36 nullable"
-        nvarchar actor_id FK "36 nullable"
-        nvarchar note "1000"
-        datetime starts_at
-        datetime ends_at
-        datetime created_at
-    }
 
     Users ||--o| Shops : owns
     Users |o--o{ Addresses : user
@@ -609,15 +547,3 @@ erDiagram
     Blog_Comments |o--o{ Blog_Comments : replies_to
     Users ||--o{ Customer_Occasions : owns
     Users ||--o{ Notifications : receives
-    Shops ||--o| Shop_Subscriptions : subscribes
-    Shop_Plans ||--o{ Shop_Subscriptions : plan
-    Shops ||--o{ Shop_Plan_Payments : pays
-    Shop_Plans ||--o{ Shop_Plan_Payments : plan
-    Shops ||--o{ Shop_Product_Postings : posts
-    Products ||--o| Featured_Products : featured_as
-    Shops ||--o{ Featured_Products : features
-    Shop_Subscriptions ||--o{ Subscription_Reminders : reminds
-    Shops ||--o{ Shop_Pro_Activations : activated_for
-    Shop_Plans ||--o{ Shop_Pro_Activations : plan
-    Shop_Plan_Payments |o--o| Shop_Pro_Activations : paid_by
-    Users |o--o{ Shop_Pro_Activations : actor
