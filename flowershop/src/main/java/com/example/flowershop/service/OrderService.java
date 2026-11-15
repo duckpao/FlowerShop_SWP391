@@ -35,6 +35,7 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 public class OrderService {
     @org.springframework.beans.factory.annotation.Autowired private ProductQuotaService quota;
+    @org.springframework.beans.factory.annotation.Autowired private CouponService couponService;
 
     private final OrderRepository orderRepository;
     private final OrderDetailRepository orderDetailRepository;
@@ -108,12 +109,18 @@ public class OrderService {
                 jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
         if (custom == null || !custom.getCustomer().getId().equals(userId))
             throw ApiException.notFound("Không tìm thấy yêu cầu hoa tùy chỉnh.");
-        if (custom.getStatus() != com.example.flowershop.entity.enums.CustomOrderStatus.ACCEPTED)
-            throw ApiException.badRequest("Shop chưa chấp nhận yêu cầu này.");
+        var customStatus = custom.getStatus();
+        // QUOTED: lần chấp nhận đầu. ACCEPTED: đặt lại sau khi đơn cọc cũ bị hủy.
+        if (customStatus != com.example.flowershop.entity.enums.CustomOrderStatus.QUOTED
+                && customStatus != com.example.flowershop.entity.enums.CustomOrderStatus.ACCEPTED)
+            throw ApiException.badRequest("Shop chưa báo giá cho yêu cầu này.");
+        if (customStatus == com.example.flowershop.entity.enums.CustomOrderStatus.QUOTED && custom.getQuoteValidUntil() != null
+                && !custom.getQuoteValidUntil().isAfter(CustomFlowerOrderService.now()))
+            throw ApiException.badRequest("Báo giá đã hết hạn. Vui lòng nhờ shop báo giá lại.");
         if (orderRepository.existsByCustomRequestIdAndStatusNot(requestId, OrderStatus.CANCELLED))
             throw ApiException.badRequest("Yêu cầu này đã có đơn đặt cọc.");
-        BigDecimal quotedPrice;
-        try {
+        BigDecimal quotedPrice = custom.getQuotedPrice();
+        if (quotedPrice == null) try {
             var node = new com.fasterxml.jackson.databind.ObjectMapper().readTree(
                     custom.getDesiredComponents() == null ? "{}" : custom.getDesiredComponents()).path("quotedPrice");
             quotedPrice = node.isNumber() ? node.decimalValue() : null;
@@ -127,7 +134,19 @@ public class OrderService {
         User user = custom.getCustomer();
         Address deliveryAddress = resolveDestination(userId, request.getDeliveryAddressId());
         BigDecimal shippingFee = quoteFee(shop, deliveryAddress);
-        BigDecimal totalAmount = quotedPrice.add(shippingFee);
+        String couponId = null;
+        BigDecimal discountAmount = BigDecimal.ZERO;
+        if (request.getCouponId() != null && !request.getCouponId().isBlank()) {
+            // Luật 1 mã/khách do CouponService kiểm tra; mã chỉ áp lúc chấp nhận, trên giá hoa của báo giá.
+            var applied = couponService.apply(userId, shop.getId(), quotedPrice, request.getCouponId());
+            couponId = applied.couponId();
+            discountAmount = applied.discountAmount();
+        }
+        BigDecimal flowerTotal = quotedPrice.subtract(discountAmount);
+        if (flowerTotal.signum() <= 0) throw ApiException.badRequest("Tổng thanh toán phải lớn hơn 0.");
+        BigDecimal totalAmount = flowerTotal.add(shippingFee);
+        BigDecimal depositAmount = custom.getDepositPercent() == null ? BigDecimal.ZERO
+                : CustomFlowerOrderService.depositOf(flowerTotal, custom.getDepositPercent());
 
         Order order = orderRepository.save(Order.builder()
                 .id(UUID.randomUUID().toString())
@@ -138,9 +157,12 @@ public class OrderService {
                 .recipientPhone(firstNonBlank(request.getPhone(), user.getPhone()))
                 .orderType(OrderType.CUSTOM)
                 .customRequestId(requestId)
+                .couponId(couponId)
                 .subTotal(quotedPrice)
+                .discountAmount(discountAmount)
                 .shippingFee(shippingFee)
                 .totalAmount(totalAmount)
+                .depositAmount(depositAmount)
                 .customerNote(custom.getDescription())
                 .status(OrderStatus.AWAITING_DEPOSIT)
                 .createdBy(userId)
@@ -157,6 +179,11 @@ public class OrderService {
                 .lastModifyBy(userId)
                 .build());
 
+        if (customStatus == com.example.flowershop.entity.enums.CustomOrderStatus.QUOTED) {
+            custom.setStatus(com.example.flowershop.entity.enums.CustomOrderStatus.ACCEPTED);
+            custom.setLastModifyBy(userId);
+            notificationService.notifyCustomQuoteAnswered(custom, true, null);
+        }
         entityManager.flush();
         events.publishEvent(new com.example.flowershop.event.OrderPlacedEvent(List.of(order.getId())));
         return OrderResponse.builder()
@@ -164,7 +191,7 @@ public class OrderService {
                 .status(order.getStatus().name())
                 .orderType(order.getOrderType().name())
                 .subTotal(quotedPrice)
-                .discountAmount(BigDecimal.ZERO)
+                .discountAmount(discountAmount)
                 .shippingFee(shippingFee)
                 .totalAmount(totalAmount)
                 .deliveryAddressId(deliveryAddress.getId())
@@ -264,31 +291,10 @@ public class OrderService {
         BigDecimal discountAmount = BigDecimal.ZERO;
         String couponId = null;
         if (request.getCouponId() != null && !request.getCouponId().isBlank()) {
-            // Khóa dòng khách để hai yêu cầu song song không cùng dùng được hai mã khác nhau.
-            userRepository.findByIdForUpdate(userId);
-            if (orderRepository.existsByCustomerIdAndCouponIdIsNotNullAndStatusNot(userId, OrderStatus.CANCELLED)) {
-                throw ApiException.badRequest("Bạn đã dùng mã giảm giá rồi, mỗi người chỉ được dùng 1 mã.");
-            }
-            Coupon coupon = couponRepository.findByCodeForUpdate(request.getCouponId().trim())
-                    .orElseThrow(() -> ApiException.badRequest("Mã giảm giá không hợp lệ."));
-            LocalDateTime now = LocalDateTime.now();
-            if (coupon.getStatus() != CouponStatus.ACTIVE || now.isBefore(coupon.getStartDate())
-                    || now.isAfter(coupon.getEndDate()) || coupon.getUsedCount() >= coupon.getUsageLimit()
-                    || coupon.getDiscountValue().signum() <= 0
-                    || (coupon.getDiscountType() == DiscountType.PERCENTAGE && coupon.getDiscountValue().compareTo(new BigDecimal("100")) > 0)
-                    || subTotal.compareTo(coupon.getMinOrderValue()) < 0
-                    || (coupon.getShop() != null && !coupon.getShop().getId().equals(request.getShopId()))) {
-                throw ApiException.badRequest("Mã giảm giá không áp dụng được cho đơn hàng này.");
-            }
-            discountAmount = coupon.getDiscountType() == DiscountType.PERCENTAGE
-                    ? subTotal.multiply(coupon.getDiscountValue()).divide(new BigDecimal("100"), 2, RoundingMode.HALF_UP)
-                    : coupon.getDiscountValue();
-            if (coupon.getMaxDiscountValue() != null) discountAmount = discountAmount.min(coupon.getMaxDiscountValue());
-            discountAmount = discountAmount.min(subTotal);
-            if (discountAmount.signum() < 0) throw ApiException.badRequest("Mã giảm giá không hợp lệ.");
-            coupon.setUsedCount(coupon.getUsedCount() + 1);
-            couponRepository.save(coupon);
-            couponId = coupon.getId();
+            // CouponService khóa khách + mã, kiểm tra luật 1 mã/khách rồi giữ lượt dùng.
+            var applied = couponService.apply(userId, request.getShopId(), subTotal, request.getCouponId());
+            discountAmount = applied.discountAmount();
+            couponId = applied.couponId();
         }
         if (subTotal.subtract(discountAmount).signum() <= 0) throw ApiException.badRequest("Tổng thanh toán phải lớn hơn 0.");
 
@@ -369,7 +375,7 @@ public class OrderService {
                     .paymentType(PaymentType.FULL)
                     .paymentMethod(PaymentMethod.COD)
                     .amount(totalAmount)
-                    .invoiceNumber("COD-" + order.getId().replace("-", "").substring(0, 8).toUpperCase())
+                    .invoiceNumber("COD-" + com.example.flowershop.util.ShortCode.of(order.getId()))
                     .status(PaymentStatus.PENDING)
                     .createdBy(userId)
                     .lastModifyBy(userId)

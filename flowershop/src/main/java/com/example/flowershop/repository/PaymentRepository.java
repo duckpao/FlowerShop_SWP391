@@ -26,6 +26,24 @@ public interface PaymentRepository extends JpaRepository<Payment, String> {
             + "WHERE p.order.id = :orderId AND p.status = com.example.flowershop.entity.enums.PaymentStatus.PENDING")
     int failPendingByOrderId(@Param("orderId") String orderId, @Param("actor") String actor);
 
+    @Query("SELECT p FROM Payment p WHERE p.order.customer.id = :customerId AND p.status IN :statuses "
+            + "AND p.createdDate >= :start AND p.createdDate < :end")
+    org.springframework.data.domain.Page<Payment> findForCustomer(@Param("customerId") String customerId,
+            @Param("statuses") java.util.Collection<com.example.flowershop.entity.enums.PaymentStatus> statuses,
+            @Param("start") LocalDateTime start, @Param("end") LocalDateTime end,
+            org.springframework.data.domain.Pageable pageable);
+
+    @Query("SELECT COALESCE(SUM(p.amount), 0) FROM Payment p WHERE p.order.customer.id = :customerId "
+            + "AND p.status = com.example.flowershop.entity.enums.PaymentStatus.SUCCESS "
+            + "AND p.createdDate >= :start AND p.createdDate < :end")
+    BigDecimal sumSuccessForCustomer(@Param("customerId") String customerId,
+            @Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
+
+    /** Mỗi dòng: [orderId, tổng đã thu thành công của đơn]. */
+    @Query("SELECT p.order.id, SUM(p.amount) FROM Payment p WHERE p.order.id IN :orderIds "
+            + "AND p.status = com.example.flowershop.entity.enums.PaymentStatus.SUCCESS GROUP BY p.order.id")
+    List<Object[]> sumSuccessByOrderIds(@Param("orderIds") java.util.Collection<String> orderIds);
+
     @Query("SELECT COALESCE(SUM(p.amount), 0) FROM Payment p WHERE p.order.shop.id = :shopId "
             + "AND p.status = com.example.flowershop.entity.enums.PaymentStatus.SUCCESS "
             + "AND p.lastModifyDate >= :start AND p.lastModifyDate < :end")

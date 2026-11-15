@@ -30,7 +30,9 @@ public class SecurityConfig {
 
         http
                 .cors(Customizer.withDefaults())
-                .csrf(csrf -> csrf.ignoringRequestMatchers("/api/webhook/sepay", "/ws/**"))
+                // preview chỉ đọc và đã cần JWT trong header; nhiều ô chọn mã gọi song song nên không phụ thuộc phiên CSRF
+                .csrf(csrf -> csrf.ignoringRequestMatchers("/api/webhook/sepay", "/ws/**")
+                        .ignoringRequestMatchers(org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/orders/*/vouchers/preview")))
                 .sessionManagement(session -> session.sessionCreationPolicy(org.springframework.security.config.http.SessionCreationPolicy.STATELESS))
                 .addFilterBefore(new com.example.flowershop.security.JwtAuthenticationFilter(tokenAuth),
                         org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter.class)

@@ -1,14 +1,13 @@
 import toast from 'react-hot-toast'
 import { authModel } from '../models/authModel'
 import { API_BASE } from '../apiBase'
+import { fetchCsrf } from './csrf'
 
 async function request(path, { method = 'GET', body, bearer = false, headers: customHeaders = {} } = {}) {
   const isFormData = body instanceof FormData
   const headers = { ...customHeaders }
   if (method !== 'GET') {
-    const csrfResponse = await fetch(`${API_BASE}/api/auth/csrf`, { credentials: 'include', cache: 'no-store' })
-    if (!csrfResponse.ok) throw new Error('Không thể tạo phiên bảo vệ yêu cầu.')
-    const csrf = await csrfResponse.json()
+    const csrf = await fetchCsrf()
     headers[csrf.headerName] = csrf.token
     if (!isFormData && !headers['Content-Type']) headers['Content-Type'] = 'application/json'
   }

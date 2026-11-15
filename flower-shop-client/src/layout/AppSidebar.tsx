@@ -42,6 +42,10 @@ const adminNavItems: NavItem[] = [
   { name: 'Quản lý các shop', path: '/admin/shops', icon: <BoxCubeIcon fontSize={24} /> },
   { name: 'Danh mục & kiểm duyệt', path: '/admin/categories', icon: <TableIcon fontSize={24} /> },
   { name: 'Quản lý gói Pro', path: '/admin/shop-plans', icon: <ListIcon fontSize={24} /> },
+  { name: 'Mã giảm giá của sàn', path: '/admin/vouchers', icon: <ListIcon fontSize={24} /> },
+  { name: 'Đơn hàng', path: '/admin/orders', icon: <TableIcon fontSize={24} /> },
+  { name: 'Hoàn tiền', path: '/admin/refunds', icon: <ListIcon fontSize={24} /> },
+  { name: 'Đánh giá sản phẩm', path: '/admin/reviews', icon: <ListIcon fontSize={24} /> },
   { name: 'Xem khiếu nại', path: '#', icon: <ListIcon fontSize={24} /> }
 ];
 
@@ -54,6 +58,7 @@ const managerNavItems: NavItem[] = [
   { name: 'Quản lý đơn hàng', path: '/shop-admin/orders', icon: <TableIcon fontSize={24} /> },
   { name: 'Báo cáo thống kê', path: '/shop-admin/reports', icon: <GridIcon fontSize={24} /> },
   { name: 'Quản lý nhân sự', path: '/shop-admin/staff', icon: <UserCircleIcon fontSize={24} /> },
+  { name: 'Mã giảm giá', path: '/shop-admin/vouchers', icon: <ListIcon fontSize={24} /> },
   { name: 'Gói đăng ký Pro', path: '/shop-admin/subscription', icon: <ListIcon fontSize={24} /> },
   { name: 'Tin nhắn khách hàng', path: '/shop-admin/chat', icon: <ListIcon fontSize={24} /> }
 ];
@@ -84,7 +89,7 @@ const AppSidebar: React.FC = () => {
     ? adminNavItems
     : [...managerNavItems.map(item => item.path === '/shop-admin/orders' ? { ...item, badge: queueCount }
          : item.path === '/shop-admin/chat' ? { ...item, badge: chatUnread } : item),
-       ...(user?.role === 'SHOP_STAFF' ? [{ name: 'Đơn hủy cần hoàn tiền', path: '/shop-admin/refunds', icon: <ListIcon fontSize={24} /> } as NavItem] : [])];
+       { name: 'Hoàn tiền', path: '/shop-admin/refunds', icon: <ListIcon fontSize={24} /> } as NavItem];
 
   useEffect(() => {
     if (location.pathname.startsWith('/shop-admin')) {

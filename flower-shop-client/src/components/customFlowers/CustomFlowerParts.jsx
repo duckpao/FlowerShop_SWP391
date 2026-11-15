@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { customFlowerService } from '../../services/customFlowerService'
 import { formatPrice } from '../../models/productModel'
 
-export const customStatus = { REQUESTED: 'Chờ shop tiếp nhận', NEGOTIATING: 'Đang trao đổi', ACCEPTED: 'Shop đã chấp nhận', REJECTED: 'Shop từ chối' }
+export const customStatus = { REQUESTED: 'Chờ shop tiếp nhận', NEGOTIATING: 'Đang trao đổi', QUOTED: 'Đã báo giá', ACCEPTED: 'Khách đã chấp nhận', REJECTED: 'Đã từ chối' }
 export const customButton = 'custom-flower-button'
 
 export function BudgetSuggestions({ budget, quantity, shopId, onChoose, selectedId = '' }) {
@@ -39,6 +39,15 @@ export function BudgetSuggestions({ budget, quantity, shopId, onChoose, selected
   </section>
 }
 
+export function QuoteSummary({ request }) {
+  return <dl className="mt-4 grid gap-2 rounded-xl bg-gray-50 p-4 text-sm sm:grid-cols-3 dark:bg-white/5">
+    <div><dt className="text-gray-500">Giá hoa</dt><dd className="font-semibold">{formatPrice(request.quotedPrice)}</dd></div>
+    <div><dt className="text-gray-500">Tiền cọc ({request.depositPercent}%)</dt><dd className="font-semibold">{formatPrice(request.depositAmount)}</dd></div>
+    <div><dt className="text-gray-500">Còn lại sau cọc</dt><dd className="font-semibold">{formatPrice(request.remainingAmount)}</dd></div>
+    {request.quoteValidUntil && <div className="sm:col-span-3 text-gray-500">Báo giá có hiệu lực đến {new Date(request.quoteValidUntil).toLocaleString('vi-VN')}. Chưa gồm phí giao hàng.</div>}
+  </dl>
+}
+
 export function CustomRequestCard({ request, children }) {
   const d = request.design || {}
   return <article className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-white/3">
@@ -47,8 +56,10 @@ export function CustomRequestCard({ request, children }) {
     <dl className="grid gap-2 text-sm sm:grid-cols-2"><div><dt className="text-gray-500">Ngân sách tổng</dt><dd className="font-semibold">{formatPrice(request.budget)}</dd></div><div><dt className="text-gray-500">Số mẫu/bó</dt><dd>{d.quantity || 1}</dd></div>
       {[["Loại hoa", d.flowers], ["Màu sắc", d.colors], ["Dịp tặng", d.occasion], ["Giấy gói / phụ kiện", d.wrapping], ["Ngày mong muốn", d.deliveryDate], ["Mẫu tham khảo", d.referenceProductName]].filter(([, value]) => value).map(([label, value]) => <div key={label}><dt className="text-gray-500">{label}</dt><dd>{value}</dd></div>)}
     </dl>
-    {(d.shopNote || d.quotedPrice != null) && <div className="mt-4 border-t border-gray-200 pt-4 dark:border-gray-700"><p className="font-semibold">Phản hồi của shop</p>{d.shopNote && <p className="whitespace-pre-wrap">{d.shopNote}</p>}{d.quotedPrice != null && <p className="mt-2 font-semibold">Báo giá tổng: {formatPrice(d.quotedPrice)}</p>}</div>}
-    {request.status === 'ACCEPTED' && <p className="mt-3 text-sm text-gray-500">Shop đã nhận yêu cầu thiết kế. Đây chưa phải xác nhận thanh toán hoặc đơn giao hàng.</p>}
+    {(d.shopNote || request.quotedPrice != null) && <div className="mt-4 border-t border-gray-200 pt-4 dark:border-gray-700"><p className="font-semibold">Phản hồi của shop</p>{d.shopNote && <p className="whitespace-pre-wrap">{d.shopNote}</p>}</div>}
+    {request.quotedPrice != null && <QuoteSummary request={request} />}
+    {request.status === 'REJECTED' && request.rejectReason && <p className="mt-3 text-sm text-gray-500">{request.rejectedBy === 'CUSTOMER' ? 'Khách từ chối' : 'Shop từ chối'}. Lý do: {request.rejectReason}</p>}
+    {request.status === 'ACCEPTED' && <p className="mt-3 text-sm text-gray-500">Khách đã chấp nhận báo giá và chuyển sang bước đặt cọc.</p>}
     {children}
   </article>
 }

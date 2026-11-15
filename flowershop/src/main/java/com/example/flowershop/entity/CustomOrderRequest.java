@@ -44,6 +44,28 @@ public class CustomOrderRequest {
     @Builder.Default
     private CustomOrderStatus status = CustomOrderStatus.REQUESTED;
 
+    /** Báo giá hoa của shop (chưa gồm phí giao hàng); null khi chưa báo giá. */
+    @Column(name = "quoted_price", precision = 12, scale = 2)
+    private BigDecimal quotedPrice;
+
+    /** Phần trăm cọc shop yêu cầu (10 đến 100). */
+    @Column(name = "deposit_percent")
+    private Integer depositPercent;
+
+    @Column(name = "quote_valid_until")
+    private LocalDateTime quoteValidUntil;
+
+    @Column(name = "quoted_date")
+    private LocalDateTime quotedDate;
+
+    /** Lý do từ chối (shop hoặc khách). */
+    @Column(name = "reject_reason", length = 2000)
+    private String rejectReason;
+
+    /** SHOP hoặc CUSTOMER: bên đã từ chối yêu cầu. */
+    @Column(name = "rejected_by", length = 20)
+    private String rejectedBy;
+
     @CreationTimestamp
     @Column(name = "created_date", updatable = false)
     private LocalDateTime createdDate;

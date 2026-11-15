@@ -16,4 +16,8 @@ public class MakeCustomOrderRequest {
 
     @Size(max = 20)
     private String phone;
+
+    /** Mã giảm giá (tùy chọn), chỉ áp lúc chấp nhận báo giá; theo luật 1 mã/khách. */
+    @Size(max = 50)
+    private String couponId;
 }

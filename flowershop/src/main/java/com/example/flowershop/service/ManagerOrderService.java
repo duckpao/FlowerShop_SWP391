@@ -226,7 +226,7 @@ public class ManagerOrderService {
         if (codAmount.signum() > 0 && orderPayments.stream().noneMatch(p -> p.getPaymentMethod() == PaymentMethod.COD)) {
             payments.save(Payment.builder().id(UUID.randomUUID().toString()).order(o)
                     .paymentType(PaymentType.FINAL).paymentMethod(PaymentMethod.COD).amount(codAmount)
-                    .invoiceNumber("COD-" + orderId.replace("-", "").substring(0, 8).toUpperCase())
+                    .invoiceNumber("COD-" + com.example.flowershop.util.ShortCode.of(orderId))
                     .status(PaymentStatus.PENDING).createdBy(actor).lastModifyBy(actor).build());
         }
 

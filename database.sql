@@ -264,6 +264,7 @@ CREATE TABLE Coupons (
     usage_limit INT DEFAULT 1,
     used_count INT DEFAULT 0,
     status ENUM('ACTIVE', 'EXPIRED', 'DISABLED') DEFAULT 'ACTIVE',
+    deleted BOOLEAN NOT NULL DEFAULT FALSE, -- xóa mềm: đơn cũ vẫn tham chiếu được mã
     created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_by VARCHAR(36),
     last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -406,7 +407,13 @@ CREATE TABLE Custom_Order_Requests (
     budget DECIMAL(12, 2) NOT NULL,
     desired_components JSON, -- {"flowers": ["Hoa hồng", "Hoa ly"], "wrapper": "Giấy Kraft"}
     description TEXT,
-    status ENUM('REQUESTED', 'NEGOTIATING', 'ACCEPTED', 'REJECTED') DEFAULT 'REQUESTED',
+    status ENUM('REQUESTED', 'NEGOTIATING', 'QUOTED', 'ACCEPTED', 'REJECTED') DEFAULT 'REQUESTED',
+    quoted_price DECIMAL(12, 2), -- báo giá hoa của shop, chưa gồm phí giao hàng
+    deposit_percent INT, -- % cọc shop yêu cầu (10 đến 100)
+    quote_valid_until DATETIME,
+    quoted_date DATETIME,
+    reject_reason VARCHAR(2000),
+    rejected_by VARCHAR(20), -- SHOP hoặc CUSTOMER
     created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_by VARCHAR(36),
     last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -442,9 +449,12 @@ CREATE TABLE Refunds (
     order_id VARCHAR(36) NOT NULL,
     amount DECIMAL(12, 2) NOT NULL,
     reason TEXT NOT NULL,
+    description TEXT NULL,
+    evidence_images TEXT NULL,
+    shop_response TEXT NULL,
     gateway_refund_id VARCHAR(100),
     gateway_response JSON,
-    status ENUM('REQUESTED', 'APPROVED', 'PROCESSED', 'REJECTED') DEFAULT 'REQUESTED',
+    status ENUM('REQUESTED', 'APPROVED', 'PROCESSED', 'REJECTED', 'CANCELLED') DEFAULT 'REQUESTED',
     created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_by VARCHAR(36),
     last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -696,7 +706,7 @@ INSERT INTO Cart_Items (id, user_id, product_id, quantity, created_by) VALUES
 
 -- 8. ORDERS: 2 x 350000 = 700000, giảm 10% tối đa 50000 -> tổng 650000
 INSERT INTO Orders (id, customer_id, shop_id, delivery_address_id, recipient_name, recipient_phone, coupon_id, order_type, sub_total, discount_amount, shipping_fee, total_amount, deposit_amount, status, created_by) VALUES
-('order-01', 'user-customer-01', 'shop-01', 'addr-customer-01', 'Trần Thị B', '0987654321', 'coupon-01', 'STANDARD', 700000.00, 50000.00, 0.00, 650000.00, 0.00, 'COMPLETED', 'user-customer-01');
+('order-01', 'user-customer-01', 'shop-01', 'addr-customer-01', 'Trần Thị B', '0987654321', NULL, 'STANDARD', 700000.00, 0.00, 0.00, 700000.00, 0.00, 'COMPLETED', 'user-customer-01');
 
 -- 9. ORDER DETAILS
 INSERT INTO Order_Details (id, order_id, product_id, price, quantity, created_by) VALUES
@@ -704,7 +714,7 @@ INSERT INTO Order_Details (id, order_id, product_id, price, quantity, created_by
 
 -- 10. PAYMENTS
 INSERT INTO Payments (id, order_id, payment_type, payment_method, amount, gateway_transaction_no, invoice_number, gateway_response, status, created_by) VALUES
-('pay-01', 'order-01', 'FULL', 'ONLINE', 650000.00, 'VNP123456789', 'INV-0001', '{"vnp_ResponseCode":"00", "vnp_BankCode":"NCB"}', 'SUCCESS', 'user-customer-01');
+('pay-01', 'order-01', 'FULL', 'ONLINE', 700000.00, 'VNP123456789', 'INV-0001', '{"vnp_ResponseCode":"00", "vnp_BankCode":"NCB"}', 'SUCCESS', 'user-customer-01');
 
 -- 11. DELIVERIES (đối tác giao hàng bên ngoài)
 INSERT INTO Deliveries (id, order_id, delivery_partner_id, tracking_code, tracking_notes, status, created_by) VALUES

@@ -22,7 +22,7 @@ public class PaymentTimeoutScheduler {
     private final SePayGatewayService sePayGatewayService;
 
     /**
-     * Cronjob chạy định kỳ mỗi 30 giây (fixedDelay = 30000ms) để kiểm tra và tự động hủy các đơn hàng online:
+     * Cronjob chạy định kỳ mỗi 5 giây (fixedDelay = 5000ms, theo SRS 5.3) để kiểm tra và tự động hủy các đơn hàng online:
      * - Trạng thái PENDING: quá hạn thanh toán 10 phút (SePayGatewayService.PAYMENT_WINDOW_MINUTES).
      * - Trạng thái AWAITING_DEPOSIT: quá hạn chuyển cọc 24 giờ (SePayGatewayService.DEPOSIT_DEADLINE_HOURS).
      * 
@@ -35,7 +35,7 @@ public class PaymentTimeoutScheduler {
      *    - Cập nhật Order status -> CANCELLED, Payment status -> EXPIRED.
      *    - Hoàn trả lại tồn kho sản phẩm cho Shop (orderService.restoreCancelledOrderItems).
      */
-    @Scheduled(fixedDelay = 30000)
+    @Scheduled(fixedDelayString = "${app.scheduler.payment-timeout-delay-ms:5000}")
     public void scanAndCancelExpiredOrders() {
         // Mốc thời gian timeout cho đơn thanh toán toàn bộ (10 phút trước)
         LocalDateTime threshold = LocalDateTime.now().minusMinutes(SePayGatewayService.PAYMENT_WINDOW_MINUTES);

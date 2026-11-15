@@ -63,6 +63,10 @@ public class Coupon {
     @Builder.Default
     private CouponStatus status = CouponStatus.ACTIVE;
 
+    @Builder.Default
+    @Column(name = "deleted", nullable = false)
+    private boolean deleted = false;
+
     @CreationTimestamp
     @Column(name = "created_date", updatable = false)
     private LocalDateTime createdDate;

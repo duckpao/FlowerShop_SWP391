@@ -11,7 +11,8 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
-public interface ProductReviewRepository extends JpaRepository<ProductReview, String> {
+public interface ProductReviewRepository extends JpaRepository<ProductReview, String>,
+        org.springframework.data.jpa.repository.JpaSpecificationExecutor<ProductReview> {
     Optional<ProductReview> findByProductIdAndUserId(String productId, String userId);
     Page<ProductReview> findByProductId(String productId, Pageable pageable);
 

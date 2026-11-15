@@ -87,7 +87,7 @@ public class OrderMailSender {
     }
 
     static String shortId(Order order) {
-        return order.getId().replace("-", "").substring(0, 8).toUpperCase();
+        return com.example.flowershop.util.ShortCode.of(order.getId());
     }
 
     // ---- Biên lai ----

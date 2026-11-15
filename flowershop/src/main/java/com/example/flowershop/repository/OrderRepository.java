@@ -19,7 +19,8 @@ import java.util.List;
  * Cung cấp các phương thức truy vấn danh sách, phân trang, khóa bi quan (pessimistic lock)
  * phục vụ quản lý đơn hàng của khách hàng và chủ cửa hàng (Shop Manager).
  */
-public interface OrderRepository extends JpaRepository<Order, String> {
+public interface OrderRepository extends JpaRepository<Order, String>,
+        org.springframework.data.jpa.repository.JpaSpecificationExecutor<Order> {
     
     /**
      * Tìm đơn hàng theo ID và áp dụng khóa bi quan (Pessimistic Write Lock).
@@ -40,8 +41,8 @@ public interface OrderRepository extends JpaRepository<Order, String> {
      */
     boolean existsByDeliveryAddressId(String addressId);
 
-    /** Khách đã dùng một mã giảm giá cho đơn chưa hủy (đơn hủy đã trả lại lượt dùng nên không tính). */
-    boolean existsByCustomerIdAndCouponIdIsNotNullAndStatusNot(String customerId, OrderStatus status);
+    /** Khách đã dùng xong một mã: có đơn giữ mã ở trạng thái đã thanh toán hoặc đã được shop nhận (đơn chờ thanh toán và đơn hủy không tính). */
+    boolean existsByCustomerIdAndCouponIdIsNotNullAndStatusIn(String customerId, java.util.Collection<OrderStatus> statuses);
 
     boolean existsByCustomRequestIdAndStatusNot(String customRequestId, OrderStatus status);
 
