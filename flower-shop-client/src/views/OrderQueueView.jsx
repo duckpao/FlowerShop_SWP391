@@ -279,83 +279,77 @@ export default function OrderQueueView({ shop }) {
                 {data && data.content.length > 0 && (
                     <>
                         <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-white/5">
-                            <Table>
+                            <Table className="w-full min-w-[40rem] table-fixed">
                                 <TableHeader>
-                                    <TableRow>
-                                        <TableCell isHeader>Mã đơn</TableCell>
-                                        <TableCell isHeader>Khách hàng</TableCell>
-                                        <TableCell isHeader>Tổng tiền</TableCell>
-                                        <TableCell isHeader>Thời gian đặt</TableCell>
-                                        <TableCell isHeader>Trạng thái</TableCell>
-                                        <TableCell isHeader className="text-right">Hành động</TableCell>
+                                    <TableRow className="border-b border-gray-200 dark:border-white/5">
+                                        <TableCell isHeader className="w-24 px-4 py-3 text-start font-medium text-gray-500 dark:text-gray-400">Mã đơn</TableCell>
+                                        <TableCell isHeader className="px-4 py-3 text-start font-medium text-gray-500 dark:text-gray-400">Khách hàng</TableCell>
+                                        <TableCell isHeader className="w-32 px-4 py-3 text-start font-medium text-gray-500 dark:text-gray-400">Tổng tiền</TableCell>
+                                        <TableCell isHeader className="hidden w-44 px-4 py-3 text-start font-medium text-gray-500 dark:text-gray-400 lg:table-cell">Thời gian đặt</TableCell>
+                                        <TableCell isHeader className="w-36 px-4 py-3 text-start font-medium text-gray-500 dark:text-gray-400">Trạng thái</TableCell>
+                                        <TableCell isHeader className="w-56 px-4 py-3 text-start font-medium text-gray-500 dark:text-gray-400">Hành động</TableCell>
                                     </TableRow>
                                 </TableHeader>
-                                <TableBody>
+                                <TableBody className="divide-y divide-gray-200 dark:divide-white/5">
                                     {data.content.map(o => (
                                         <TableRow key={o.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                                            <TableCell className="font-mono text-xs">{o.id.substring(0,8)}</TableCell>
-                                            <TableCell>
+                                            <TableCell className="px-4 py-4 align-top">
+                                                <div className="font-mono text-xs">{o.id.substring(0,8)}</div>
+                                                <div className="mt-1 text-xs text-gray-500 lg:hidden">{timeAgo(o.createdDate)}</div>
+                                            </TableCell>
+                                            <TableCell className="break-words px-4 py-4 align-top">
                                                 <div className="font-medium text-gray-900 dark:text-white">{o.customerName || 'Khách ẩn danh'}</div>
                                                 <div className="text-xs text-gray-500">{o.customerPhone || ''}</div>
                                             </TableCell>
-                                            <TableCell className="font-medium">{formatPrice(o.totalAmount)}</TableCell>
-                                            <TableCell>
+                                            <TableCell className="px-4 py-4 align-top font-medium">{formatPrice(o.totalAmount)}</TableCell>
+                                            <TableCell className="hidden px-4 py-4 align-top lg:table-cell">
                                                 <div className="text-sm font-medium text-gray-900 dark:text-white">{timeAgo(o.createdDate)}</div>
                                                 <div className="text-xs text-gray-500">{new Date(o.createdDate).toLocaleString('vi-VN')}</div>
                                             </TableCell>
-                                            <TableCell>
+                                            <TableCell className="px-4 py-4 align-top">
                                                 <Badge color={statusColors[o.status] || 'primary'}>
                                                     {statusLabels[o.status] || o.status}
                                                 </Badge>
                                             </TableCell>
-                                            <TableCell className="text-right">
-                                                <div className="flex items-center justify-end gap-2">
-                                                    <Button 
-                                                        size="sm" 
-                                                        variant="outline"
-                                                        onClick={() => viewDetail(o)} 
-                                                        disabled={busy}
-                                                    >
-                                                        <EyeIcon className="w-4 h-4 mr-1 inline" />
-                                                       Xem chi tiết
-                                                    </Button>
-                                                    
+                                            <TableCell className="px-4 py-4 align-top">
+                                                <div className="flex flex-col gap-2">
                                                     {o.status === 'PENDING' && (
-                                                        <Button size="sm" onClick={() => confirmOrder(o.id)} disabled={busy}>
-                                                            Xác nhận đơn hàng
+                                                        <Button size="xs" className="w-full" onClick={() => confirmOrder(o.id)} disabled={busy}>
+                                                            Xác nhận đơn
                                                         </Button>
-                                                    )}
-                                                    
-                                                    {(o.status === 'PROCESSING' || o.status === 'DEPOSIT_PAID') && (
-                                                        <Button size="sm" className="bg-brand-600 hover:bg-brand-700 text-white" onClick={() => ship(o.id)} disabled={busy}>
-                                                            Tạo mã vận đơn GHN & Giao
-                                                        </Button>
-                                                    )}
-                                                    
-                                                    {o.status === 'DELIVERING' && (
-                                                        <>
-                                                            <Button size="sm" className="bg-brand-600 hover:bg-brand-700 text-white" onClick={() => viewDetail(o)} disabled={busy}>
-                                                                Trạng thái GHN
-                                                            </Button>
-                                                            <Button size="sm" variant="outline" onClick={() => refresh(o.id)} disabled={busy}>
-                                                                Kiểm tra GHN
-                                                            </Button>
-                                                        </>
                                                     )}
 
-                                                    {['PENDING', 'AWAITING_DEPOSIT', 'DEPOSIT_PAID', 'PROCESSING'].includes(o.status) && (
-                                                        <Button size="sm" variant="outline" className="text-error-500 hover:bg-error-50 hover:border-error-200" onClick={() => openCancelModal(o)} disabled={busy}>
-                                                            Hủy đơn
+                                                    {(o.status === 'PROCESSING' || o.status === 'DEPOSIT_PAID') && (
+                                                        <Button size="xs" className="w-full" onClick={() => ship(o.id)} disabled={busy}>
+                                                            Tạo vận đơn GHN
                                                         </Button>
                                                     )}
+
+                                                    {o.status === 'DELIVERING' && (
+                                                        <Button size="xs" className="w-full" onClick={() => refresh(o.id)} disabled={busy}>
+                                                            Kiểm tra GHN
+                                                        </Button>
+                                                    )}
+
+                                                    <div className="flex gap-2">
+                                                        <Button size="xs" variant="outline" className="flex-1" onClick={() => viewDetail(o)} disabled={busy}>
+                                                            <EyeIcon className="h-4 w-4" />
+                                                            Chi tiết
+                                                        </Button>
+                                                        {['PENDING', 'AWAITING_DEPOSIT', 'DEPOSIT_PAID', 'PROCESSING'].includes(o.status) && (
+                                                            <Button size="xs" variant="outline" className="flex-1 text-error-500 hover:bg-error-50" onClick={() => openCancelModal(o)} disabled={busy}>
+                                                                Hủy đơn
+                                                            </Button>
+                                                        )}
+                                                    </div>
 
                                                     <select
                                                         aria-label={`Chuyển trạng thái đơn ${o.id.substring(0, 8)}`}
-                                                        className="h-9 rounded-lg border border-gray-300 px-2 text-sm dark:border-gray-700 dark:bg-gray-900"
+                                                        className="h-9 w-full rounded-lg border border-gray-300 px-2 text-sm dark:border-gray-700 dark:bg-gray-900"
                                                         value="" disabled={busy}
                                                         onChange={e => changeStatus(o, e.target.value)}
                                                     >
-                                                        <option value="">Chuyển trạng thái</option>
+                                                        <option value="">Đổi trạng thái</option>
                                                         {Object.entries(statusLabels).filter(([k]) => k !== o.status).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                                                     </select>
                                                 </div>
