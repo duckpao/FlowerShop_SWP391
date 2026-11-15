@@ -36,7 +36,7 @@ class CustomDepositOrderTests {
     private final EntityManager em = mock(EntityManager.class);
     private final OrderService service = new OrderService(orders, details, mock(CartItemRepository.class),
             mock(UserRepository.class), addresses, mock(ProductRepository.class), mock(PaymentRepository.class),
-            mock(com.example.flowershop.service.CouponService.class), mock(ShopRepository.class), ghn, mock(NotificationService.class),
+            mock(CouponRepository.class), mock(ShopRepository.class), ghn, mock(NotificationService.class),
             mock(org.springframework.context.ApplicationEventPublisher.class),
             mock(com.example.flowershop.repository.RefundRepository.class));
 
@@ -78,19 +78,6 @@ class CustomDepositOrderTests {
         assertThat(order.getTotalAmount()).isEqualByComparingTo("830000");
         assertThat(order.getRecipientName()).isEqualTo("Lan");
         assertThat(response.getTotalAmount()).isEqualByComparingTo("830000");
-        // Store the same whole-VND amount returned by preview and charged by SePay.
-        assertThat(order.getDepositAmount()).isEqualByComparingTo("415000");
-        assertThat(response.getDepositAmount()).isEqualByComparingTo("415000");
-    }
-
-    @Test
-    void depositIsShopPercentOfQuoteLockedIntoOrder() {
-        request.setDesiredComponents("{\"quantity\":1,\"quotedPrice\":800000,\"depositPercent\":30}");
-        service.makeCustomOrder("c-1", "req-1", body());
-
-        ArgumentCaptor<Order> saved = ArgumentCaptor.forClass(Order.class);
-        verify(orders).save(saved.capture());
-        assertThat(saved.getValue().getDepositAmount()).isEqualByComparingTo("240000");
     }
 
     @Test

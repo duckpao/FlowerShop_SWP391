@@ -37,7 +37,7 @@ public class ProductCardAssembler {
 
     /** Quy tắc hiển thị công khai duy nhất, dùng chung toàn hệ thống. */
     public static boolean visible(Product p) {
-        return !p.isDeleted() && p.getStatus() == ProductStatus.ACTIVE && !p.isAdminHidden()
+        return p.getStatus() == ProductStatus.ACTIVE && !p.isAdminHidden()
                 && p.getShop().getStatus() == ShopStatus.ACTIVE;
     }
 

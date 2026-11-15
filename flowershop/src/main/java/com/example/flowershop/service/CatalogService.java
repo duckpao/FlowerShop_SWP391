@@ -131,9 +131,8 @@ public class CatalogService {
 
     public List<CategoryCard> categories() {
         Map<String, Long> counts = new HashMap<>();
-        Specification<Product> visible=(root,query,cb)->cb.and(cb.equal(root.get("status"),ProductStatus.ACTIVE),cb.isFalse(root.get("adminHidden")),cb.equal(root.get("shop").get("status"),ShopStatus.ACTIVE));
-        for (var p : products.findAll(visible,org.springframework.data.domain.Pageable.unpaged()))
-            counts.merge(p.getCategory().getId(),1L,Long::sum);
+        for (Object[] row : products.countVisibleByCategory())
+            counts.put((String) row[0], ((Number) row[1]).longValue());
         return categories.findByStatusOrderByNameAsc(CategoryStatus.ACTIVE).stream()
                 .map(c -> new CategoryCard(c.getId(), c.getName(), c.getDescription(), c.getGroupName(),
                         counts.getOrDefault(c.getId(), 0L))).toList();

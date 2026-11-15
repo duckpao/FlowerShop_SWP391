@@ -2,7 +2,6 @@ import { useSidebar } from "../context/SidebarContext";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useLocation } from "react-router";
-import { ChartColumn, Flower2, LayoutDashboard, MessagesSquare, NotebookPen, Package, ShoppingBag, Store, Users } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { managerShopService } from "../services/managerShopService";
 import { managerOrderService } from "../services/managerOrderService";
@@ -12,11 +11,11 @@ import {
   GridIcon,
   HorizontaLDots,
   ListIcon,
+  PageIcon,
   TableIcon,
   UserCircleIcon,
 } from "../icons";
 import { cn } from "../utils";
-import { homePathFor } from "../utils/homePath";
 import { useChatUnread } from "../controllers/useChatUnread";
 
 type NavItem = {
@@ -38,30 +37,23 @@ type NavItem = {
 };
 
 const adminNavItems: NavItem[] = [
-{ name: 'Mã giảm giá của sàn', path: '/admin/vouchers', icon: <ListIcon fontSize={24} /> },
   { name: 'Tổng quan', path: '/admin', icon: <GridIcon fontSize={24} /> },
   { name: 'Quản lý người dùng', path: '/admin/users', icon: <UserCircleIcon fontSize={24} /> },
   { name: 'Quản lý các shop', path: '/admin/shops', icon: <BoxCubeIcon fontSize={24} /> },
   { name: 'Danh mục & kiểm duyệt', path: '/admin/categories', icon: <TableIcon fontSize={24} /> },
-  { name: 'Đơn hàng', path: '/admin/orders', icon: <ListIcon fontSize={24} /> },
-  { name: 'Hoàn tiền', path: '/admin/refunds', icon: <ListIcon fontSize={24} /> },
-  { name: 'Đánh giá sản phẩm', path: '/admin/reviews', icon: <ListIcon fontSize={24} /> }
+  { name: 'Xem khiếu nại', path: '#', icon: <ListIcon fontSize={24} /> }
 ];
 
-// SRS 4.4: staff chỉ dùng các chức năng vận hành, không vào shop, nhân sự, voucher.
-const staffNavPaths = ['/shop-admin', '/shop-admin/products', '/shop-admin/blogs', '/shop-admin/orders', '/shop-admin/reports', '/shop-admin/chat'];
-
 const managerNavItems: NavItem[] = [
-  { name: 'Mã giảm giá của shop', path: '/shop-admin/vouchers', icon: <ListIcon fontSize={24} /> },
-  { name: 'Bài chăm sóc hoa', path: '/shop-admin/blogs', icon: <NotebookPen size={24} /> },
-  { name: 'Yêu cầu đặt hoa riêng', path: '/shop-admin/custom-orders', icon: <Flower2 size={24} /> },
-  { name: 'Tổng quan', path: '/shop-admin', icon: <LayoutDashboard size={24} /> },
-  { name: 'Quản lý shop', path: '/shop-admin/shop', icon: <Store size={24} /> },
-  { name: 'Quản lý mặt hàng', path: '/shop-admin/products', icon: <Package size={24} /> },
-  { name: 'Quản lý đơn hàng', path: '/shop-admin/orders', icon: <ShoppingBag size={24} /> },
-  { name: 'Báo cáo thống kê', path: '/shop-admin/reports', icon: <ChartColumn size={24} /> },
-  { name: 'Quản lý nhân sự', path: '/shop-admin/staff', icon: <Users size={24} /> },
-  { name: 'Tin nhắn khách hàng', path: '/shop-admin/chat', icon: <MessagesSquare size={24} /> }
+  { name: 'Bài chăm sóc hoa', path: '/shop-admin/blogs', icon: <PageIcon fontSize={24} /> },
+  { name: 'Yêu cầu đặt hoa riêng', path: '/shop-admin/custom-orders', icon: <ListIcon fontSize={24} /> },
+  { name: 'Tổng quan', path: '/shop-admin', icon: <GridIcon fontSize={24} /> },
+  { name: 'Quản lý shop', path: '/shop-admin/shop', icon: <PageIcon fontSize={24} /> },
+  { name: 'Quản lý mặt hàng', path: '/shop-admin/products', icon: <BoxCubeIcon fontSize={24} /> },
+  { name: 'Quản lý đơn hàng', path: '/shop-admin/orders', icon: <TableIcon fontSize={24} /> },
+  { name: 'Báo cáo thống kê', path: '/shop-admin/reports', icon: <GridIcon fontSize={24} /> },
+  { name: 'Quản lý nhân sự', path: '/shop-admin/staff', icon: <UserCircleIcon fontSize={24} /> },
+  { name: 'Tin nhắn khách hàng', path: '/shop-admin/chat', icon: <ListIcon fontSize={24} /> }
 ];
 
 // Phía khách không dùng sidebar nữa: menu nằm ở CategoryMenu (thanh ngang) và menu tài khoản.
@@ -85,17 +77,17 @@ const AppSidebar: React.FC = () => {
   const isAdmin = location.pathname.startsWith('/admin') && !location.pathname.startsWith('/shop-admin');
   const isManager = location.pathname.startsWith('/shop-admin');
   const chatScope = isManager ? { kind: 'shop', shopId: managerShopId } : null;
-  const chatUnread = useChatUnread(chatScope, user?.role === 'SHOP' || user?.role === 'SHOP_STAFF' ? user?.id : undefined);
+  const chatUnread = useChatUnread(chatScope, user?.role === 'SHOP' ? user?.id : undefined);
   const navItems = isAdmin
     ? adminNavItems
-    : [...managerNavItems.filter(item => user?.role !== 'SHOP_STAFF' || staffNavPaths.includes(item.path)).map(item => item.path === '/shop-admin/orders' ? { ...item, badge: queueCount }
+    : [...managerNavItems.map(item => item.path === '/shop-admin/orders' ? { ...item, badge: queueCount }
          : item.path === '/shop-admin/chat' ? { ...item, badge: chatUnread } : item),
-       ...(user?.role === 'SHOP_STAFF' || user?.role === 'SHOP' ? [{ name: 'Đơn hủy cần hoàn tiền', path: '/shop-admin/refunds', icon: <ListIcon fontSize={24} /> } as NavItem] : [])];
+       ...(user?.role === 'SHOP_STAFF' ? [{ name: 'Đơn hủy cần hoàn tiền', path: '/shop-admin/refunds', icon: <ListIcon fontSize={24} /> } as NavItem] : [])];
 
   useEffect(() => {
     if (location.pathname.startsWith('/shop-admin')) {
       let active = true;
-      managerShopService.list(user?.role === "SHOP_STAFF" ? "SHOP_STAFF" : "SHOP").then(shops => {
+      managerShopService.list("SHOP").then(shops => {
         if (active && shops.length > 0) {
           setManagerShopId(shops[0].id);
           managerOrderService.getQueueCount(shops[0].id).then(res => {
@@ -105,7 +97,7 @@ const AppSidebar: React.FC = () => {
       }).catch(() => {});
       return () => { active = false; };
     }
-  }, [location.pathname, user?.role]);
+  }, [location.pathname]);
 
   // Auto-close sidebar on mobile after route change
   useEffect(() => {
@@ -339,7 +331,7 @@ const AppSidebar: React.FC = () => {
           !isExpanded && !isHovered ? "xl:justify-center" : "justify-start",
         )}
       >
-        <Link to={homePathFor(user?.role)} className="flex items-center gap-2">
+        <Link to="/" className="flex items-center gap-2">
           <span className="text-2xl">✿</span>
           {(isExpanded || isHovered || isMobileOpen) && (
             <span className="text-xl font-bold text-brand-500 truncate">

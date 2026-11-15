@@ -48,7 +48,7 @@ public class SePayGatewayService {
     private static final String EXPIRED_REASON = "Quá hạn 10 phút không quét mã thanh toán";
     private static final String DEPOSIT_EXPIRED_REASON = "Quá hạn 24 giờ không thanh toán tiền cọc";
     /** Thời hạn thanh toán tiền cọc kể từ lúc tạo đơn AWAITING_DEPOSIT. */
-    public static final long DEPOSIT_DEADLINE_MINUTES = 24 * 60;
+    public static final long DEPOSIT_DEADLINE_HOURS = 24;
     /** Thời hạn thanh toán đơn thường kể từ lúc tạo đơn (kiểu Shopee: hủy giao dịch vẫn giữ đơn tới hết hạn). */
     public static final long PAYMENT_WINDOW_MINUTES = 10;
 
@@ -73,26 +73,17 @@ public class SePayGatewayService {
     @Value("${sepay.checkout-url:https://pay-sandbox.sepay.vn/v1/checkout/init}")
     private String checkoutUrl;
 
-    @Value("${sepay.api-base-url:https://pgapi-sandbox.sepay.vn}")
+    @Value("${sepay.api-base-url:https://pgapi.sepay.vn}")
     private String apiBaseUrl;
 
-    @Value("${sepay.success-url:${app.frontend-base-url:http://localhost:5173}/payment/success}")
+    @Value("${sepay.success-url:http://localhost:8080/payment/success}")
     private String successUrl;
 
-    @Value("${sepay.error-url:${app.frontend-base-url:http://localhost:5173}/payment/error}")
+    @Value("${sepay.error-url:http://localhost:8080/payment/error}")
     private String errorUrl;
 
-    @Value("${sepay.cancel-url:${app.frontend-base-url:http://localhost:5173}/payment/cancel}")
+    @Value("${sepay.cancel-url:http://localhost:8080/payment/cancel}")
     private String cancelUrl;
-
-    /** Properties/environment variables may contain spaces accidentally pasted with credentials. */
-    @jakarta.annotation.PostConstruct
-    void normalizeConfiguration() {
-        merchantId = merchantId == null ? "" : merchantId.strip();
-        secretKey = secretKey == null ? "" : secretKey.strip();
-        checkoutUrl = checkoutUrl.strip();
-        apiBaseUrl = apiBaseUrl.strip();
-    }
 
     /** Mã đơn rút gọn: 8 ký tự hex đầu của UUID viết hoa, dùng đặt tên invoice và mô tả giao dịch. */
     private String getShortOrderCode(String orderId) {
@@ -106,21 +97,21 @@ public class SePayGatewayService {
         if (order.getCreatedDate() == null) return false;
         java.time.LocalDateTime now = java.time.LocalDateTime.now();
         if (order.getStatus() == OrderStatus.AWAITING_DEPOSIT) {
-            return !order.getPaymentWindowStart().plusMinutes(DEPOSIT_DEADLINE_MINUTES).isAfter(now);
+            return order.getCreatedDate().plusHours(DEPOSIT_DEADLINE_HOURS).isBefore(now);
         }
-        return order.getStatus() == OrderStatus.PENDING && !order.getPaymentWindowStart().plusMinutes(PAYMENT_WINDOW_MINUTES).isAfter(now);
+        return order.getStatus() == OrderStatus.PENDING && order.getCreatedDate().plusMinutes(PAYMENT_WINDOW_MINUTES).isBefore(now);
     }
 
     /** Thời hạn hiển thị cho người dùng: đơn custom (đặt cọc) 24 giờ, đơn thường 10 phút. */
     static String expiryText(Order order) {
-        return order.getStatus() == OrderStatus.AWAITING_DEPOSIT ? DEPOSIT_DEADLINE_MINUTES / 60 + " giờ" : PAYMENT_WINDOW_MINUTES + " phút";
+        return order.getOrderType() == OrderType.CUSTOM ? DEPOSIT_DEADLINE_HOURS + " giờ" : "10 phút";
     }
 
     /** Tiền cọc yêu cầu: depositAmount nếu > 0, ngược lại 50% tổng. Dùng chung cho createPayment và status. */
     static BigDecimal requiredDeposit(Order order) {
         return order.getDepositAmount() != null && order.getDepositAmount().compareTo(BigDecimal.ZERO) > 0
                 ? order.getDepositAmount()
-                : CustomOrderPricing.deposit(order.getSubTotal(),order.getDiscountAmount(),order.getTotalAmount(),null);
+                : order.getTotalAmount().multiply(new BigDecimal("0.5"));
     }
 
     /** Điền các field tiến độ thanh toán (cọc/còn lại/bước tiếp theo) vào response trạng thái. */
@@ -133,7 +124,7 @@ public class SePayGatewayService {
         BigDecimal total = order.getTotalAmount();
         String next = null;
         if (order.getStatus() == OrderStatus.AWAITING_DEPOSIT
-                || (order.getOrderType() == OrderType.CUSTOM && order.getPaymentStartedAt()==null && order.getStatus() == OrderStatus.PENDING)) {
+                || (order.getOrderType() == OrderType.CUSTOM && order.getStatus() == OrderStatus.PENDING)) {
             next = "DEPOSIT";
         } else if (order.getStatus() == OrderStatus.DEPOSIT_PAID) {
             next = "FINAL";
@@ -183,7 +174,7 @@ public class SePayGatewayService {
         // Không hủy tại đây: scheduler sẽ hủy phía SePay trước rồi mới nhả hàng.
         if (isExpired(order)) {
             throw ApiException.badRequest(order.getStatus() == OrderStatus.AWAITING_DEPOSIT
-                    ? "Đơn hàng đã hết hạn đặt cọc (quá " + DEPOSIT_DEADLINE_MINUTES / 60 + " giờ)."
+                    ? "Đơn hàng đã hết hạn đặt cọc (quá " + DEPOSIT_DEADLINE_HOURS + " giờ)."
                     : "Đơn hàng đã hết hạn thanh toán (quá 10 phút).");
         }
         if (order.getStatus() != OrderStatus.PENDING && order.getStatus() != OrderStatus.DEPOSIT_PAID
@@ -197,9 +188,6 @@ public class SePayGatewayService {
 
         // PHASE 2 & 3: Xác định PaymentType (FULL, DEPOSIT, FINAL)
         PaymentType paymentType = request.getPaymentType() != null ? request.getPaymentType() : PaymentType.FULL;
-        if(order.getOrderType()==OrderType.CUSTOM && order.getStatus()==OrderStatus.PENDING
-                && order.getPaymentStartedAt()!=null && paymentType!=PaymentType.FULL)
-            throw ApiException.badRequest("Đơn thiết kế đã chọn thanh toán toàn bộ.");
         if (order.getOrderType() == OrderType.STANDARD
                 && paymentType != PaymentType.FULL) {
             throw ApiException.badRequest("Đơn hàng thường chỉ hỗ trợ thanh toán toàn bộ.");
@@ -282,17 +270,17 @@ public class SePayGatewayService {
     private Map<String, String> signedCheckoutFields(String invoiceNumber, long amount, String description,
                                                      String customerId, String paymentMethod) {
         Map<String, String> fields = new LinkedHashMap<>();
-        fields.put("order_amount", String.valueOf(amount));
         fields.put("merchant", merchantId);
-        fields.put("currency", "VND");
         fields.put("operation", "PURCHASE");
-        fields.put("order_description", description);
-        fields.put("order_invoice_number", invoiceNumber);
-        if (customerId != null) {
-            fields.put("customer_id", customerId);
-        }
         if (paymentMethod != null) {
             fields.put("payment_method", paymentMethod);
+        }
+        fields.put("order_amount", String.valueOf(amount));
+        fields.put("currency", "VND");
+        fields.put("order_invoice_number", invoiceNumber);
+        fields.put("order_description", description);
+        if (customerId != null) {
+            fields.put("customer_id", customerId);
         }
         fields.put("success_url", successUrl + "?invoice_number=" + invoiceNumber);
         fields.put("error_url", errorUrl + "?invoice_number=" + invoiceNumber);
@@ -438,8 +426,6 @@ public class SePayGatewayService {
      * Không @Transactional vì có gọi HTTP.
      */
     public void expireUnpaidOrder(String orderId) {
-        var current=orderRepository.findById(orderId).orElse(null);
-        if(current==null || !isExpired(current)) return;
         // Đơn COD (kể cả đơn "mua ngay" của CustomerOrderService) không có bước thanh toán online → không hết hạn sau 10 phút.
         List<Payment> orderPayments = paymentRepository.findByOrderId(orderId);
         if (orderPayments.stream().anyMatch(p -> p.getPaymentMethod() == PaymentMethod.COD)) {

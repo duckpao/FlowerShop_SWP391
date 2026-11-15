@@ -37,7 +37,6 @@ public class ChatMessage {
     @Column(name = "message", columnDefinition = "TEXT")
     private String message;
 
-    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
     @Column(name = "media", columnDefinition = "json")
     private String media;
 
@@ -49,7 +48,6 @@ public class ChatMessage {
     @Column(name = "context_id", length = 36)
     private String contextId;
 
-    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
     @Column(name = "context_snapshot", columnDefinition = "json")
     private String contextSnapshot;
 

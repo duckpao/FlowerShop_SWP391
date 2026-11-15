@@ -1,8 +1,3 @@
-import CustomerQuoteActions from '../components/customFlowers/CustomerQuoteActions'
-import CustomOrderPayment from '../components/customFlowers/CustomOrderPayment'
-import CustomerCustomAddress from '../components/customFlowers/CustomerCustomAddress'
-import { OrderDesignPanel } from '../components/customFlowers/OrderDesignPanel'
-import OrderDiscountSummary from '../components/checkout/OrderDiscountSummary'
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router'
 import { useAuth } from '../context/AuthContext'
@@ -21,68 +16,8 @@ const refundStatusLabels = {
     APPROVED: 'Cửa hàng đã liên hệ, đang hoàn tiền',
     PROCESSED: 'Đã hoàn tiền',
     REJECTED: 'Bị từ chối',
-    CANCELLED: 'Bạn đã hủy yêu cầu',
 }
-const refundStatusColors = { REQUESTED: 'warning', APPROVED: 'info', PROCESSED: 'success', REJECTED: 'error', CANCELLED: 'light' }
-const REFUND_REASONS = ['Đổi ý', 'Sai sản phẩm', 'Hoa bị dập, héo', 'Giao hàng trễ', 'Khác']
-const NEEDS_EVIDENCE = ['Sai sản phẩm', 'Hoa bị dập, héo']
-
-/** SRS 5.2: form khách gửi yêu cầu hoàn tiền (lý do, mô tả, tối đa 5 ảnh bằng chứng, mỗi ảnh ≤ 5 MB). */
-function RefundRequestForm({ orderId, amount, onDone }) {
-    const [reason, setReason] = useState(REFUND_REASONS[0])
-    const [description, setDescription] = useState('')
-    const [images, setImages] = useState([])
-    const [busy, setBusy] = useState(false)
-    const [error, setError] = useState('')
-    const upload = async files => {
-        const list = [...files].slice(0, 5 - images.length)
-        if (list.some(f => f.size > 5 * 1024 * 1024)) { setError('Mỗi ảnh tối đa 5 MB.'); return }
-        setBusy(true); setError('')
-        try {
-            const urls = []
-            for (const f of list) urls.push((await customerOrderService.uploadRefundImage(orderId, f)).url)
-            setImages(current => [...current, ...urls])
-        } catch (e) { setError(e.message || 'Không tải được ảnh.') } finally { setBusy(false) }
-    }
-    const submit = async e => {
-        e.preventDefault()
-        setBusy(true); setError('')
-        try { await customerOrderService.requestRefund(orderId, { reason, description, images }); onDone() }
-        catch (err) { setError(err.message || 'Không gửi được yêu cầu.'); setBusy(false) }
-    }
-    const needsImages = NEEDS_EVIDENCE.includes(reason)
-    return <form onSubmit={submit} className="mt-6 space-y-3 rounded-lg border border-gray-200 p-4 text-sm dark:border-white/10" aria-label="Yêu cầu hoàn tiền">
-        <h2 className="font-semibold">Yêu cầu hoàn tiền</h2>
-        <p className="text-gray-500">Số tiền dự kiến hoàn: <strong>{formatPrice(amount)}</strong> (cửa hàng xác nhận số tiền cuối cùng).</p>
-        <label className="block">Lý do
-            <select className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 dark:border-white/10 dark:bg-gray-800" value={reason} onChange={e => setReason(e.target.value)} disabled={busy}>
-                {REFUND_REASONS.map(r => <option key={r} value={r}>{r}</option>)}
-            </select>
-        </label>
-        <label className="block">Mô tả{reason === 'Khác' ? ' (bắt buộc)' : ''}
-            <textarea className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 dark:border-white/10 dark:bg-gray-800" rows={3} maxLength={1000}
-                required={reason === 'Khác'} value={description} onChange={e => setDescription(e.target.value)} disabled={busy} />
-        </label>
-        <div>
-            <label className="block">Ảnh bằng chứng{needsImages ? ' (bắt buộc)' : ''}, tối đa 5 ảnh JPG/PNG
-                <input type="file" accept="image/jpeg,image/png" multiple className="mt-1 block" disabled={busy || images.length >= 5}
-                    onChange={e => { upload(e.target.files); e.target.value = '' }} />
-            </label>
-            {images.length > 0 && <div className="mt-2 flex flex-wrap gap-2">{images.map(url => <span key={url} className="relative">
-                <img src={url} alt="Ảnh bằng chứng" className="h-16 w-16 rounded object-cover" />
-                <button type="button" aria-label="Bỏ ảnh này" className="absolute -right-2 -top-2 rounded-full bg-white px-1 text-xs shadow" onClick={() => setImages(list => list.filter(x => x !== url))}>✕</button>
-            </span>)}</div>}
-        </div>
-        {error && <p role="alert" className="text-error-500">{error}</p>}
-        <button type="submit" className="rounded-lg bg-brand-500 px-4 py-2 font-medium text-white disabled:opacity-50" disabled={busy || (needsImages && images.length === 0)}>
-            {busy ? 'Đang gửi…' : 'Gửi yêu cầu hoàn tiền'}
-        </button>
-    </form>
-}
-
-/** Còn được hoàn = đã trả thành công − đã hoàn (server tính lại khi gửi yêu cầu). */
-const refundableAmount = order => paidAmount(order) - (order.refunds || [])
-    .filter(r => r.status === 'PROCESSED').reduce((sum, r) => sum + Number(r.amount || 0), 0)
+const refundStatusColors = { REQUESTED: 'warning', APPROVED: 'info', PROCESSED: 'success', REJECTED: 'error' }
 
 /** Tổng đã trả thành công (cọc + phần còn lại, hoặc toàn bộ); dùng để biết đơn đã có hóa đơn chưa. */
 const paidAmount = order => (order.payments || [])
@@ -90,11 +25,7 @@ const paidAmount = order => (order.payments || [])
     .reduce((sum, p) => sum + Number(p.amount || 0), 0)
 
 /** Chưa giao cho GHN thì khách còn hủy được (backend kiểm tra lại). */
-const cancellableStatuses = ['PENDING', 'AWAITING_DEPOSIT', 'DEPOSIT_PAID', 'PROCESSING','AWAITING_QUOTE','QUOTED']
-
-// Địa chỉ nhận của đơn sửa được cho đến khi tạo vận đơn (chưa có Delivery, chưa đến DELIVERING); backend khóa sửa từ lúc đó.
-const addressEditable = order => cancellableStatuses.includes(order.status) && !order.delivery
-const addressLocked = order => !!order.delivery || ['DELIVERING', 'COMPLETED', 'REFUNDED'].includes(order.status)
+const cancellableStatuses = ['PENDING', 'AWAITING_DEPOSIT', 'DEPOSIT_PAID', 'PROCESSING']
 
 const trackingSteps = [
     'Cửa hàng đang chuẩn bị đơn hàng',
@@ -102,43 +33,18 @@ const trackingSteps = [
     'Đơn vị vận chuyển đã vận chuyển thành công đến khách hàng',
 ]
 
-// Trạng thái vận đơn khi giao không thành công / đang hoàn hàng: bước 3 hiện cảnh báo thay vì "đã giao"
-const PROBLEM_DELIVERY = ['FAILED', 'RETURNING', 'RETURNED']
-const isTrackingProblem = order => order.status === 'REFUNDED' || PROBLEM_DELIVERY.includes(order.delivery?.status)
-
-/**
- * Bước đang sáng trên thanh theo dõi: 0 = shop chuẩn bị, 1 = đã giao GHN, 2 = đang vận chuyển, 3 = đã giao xong
- * (mọi bước đều hoàn tất). -1 = chưa bắt đầu (chờ báo giá/đặt cọc) hoặc đã hủy.
- * Ưu tiên trạng thái của ĐƠN trước trạng thái vận đơn: shop có thể đổi trạng thái thủ công (không có vận đơn)
- * hoặc job tự hoàn tất đơn mà vận đơn vẫn còn trạng thái cũ.
- */
 function getTrackingStage(order) {
     const deliveryStatus = order.delivery?.status
-    if (['AWAITING_QUOTE', 'QUOTED', 'AWAITING_DEPOSIT', 'CANCELLED'].includes(order.status)) return -1
-    if (isTrackingProblem(order)) return 2
-    if (order.status === 'COMPLETED' || deliveryStatus === 'DELIVERED') return 3
+    if (deliveryStatus === 'DELIVERED') return 3
     if (['PICKED_UP', 'ON_THE_WAY'].includes(deliveryStatus)) return 2
     if (order.status === 'DELIVERING') return 1
-    return 0 // PENDING, DEPOSIT_PAID, PROCESSING: shop đang xử lý
-}
-
-function getStepLabel(order, index) {
-    if (index === 2 && isTrackingProblem(order)) {
-        if (order.status === 'REFUNDED' || order.delivery?.status === 'RETURNED') return 'Đơn hàng đã được hoàn về cửa hàng'
-        if (order.delivery?.status === 'RETURNING') return 'Đơn hàng đang được hoàn về cửa hàng'
-        return 'Đơn vị vận chuyển chưa giao được đơn hàng'
-    }
-    return trackingSteps[index]
+    if (order.status === 'PROCESSING') return 0
+    return -1
 }
 
 function getTrackingMessage(order) {
     if (order.status === 'CANCELLED') return 'Đơn hàng đã bị hủy.'
     if (order.status === 'REFUNDED') return 'Đơn vị vận chuyển đã hoàn đơn hàng về cửa hàng.'
-    if (order.status === 'COMPLETED') return 'Đơn hàng đã được giao thành công.'
-    if (order.status === 'AWAITING_QUOTE') return 'Đơn hàng đang chờ cửa hàng báo giá.'
-    if (order.status === 'QUOTED') return 'Cửa hàng đã báo giá, đang chờ bạn đồng ý.'
-    if (order.status === 'AWAITING_DEPOSIT') return 'Đơn hàng đang chờ bạn đặt cọc.'
-    if (order.status === 'DEPOSIT_PAID') return 'Đã nhận tiền cọc, cửa hàng sẽ chuẩn bị đơn hàng.'
     if (order.status === 'PENDING') return 'Đơn hàng đang chờ cửa hàng xác nhận.'
     if (order.delivery?.status === 'DELIVERED') return 'Đơn vị vận chuyển đã giao hàng thành công.'
     if (order.delivery?.status === 'ON_THE_WAY') return 'Đơn vị vận chuyển đang giao hàng đến bạn.'
@@ -164,16 +70,6 @@ export default function CustomerOrderDetailView() {
     const [cancelReason, setCancelReason] = useState('')
     const [cancelBusy, setCancelBusy] = useState(false)
     const [cancelError, setCancelError] = useState('')
-    const [reloadKey, setReloadKey] = useState(0)
-    const [refundError, setRefundError] = useState('')
-
-    // Ghi trạng thái vận đơn mới từ GHN vào đơn đang hiển thị (backend đã đồng bộ trạng thái đơn tương ứng)
-    const applyDelivery = delivery => setOrder(current => ({
-        ...current,
-        delivery,
-        ...(delivery.status === 'DELIVERED' ? { status: 'COMPLETED' } : {}),
-        ...(delivery.status === 'RETURNED' ? { status: 'REFUNDED' } : {}),
-    }))
 
     // Tải chi tiết đơn (customerOrderService.detail), rồi hỏi lại phí GHN hiện tại (customerOrderService.shippingFee)
     useEffect(() => {
@@ -187,26 +83,27 @@ export default function CustomerOrderDetailView() {
                 setOrder(data)
                 setShippingFee(data.shippingFee)
                 setError('')
-                // Hệ thống không có webhook GHN: đơn đang giao thì hỏi GHN ngay khi mở trang để thanh theo dõi không bị cũ
-                if (data.status === 'DELIVERING' && data.delivery)
-                    customerOrderService.refreshTracking(id)
-                        .then(delivery => { if (active) applyDelivery(delivery) })
-                        .catch(e => { if (active) setTrackingError(e.message || 'Không thể cập nhật trạng thái giao hàng từ GHN.') })
                 customerOrderService.shippingFee(id)
                     .then(result => { if (active) setShippingFee(result.shippingFee) })
-                    .catch(e => { if (active) setShippingFeeError(`${e.message || 'Không lấy được phí GHN hiện tại.'} Đang hiển thị phí đã lưu của đơn.`) })
+                    .catch(() => { if (active) setShippingFeeError('Không lấy được phí GHN hiện tại; đang hiển thị phí đã lưu của đơn.') })
             })
             .catch(e => { if (active) setError(e.message) })
             .finally(() => { if (active) setBusy(false) })
         return () => { active = false }
-    }, [user, id, reloadKey])
+    }, [user, id])
 
     // Cập nhật trạng thái giao hàng: customerOrderService.refreshTracking -> POST /api/customer/orders/{id}/refresh-tracking -> GHN
     const refreshTracking = async () => {
         setTrackingBusy(true)
         setTrackingError('')
         try {
-            applyDelivery(await customerOrderService.refreshTracking(id))
+            const delivery = await customerOrderService.refreshTracking(id)
+            setOrder(current => ({
+                ...current,
+                delivery,
+                ...(delivery.status === 'DELIVERED' ? { status: 'COMPLETED' } : {}),
+                ...(delivery.status === 'RETURNED' ? { status: 'REFUNDED' } : {}),
+            }))
         } catch (e) {
             setTrackingError(e.message || 'Không thể cập nhật trạng thái giao hàng.')
         } finally {
@@ -240,9 +137,7 @@ export default function CustomerOrderDetailView() {
         <PageMeta title={`Đơn #${order.id.substring(0,8)} | FlowerShop`} />
         <PageBreadCrumb pageTitle={`Chi tiết đơn #${order.id.substring(0,8)}`} />
         <div className="max-w-3xl mx-auto space-y-6">
-            <Link to="/orders" className="inline-flex text-sm font-medium text-brand-600 hover:underline dark:text-brand-400">&larr; Lịch sử đơn hàng</Link>
             <ComponentCard title={`Đơn hàng từ ${order.shopName}`}>
-<OrderDesignPanel order={order} /><CustomerCustomAddress order={order} onChanged={async () => setOrder(await customerOrderService.detail(id))} /><CustomerQuoteActions key={order.id} order={order} user={user} onChanged={async () => setOrder(await customerOrderService.detail(id))} />{order.orderType === 'CUSTOM' && ['AWAITING_DEPOSIT', 'DEPOSIT_PAID'].includes(order.status) && <CustomOrderPayment key={order.id} orderId={order.id} />}<OrderDiscountSummary order={order} />
                 <div className="flex justify-between items-center mb-4">
                     <Badge color={statusColors[order.status]||'primary'}>{statusLabels[order.status]||order.status}</Badge>
                     <span className="text-sm text-gray-500">{new Date(order.createdDate).toLocaleString('vi-VN')}</span>
@@ -264,40 +159,20 @@ export default function CustomerOrderDetailView() {
                     </div>
                     {trackingError && <p className="mb-3 text-sm text-error-500" role="alert">{trackingError}</p>}
                     <ol className="space-y-3">
-                        {trackingSteps.map((_, index) => {
+                        {trackingSteps.map((label, index) => {
                             const complete = trackingStage === 3 || index < trackingStage
                             const current = index === trackingStage
-                            const problem = current && isTrackingProblem(order)
-                            return <li key={index} className="flex items-start gap-3">
+                            return <li key={label} className="flex items-start gap-3">
                                 <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
-                                    complete ? 'bg-success-600 text-white' : problem ? 'bg-warning-500 text-white' : current ? 'bg-brand-600 text-white' : 'border border-gray-300 text-gray-500 dark:border-gray-600'
-                                }`} aria-label={complete ? 'Hoàn tất' : problem ? 'Có sự cố' : current ? 'Đang xử lý' : 'Chưa hoàn tất'}>
-                                    {complete ? '✓' : problem ? '!' : index + 1}
+                                    complete ? 'bg-success-600 text-white' : current ? 'bg-brand-600 text-white' : 'border border-gray-300 text-gray-500 dark:border-gray-600'
+                                }`} aria-label={complete ? 'Hoàn tất' : current ? 'Đang xử lý' : 'Chưa hoàn tất'}>
+                                    {complete ? '✓' : index + 1}
                                 </span>
-                                <span className={`text-sm ${complete || current ? 'font-medium text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400'}`}>
-                                    {getStepLabel(order, index)}
-                                    <span className="ml-2 text-xs font-normal text-gray-500 dark:text-gray-400">({complete ? 'Hoàn tất' : problem ? 'Có sự cố' : current ? 'Đang xử lý' : 'Chưa hoàn tất'})</span>
-                                </span>
+                                <span className={`text-sm ${complete || current ? 'font-medium text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400'}`}>{label}</span>
                             </li>
                         })}
                     </ol>
                 </section>
-
-                {order.deliveryAddress && <section className="mb-6 rounded-lg border border-gray-200 p-4 dark:border-white/10" aria-label="Địa chỉ nhận hàng">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                            <h2 className="font-semibold">Địa chỉ nhận hàng</h2>
-                            <p className="mt-1 text-sm"><strong>{order.recipientName}</strong>{order.recipientPhone && ` · ${order.recipientPhone}`}</p>
-                            <p className="text-sm text-gray-600 dark:text-gray-300">{order.deliveryAddress}</p>
-                        </div>
-                        {addressEditable(order) && (
-                            <Link to="/account" className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium dark:border-white/10">Sửa địa chỉ</Link>
-                        )}
-                    </div>
-                    {addressEditable(order)
-                        ? <p className="mt-2 text-xs text-gray-500">Bạn có thể sửa địa chỉ này trong hồ sơ cho đến khi cửa hàng giao đơn cho đơn vị vận chuyển (tạo mã vận đơn). Phí vận chuyển đã chốt khi đặt hàng không thay đổi.</p>
-                        : addressLocked(order) && <p className="mt-2 text-xs text-gray-500">Đơn đã tạo vận đơn hoặc đã giao nên không thể đổi địa chỉ nhận hàng.</p>}
-                </section>}
 
                 <div className="border rounded-lg overflow-hidden mb-4">
                     <table className="min-w-full">
@@ -319,7 +194,7 @@ export default function CustomerOrderDetailView() {
                 <div className="space-y-1 text-sm">
                     <div className="flex justify-between"><span>Tạm tính:</span><span>{formatPrice(order.subTotal)}</span></div>
                     <div className="flex justify-between"><span>Phí ship (GHN):</span><span>{formatPrice(shippingFee ?? order.shippingFee)}</span></div>
-                    {shippingFeeError && <p className="text-xs text-error-500" role="alert">{shippingFeeError}</p>}
+                    {shippingFeeError && <p className="text-xs text-gray-500" role="status">{shippingFeeError}</p>}
                     {shippingFee !== null && Number(shippingFee) !== Number(order.shippingFee) && (
                         <p className="text-xs text-gray-500">Phí GHN hiện tại có thể khác phí đã chốt khi đặt hàng; tổng tiền đơn không thay đổi.</p>
                     )}
@@ -380,11 +255,6 @@ export default function CustomerOrderDetailView() {
                                         <Badge color={refundStatusColors[r.status] || 'primary'}>{refundStatusLabels[r.status] || r.status}</Badge>
                                     </div>
                                     {r.reason && <p className="mt-1 text-gray-600 dark:text-gray-300">{r.reason}</p>}
-                                    {r.description && <p className="mt-1 whitespace-pre-wrap text-gray-600 dark:text-gray-300">{r.description}</p>}
-                                    {r.images?.length > 0 && <div className="mt-2 flex flex-wrap gap-2">{r.images.map(url => <a key={url} href={url} target="_blank" rel="noreferrer"><img src={url} alt="Ảnh bằng chứng" className="h-14 w-14 rounded object-cover" /></a>)}</div>}
-                                    {r.status === 'REJECTED' && r.shopResponse && <p className="mt-1 text-error-500">Phản hồi của cửa hàng: {r.shopResponse}</p>}
-                                    {r.status === 'REQUESTED' && r.id && <button type="button" className="mt-1 text-xs text-error-500 underline"
-                                        onClick={() => customerOrderService.cancelRefund(order.id, r.id).then(() => setReloadKey(k => k + 1)).catch(e => setRefundError(e.message))}>Hủy yêu cầu</button>}
                                     <p className="mt-1 text-xs text-gray-500">
                                         Tạo lúc {new Date(r.createdDate).toLocaleString('vi-VN')}
                                         {r.status !== 'REQUESTED' && r.updatedDate && ` · Cập nhật ${new Date(r.updatedDate).toLocaleString('vi-VN')}`}
@@ -392,15 +262,9 @@ export default function CustomerOrderDetailView() {
                                 </li>
                             ))}
                         </ul>
-                        {refundError && <p role="alert" className="mt-2 text-sm text-error-500">{refundError}</p>}
                         <p className="mt-3 text-xs text-gray-500">Nhân viên cửa hàng sẽ gọi cho bạn để hoàn tiền. Bạn sẽ nhận thông báo khi tiền đã được hoàn.</p>
                     </section>
                 )}
-
-                {['COMPLETED', 'CANCELLED', 'REFUNDED'].includes(order.status)
-                    && !(order.refunds || []).some(r => r.status === 'REQUESTED' || r.status === 'APPROVED')
-                    && refundableAmount(order) > 0
-                    && <RefundRequestForm key={reloadKey} orderId={order.id} amount={refundableAmount(order)} onDone={() => setReloadKey(k => k + 1)} />}
 
                 {order.delivery && <div className="mt-4 p-3 rounded-lg bg-gray-50 dark:bg-white/5 text-sm">
                     <p><strong>Vận đơn:</strong> {order.delivery.trackingCode}</p>

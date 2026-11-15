@@ -3,7 +3,6 @@ package com.example.flowershop.repository;
 import com.example.flowershop.entity.CustomerOccasion;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -20,5 +19,5 @@ public interface CustomerOccasionRepository extends JpaRepository<CustomerOccasi
     /** Dịp còn có thể cần nhắc: mọi dịp hằng năm, và dịp một lần chưa qua ngày mà chưa nhắc. */
     @Query("select o from CustomerOccasion o join fetch o.customer where o.recurringYearly = true "
             + "or (o.occasionDate >= :today and (o.reminderSent is null or o.reminderSent = false))")
-    List<CustomerOccasion> findReminderCandidates(@Param("today") LocalDate today);
+    List<CustomerOccasion> findReminderCandidates(LocalDate today);
 }

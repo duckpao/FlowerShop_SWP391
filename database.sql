@@ -12,7 +12,7 @@ CREATE TABLE Users (
     password_hash VARCHAR(255),
     google_id VARCHAR(255) UNIQUE,
     full_name VARCHAR(100),
-    phone VARCHAR(20) UNIQUE, -- SRS 3.3: không trùng số điện thoại (NULL nếu chưa nhập)
+    phone VARCHAR(20),
     role ENUM('ADMIN', 'SHOP', 'CUSTOMER', 'DELIVERY', 'SHOP_STAFF') NOT NULL, -- DELIVERY: giá trị cũ, giữ lại cho chức năng giao hàng sau này
     is_email_verified BOOLEAN DEFAULT FALSE,
     status ENUM('ACTIVE', 'INACTIVE', 'BANNED') DEFAULT 'ACTIVE',
@@ -101,12 +101,6 @@ CREATE TABLE Pending_Registrations (
     otp_hash VARCHAR(255) NOT NULL,
     shop_name VARCHAR(255),
     shop_description TEXT,
-    shop_address_line VARCHAR(255),
-    shop_city VARCHAR(100),
-    shop_district VARCHAR(100),
-    shop_ward VARCHAR(100),
-    shop_ghn_ward_code VARCHAR(20),
-    shop_ghn_district_id INT,
     issued_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     expires_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     window_start TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -218,7 +212,6 @@ CREATE TABLE Products (
     product_type ENUM('READY_MADE', 'CUSTOM') NOT NULL DEFAULT 'READY_MADE',
     status ENUM('ACTIVE', 'INACTIVE', 'OUT_OF_STOCK') DEFAULT 'ACTIVE',
     admin_hidden BOOLEAN NOT NULL DEFAULT FALSE,
-    deleted BOOLEAN NOT NULL DEFAULT FALSE,
     created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_by VARCHAR(36),
     last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -260,9 +253,6 @@ CREATE TABLE Product_Videos (
 CREATE TABLE Coupons (
     id VARCHAR(36) PRIMARY KEY,
     shop_id VARCHAR(36), -- NULL nếu là platform voucher
-    target VARCHAR(20) NOT NULL DEFAULT 'ORDER', -- ORDER / SHIPPING / PRODUCT
-    product_id VARCHAR(36), -- Chỉ dùng cho voucher PRODUCT của sàn
-    deleted BOOLEAN NOT NULL DEFAULT FALSE,
     code VARCHAR(50) UNIQUE NOT NULL,
     discount_type ENUM('PERCENTAGE', 'FIXED_AMOUNT') NOT NULL,
     discount_value DECIMAL(12,2) NOT NULL,
@@ -277,8 +267,7 @@ CREATE TABLE Coupons (
     created_by VARCHAR(36),
     last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     last_modify_by VARCHAR(36),
-    FOREIGN KEY (shop_id) REFERENCES Shops(id),
-    CONSTRAINT fk_coupon_product FOREIGN KEY (product_id) REFERENCES Products(id)
+    FOREIGN KEY (shop_id) REFERENCES Shops(id)
 );
 
 -- ==========================================
@@ -305,15 +294,10 @@ CREATE TABLE Orders (
     id VARCHAR(36) PRIMARY KEY,
     customer_id VARCHAR(36) NOT NULL,
     shop_id VARCHAR(36) NOT NULL,
-    delivery_address_id VARCHAR(36) NULL,
+    delivery_address_id VARCHAR(36) NOT NULL,
     recipient_name VARCHAR(255),
     recipient_phone VARCHAR(20),
     coupon_id VARCHAR(36),
-    shipping_coupon_id VARCHAR(36),
-    coupon_code VARCHAR(50),
-    shipping_coupon_code VARCHAR(50),
-    shipping_discount_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
-    coupons_released BOOLEAN NOT NULL DEFAULT FALSE,
     order_type ENUM('STANDARD', 'CUSTOM') DEFAULT 'STANDARD',
     sub_total DECIMAL(12, 2) NOT NULL,
     discount_amount DECIMAL(12, 2) DEFAULT 0.00,
@@ -325,8 +309,7 @@ CREATE TABLE Orders (
     shop_note TEXT,
     checkout_group VARCHAR(36), -- chung cho các đơn (mỗi shop một đơn) tạo trong cùng một lần thanh toán giỏ; NULL với đơn lẻ
     custom_request_id VARCHAR(36), -- đơn đặt cọc (CUSTOM) sinh từ Custom_Order_Requests; NULL với đơn thường
-    payment_started_at DATETIME NULL,
-    status ENUM('PENDING', 'AWAITING_DEPOSIT', 'DEPOSIT_PAID', 'PROCESSING', 'DELIVERING', 'COMPLETED', 'CANCELLED', 'REFUNDED', 'AWAITING_QUOTE', 'QUOTED') DEFAULT 'PENDING',
+    status ENUM('PENDING', 'AWAITING_DEPOSIT', 'DEPOSIT_PAID', 'PROCESSING', 'DELIVERING', 'COMPLETED', 'CANCELLED', 'REFUNDED') DEFAULT 'PENDING',
     created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_by VARCHAR(36),
     last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -335,7 +318,6 @@ CREATE TABLE Orders (
     FOREIGN KEY (shop_id) REFERENCES Shops(id),
     FOREIGN KEY (delivery_address_id) REFERENCES Addresses(id),
     FOREIGN KEY (coupon_id) REFERENCES Coupons(id),
-    CONSTRAINT fk_order_shipping_coupon FOREIGN KEY (shipping_coupon_id) REFERENCES Coupons(id),
     INDEX idx_orders_checkout_group (checkout_group),
     INDEX idx_orders_custom_request (custom_request_id)
 );
@@ -344,7 +326,6 @@ CREATE TABLE Order_Details (
     id VARCHAR(36) PRIMARY KEY,
     order_id VARCHAR(36) NOT NULL,
     product_id VARCHAR(36),
-    product_name VARCHAR(255), -- Tên sản phẩm tại thời điểm mua
     custom_materials JSON, -- {"main_flower": "Hoa hồng đỏ", "wrapper_color": "Đen", "ribbon": "Trắng"}
     price DECIMAL(12, 2) NOT NULL, -- Đơn giá tại thời điểm mua
     quantity INT NOT NULL,
@@ -417,22 +398,11 @@ CREATE TABLE Chat_Messages (
 -- ==========================================
 -- M04: CUSTOM FLOWER REQUEST
 -- ==========================================
--- Danh mục loại hoa, dịp tặng, giấy gói và phụ kiện cho đơn hoa theo yêu cầu.
--- disabled = TRUE: vẫn hiển thị nhưng không cho khách lựa chọn.
-CREATE TABLE IF NOT EXISTS Custom_Flower_Options (
-    id VARCHAR(36) PRIMARY KEY,
-    option_group VARCHAR(20) NOT NULL,
-    label VARCHAR(100) NOT NULL,
-    disabled BOOLEAN NOT NULL DEFAULT FALSE,
-    sort_order INT NOT NULL DEFAULT 0,
-    CONSTRAINT uq_custom_flower_option UNIQUE (option_group, label)
-) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
 CREATE TABLE Custom_Order_Requests (
     id VARCHAR(36) PRIMARY KEY,
     customer_id VARCHAR(36) NOT NULL,
     shop_id VARCHAR(36) NOT NULL,
-    budget DECIMAL(12, 2) NULL, -- ngân sách khách cũ; yêu cầu mới không nhập giá, shop báo giá sau
+    budget DECIMAL(12, 2) NOT NULL,
     desired_components JSON, -- {"flowers": ["Hoa hồng", "Hoa ly"], "wrapper": "Giấy Kraft"}
     description TEXT,
     status ENUM('REQUESTED', 'NEGOTIATING', 'ACCEPTED', 'REJECTED') DEFAULT 'REQUESTED',
@@ -471,12 +441,9 @@ CREATE TABLE Refunds (
     order_id VARCHAR(36) NOT NULL,
     amount DECIMAL(12, 2) NOT NULL,
     reason TEXT NOT NULL,
-    description TEXT NULL,
-    evidence_images TEXT NULL,
-    shop_response TEXT NULL,
     gateway_refund_id VARCHAR(100),
     gateway_response JSON,
-    status ENUM('REQUESTED', 'APPROVED', 'PROCESSED', 'REJECTED', 'CANCELLED') DEFAULT 'REQUESTED',
+    status ENUM('REQUESTED', 'APPROVED', 'PROCESSED', 'REJECTED') DEFAULT 'REQUESTED',
     created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_by VARCHAR(36),
     last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -548,6 +515,18 @@ CREATE TABLE Blogs (
     FOREIGN KEY (shop_id) REFERENCES Shops(id),
     INDEX idx_blogs_public_feed (status, created_date),
     INDEX idx_blogs_shop_feed (shop_id, created_date)
+);
+
+CREATE TABLE Blog_Images (
+    id VARCHAR(36) PRIMARY KEY,
+    blog_id VARCHAR(36) NOT NULL,
+    image_url VARCHAR(500) NOT NULL,
+    display_order INT DEFAULT 0,
+    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(36),
+    last_modify_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    last_modify_by VARCHAR(36),
+    FOREIGN KEY (blog_id) REFERENCES Blogs(id) ON DELETE CASCADE
 );
 
 CREATE TABLE Blog_Interactions (
@@ -710,46 +689,6 @@ SELECT id, COALESCE(created_date, NOW()) FROM Products WHERE status = 'ACTIVE';
 INSERT INTO Coupons (id, shop_id, code, discount_type, discount_value, min_order_value, max_discount_value, start_date, end_date, usage_limit, used_count, created_by) VALUES
 ('coupon-01', 'shop-01', 'WELCOME10', 'PERCENTAGE', 10.00, 200000.00, 50000.00, '2023-01-01 00:00:00', '2026-12-31 23:59:59', 100, 1, 'user-shop-01');
 
--- 6.1 PLATFORM VOUCHERS: chỉ ADMIN quản lý; shop_id NULL áp dụng toàn sàn.
-INSERT INTO Coupons (id, shop_id, target, product_id, code, discount_type, discount_value, min_order_value, max_discount_value, start_date, end_date, usage_limit, used_count, status, created_by) VALUES
-('coupon-platform-20', NULL, 'ORDER', NULL, 'SAN20', 'PERCENTAGE', 10, 100000, 20000, NOW(), DATE_ADD(NOW(), INTERVAL 1 YEAR), 1000, 0, 'ACTIVE', 'user-admin-01'),
-('coupon-platform-70', NULL, 'ORDER', NULL, 'SAN70', 'PERCENTAGE', 20, 200000, 70000, NOW(), DATE_ADD(NOW(), INTERVAL 1 YEAR), 1000, 0, 'ACTIVE', 'user-admin-01'),
-('coupon-platform-ship', NULL, 'SHIPPING', NULL, 'SHIP30', 'PERCENTAGE', 100, 100000, 30000, NOW(), DATE_ADD(NOW(), INTERVAL 1 YEAR), 1000, 0, 'ACTIVE', 'user-admin-01'),
-('coupon-platform-product', NULL, 'PRODUCT', 'prod-01', 'HONG40', 'PERCENTAGE', 15, 100000, 40000, NOW(), DATE_ADD(NOW(), INTERVAL 1 YEAR), 1000, 0, 'ACTIVE', 'user-admin-01');
-
--- 6.2 SHOP VOUCHERS (đồng bộ với sql/025_seed_shop_vouchers.sql)
--- Apply after 024_voucher_management.sql, with the application's schema selected.
--- Top up each existing shop to three usable ORDER vouchers; preserve existing codes/usage.
-SET NAMES utf8mb4;
-INSERT INTO Coupons (id, shop_id, target, product_id, code, discount_type, discount_value,
-    min_order_value, max_discount_value, start_date, end_date, usage_limit, used_count,
-    status, deleted, created_by, last_modify_by)
-SELECT UUID(), s.id, 'ORDER', NULL,
-    CONCAT('SHOP', UPPER(LEFT(MD5(s.id), 12)), '_', LPAD(v.percent_off, 2, '0')),
-    'PERCENTAGE', v.percent_off, 0, v.discount_cap,
-    DATE_SUB(NOW(), INTERVAL 1 DAY), DATE_ADD(NOW(), INTERVAL 1 YEAR), 1000, 0,
-    'ACTIVE', FALSE, s.owner_id, s.owner_id
-FROM Shops s
-CROSS JOIN (
-    SELECT 1 AS slot, 5 AS percent_off, 20000 AS discount_cap
-    UNION ALL SELECT 2, 15, 70000
-    UNION ALL SELECT 3, 10, 50000
-) v
-LEFT JOIN (
-    SELECT shop_id, COUNT(*) AS usable_count
-    FROM Coupons
-    WHERE shop_id IS NOT NULL AND target='ORDER' AND deleted=FALSE AND status='ACTIVE'
-      AND start_date<=NOW() AND end_date>NOW() AND used_count<usage_limit
-      AND discount_type='PERCENTAGE' AND discount_value>0 AND discount_value<=100
-      AND max_discount_value > 0 AND max_discount_value <= 100000
-    GROUP BY shop_id
-) existing ON existing.shop_id=s.id
-WHERE v.slot<=GREATEST(0, 3-COALESCE(existing.usable_count, 0))
-  AND NOT EXISTS (
-    SELECT 1 FROM Coupons c
-    WHERE c.code=CONCAT('SHOP', UPPER(LEFT(MD5(s.id), 12)), '_', LPAD(v.percent_off, 2, '0'))
-  );
-
 -- 7. CART ITEMS
 INSERT INTO Cart_Items (id, user_id, product_id, quantity, created_by) VALUES
 ('cart-01', 'user-customer-01', 'prod-02', 1, 'user-customer-01');
@@ -782,43 +721,6 @@ INSERT INTO Chat_Messages (id, session_id, sender_id, sender_type, message, is_r
 INSERT INTO Custom_Order_Requests (id, customer_id, shop_id, budget, desired_components, description, status, created_by) VALUES
 ('req-01', 'user-customer-01', 'shop-01', 1000000.00, '{"main_flowers": ["Hồng Ân", "Lan Hồ Điệp"], "color_tone": "Pastel"}', 'Làm cho mình một lẵng hoa tặng kỷ niệm 10 năm ngày cưới.', 'NEGOTIATING', 'user-customer-01');
 
--- 13.1 CUSTOM FLOWER OPTIONS (đồng bộ với sql/023_custom_flower_options.sql)
-INSERT INTO Custom_Flower_Options (id, option_group, label, disabled, sort_order) VALUES
-('flower-rose', 'FLOWER', 'Hoa hồng', FALSE, 10),
-('flower-baby', 'FLOWER', 'Hoa baby', FALSE, 20),
-('flower-tulip', 'FLOWER', 'Hoa tulip', FALSE, 30),
-('flower-sunflower', 'FLOWER', 'Hoa hướng dương', FALSE, 40),
-('flower-hydrangea', 'FLOWER', 'Hoa cẩm tú cầu', FALSE, 50),
-('flower-carnation', 'FLOWER', 'Hoa cẩm chướng', FALSE, 60),
-('flower-orchid', 'FLOWER', 'Hoa lan', FALSE, 70),
-('flower-lily', 'FLOWER', 'Hoa ly', FALSE, 80),
-('flower-chrysanthemum', 'FLOWER', 'Hoa cúc', FALSE, 90),
-('flower-lotus', 'FLOWER', 'Hoa sen', FALSE, 100),
-('flower-peony', 'FLOWER', 'Hoa mẫu đơn', FALSE, 110),
-('flower-gerbera', 'FLOWER', 'Hoa đồng tiền', FALSE, 120),
-('flower-mixed', 'FLOWER', 'Phối nhiều loại hoa', FALSE, 130),
-('flower-other', 'FLOWER', 'Khác', FALSE, 140),
-('occasion-birthday', 'OCCASION', 'Sinh nhật', FALSE, 10),
-('occasion-graduation', 'OCCASION', 'Tốt nghiệp', FALSE, 20),
-('occasion-anniversary', 'OCCASION', 'Kỷ niệm', FALSE, 30),
-('occasion-love', 'OCCASION', 'Tình yêu', FALSE, 40),
-('occasion-opening', 'OCCASION', 'Khai trương', FALSE, 50),
-('occasion-congratulations', 'OCCASION', 'Chúc mừng', FALSE, 60),
-('occasion-thanks', 'OCCASION', 'Cảm ơn', FALSE, 70),
-('occasion-wedding', 'OCCASION', 'Ngày cưới', FALSE, 80),
-('occasion-condolence', 'OCCASION', 'Chia buồn', FALSE, 90),
-('occasion-other', 'OCCASION', 'Khác', FALSE, 100),
-('wrapping-kraft', 'WRAPPING', 'Giấy kraft', FALSE, 10),
-('wrapping-tissue', 'WRAPPING', 'Giấy lụa', FALSE, 20),
-('wrapping-cellophane', 'WRAPPING', 'Giấy bóng kính', FALSE, 30),
-('wrapping-korean', 'WRAPPING', 'Giấy gói Hàn Quốc', FALSE, 40),
-('accessory-ribbon', 'ACCESSORY', 'Ruy băng', FALSE, 10),
-('accessory-bow', 'ACCESSORY', 'Nơ', FALSE, 20),
-('accessory-card', 'ACCESSORY', 'Thiệp chúc mừng', FALSE, 30),
-('accessory-led', 'ACCESSORY', 'Đèn LED', FALSE, 40),
-('accessory-teddy', 'ACCESSORY', 'Gấu bông', FALSE, 50)
-ON DUPLICATE KEY UPDATE id = Custom_Flower_Options.id;
-
 -- 14. PRODUCT REVIEWS
 INSERT INTO Product_Reviews (id, product_id, user_id, order_id, rating, comment, shop_reply, created_by) VALUES
 ('rev-01', 'prod-01', 'user-customer-01', 'order-01', 5, 'Hoa rất tươi, giao hàng siêu nhanh. Sẽ ủng hộ shop tiếp!', 'Cảm ơn bạn đã tin tưởng FPTU Smart Floral ạ!', 'user-customer-01');
@@ -843,8 +745,8 @@ INSERT INTO Customer_Occasions (id, customer_id, title, occasion_date, reminder_
 INSERT INTO Otp_Challenges (id, user_id, purpose, code_hash, issued_at, expires_at, window_start, failed_attempts, send_count) VALUES
 ('otp-01', 'user-customer-01', 'RESET_PASSWORD', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', '2026-09-27 09:00:00', '2026-09-27 09:05:00', '2026-09-27 09:00:00', 0, 1);
 
-INSERT INTO Pending_Registrations (email, full_name, password_hash, otp_hash, shop_name, shop_description, shop_address_line, shop_city, shop_district, shop_ward, shop_ghn_ward_code, shop_ghn_district_id, issued_at, expires_at, window_start, failed_attempts, send_count) VALUES
-('hoaxinh.owner@gmail.com', 'Đỗ Thị Hoa', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', 'Hoa Xinh Corner', 'Tiệm hoa nhỏ chuyên hoa cưới và hoa sự kiện.', 'Số 5, Đường Láng', 'Hà Nội', 'Đống Đa', 'Láng Thượng', '1A0101', 1482, '2026-09-27 08:00:00', '2026-09-27 08:05:00', '2026-09-27 08:00:00', 0, 1);
+INSERT INTO Pending_Registrations (email, full_name, password_hash, otp_hash, shop_name, shop_description, issued_at, expires_at, window_start, failed_attempts, send_count) VALUES
+('hoaxinh.owner@gmail.com', 'Đỗ Thị Hoa', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', '$2a$12$z2frH4jxzHPjasvwidmC4.GobzOtpx/Q1fhJyXokmGjsDypKXUPf2', 'Hoa Xinh Corner', 'Tiệm hoa nhỏ chuyên hoa cưới và hoa sự kiện.', '2026-09-27 08:00:00', '2026-09-27 08:05:00', '2026-09-27 08:00:00', 0, 1);
 
 INSERT INTO Auth_Sessions (id, user_id, refresh_hash, expires_at, revoked) VALUES
 ('sess-01', 'user-customer-01', '120c7fd6bccd463cc455a83865ca1e395c080dfbf1c3068fd16739cda0e2e381', '2026-10-04 09:00:00', FALSE);
@@ -862,8 +764,37 @@ INSERT INTO Manager_Applications (id, user_id, full_name, phone, shop_name, desc
 ('mgr-app-01', 'user-customer-01', 'Trần Thị B', '0987654321', 'B Flower House', 'Xin mở shop hoa online phục vụ khu vực Cầu Giấy.', 'Số 10, Ngõ 20, Đường Cầu Giấy', 'Hà Nội', 'Cầu Giấy', 'Dịch Vọng', 'PENDING', '2026-09-25 14:00:00');
 
 -- ===================================
--- BACKFILL SHOP PRODUCT PUBLICATIONS (migration 024)
+-- NOTIFICATIONS & SHOP FOLLOW MAIL (migration 020, 024)
 -- ==========================================
+CREATE TABLE IF NOT EXISTS Notifications (
+    id VARCHAR(36) PRIMARY KEY,
+    user_id VARCHAR(36) NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    message TEXT,
+    link VARCHAR(255),
+    is_read BOOLEAN NOT NULL DEFAULT FALSE,
+    created_date DATETIME(6) NOT NULL,
+    CONSTRAINT fk_notification_user FOREIGN KEY (user_id) REFERENCES Users(id),
+    INDEX ix_notification_user (user_id, created_date)
+);
+
+CREATE TABLE IF NOT EXISTS Shop_Product_Publications (
+    product_id VARCHAR(36) PRIMARY KEY,
+    published_at DATETIME(6) NOT NULL
+);
+CREATE TABLE IF NOT EXISTS Shop_Product_Mails (
+    id VARCHAR(36) PRIMARY KEY,
+    product_id VARCHAR(36) NOT NULL,
+    shop_id VARCHAR(36) NOT NULL,
+    user_id VARCHAR(36) NOT NULL,
+    status VARCHAR(16) NOT NULL DEFAULT 'PENDING',
+    attempts INT NOT NULL DEFAULT 0,
+    next_attempt_at DATETIME(6) NOT NULL,
+    created_at DATETIME(6) NOT NULL,
+    sent_at DATETIME(6),
+    CONSTRAINT uk_shop_product_mail UNIQUE (product_id, user_id),
+    INDEX ix_shop_product_mail_due (status, next_attempt_at, created_at)
+);
 INSERT IGNORE INTO Shop_Product_Publications(product_id, published_at)
 SELECT id, COALESCE(created_date, NOW()) FROM Products WHERE status = 'ACTIVE';
 -- 18. DEMO SHOPS ĐỂ KIỂM THỬ THEO DÕI SHOP (chỉ dùng local; chủ shop dùng email example.test và chưa có mật khẩu nên không đăng nhập được)

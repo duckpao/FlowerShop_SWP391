@@ -44,10 +44,7 @@ public class AccountService {
     public ProfileResponse updateProfile(String userId, ProfileRequest request) {
         User user = lock(userId);
         user.setFullName(request.fullName().strip());
-        String phone = request.phone().strip();
-        if (!phone.isEmpty() && users.existsByPhoneAndIdNot(phone, userId))
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Số điện thoại đã được dùng bởi tài khoản khác.");
-        user.setPhone(phone.isEmpty() ? null : phone); // NULL để cột phone được phép unique
+        user.setPhone(request.phone().strip());
         user.setLastModifyBy(userId);
         return ProfileResponse.from(user);
     }
@@ -105,12 +102,9 @@ public class AccountService {
             address = Address.builder().id(UUID.randomUUID().toString()).user(user).createdBy(userId).build();
         } else {
             address = find(list, id);
-            // Đơn chưa có vận đơn vẫn nhận hoa theo địa chỉ đã sửa; chỉ khóa khi có đơn đã tạo vận đơn / đang giao / đã xong.
-            if (orders.existsShippedByDeliveryAddressId(id))
-                throw lockedByShipment();
+            if (orders.existsByDeliveryAddressId(id))
+                throw inUse();
         }
-        String previousRecipientName = address.getRecipientName();
-        String previousRecipientPhone = address.getRecipientPhone();
         address.setAddressLine(request.addressLine().strip());
         address.setCity(request.city().strip());
         address.setDistrict(request.district().strip());
@@ -125,7 +119,7 @@ public class AccountService {
         address.setIsPickup(Boolean.TRUE.equals(request.isPickup()));
         address.setIsReturn(Boolean.TRUE.equals(request.isReturn()));
         address.setLastModifyBy(userId);
-
+        
         boolean makeDefault = request.isDefault() || list.isEmpty() || Boolean.TRUE.equals(address.getIsDefault())
                 || list.stream().noneMatch(a -> Boolean.TRUE.equals(a.getIsDefault()));
         if (makeDefault)
@@ -134,30 +128,7 @@ public class AccountService {
                 a.setLastModifyBy(userId);
             });
         address.setIsDefault(makeDefault);
-        Address saved = addresses.save(address);
-        if (id != null) followRecipientChange(saved, previousRecipientName, previousRecipientPhone, userId);
-        return AddressResponse.from(saved);
-    }
-
-    /**
-     * Người nhận của đơn được chép từ địa chỉ lúc đặt hàng. Khi sửa tên/SĐT người nhận của địa chỉ, các đơn chưa có vận đơn
-     * đang dùng đúng giá trị cũ đó được cập nhật theo; giá trị khách đã tự nhập riêng cho đơn thì giữ nguyên.
-     */
-    private void followRecipientChange(Address address, String previousName, String previousPhone, String actor) {
-        for (Order order : orders.findNotShippedByDeliveryAddressId(address.getId())) {
-            boolean changed = false;
-            if (Objects.equals(order.getRecipientName(), previousName)
-                    && !Objects.equals(previousName, address.getRecipientName())) {
-                order.setRecipientName(address.getRecipientName());
-                changed = true;
-            }
-            if (Objects.equals(order.getRecipientPhone(), previousPhone)
-                    && !Objects.equals(previousPhone, address.getRecipientPhone())) {
-                order.setRecipientPhone(address.getRecipientPhone());
-                changed = true;
-            }
-            if (changed) order.setLastModifyBy(actor);
-        }
+        return AddressResponse.from(addresses.save(address));
     }
 
     public AddressResponse setDefault(String userId, String id) {
@@ -202,15 +173,8 @@ public class AccountService {
         return new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy dữ liệu.");
     }
 
-    /** Xóa: mọi đơn đang trỏ tới địa chỉ này (kể cả chưa giao) đều cần địa chỉ nhận, nên không xóa được. */
     private static ResponseStatusException inUse() {
         return new ResponseStatusException(HttpStatus.CONFLICT,
-                "Địa chỉ đang được dùng trong đơn hàng nên không thể xóa. Bạn vẫn có thể sửa địa chỉ nếu đơn chưa giao cho đơn vị vận chuyển.");
-    }
-
-    /** Sửa: chỉ bị chặn khi có đơn đã tạo vận đơn hoặc đã giao. */
-    private static ResponseStatusException lockedByShipment() {
-        return new ResponseStatusException(HttpStatus.CONFLICT,
-                "Địa chỉ đang dùng cho đơn đã tạo vận đơn hoặc đã giao nên không thể sửa. Hãy thêm địa chỉ mới.");
+                "Địa chỉ đã được dùng trong đơn hàng. Hãy thêm địa chỉ mới.");
     }
 }

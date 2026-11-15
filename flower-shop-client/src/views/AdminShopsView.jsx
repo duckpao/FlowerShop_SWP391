@@ -147,7 +147,7 @@ export default function AdminShopsView() {
 
       {/* Detail Modal Overlay */}
       {c.selected && (
-        <div className="fixed inset-0 z-99999 flex items-center justify-center bg-gray-900/50 p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 p-4 backdrop-blur-sm">
           <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-800">
             <h3 className="mb-4 text-xl font-semibold text-gray-900 dark:text-white">{c.selected.name}</h3>
             
@@ -157,14 +157,6 @@ export default function AdminShopsView() {
                 <div className="flex justify-between">
                   <span className="text-gray-500 dark:text-gray-400">Mô tả:</span>
                   <span className="font-medium text-gray-900 dark:text-white text-right ml-4">{c.selected.description || "Chưa có mô tả"}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500 dark:text-gray-400">Địa chỉ:</span>
-                  <span className="font-medium text-gray-900 dark:text-white text-right ml-4">
-                    {c.selected.address
-                      ? [c.selected.address.addressLine, c.selected.address.ward, c.selected.address.district, c.selected.address.city].filter(Boolean).join(', ')
-                      : "Chưa có địa chỉ"}
-                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500 dark:text-gray-400">Trạng thái:</span>

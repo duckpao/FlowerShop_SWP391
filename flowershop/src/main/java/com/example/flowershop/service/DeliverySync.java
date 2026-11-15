@@ -15,9 +15,8 @@ import org.springframework.stereotype.Component;
 @Component
 public class DeliverySync {
     private final PaymentRepository payments;
-    private final CouponService vouchers;
 
-    public DeliverySync(PaymentRepository payments,CouponService vouchers) { this.payments = payments; this.vouchers=vouchers; }
+    public DeliverySync(PaymentRepository payments) { this.payments = payments; }
 
     /** Cập nhật Delivery theo tracking; chỉ đổi trạng thái Order khi đơn đang DELIVERING. */
     public void apply(Order order, Delivery delivery, GhnService.Tracking tracking, String actor) {
@@ -27,27 +26,22 @@ public class DeliverySync {
         delivery.setLastModifyBy(actor);
         if (order.getStatus() != OrderStatus.DELIVERING) return;
         switch (tracking.ghnStatus()) {
-            case "delivered" -> complete(order, actor);
+            case "delivered" -> {
+                order.setStatus(OrderStatus.COMPLETED);
+                // Chỉ tiền GHN thu hộ; lần thanh toán online FAILED/hủy không được thành SUCCESS
+                payments.findByOrderId(order.getId()).stream()
+                        .filter(p -> p.getPaymentMethod() == PaymentMethod.COD).forEach(p -> {
+                    p.setStatus(PaymentStatus.SUCCESS);
+                    p.setLastModifyBy(actor);
+                });
+            }
             case "returned" -> order.setStatus(OrderStatus.REFUNDED);
             case "cancel" -> {
-                vouchers.release(order);
                 order.setStatus(OrderStatus.CANCELLED);
                 order.setCancelReason("Vận đơn bị hủy trên GHN.");
             }
             default -> { return; }
         }
-        order.setLastModifyBy(actor);
-    }
-
-    /** Đơn đã giao xong: COMPLETED và đánh dấu khoản COD SUCCESS. Dùng chung với job tự hoàn tất. */
-    public void complete(Order order, String actor) {
-        order.setStatus(OrderStatus.COMPLETED);
-        // Chỉ tiền GHN thu hộ; lần thanh toán online FAILED/hủy không được thành SUCCESS
-        payments.findByOrderId(order.getId()).stream()
-                .filter(p -> p.getPaymentMethod() == PaymentMethod.COD).forEach(p -> {
-            p.setStatus(PaymentStatus.SUCCESS);
-            p.setLastModifyBy(actor);
-        });
         order.setLastModifyBy(actor);
     }
 }

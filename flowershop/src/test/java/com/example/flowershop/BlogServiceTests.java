@@ -1,6 +1,5 @@
 package com.example.flowershop;
 
-import com.example.flowershop.dto.auth.CurrentUser;
 import com.example.flowershop.entity.Shop;
 import com.example.flowershop.entity.User;
 import com.example.flowershop.entity.enums.BlogStatus;
@@ -14,8 +13,6 @@ import com.example.flowershop.repository.UserRepository;
 import com.example.flowershop.service.BlogService;
 import com.example.flowershop.service.BlogInteractionService;
 import com.example.flowershop.service.CloudinaryService;
-import com.example.flowershop.service.TokenAuthService;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,7 +22,6 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.mock.web.MockMultipartFile;
-import org.springframework.mock.web.MockHttpSession;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -35,7 +31,6 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.mockito.ArgumentMatchers.any;
@@ -52,7 +47,6 @@ import static org.mockito.Mockito.when;
 class BlogServiceTests {
     @MockitoBean JavaMailSender mail;
     @MockitoBean CloudinaryService cloudinary;
-    @MockitoBean TokenAuthService tokens;
     @Autowired UserRepository users;
     @Autowired ShopRepository shops;
     @Autowired BlogRepository blogs;
@@ -72,7 +66,7 @@ class BlogServiceTests {
     }
 
     @Test
-    void managerCanCreateUpdateHideAndRepublishPost() {
+    void managerCanCreateUpdateAndHidePost() {
         when(cloudinary.uploadBlogImage(any(), any(), any())).thenReturn("https://cdn.example.test/rose.jpg");
         var file = new MockMultipartFile("images", "rose.jpg", "image/jpeg", new byte[] { 1, 2, 3 });
         var created = service.save(shop.getId(), null, owner.getId(),
@@ -92,18 +86,6 @@ class BlogServiceTests {
         service.hide(shop.getId(), published.id(), owner.getId());
         assertThat(service.listPublic(null, "roses", 0).content()).isEmpty();
         assertThat(blogs.findById(published.id()).orElseThrow().getStatus()).isEqualTo(BlogStatus.HIDDEN);
-        assertThatThrownBy(() -> service.publicDetail(published.id()))
-                .isInstanceOf(ResponseStatusException.class);
-
-        service.publish(shop.getId(), published.id(), owner.getId());
-        assertThat(service.listPublic(null, "roses", 0).content()).extracting(BlogService.Result::id)
-                .containsExactly(published.id());
-        var restored = service.publicDetail(published.id());
-        assertThat(restored.status()).isEqualTo(BlogStatus.PUBLISHED);
-        assertThat(restored.title()).isEqualTo(published.title());
-        assertThat(restored.content()).isEqualTo(published.content());
-        assertThat(restored.images()).isEqualTo(published.images());
-        assertThat(blogs.findById(published.id()).orElseThrow().getLastModifyBy()).isEqualTo(owner.getId());
     }
 
     @Test
@@ -111,47 +93,12 @@ class BlogServiceTests {
         var stranger = users.saveAndFlush(User.builder().id(id()).email(id() + "@example.test")
                 .role(UserRole.SHOP).status(UserStatus.ACTIVE).isEmailVerified(true).build());
         var input = new BlogService.Input("Flower guide", "Enough useful content", BlogStatus.PUBLISHED, List.of());
-        var post = service.save(shop.getId(), null, owner.getId(), input);
-        service.hide(shop.getId(), post.id(), owner.getId());
-        assertThatThrownBy(() -> service.publish(shop.getId(), post.id(), stranger.getId()))
-                .isInstanceOf(ResponseStatusException.class);
         assertThatThrownBy(() -> service.save(shop.getId(), null, stranger.getId(), input))
                 .isInstanceOf(ResponseStatusException.class);
         shop.setStatus(ShopStatus.INACTIVE);
         shops.saveAndFlush(shop);
-        assertThatThrownBy(() -> service.publish(shop.getId(), post.id(), owner.getId()))
-                .isInstanceOf(ResponseStatusException.class);
-        assertThat(blogs.findById(post.id()).orElseThrow().getStatus()).isEqualTo(BlogStatus.HIDDEN);
         assertThatThrownBy(() -> service.save(shop.getId(), null, owner.getId(), input))
                 .isInstanceOf(ResponseStatusException.class);
-    }
-
-    @Test
-    void managerCanRepublishHiddenPostThroughApi() throws Exception {
-        var post = service.save(shop.getId(), null, owner.getId(),
-                new BlogService.Input("Rose care", "Keep the vase clean.", BlogStatus.PUBLISHED, List.of()));
-        service.hide(shop.getId(), post.id(), owner.getId());
-        mvc.perform(get("/api/public/blogs/" + post.id())).andExpect(status().isNotFound());
-
-        var csrfResponse = mvc.perform(get("/api/auth/csrf")).andReturn();
-        var csrf = new ObjectMapper().readTree(csrfResponse.getResponse().getContentAsString());
-        var session = (MockHttpSession) csrfResponse.getRequest().getSession(false);
-        String path = "/api/shop/mine/" + shop.getId() + "/blogs/" + post.id() + "/publish";
-        mvc.perform(put(path).session(session)
-                .header(csrf.path("headerName").asText(), csrf.path("token").asText()))
-                .andExpect(status().isUnauthorized());
-        when(tokens.authenticate("shop-test")).thenReturn(CurrentUser.from(owner));
-        mvc.perform(put(path).session(session)
-                .header(csrf.path("headerName").asText(), csrf.path("token").asText())
-                .header("Authorization", "Bearer shop-test"))
-                .andExpect(status().isNoContent());
-
-        mvc.perform(get("/api/public/blogs/" + post.id()))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("PUBLISHED"));
-        mvc.perform(get("/api/public/blogs").param("q", "Rose care"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content[0].id").value(post.id()));
     }
 
     @Test

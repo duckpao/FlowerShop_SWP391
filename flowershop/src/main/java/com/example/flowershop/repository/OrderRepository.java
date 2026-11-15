@@ -1,145 +1,82 @@
 package com.example.flowershop.repository;
 
-import java.util.*;
-import java.math.BigDecimal;
-import java.time.LocalDateTime;
 import com.example.flowershop.entity.Order;
-import org.springframework.stereotype.Repository;
-import org.springframework.transaction.annotation.Transactional;
+import com.example.flowershop.entity.enums.OrderStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
-import java.util.*;
-import com.example.flowershop.entity.enums.OrderStatus;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import jakarta.persistence.LockModeType;
 import java.time.LocalDateTime;
+import java.util.Collection;
+import java.util.Optional;
+import java.util.List;
 
-/** Explicit Hibernate queries; Spring does not generate this repository. */
-@Repository
-public class OrderRepository extends HibernateRepository<Order> {
-    public Optional<Order> findLinkedCustomOrder(String referenceId,String customerId,String shopId) {
-        return first("(e.id = :referenceId or e.customRequestId = :referenceId) and e.orderType = com.example.flowershop.entity.enums.OrderType.CUSTOM and e.customer.id = :customerId and e.shop.id = :shopId",
-                Map.of("referenceId",referenceId,"customerId",customerId,"shopId",shopId),Sort.by(Sort.Order.desc("createdDate"),Sort.Order.asc("id")));
-    }
-    public OrderRepository() { super(Order.class); }
-
-    /** Id các mã (đơn và vận chuyển) khách đã dùng cho đơn chưa hủy; đơn bị hủy đã nhả mã nên không tính. */
-    public Set<String> couponIdsUsedBy(String customerId, String excludeOrderId) {
-        var ids = new HashSet<String>();
-        String where = " from Order e where e.customer.id = :customerId and e.couponsReleased = false and e.id <> :exclude";
-        for (String field : List.of("couponId", "shippingCouponId")) {
-            ids.addAll(session().createSelectionQuery("select e." + field + where + " and e." + field + " is not null", String.class)
-                    .setParameter("customerId", customerId).setParameter("exclude", excludeOrderId == null ? "" : excludeOrderId)
-                    .getResultList());
-        }
-        return ids;
-    }
-
-    /** Như couponIdsUsedBy nhưng đọc khóa (FOR UPDATE) để thấy đơn vừa commit của một yêu cầu song song; chỉ dùng khi đặt đơn. */
-    public Set<String> couponIdsUsedByForUpdate(String customerId, String excludeOrderId) {
-        var ids = new HashSet<String>();
-        session().createSelectionQuery("from Order e where e.customer.id = :customerId and e.couponsReleased = false and e.id <> :exclude"
-                        + " and (e.couponId is not null or e.shippingCouponId is not null)", Order.class)
-                .setParameter("customerId", customerId).setParameter("exclude", excludeOrderId == null ? "" : excludeOrderId)
-                .setLockMode(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE).getResultList()
-                .forEach(o -> { if (o.getCouponId() != null) ids.add(o.getCouponId()); if (o.getShippingCouponId() != null) ids.add(o.getShippingCouponId()); });
-        return ids;
-    }
-
-    @Transactional
-    public Optional<Order> findByIdForUpdate(String id) {
-        return locked("e.id = :id", Map.of("id", id));
-    }
-
-    public Optional<Order> findByIdAndShopIdForUpdate(String id,String shopId) {
-        return locked("e.id = :id and e.shop.id = :shopId",Map.of("id",id,"shopId",shopId));
-    }
-
-    public List<Order> findByStatusAndPaymentWindowStartBefore(OrderStatus status,LocalDateTime threshold) {
-        return list("e.status = :status and coalesce(e.paymentStartedAt,e.createdDate) <= :threshold",
-                Map.of("status",status,"threshold",threshold));
-    }
-
-    public List<Order> findByCustomerIdOrderByCreatedDateDesc(String customerId) {
-        return list("e.customer.id = :customerId", Map.of("customerId", customerId), Sort.by(Sort.Order.desc("createdDate"), Sort.Order.asc("id")));
-    }
-
-    public List<Order> findByStatusAndCreatedDateBefore(OrderStatus status, LocalDateTime threshold) {
-        return list("e.status = :status and e.createdDate < :threshold", Map.of("status", status, "threshold", threshold));
-    }
-
-    /** Đơn DELIVERING đã giao xong (GHN delivered) từ trước mốc cutoff và chưa có yêu cầu hoàn tiền. */
-    public List<Order> deliveredBeforeWithoutRefund(LocalDateTime cutoff) {
-        return list("e.status = :status and exists (select 1 from Delivery d where d.order = e and d.status = :delivered"
-                        + " and d.lastModifyDate < :cutoff) and not exists (select 1 from Refund r where r.order = e)",
-                Map.of("status", OrderStatus.DELIVERING, "delivered", com.example.flowershop.entity.enums.DeliveryStatus.DELIVERED, "cutoff", cutoff));
-    }
-
-    public boolean existsByDeliveryAddressId(String addressId) {
-        return countWhere("e.deliveryAddress.id = :addressId", Map.of("addressId", addressId)) > 0;
-    }
-
-    /** Trạng thái đơn đã giao cho đơn vị vận chuyển hoặc đã kết thúc giao hàng. */
-    private static final List<OrderStatus> SHIPPED_STATUSES =
-            List.of(OrderStatus.DELIVERING, OrderStatus.COMPLETED, OrderStatus.REFUNDED);
+/**
+ * Repository thao tác dữ liệu bảng Đơn hàng (Orders).
+ * Cung cấp các phương thức truy vấn danh sách, phân trang, khóa bi quan (pessimistic lock)
+ * phục vụ quản lý đơn hàng của khách hàng và chủ cửa hàng (Shop Manager).
+ */
+public interface OrderRepository extends JpaRepository<Order, String> {
+    
+    /**
+     * Tìm đơn hàng theo ID và áp dụng khóa bi quan (Pessimistic Write Lock).
+     * Ngăn chặn race condition khi nhiều luồng cùng thao tác cập nhật trạng thái đơn (xác nhận, giao hàng, hủy...).
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT o FROM Order o WHERE o.id = :id")
+    Optional<Order> findByIdForUpdate(@Param("id") String id);
 
     /**
-     * Có đơn dùng địa chỉ này đã tạo vận đơn (có Delivery) hoặc đã đến DELIVERING trở đi không.
-     * Các đơn đó phải giữ nguyên địa chỉ nhận, nên địa chỉ không còn sửa được.
+     * Lấy danh sách đơn hàng theo trạng thái được tạo trước mốc thời gian threshold.
+     * Thường dùng cho các cron job tự động hủy đơn quá hạn thanh toán (expire orders).
      */
-    public boolean existsShippedByDeliveryAddressId(String addressId) {
-        return countWhere("e.deliveryAddress.id = :addressId and (e.status in :shipped"
-                + " or exists (select 1 from Delivery d where d.order = e))",
-                Map.of("addressId", addressId, "shipped", SHIPPED_STATUSES)) > 0;
-    }
+    List<Order> findByStatusAndCreatedDateBefore(OrderStatus status, LocalDateTime threshold);
 
-    /** Các đơn dùng địa chỉ này mà chưa tạo vận đơn: địa chỉ đổi thì các đơn này nhận hoa theo địa chỉ mới. */
-    public List<Order> findNotShippedByDeliveryAddressId(String addressId) {
-        return list("e.deliveryAddress.id = :addressId and e.status not in :shipped"
-                + " and not exists (select 1 from Delivery d where d.order = e)",
-                Map.of("addressId", addressId, "shipped", SHIPPED_STATUSES));
-    }
+    /**
+     * Kiểm tra xem địa chỉ nhận hàng có đang được liên kết với bất kỳ đơn hàng nào không.
+     */
+    boolean existsByDeliveryAddressId(String addressId);
 
-    public Page<Order> findByShopIdAndStatusIn(String shopId, Collection<OrderStatus> statuses, Pageable pageable) {
-        return page("e.shop.id = :shopId and e.status in :statuses", Map.of("shopId", shopId, "statuses", statuses), pageable);
-    }
+    boolean existsByCustomRequestIdAndStatusNot(String customRequestId, OrderStatus status);
 
-    public long countByShopIdAndStatusIn(String shopId, Collection<OrderStatus> statuses) {
-        return countWhere("e.shop.id = :shopId and e.status in :statuses", Map.of("shopId", shopId, "statuses", statuses));
-    }
+    /**
+     * Đếm tổng số đơn hàng của shop thuộc các trạng thái được chỉ định (dùng hiển thị badge số lượng đơn chờ).
+     */
+    long countByShopIdAndStatusIn(String shopId, Collection<OrderStatus> statuses);
 
-    public Page<Order> findByStatus(OrderStatus status, Pageable pageable) {
-        return page("e.status = :status", Map.of("status", status), pageable);
-    }
+    /**
+     * Lấy tất cả đơn hàng thuộc quyền quản lý của shop (hỗ trợ phân trang và sắp xếp).
+     */
+    Page<Order> findByShopId(String shopId, Pageable pageable);
 
-    public Page<Order> findByShopId(String shopId, Pageable pageable) {
-        return page("e.shop.id = :shopId", Map.of("shopId", shopId), pageable);
-    }
+    /**
+     * Lấy danh sách đơn hàng của shop lọc theo một trạng thái cụ thể (PENDING, DELIVERING, COMPLETED...), có phân trang.
+     */
+    Page<Order> findByShopIdAndStatus(String shopId, OrderStatus status, Pageable pageable);
 
-    public Page<Order> findByShopIdAndStatus(String shopId, OrderStatus status, Pageable pageable) {
-        return page("e.shop.id = :shopId and e.status = :status", Map.of("shopId", shopId, "status", status), pageable);
-    }
+    /**
+     * Tìm đơn hàng theo ID và Shop ID (đảm bảo shop chỉ xem/thao tác đúng đơn hàng của mình, tránh lộ dữ liệu chéo shop).
+     */
+    Optional<Order> findByIdAndShopId(String id, String shopId);
 
-    public Optional<Order> findByIdAndShopId(String id, String shopId) {
-        return one("e.id = :id and e.shop.id = :shopId", Map.of("id", id, "shopId", shopId));
-    }
+    /**
+     * Lấy danh sách đơn hàng của khách hàng theo phân trang, sắp xếp theo thời gian tạo giảm dần.
+     */
+    Page<Order> findByCustomerIdOrderByCreatedDateDesc(String customerId, Pageable pageable);
 
-    public Optional<Order> findByIdAndCustomerId(String id, String customerId) {
-        return one("e.id = :id and e.customer.id = :customerId", Map.of("id", id, "customerId", customerId));
-    }
+    Page<Order> findByCustomerIdAndStatusOrderByCreatedDateDesc(String customerId, OrderStatus status, Pageable pageable);
 
-    public Page<Order> findByCustomerIdOrderByCreatedDateDesc(String customerId, Pageable pageable) {
-        return page("e.customer.id = :customerId", Map.of("customerId", customerId), pageable);
-    }
+    List<Order> findByCustomerIdAndStatusOrderByCreatedDateDesc(
+        String customerId,
+        OrderStatus status
+);
 
-    public Page<Order> findByCustomerIdAndStatus(String customerId, OrderStatus status, Pageable pageable) {
-        return page("e.customer.id = :customerId and e.status = :status", Map.of("customerId", customerId, "status", status), pageable);
-    }
-
-    public List<Order> findByCustomerIdAndStatusOrderByCreatedDateDesc(String customerId, OrderStatus status) {
-        return list("e.customer.id = :customerId and e.status = :status", Map.of("customerId", customerId, "status", status), Sort.by(Sort.Order.desc("createdDate"), Sort.Order.asc("id")));
-    }
-public boolean existsByCustomRequestIdAndStatusNot(String customRequestId, OrderStatus status) { return countWhere("e.customRequestId = :id and e.status <> :status", Map.of("id",customRequestId,"status",status)) > 0; }
-public Page<Order> findByCustomerIdAndStatusOrderByCreatedDateDesc(String customerId, OrderStatus status, Pageable pageable) { return findByCustomerIdAndStatus(customerId,status,pageable); }
-public List<Object[]> countStatusesForReport(String shopId, LocalDateTime start, LocalDateTime end) { return session().createSelectionQuery("SELECT o.status, COUNT(o) FROM Order o WHERE o.shop.id = :shopId AND o.createdDate >= :start AND o.createdDate < :end GROUP BY o.status",Object[].class).setParameter("shopId",shopId).setParameter("start",start).setParameter("end",end).getResultList(); }
-
+    @Query("SELECT o.status, COUNT(o) FROM Order o WHERE o.shop.id = :shopId "
+            + "AND o.createdDate >= :start AND o.createdDate < :end GROUP BY o.status")
+    List<Object[]> countStatusesForReport(@Param("shopId") String shopId,
+            @Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
 }
+
