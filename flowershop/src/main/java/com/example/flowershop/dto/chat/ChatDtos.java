@@ -1,4 +1,4 @@
-package com.example.flowershop.chat;
+package com.example.flowershop.dto.chat;
 
 import com.example.flowershop.entity.enums.ChatContextType;
 import com.example.flowershop.entity.enums.SenderType;

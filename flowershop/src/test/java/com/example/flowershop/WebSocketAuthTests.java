@@ -1,6 +1,6 @@
 package com.example.flowershop;
 
-import com.example.flowershop.chat.ChatService;
+import com.example.flowershop.service.ChatService;
 import com.example.flowershop.config.WebSocketConfig;
 import com.example.flowershop.dto.auth.CurrentUser;
 import com.example.flowershop.service.TokenAuthService;

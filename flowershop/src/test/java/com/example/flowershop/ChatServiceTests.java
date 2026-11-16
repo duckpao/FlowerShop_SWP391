@@ -1,8 +1,8 @@
 package com.example.flowershop;
 
-import com.example.flowershop.chat.ChatDtos.ContextInput;
-import com.example.flowershop.chat.ChatDtos.SendInput;
-import com.example.flowershop.chat.ChatService;
+import com.example.flowershop.dto.chat.ChatDtos.ContextInput;
+import com.example.flowershop.dto.chat.ChatDtos.SendInput;
+import com.example.flowershop.service.ChatService;
 import com.example.flowershop.entity.*;
 import com.example.flowershop.entity.enums.*;
 import com.example.flowershop.repository.*;

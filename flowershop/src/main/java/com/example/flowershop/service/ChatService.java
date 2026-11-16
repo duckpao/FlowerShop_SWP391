@@ -1,14 +1,12 @@
-package com.example.flowershop.chat;
+package com.example.flowershop.service;
 
-import com.example.flowershop.chat.ChatDtos.*;
+import com.example.flowershop.dto.chat.ChatDtos.*;
 import com.example.flowershop.entity.*;
 import com.example.flowershop.entity.enums.ChatContextType;
 import com.example.flowershop.entity.enums.SenderType;
 import com.example.flowershop.entity.enums.ShopStatus;
 import com.example.flowershop.entity.enums.UserRole;
 import com.example.flowershop.repository.*;
-import com.example.flowershop.service.CloudinaryService;
-import com.example.flowershop.service.NotificationService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
