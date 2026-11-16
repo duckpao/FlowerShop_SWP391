@@ -18,7 +18,8 @@ function QuoteActions({ request, userId, addresses, onChanged }) {
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [rejecting, setRejecting] = useState(false)
   const open = request.status === 'QUOTED' || (request.status === 'ACCEPTED' && request.quotedPrice != null)
   if (!open) return null
-  const expired = request.status === 'QUOTED' && request.quoteValidUntil && new Date(request.quoteValidUntil) <= new Date()
+  // Hết hạn thì cả chấp nhận lần đầu lẫn đặt lại cọc đều bị chặn (backend kiểm cùng luật)
+  const expired = request.quoteValidUntil && new Date(request.quoteValidUntil) <= new Date()
   const selected = addressId || addresses.find(a => a.isDefault)?.id || addresses[0]?.id || ''
   const accept = async () => {
     setBusy(true); setError('')
