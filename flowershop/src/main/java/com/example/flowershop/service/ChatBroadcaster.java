@@ -1,8 +1,9 @@
-package com.example.flowershop.chat;
+package com.example.flowershop.service;
 
-import com.example.flowershop.chat.ChatDtos.InboxEvent;
-import com.example.flowershop.chat.ChatDtos.MessageEvent;
-import com.example.flowershop.chat.ChatDtos.ReadEvent;
+import com.example.flowershop.dto.chat.ChatDtos;
+import com.example.flowershop.dto.chat.ChatDtos.InboxEvent;
+import com.example.flowershop.dto.chat.ChatDtos.MessageEvent;
+import com.example.flowershop.dto.chat.ChatDtos.ReadEvent;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;

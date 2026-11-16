@@ -1,6 +1,8 @@
-package com.example.flowershop.chat;
+package com.example.flowershop.controller;
 
-import com.example.flowershop.chat.ChatDtos.*;
+import com.example.flowershop.service.ChatService;
+
+import com.example.flowershop.dto.chat.ChatDtos.*;
 import com.example.flowershop.dto.auth.CurrentUser;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.enums.ParameterIn;

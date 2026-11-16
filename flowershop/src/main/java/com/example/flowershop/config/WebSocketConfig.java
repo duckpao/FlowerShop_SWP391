@@ -1,6 +1,6 @@
 package com.example.flowershop.config;
 
-import com.example.flowershop.chat.ChatService;
+import com.example.flowershop.service.ChatService;
 import com.example.flowershop.dto.auth.CurrentUser;
 import com.example.flowershop.service.TokenAuthService;
 import org.springframework.context.annotation.Configuration;
