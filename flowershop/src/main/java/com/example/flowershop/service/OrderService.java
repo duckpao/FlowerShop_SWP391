@@ -68,6 +68,8 @@ public class OrderService {
      */
     @Transactional
     public List<OrderResponse> makeOrders(String userId, MakeOrdersRequest request) {
+        // Khóa dòng khách: hai lần bấm đặt hàng cùng lúc chạy lần lượt, lần sau thấy giỏ đã được đặt và nhận lỗi 409 rõ ràng.
+        userRepository.findByIdForUpdate(userId);
         var parts = request.getShops().stream()
                 .sorted(Comparator.comparing(MakeOrdersRequest.ShopOrder::getShopId)).toList();
         if (parts.stream().map(MakeOrdersRequest.ShopOrder::getShopId).distinct().count() != parts.size()) {
@@ -114,8 +116,7 @@ public class OrderService {
         if (customStatus != com.example.flowershop.entity.enums.CustomOrderStatus.QUOTED
                 && customStatus != com.example.flowershop.entity.enums.CustomOrderStatus.ACCEPTED)
             throw ApiException.badRequest("Shop chưa báo giá cho yêu cầu này.");
-        if (customStatus == com.example.flowershop.entity.enums.CustomOrderStatus.QUOTED && custom.getQuoteValidUntil() != null
-                && !custom.getQuoteValidUntil().isAfter(CustomFlowerOrderService.now()))
+        if (custom.getQuoteValidUntil() != null && !custom.getQuoteValidUntil().isAfter(CustomFlowerOrderService.now()))
             throw ApiException.badRequest("Báo giá đã hết hạn. Vui lòng nhờ shop báo giá lại.");
         if (orderRepository.existsByCustomRequestIdAndStatusNot(requestId, OrderStatus.CANCELLED))
             throw ApiException.badRequest("Yêu cầu này đã có đơn đặt cọc.");
@@ -148,13 +149,17 @@ public class OrderService {
         BigDecimal depositAmount = custom.getDepositPercent() == null ? BigDecimal.ZERO
                 : CustomFlowerOrderService.depositOf(flowerTotal, custom.getDepositPercent());
 
+        String customName = firstNonBlank(request.getRecipientName(), user.getFullName());
+        String customPhone = firstNonBlank(request.getPhone(), user.getPhone());
+        requireValidRecipient(customName, customPhone);
+
         Order order = orderRepository.save(Order.builder()
                 .id(UUID.randomUUID().toString())
                 .customer(user)
                 .shop(shop)
                 .deliveryAddress(deliveryAddress)
-                .recipientName(firstNonBlank(request.getRecipientName(), user.getFullName()))
-                .recipientPhone(firstNonBlank(request.getPhone(), user.getPhone()))
+                .recipientName(customName)
+                .recipientPhone(customPhone)
                 .orderType(OrderType.CUSTOM)
                 .customRequestId(requestId)
                 .couponId(couponId)
@@ -227,9 +232,7 @@ public class OrderService {
         }
         String recipientName = firstNonBlank(request.getRecipientName(), user.getFullName());
         String recipientPhone = firstNonBlank(request.getPhone(), user.getPhone());
-        if (recipientName == null || recipientPhone == null) {
-            throw ApiException.badRequest("Cần có tên và số điện thoại người nhận. Hãy cập nhật số điện thoại trong tài khoản.");
-        }
+        requireValidRecipient(recipientName, recipientPhone);
 
         // 2. Địa chỉ nhận phải là địa chỉ đã lưu của khách và có mã GHN để tính phí
         Address deliveryAddress = resolveDestination(userId, request.getDeliveryAddressId());
@@ -242,7 +245,8 @@ public class OrderService {
         }
         for (String cartItemId : request.getCartItemIds()) {
             CartItem cartItem = cartItemRepository.findById(cartItemId)
-                    .orElseThrow(() -> ApiException.notFound("Cart item không tồn tại: " + cartItemId));
+                    .orElseThrow(() -> new ApiException(org.springframework.http.HttpStatus.CONFLICT,
+                            "Sản phẩm trong giỏ đã được đặt hoặc không còn tồn tại. Vui lòng tải lại giỏ hàng."));
 
             // Cart item phải thuộc user này
             if (!cartItem.getUser().getId().equals(userId)) {
@@ -470,6 +474,15 @@ public class OrderService {
     }
 
     /** Trả giá trị đầu tiên không rỗng (đã trim), hoặc null nếu cả hai đều rỗng. */
+    /** Người nhận phải có tên (tối đa 100 ký tự) và số điện thoại 10 số bắt đầu bằng 0, kể cả khi lấy từ hồ sơ khách. */
+    private static void requireValidRecipient(String name, String phone) {
+        if (name == null || phone == null) {
+            throw ApiException.badRequest("Cần có tên và số điện thoại người nhận. Hãy cập nhật số điện thoại trong tài khoản.");
+        }
+        if (name.length() > 100) throw ApiException.badRequest("Tên người nhận tối đa 100 ký tự.");
+        if (!phone.matches("0[0-9]{9}")) throw ApiException.badRequest("Số điện thoại gồm 10 chữ số, bắt đầu bằng 0.");
+    }
+
     private static String firstNonBlank(String first, String second) {
         if (first != null && !first.isBlank()) return first.trim();
         if (second != null && !second.isBlank()) return second.trim();
@@ -515,6 +528,7 @@ public class OrderService {
 
         // 1. Cập nhật trạng thái Order sang CANCELLED
         order.setStatus(OrderStatus.CANCELLED);
+        order.setCancelReason(reason);
         order.setLastModifyBy(actor);
         orderRepository.save(order);
 
