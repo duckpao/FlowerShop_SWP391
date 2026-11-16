@@ -318,6 +318,7 @@ class PaymentBusinessTests {
 
         assertThat(service.cancelPendingOrder(order.getId(), "test", "SYSTEM")).isTrue();
         assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
+        assertThat(order.getCancelReason()).isEqualTo("test");
 
         Order paid = customOrder(OrderStatus.DEPOSIT_PAID, "400000", "0", LocalDateTime.now().minusHours(25));
         paid.setId("paid-order");

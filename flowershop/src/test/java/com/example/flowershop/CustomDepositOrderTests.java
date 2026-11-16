@@ -40,7 +40,7 @@ class CustomDepositOrderTests {
             mock(org.springframework.context.ApplicationEventPublisher.class),
             mock(com.example.flowershop.repository.RefundRepository.class));
 
-    private final User customer = User.builder().id("c-1").fullName("Lan").phone("0901").build();
+    private final User customer = User.builder().id("c-1").fullName("Lan").phone("0901234567").build();
     private final Shop shop = Shop.builder().id("s-1").status(ShopStatus.ACTIVE).build();
     private CustomOrderRequest request;
 
@@ -78,6 +78,23 @@ class CustomDepositOrderTests {
         assertThat(order.getTotalAmount()).isEqualByComparingTo("830000");
         assertThat(order.getRecipientName()).isEqualTo("Lan");
         assertThat(response.getTotalAmount()).isEqualByComparingTo("830000");
+    }
+
+    @Test
+    void expiredQuoteCannotBeReorderedEvenAfterAcceptance() {
+        request.setQuoteValidUntil(java.time.LocalDateTime.now().minusMinutes(1));
+        assertThatThrownBy(() -> service.makeCustomOrder("c-1", "req-1", body()))
+                .isInstanceOf(ApiException.class).hasMessageContaining("hết hạn");
+        verify(orders, never()).save(any());
+    }
+
+    @Test
+    void invalidRecipientPhoneIsRejected() {
+        var body = body();
+        body.setPhone("abc");
+        assertThatThrownBy(() -> service.makeCustomOrder("c-1", "req-1", body))
+                .isInstanceOf(ApiException.class).hasMessageContaining("Số điện thoại");
+        verify(orders, never()).save(any());
     }
 
     @Test

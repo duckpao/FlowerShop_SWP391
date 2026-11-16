@@ -3,44 +3,58 @@
 title FlowerShop - System Architecture
 skinparam shadowing false
 skinparam defaultFontName Arial
-skinparam wrapWidth 200
+skinparam wrapWidth 220
 skinparam ArrowColor #444444
 skinparam ArrowFontSize 12
 skinparam RectangleBorderColor #555555
-skinparam RectangleFontSize 14
-skinparam nodesep 50
-skinparam ranksep 60
+skinparam RectangleFontSize 13
+skinparam nodesep 40
+skinparam ranksep 55
 
-actor "Users\nCustomer, Shop Manager,\nShop Staff, Admin" as USER
+actor "Users\nGuest, Customer, Shop Owner,\nShop Staff, Admin" as USER
 
-rectangle "React SPA\nflower-shop-client\nviews, controllers, services" as CLIENT #EADCFF
-
-rectangle "Spring Boot - flowershop" as BACKEND #F4F8FF {
-  rectangle "security\nJWT filter, CSRF, rate limit" as SEC #FFF1C9
-  rectangle "controller + chat\nREST /api and STOMP /ws" as CTRL #D8F3DC
-  rectangle "service\nbusiness logic" as SVC #D8F3DC
-  rectangle "integration\nGHN, SePay, Cloudinary, Mail" as INTEG #FFE8CC
-  rectangle "event + scheduler\nafter-commit events, timed jobs" as JOBS #FFE8CC
-  rectangle "repository + entity\nSpring Data JPA" as REPO #E0F3E7
+rectangle "React SPA (Vite, Tailwind)\nflower-shop-client" as CLIENT #EADCFF {
+  rectangle "views + pages\nscreens per role" as VIEWS #F3EBFF
+  rectangle "controllers (hooks)\nscreen state and actions" as HOOKS #F3EBFF
+  rectangle "services\naxiosClient, authService,\nCSRF + JWT refresh" as CSVC #F3EBFF
+  rectangle "models, context, i18n" as CMOD #F3EBFF
 }
 
-database "MySQL 8\nflower_shop_db" as DB #E0F3E7
+rectangle "Spring Boot 3 - flowershop (one server, port 8080)" as BACKEND #F4F8FF {
+  rectangle "security + config\nJwtAuthenticationFilter, CSRF,\nLoginRateLimiter, SecurityConfig,\nWebSocketConfig (STOMP /ws)" as SEC #FFF1C9
+  rectangle "controller (45)\nREST /api/*: public, customer, shop,\nstaff, admin, chat, payment" as CTRL #D8F3DC
+  rectangle "service (55)" as SVC #D8F3DC {
+    rectangle "business logic\norder, payment, custom flower order,\ncoupon, refund, shop plan (Pro), cart,\ncatalog, blog, review, chat, notification ..." as BIZ #E9F9EC
+    rectangle "clients of external systems\nGhnService, SePayGatewayService,\nCloudinaryService, GoogleAuthService,\nmail senders" as INTEG #FFE8CC
+  }
+  rectangle "dto + exception\nrequest/response records,\nGlobalExceptionHandler" as DTO #E8F5E9
+  rectangle "event + scheduler\nafter-commit events, 8 timed jobs:\npayment timeout, maintenance,\noccasion reminder, Pro reminder,\nPro reconciliation, new-product mail" as JOBS #FFE8CC
+  rectangle "repository (42)\nSpring Data JPA" as REPO #E0F3E7
+  rectangle "entity (45)\nJPA entities + enums" as ENT #E0F3E7
+}
 
-rectangle "GHN" as GHN #FFE0E0
-rectangle "SePay" as SEPAY #FFE0E0
-rectangle "Cloudinary" as CLOUD #FFE0E0
-rectangle "SMTP" as SMTP #FFE0E0
-rectangle "Google Identity" as GOOG #FFE0E0
+database "MySQL 8\nflower_shop_db\n(schema: database.sql + sql/*.sql)" as DB #E0F3E7
 
-USER --> CLIENT
-CLIENT --> SEC : HTTPS JSON, STOMP
+rectangle "GHN\nfee, waybill, tracking, address catalogue" as GHN #FFE0E0
+rectangle "SePay\ncheckout (sandbox/live), payment query" as SEPAY #FFE0E0
+rectangle "Cloudinary\nimages and video" as CLOUD #FFE0E0
+rectangle "SMTP\nOTP, order, Pro, occasion mails" as SMTP #FFE0E0
+rectangle "Google Identity\nOAuth 2.0 sign-in" as GOOG #FFE0E0
+
+USER --> VIEWS
+VIEWS --> HOOKS
+HOOKS --> CSVC
+CSVC --> CMOD
+CSVC --> SEC : HTTPS JSON (JWT + CSRF), STOMP
 SEC --> CTRL : authenticated request
-CTRL --> SVC
-SVC --> REPO
-REPO --> DB : JDBC
-SVC --> INTEG
-SVC --> JOBS : publish events
-JOBS --> SVC : timed jobs
+CTRL --> DTO
+CTRL --> BIZ
+BIZ --> REPO
+REPO --> ENT
+ENT --> DB : JDBC
+BIZ --> INTEG
+BIZ --> JOBS : publish events
+JOBS --> BIZ : timed jobs
 JOBS --> INTEG : send mail
 
 INTEG --> GHN
@@ -48,6 +62,5 @@ INTEG --> SEPAY
 INTEG --> CLOUD
 INTEG --> SMTP
 INTEG --> GOOG
-CLIENT --> SEPAY : signed checkout form
-
+CSVC --> SEPAY : signed checkout form
 @enduml

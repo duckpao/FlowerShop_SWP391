@@ -86,6 +86,12 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(404).body(new MessageResponse("Không tìm thấy tài nguyên."));
     }
 
+    /** Lỗi truy cập dữ liệu khi hai yêu cầu chạy đua (khóa lạc quan, dòng đã bị xóa...): trả 409, không lộ thông báo Hibernate. */
+    @ExceptionHandler(org.springframework.dao.DataAccessException.class)
+    public ResponseEntity<MessageResponse> handleDataAccess(org.springframework.dao.DataAccessException exception) {
+        return ResponseEntity.status(409).body(new MessageResponse("Dữ liệu bị xung đột. Vui lòng thử lại."));
+    }
+
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<MessageResponse> handleDataConflict(DataIntegrityViolationException exception) {
         return ResponseEntity.status(409).body(new MessageResponse("Dữ liệu bị xung đột. Vui lòng thử lại."));

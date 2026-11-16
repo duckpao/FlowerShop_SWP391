@@ -43,7 +43,7 @@ class CustomQuoteAcceptTests {
             mock(org.springframework.context.ApplicationEventPublisher.class),
             mock(com.example.flowershop.repository.RefundRepository.class));
 
-    private final User customer = User.builder().id("c-1").fullName("Lan").phone("0901").build();
+    private final User customer = User.builder().id("c-1").fullName("Lan").phone("0901234567").build();
     private final Shop shop = Shop.builder().id("s-1").status(ShopStatus.ACTIVE).build();
     private CustomOrderRequest request;
 
