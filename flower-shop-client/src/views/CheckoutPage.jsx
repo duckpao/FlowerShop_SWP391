@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { useCartContext } from '../context/CartContext';
 import { accountService } from '../services/accountService';
@@ -19,6 +19,9 @@ const formatPrice = amount =>
  * -> handlePlaceOrder tạo đơn (mỗi shop 1 đơn) -> ONLINE sang SePay | COD sang trang thành công.
  * Chỉ CUSTOMER đã đăng nhập mới đặt được; số tiền cuối cùng do backend tính lại.
  */
+// Số điện thoại nhận hàng: 10 chữ số, bắt đầu bằng 0 (cùng luật với backend)
+const PHONE_PATTERN = /^0[0-9]{9}$/;
+
 export default function CheckoutPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -49,6 +52,7 @@ export default function CheckoutPage() {
 
   const [recipientName, setRecipientName] = useState('');
   const [phone, setPhone] = useState('');
+  const submittingRef = useRef(false);
   const [addresses, setAddresses] = useState([]);
   const [selectedAddressId, setSelectedAddressId] = useState('');
   const [addressesLoading, setAddressesLoading] = useState(Boolean(userId));
@@ -149,6 +153,8 @@ export default function CheckoutPage() {
    *    nếu mở cổng lỗi thì sang /payment/pending. COD: sang /payment/cod-success.
    */
   const handlePlaceOrder = async () => {
+    // Ref chặn bấm đúp tức thì (state orderLoading chỉ cập nhật sau lần render kế)
+    if (submittingRef.current) return;
     // Chặn double-click và các trạng thái chưa hợp lệ (nút cũng bị disable, đây là lớp bảo vệ thứ hai)
     if (orderLoading || loading || feeLoading || !feesReady || !userId || requestedIds.length === 0 || missingItems || selectedItems.length === 0) return;
     if (shopIds.some(id => !id) || hasOverStockItem) return;
@@ -156,8 +162,16 @@ export default function CheckoutPage() {
       setOrderError('Vui lòng nhập tên và số điện thoại người nhận.');
       return;
     }
-    
+    if (recipientName.trim().length > 100) {
+      setOrderError('Tên người nhận tối đa 100 ký tự.');
+      return;
+    }
+    if (!PHONE_PATTERN.test(phone.trim())) {
+      setOrderError('Số điện thoại gồm 10 chữ số, bắt đầu bằng 0.');
+      return;
+    }
 
+    submittingRef.current = true;
     setOrderLoading(true);
     setOrderError('');
     try {
@@ -191,7 +205,10 @@ export default function CheckoutPage() {
       navigate('/payment/cod-success?' + query);
     } catch (err) {
       setOrderError(err.message || 'Đặt hàng thất bại. Vui lòng thử lại.');
+      // Giỏ có thể đã được đặt ở lần bấm trước: tải lại để không còn món cũ
+      if (/đã được đặt|không còn tồn tại/.test(err.message || '')) await fetchCart();
     } finally {
+      submittingRef.current = false;
       setOrderLoading(false);
     }
   };
@@ -231,7 +248,7 @@ export default function CheckoutPage() {
               </div>
               <div>
                 <label htmlFor="recipient-phone" className="mb-1.5 block text-sm font-semibold text-gray-700 dark:text-gray-300">Số điện thoại nhận hàng <span className="text-error-500">*</span></label>
-                <input id="recipient-phone" type="tel" value={phone} onChange={e => setPhone(e.target.value)} maxLength={20} className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 disabled:opacity-60 dark:border-white/10 dark:bg-gray-800 dark:text-white" />
+                <input id="recipient-phone" type="tel" value={phone} onChange={e => setPhone(e.target.value.replace(/\D/g, ''))} maxLength={10} inputMode="numeric" autoComplete="tel" placeholder="0901234567" className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 disabled:opacity-60 dark:border-white/10 dark:bg-gray-800 dark:text-white" />
               </div>
             </div>
             <div>

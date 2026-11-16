@@ -20,6 +20,8 @@ import java.util.Map;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
     @ExceptionHandler(CaptchaRequiredException.class)
     public ResponseEntity<Map<String,Object>> captcha(CaptchaRequiredException e) {
         return ResponseEntity.status(429).body(Map.of("message",e.getMessage(),"captchaRequired",true));
@@ -86,19 +88,22 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(404).body(new MessageResponse("Không tìm thấy tài nguyên."));
     }
 
-    /** Lỗi truy cập dữ liệu khi hai yêu cầu chạy đua (khóa lạc quan, dòng đã bị xóa...): trả 409, không lộ thông báo Hibernate. */
-    @ExceptionHandler(org.springframework.dao.DataAccessException.class)
-    public ResponseEntity<MessageResponse> handleDataAccess(org.springframework.dao.DataAccessException exception) {
+    /** Hai yêu cầu chạy đua (khóa lạc quan, deadlock, hết thời gian chờ khóa): 409 thay vì lộ thông báo Hibernate. */
+    @ExceptionHandler(org.springframework.dao.ConcurrencyFailureException.class)
+    public ResponseEntity<MessageResponse> handleConcurrency(org.springframework.dao.ConcurrencyFailureException exception) {
+        log.warn("Xung đột đồng thời: {}", exception.getMessage(), exception);
         return ResponseEntity.status(409).body(new MessageResponse("Dữ liệu bị xung đột. Vui lòng thử lại."));
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<MessageResponse> handleDataConflict(DataIntegrityViolationException exception) {
+        log.warn("Vi phạm ràng buộc dữ liệu: {}", exception.getMostSpecificCause().getMessage(), exception);
         return ResponseEntity.status(409).body(new MessageResponse("Dữ liệu bị xung đột. Vui lòng thử lại."));
     }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleGenericException(Exception ex) {
+        log.error("Lỗi không xử lý được: {}", ex.getMessage(), ex);
         Map<String, Object> body = new HashMap<>();
         body.put("timestamp", LocalDateTime.now().toString());
         body.put("status", 500);

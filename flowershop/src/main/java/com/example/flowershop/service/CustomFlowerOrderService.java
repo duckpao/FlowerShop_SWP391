@@ -130,10 +130,10 @@ public class CustomFlowerOrderService {
     public Results mine(String actor,int page){return results(requests.findByCustomerId(actor,page(page)));}
     public Result detail(String actor,String id){return result(requests.findByIdAndCustomerId(id,actor).orElseThrow(CustomFlowerOrderService::missing));}
     public Results shopRequests(String shopId,String actor,CustomOrderStatus status,int page){
-        guard.requireAccess(shopId,actor);return results(status==null?requests.findByShopId(shopId,page(page)):requests.findByShopIdAndStatus(shopId,status,page(page)));
+        guard.requireReadAccess(shopId,actor);return results(status==null?requests.findByShopId(shopId,page(page)):requests.findByShopIdAndStatus(shopId,status,page(page)));
     }
     public Result shopRequest(String shopId,String actor,String id){
-        guard.requireAccess(shopId,actor);return result(requests.findById(id).filter(r->r.getShop().getId().equals(shopId)).orElseThrow(CustomFlowerOrderService::missing));
+        guard.requireReadAccess(shopId,actor);return result(requests.findById(id).filter(r->r.getShop().getId().equals(shopId)).orElseThrow(CustomFlowerOrderService::missing));
     }
     private CustomOrderRequest lockedOfShop(String shopId,String id){return requests.findLocked(id).filter(r->r.getShop().getId().equals(shopId)).orElseThrow(CustomFlowerOrderService::missing);}
     private void putDesign(CustomOrderRequest request,String note,BigDecimal quotedPrice){
